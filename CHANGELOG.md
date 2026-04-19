@@ -3,6 +3,11 @@
 All notable changes to XCPlite are documented in this file.
 
 
+## [V2.0.5]
+
+- Work in progress, not released yet
+
+
 ## [V2.0.4]
 
 - gcc compatibility issue fixed

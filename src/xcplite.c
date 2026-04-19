@@ -4,7 +4,7 @@
 |
 |  Description:
 |    Implementation of the ASAM XCP Protocol Layer V1.4
-|    Version V2.0.4
+|    Version V2.0.x
 |       - Optimized for 64 bit POSIX based platforms (Linux, QNX or MacOS)
 |       - Compatible with 32 bit platforms
 |       - Tested on x86 strong and ARM weak memory model
@@ -130,6 +130,7 @@
 #error "Please define XCP_DAQ_MEM_SIZE"
 #endif
 
+#ifdef OPTION_CAL_SEGMENTS
 /* Check XCP_CAL_MEM_SIZE */
 #if defined(XCP_CAL_MEM_SIZE)
 #if (XCP_CAL_MEM_SIZE > 0xFFFFFFFF)
@@ -137,6 +138,7 @@
 #endif
 #else
 #error "Please define XCP_CAL_MEM_SIZE"
+#endif
 #endif
 
 /* Check length of of names with null termination must be even*/
@@ -153,8 +155,9 @@
 /****************************************************************************/
 
 // Current supported addressing schemes are:
-// For A2L-Toolset compatibility: Absolute addressing mode - XCP_ADDRESS_MODE_XCPLITE__ACSDD
+// For A2L-Toolset compatibility: Absolute segment addressing mode - XCP_ADDRESS_MODE_XCPLITE__ACSDD
 // For SHM mode: Relative segment addressing mode - XCP_ADDRESS_MODE_XCPLITE__CXSDD
+// No calibration segment management: Absolute addressing mode - XCP_ADDRESS_MODE_XCPLITE__AXSDD
 // Default: Segment relative addressing mode - XCP_ADDRESS_MODE_XCPLITE__CASDD
 #ifndef _WIN
 __attribute__((used))
@@ -165,6 +168,8 @@ const uint16_t XCPLITE__CXSDD = XCP_DRIVER_VERSION;
 const uint16_t XCPLITE__ACSDD = XCP_DRIVER_VERSION;
 #elif defined(XCP_ADDRESS_MODE_XCPLITE__CASDD)
 const uint16_t XCPLITE__CASDD = XCP_DRIVER_VERSION;
+#elif defined(XCP_ADDRESS_MODE_XCPLITE__AXSDD)
+const uint16_t XCPLITE__AXSDD = XCP_DRIVER_VERSION;
 #else
 #error "Please define one of XCP_ADDRESS_MODE_XCPLITE__ACSDD, XCP_ADDRESS_MODE_XCPLITE__CASDD, XCP_ADDRESS_MODE_XCPLITE__CXSDD"
 #endif

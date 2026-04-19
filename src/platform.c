@@ -1854,7 +1854,7 @@ bool clockInit(void) {
     clockGetRealtimeNs();        // Initialize __gClockRealtime
     clockGetMonotonicNs();       // Initialize __gClockMonotonic
     uint64_t clock = clockGet(); // Initialize gClock and ClockGetLast()
-
+    (void)clock;
 #ifdef DBG_LEVEL
     if (DBG_LEVEL >= 3) { // Test
         struct timespec gtr;

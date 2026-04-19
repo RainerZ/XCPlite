@@ -231,6 +231,7 @@ static const char *A2lGetEventName_(const char *project_name, tXcpEventId id) {
 }
 #endif
 
+#ifdef OPTION_CAL_SEGMENTS
 // Get the prefixed memory segment name
 static const char *A2lGetCalSegName_(const char *project_name, uint8_t app_id, const char *name) {
 #ifdef OPTION_SHM_MODE // prefixed memory segment name
@@ -241,6 +242,7 @@ static const char *A2lGetCalSegName_(const char *project_name, uint8_t app_id, c
 #endif // SHM_MODE
     return A2lGetPrefixedName_(project_name, name);
 }
+#endif
 
 //----------------------------------------------------------------------------------
 

@@ -1595,15 +1595,7 @@ bool A2lFinalize(void) {
         return true; // Already finalized
     }
 
-    // In persistence mode, we will also write the associated binary file
-    bool write_bin = false;
-#ifdef OPTION_ENABLE_PERSISTENCE
-    if ((XcpGetInitMode() & XCP_MODE_PERSISTENCE)) {
-        write_bin = true;
-    }
-#endif
-
-    DBG_PRINTF3(ANSI_COLOR_GREEN "Finalizing A2L%s file ...\n" ANSI_COLOR_RESET, write_bin ? " and BIN" : "");
+    DBG_PRINTF3(ANSI_COLOR_GREEN "Finalizing A2L%s file ...\n" ANSI_COLOR_RESET, (XcpGetInitMode() & XCP_MODE_PERSISTENCE) ? " and BIN" : "");
 
 #ifdef OPTION_SHM_MODE // server signals all applications to finalize their A2L files
     // Later we will wait for the results and merge the partial A2L files into the main A2L file

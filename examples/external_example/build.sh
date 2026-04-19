@@ -32,12 +32,11 @@ if [ "$1" == "clean" ]; then
 fi
 
 
-
 # Step 1: Build xcplite in the main project
 echo -e "${GREEN}Step 1: Building xcplite ...${NC}"
 echo "----------------------------------------"
 cd "${REPO_ROOT}"
-./build.sh release install
+./build.sh release library install
 
 
 # Step 2: Build the external example

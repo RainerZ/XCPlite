@@ -465,8 +465,7 @@ bool XcpEthTlHandleCommands(void) {
 
         // n < 0 Error - Socket closed or other error
         else if (n < 0) {
-            int32_t err = socketGetLastError();
-            DBG_PRINTF_ERROR("XcpEthTlHandleCommands: socketRecvFrom failed n=%d (errno=%d, %s)!\n", n, err, socketGetErrorString(err));
+            DBG_PRINTF_ERROR("XcpEthTlHandleCommands: socketRecvFrom failed n=%d (errno=%d, %s)!\n", n, socketGetLastError(), socketGetErrorString(socketGetLastError()));
             return false; // Socket error
         }
 

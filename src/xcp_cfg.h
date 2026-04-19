@@ -40,12 +40,10 @@
 /*----------------------------------------------------------------------------*/
 /* DAQ event management */
 
-// Enable event list
-// @@@@ TODO: Remove the separate event list management in the Rust API
-#ifndef XCPLIB_FOR_RUST
+// Enable event list (Default)
+#ifndef XCPLIB_FOR_RUST // Rust has its own event management
 #define XCP_ENABLE_DAQ_EVENT_LIST
 #endif
-
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
 
 #if defined(OPTION_DAQ_EVENT_COUNT) && (OPTION_DAQ_EVENT_COUNT > 0)
@@ -85,8 +83,6 @@
 #endif // OPTION_CAL_SEGMENTS
 
 /*----------------------------------------------------------------------------*/
-/* Address, address extension coding */
-
 /*
 
 Address extensions and addressing modes:
@@ -117,7 +113,7 @@ XCPlite multi application absolute addressing: XCP_ADDRESS_MODE_XCPLITE__CXSDD (
 
 // Addressing schemes
 #ifdef OPTION_SHM_MODE // define addressing scheme for SHM mode
-// In SHM mode
+// Multi application absolute addressing mode
 // Enable segment relative, application callback and absolute addressing mode
 // The address extension for absolute addressing depends on the application id 0x80+app_id
 #define XCP_ADDRESS_MODE_XCPLITE__CXSDD
@@ -129,7 +125,16 @@ XCPlite multi application absolute addressing: XCP_ADDRESS_MODE_XCPLITE__CXSDD (
 #define XCP_ENABLE_APP_ADDRESSING
 #define XCP_ADDR_EXT_APP 0x01
 #else
-#if !defined(XCP_ENABLE_CALSEG_LIST) || defined(OPTION_CAL_SEGMENTS_ABS)
+#if !defined(XCP_ENABLE_CALSEG_LIST)
+// Absolute and application addressing mode without calibration segment management
+#define XCP_ADDRESS_MODE_XCPLITE__AXSDD
+#define XCP_ADDRESS_MODE "XCPLITE__AXSDD"
+#define XCP_ENABLE_ABS_ADDRESSING
+#define XCP_ADDR_EXT_ABS 0x00
+#define XCP_ENABLE_APP_ADDRESSING
+#define XCP_ADDR_EXT_APP 0x01
+#else
+#if defined(OPTION_CAL_SEGMENTS_ABS)
 // Absolute calibration segment addressing mode
 #define XCP_ADDRESS_MODE_XCPLITE__ACSDD
 #define XCP_ADDRESS_MODE "XCPLITE__ACSDD"
@@ -138,7 +143,7 @@ XCPlite multi application absolute addressing: XCP_ADDRESS_MODE_XCPLITE__CXSDD (
 #define XCP_ENABLE_SEG_ADDRESSING
 #define XCP_ADDR_EXT_SEG 0x01
 #else
-// Relative calibration segment addressing mode
+// Relative calibration segment addressing mode (Default)
 #define XCP_ADDRESS_MODE_XCPLITE__CASDD
 #define XCP_ADDRESS_MODE "XCPLITE__CASDD"
 #define XCP_ENABLE_SEG_ADDRESSING
@@ -148,7 +153,8 @@ XCPlite multi application absolute addressing: XCP_ADDRESS_MODE_XCPLITE__CXSDD (
 #define XCP_ENABLE_APP_ADDRESSING
 #define XCP_ADDR_EXT_APP 0x80
 #endif
-#endif
+#endif // XCP_ENABLE_CALSEG_LIST
+#endif // !OPTION_SHM_MODE
 
 // --- Dynamic addressing mode is always enabled
 #define XCP_ENABLE_DYN_ADDRESSING

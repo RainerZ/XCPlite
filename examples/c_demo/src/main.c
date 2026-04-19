@@ -108,6 +108,8 @@ uint8_t cb_read(uint32_t src, uint8_t size, uint8_t *dst) {
 // Write callback for application specific memory access, called by XCP when the master writes to an address with the application specific address extension
 uint8_t cb_write(uint32_t dst, uint8_t size, const uint8_t *src, uint8_t delay) {
 
+    (void)delay; // Not used in this example, but could be used to implement delayed writes for consistent calibration updates
+
     if (dst + size > sizeof(app_memory)) {
         printf("ERROR: Write out of bounds: dst=%u, size=%u\n", dst, size);
         return CRC_ACCESS_DENIED;

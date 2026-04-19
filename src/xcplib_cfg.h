@@ -15,10 +15,10 @@
   The values for XCP_xxx and XCPTL_xxx define constants (in xcp_cfg.h and xcptl_cfg.h) may depend on options
 */
 
-// XCPlite version, currently V2.0.4
+// XCPlite version, currently V2.0.5
 #define OPTION_VERSION_MAJOR 2
 #define OPTION_VERSION_MINOR 0
-#define OPTION_VERSION_PATCH 3
+#define OPTION_VERSION_PATCH 5
 
 #ifdef XCPLIB_FOR_RUST // Set by the Rust build script
 
@@ -36,7 +36,7 @@
 // Default log level: 1 - Error, 2 - Warn, 3 - Info, 4 - Trace (used to print all XCP commands), 5 - Debug, 6 - Very verbose
 #define OPTION_DEFAULT_DBG_LEVEL 3
 // Optimize code size, higher levels than OPTION_MAX_DBG_LEVEL are optimized out
-#define OPTION_MAX_DBG_LEVEL 5
+#define OPTION_MAX_DBG_LEVEL 4
 // Optimize code size, fixed log level, not changeable at runtime
 // #define OPTION_FIXED_DBG_LEVEL 4
 
@@ -66,13 +66,12 @@
 
 //-------------------------------------------------------------------------------
 // XCP multi application mode
+// Multiple application processes may have shared transmit queue, calibration RCU and XCP state
+// One application is the XCP server, could be the first one running (XCP leader) or a dedicated application (XCP daemon)
+// Requires a POSIX-compliant platform (Linux / macOS / QNX).  Not supported on Windows.
 
 // Experimental, work in progress, not fully tested yet, may change or be removed without major version change, use with caution
 
-// Enable multi application mode:
-// All application processes have shared transmit queue, calibration RCU and XCP state
-// One application is the XCP server, could be the first one running (XCP leader) or a dedicated application (XCP daemon)
-// Requires a POSIX-compliant platform (Linux / macOS / QNX).  Not supported on Windows.
 // #define OPTION_SHM_MODE
 
 //-------------------------------------------------------------------------------
@@ -84,11 +83,11 @@
 #define OPTION_SERVER_FORCEFULL_TERMINATION // Don't wait for the rx and tx thread to finish, just terminate them
 
 //-------------------------------------------------------------------------------
-// CAL setting
+// Calibration segments management
 
-// Enable calibration segment management
-// (otherwise the callbacks in xcpappl.c are used for calibration segment commands and memory read/write)
+// Enable calibration segments management and API for thread-safe calibration
 #define OPTION_CAL_SEGMENTS
+#ifdef OPTION_CAL_SEGMENTS
 
 // Maximum number of calibration segments
 #define OPTION_CAL_SEGMENT_COUNT 32
@@ -120,11 +119,13 @@
 // Automatically persist the working page on XCP disconnect
 // #define OPTION_CAL_PERSIST_ON_DISCONNECT
 
+#endif // OPTION_CAL_SEGMENTS
+
 //-------------------------------------------------------------------------------
 // DAQ settings
 
 #define OPTION_DAQ_MEM_SIZE (1024 * 8) // Memory bytes used for XCP DAQ tables - 6 bytes per measurement signal/block needed
-#define OPTION_DAQ_EVENT_COUNT 64      // Maximum number of DAQ events (integer value, must be even)
+#define OPTION_DAQ_EVENT_COUNT 32      // Maximum number of DAQ events (integer value, must be even)
 // #define OPTION_DAQ_ASYNC_EVENT         // Create an asynchronous, cyclic DAQ event for asynchronous data acquisition
 
 // Transport layer queue, vectored IO, lockless with variable queue entry size
@@ -147,6 +148,7 @@
 #undef OPTION_QUEUE_64_FIX_SIZE
 #define OPTION_QUEUE_32
 #endif
+
 //-------------------------------------------------------------------------------
 // A2L generation settings
 
