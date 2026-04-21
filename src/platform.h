@@ -555,13 +555,6 @@ uint64_t clockGetLast(void); // Last known clock value, updated by all clockGet 
 char *clockGetString(char *s, uint32_t l, uint64_t c);
 char *clockGetTimeString(char *s, uint32_t l, int64_t c);
 
-#ifdef _WIN
-
-#define clockGetMonotonicNs() clockGet()
-#define clockGetMonotonicNsLast() clockGetLast()
-
-#else
-
 // Monotonic system clock
 uint64_t clockGetMonotonicNs(void);
 uint64_t clockGetMonotonicUs(void);
@@ -573,8 +566,6 @@ uint64_t clockGetMonotonicNsLast(void);
 uint64_t clockGetMonotonicUsLast(void);
 uint64_t clockGetRealtimeNsLast(void);
 uint64_t clockGetRealtimeUsLast(void);
-
-#endif
 
 #ifdef TEST_CLOCK_GET_STATISTIC
 void clockGetPrintStatistic(void);

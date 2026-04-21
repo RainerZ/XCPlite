@@ -282,10 +282,11 @@ XCPlite multi application absolute addressing: XCP_ADDRESS_MODE_XCPLITE__CXSDD (
 #define XCP_ENABLE_COPY_CAL_PAGE
 
 // Enable calibration page initialization (COPY_CAL_PAGE, FLASH->RAM copy only)
-// Activate workaround for CANape issue with COPY_CAL_PAGE command
+// Activate workaround for CANape <24SP2 issue with COPY_CAL_PAGE command
 // COPY_CAL_PAGE always copies all segments from default to working, this is not compliant to the XCP specification
+#ifndef OPTION_CANAPE_24
 #define XCP_ENABLE_COPY_CAL_PAGE_WORKAROUND
-
+#endif
 #endif
 #ifdef XCP_ENABLE_CAL_PAGE
 
