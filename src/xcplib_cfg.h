@@ -20,6 +20,14 @@
 #define OPTION_VERSION_MINOR 0
 #define OPTION_VERSION_PATCH 5
 
+// CANape version compatibility
+// Disable workarounds for CANape versions < 24SP2
+// (Disable COPY_CAL_PAGE bug workaround and enable .this references to shared calibration axis)
+#define OPTION_CANAPE_24
+
+//-------------------------------------------------------------------------------
+// Rust specific settings
+
 #ifdef XCPLIB_FOR_RUST // Set by the Rust build script
 
 #include "xcplib_rust_cfg.h" // for Rust xcp-lite specific configuration

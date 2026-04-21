@@ -265,5 +265,20 @@
             ],
             "preLaunchTask": "XCPlite: build"
         },
+        {
+            "name": "Debug xcpclient",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/xcpclient/target/debug/xcpclient",
+            "args": [
+                "--dest-addr",
+                "192.168.3.2",
+                "--udp",
+                "--log-level",
+                "5"
+            ],
+            "cwd": "${workspaceFolder}/tools/xcpclient",
+            "preLaunchTask": "cargo build xcpclient"
+        },
     ]
 }

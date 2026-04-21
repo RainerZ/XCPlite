@@ -263,7 +263,7 @@ void A2lCreateTypedefTemplate(const char *type_name, size_t type_size, const cha
         static std::once_flag once_flag;
         std::call_once(once_flag, [&]() {
             A2lLock();
-            A2lTypedefBegin_(type_name, type_size, comment);
+            A2lTypedefBegin_(type_name, (uint32_t)type_size, comment);
             (A2lCreateTypedefComponentTemplate(builders((TypeName *)nullptr)), ...);
             A2lTypedefEnd_();
             A2lUnlock();

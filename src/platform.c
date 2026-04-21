@@ -2072,6 +2072,11 @@ uint64_t clockGet(void) {
     return t;
 }
 
+uint64_t clockGetMonotonicNs() { return clockGet(); }
+uint64_t clockGetMonotonicNsLast() { return clockGetLast(); }
+uint64_t clockGetMonotonicUs() { return clockGet() / 1000; }
+uint64_t clockGetMonotonicUsLast() { return clockGetLast() / 1000; }
+
 #endif // Windows
 
 char *clockGetTimeString(char *str, uint32_t l, int64_t t) {

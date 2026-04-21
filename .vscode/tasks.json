@@ -283,6 +283,17 @@
             "group": "build",
             "detail": "Kill any running XCP demo processes on VP6450"
         },
+        {
+            "type": "cargo",
+            "label": "cargo build xcpclient",
+            "command": "build",
+            "args": [],
+            "options": {
+                "cwd": "${workspaceFolder}/tools/xcpclient"
+            },
+            "group": "build",
+            "detail": "Build xcpclient (debug)"
+        },
     ],
     "version": "2.0.0"
 }

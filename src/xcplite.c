@@ -3405,6 +3405,9 @@ static void XcpPrintCmd(const tXcpCto *cmdBuf) {
     case CC_SET_MTA:
         printf(" SET_MTA addr=%08Xh, addrext=%02Xh\n", CRO_SET_MTA_ADDR, CRO_SET_MTA_EXT);
         break;
+    case CC_SET_REQUEST:
+        printf(" CC_SET_REQUEST mode=%02Xh\n", CRO_SET_REQUEST_MODE);
+        break;
     case CC_SYNCH:
         printf(" SYNCH\n");
         break;
