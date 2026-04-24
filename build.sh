@@ -283,6 +283,8 @@ if [ "$RUN_CLANG_TIDY" = true ] && [ "$BUILD_SUCCESS" = true ]; then
             "src/a2l.c"
             "src/persistence.c"
             "src/platform.c"
+            "src/sync.c"
+            "src/util.c"
         )
         
         echo "Build directory: ${BUILD_DIR}"

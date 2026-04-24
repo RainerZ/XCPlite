@@ -323,7 +323,23 @@ enum XcpSocket {
 impl XcpSocket {
     async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> Result<usize, std::io::Error> {
         match self {
-            XcpSocket::Udp(udp_socket) => udp_socket.send_to(buf, addr).await,
+            XcpSocket::Udp(udp_socket) => {
+                // On macOS, sendto() on a UDP socket returns EHOSTUNREACH immediately when
+                // the ARP cache is empty, instead of queuing the packet like Linux does.
+                // Retry with backoff to allow ARP resolution to complete.
+                let mut delay_ms = 50u64;
+                loop {
+                    match udp_socket.send_to(buf, addr).await {
+                        Ok(n) => return Ok(n),
+                        Err(e) if e.kind() == std::io::ErrorKind::HostUnreachable && delay_ms <= 400 => {
+                            debug!("send_to: EHOSTUNREACH, retrying after {}ms (ARP not yet resolved)", delay_ms);
+                            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                            delay_ms *= 2;
+                        }
+                        Err(e) => return Err(e),
+                    }
+                }
+            }
             XcpSocket::Tcp(tcp_stream) => {
                 // But for now, let's revert to the working approach:
                 let mut pos = 0;
@@ -837,7 +853,7 @@ impl XcpClient {
     // Get server identification
     // Returns (size, name) where name is only set if the server returned the name in the response, otherwise the caller must do an upload to get the data
     pub async fn get_id(&mut self, id_type: u8) -> Result<(u32, Option<String>), Box<dyn Error>> {
-        assert!( id_type == IDT_VECTOR_ELF_UPLOAD || id_type == IDT_ASAM_UPLOAD || id_type == IDT_ASAM_NAME || id_type == IDT_ASCII || id_type == IDT_ASAM_EPK); // others not supported yet
+        assert!(id_type == IDT_VECTOR_ELF_UPLOAD || id_type == IDT_ASAM_UPLOAD || id_type == IDT_ASAM_NAME || id_type == IDT_ASCII || id_type == IDT_ASAM_EPK); // others not supported yet
 
         let data = self.send_command(XcpCommandBuilder::new(CC_GET_ID).add_u8(id_type).build()).await?;
         assert_eq!(data[0], 0xFF);
@@ -1215,7 +1231,7 @@ impl XcpClient {
 
     // CC_TIME_CORRELATION_PROPERTIES
     async fn time_correlation_properties(&mut self) -> Result<(), Box<dyn Error>> {
-        let request: u8 = 2; // set responce format to SERVER_CONFIG_RESPONSE_FMT_ADVANCED
+        let request: u8 = 2; // set response format to SERVER_CONFIG_RESPONSE_FMT_ADVANCED
         let properties: u8 = 0;
         let cluster_id: u16 = 0;
         let _data = self
