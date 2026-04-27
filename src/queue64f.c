@@ -430,34 +430,37 @@ tQueueBuffer queueAcquire(tQueueHandle queue_handle, uint16_t packet_len) {
     // Prepare a new entry in reserved state
     tQueueEntry *entry = NULL;
 
-    // Load the head first will synchronize the queue header cache line
-    // The tail is read relaxed, head and tail are in the same cache line, but even if the tail could be stale, it is no problem
-    uint64_t head = atomic_load_explicit(&queue->h.head, memory_order_acquire);
+    // Load the consumer owned head first, to get a consistent view of the queue state
+    // Loading tail relaxed, tail is only used to check for overflow, and a stale tail causing a false overflow would just drop one packet.
+    uint64_t head = atomic_load_explicit(&queue->h.head, memory_order_acquire); // one barrier, before loop
     uint64_t tail = atomic_load_explicit(&queue->h.tail, memory_order_relaxed);
-    uint32_t level;
+    uint32_t level = 0;
 
     // Spin loop
-    // In reserved state, the message entry is between tail and head, has valid dlc and ctr must be 0
-    // This means the ctr must be 0 before the head is increment
     for (;;) {
 
         // Check for overrun
-        level = (uint32_t)(head - tail);
-        assert(queue->h.buffer_size >= level);
-        assert((level % QUEUE_ENTRY_SIZE) == 0);
-        if (queue->h.buffer_size == level) {
-            break; // Overrun
+        // When head < tail is observed, the queue is considered empty
+        // Don't rely on head>=tail, because head and tail can not be reliably observed consistently
+        if (head > tail) {
+            level = (uint32_t)(head - tail);
+            assert(queue->h.buffer_size >= level); // This assert also might be fragile ?
+            assert((level % QUEUE_ENTRY_SIZE) == 0);
+            if (queue->h.buffer_size == level) {
+                break; // Overrun
+            }
         }
 
         // Try to increment the head
         // Compare exchange weak in acq_rel/acq mode serializes with other producers, false negatives will spin
-        if (atomic_compare_exchange_weak_explicit(&queue->h.head, &head, head + QUEUE_ENTRY_SIZE, memory_order_acq_rel, memory_order_acquire)) {
+        if (atomic_compare_exchange_weak_explicit(&queue->h.head, &head, head + QUEUE_ENTRY_SIZE, memory_order_acq_rel, memory_order_relaxed)) {
             entry = (tQueueEntry *)(queue->buffer + (head % queue->h.buffer_size));
-            // Store the overall user length (header+payload) (msg_len) in the entry_header
-            // High word is still 0, which is the reserved state, not committed yet
+            // Store the overall user length (uint16_t msg_len = user header + user payload) in the entry_header (atomic uint32_t)
+            // High word is still 0, which is the reserved state, and not committed yet
             atomic_store_explicit(&entry->entry_header, (uint32_t)msg_len, memory_order_release);
             break;
         }
+
 #ifdef TEST_ACQUIRE_LOCK_TIMING
         spin_count++;
 #endif
@@ -468,7 +471,7 @@ tQueueBuffer queueAcquire(tQueueHandle queue_handle, uint16_t packet_len) {
 #endif
 
     if (entry == NULL) { // Overflow
-        uint32_t lost = (uint32_t)atomic_fetch_add_explicit(&queue->h.packets_lost, 1, memory_order_acq_rel);
+        uint32_t lost = (uint32_t)atomic_fetch_add_explicit(&queue->h.packets_lost, 1, memory_order_relaxed);
         if (lost == 0)
             DBG_PRINTF6("Queue overrun, msg_len=%u, h=%" PRIu64 ", t=%" PRIu64 ", level=%u, size=%u\n", msg_len, head, tail, level / QUEUE_ENTRY_SIZE, queue->h.buffer_size);
         tQueueBuffer ret = {
@@ -522,6 +525,7 @@ void queuePush(tQueueHandle queue_handle, const tQueueBuffer *queue_buffer, bool
 // Single consumer thread !!!!!!!!!!
 // The consumer does not contend against the providers
 
+// Estimate the current queue level (number of entries in the queue) and optionally return the maximum queue level (capacity in number of entries)
 uint32_t queueLevel(tQueueHandle queue_handle, uint32_t *queue_max_level) {
     tQueue *queue = (tQueue *)queue_handle;
     if (queue == NULL) {
@@ -531,9 +535,14 @@ uint32_t queueLevel(tQueueHandle queue_handle, uint32_t *queue_max_level) {
     }
     if (queue_max_level != NULL)
         *queue_max_level = queue->h.buffer_size / QUEUE_ENTRY_SIZE;
+
     uint64_t head = atomic_load_explicit(&queue->h.head, memory_order_relaxed);
     uint64_t tail = atomic_load_explicit(&queue->h.tail, memory_order_relaxed);
-    assert(head >= tail);
+    if (head < tail) {
+        // This can happen if the head and tail are not observed consistently
+        // In this case, we consider the queue level as 0
+        return 0;
+    }
     uint32_t level = (uint32_t)(head - tail);
     assert(level <= queue->h.buffer_size);
     assert((level % QUEUE_ENTRY_SIZE) == 0);
@@ -551,15 +560,16 @@ tQueueBuffer queuePeek(tQueueHandle queue_handle, uint32_t index, uint32_t *pack
 
     // Return the number of packets lost in the queue
     if (packets_lost != NULL) {
-        uint32_t lost = (uint32_t)atomic_exchange_explicit(&queue->h.packets_lost, 0, memory_order_acq_rel);
+        uint32_t lost = (uint32_t)atomic_exchange_explicit(&queue->h.packets_lost, 0, memory_order_relaxed);
         *packets_lost = lost;
         if (lost) {
             DBG_PRINTF6("queuePeek: packets lost since last call: %u\n", lost);
         }
     }
 
+    // Read the producer owned head first, to get a consistent view of the queue state
+    uint64_t head = atomic_load_explicit(&queue->h.head, memory_order_acquire);
     uint64_t tail = atomic_load_explicit(&queue->h.tail, memory_order_relaxed) + (index * QUEUE_ENTRY_SIZE);
-    uint64_t head = atomic_load_explicit(&queue->h.head, memory_order_relaxed);
 
     // Check if there is data in the queue at index
     if (head <= tail) {
@@ -636,14 +646,13 @@ void queueRelease(tQueueHandle queue_handle, const tQueueBuffer *queue_buffer) {
     assert(queue != NULL);
     assert(queue_buffer != NULL);
     assert(queue_buffer->buffer != NULL);
-    assert(queue_buffer->size > 0 && queue_buffer->size <= QUEUE_SEGMENT_SIZE);
+    assert(queue_buffer->size > 0 && queue_buffer->size <= QUEUE_ENTRY_USER_SIZE);
 
     DBG_PRINTF6("queueRelease: releasing entry %u with payload size %u\n", (uint32_t)((uint8_t *)queue_buffer->buffer - queue->buffer - 4) / QUEUE_ENTRY_SIZE, queue_buffer->size);
 
     // Clear the entries commit state
     tQueueEntry *entry = (tQueueEntry *)(queue_buffer->buffer - 4);               // Get the pointer to the queue entry from the user header buffer pointer
     assert((uint32_t)((uint8_t *)entry - queue->buffer) % QUEUE_ENTRY_SIZE == 0); // Check that the entry pointer is correctly aligned to the entry size
-    // @@@@ TODO: Check this release store is not strictly required for correctness, but removing it does not show any performance benefits
     atomic_store_explicit(&entry->entry_header, 0, memory_order_release);
 
     //  Increment the tail

@@ -64,6 +64,9 @@ void XcpSetLogLevel(uint8_t level);
 #if defined(OPTION_QUEUE_64_VAR_SIZE) || defined(OPTION_QUEUE_64_FIX_SIZE)
 #define TEST_QUEUE_PEEK          // Use queuePeek(random(QUEUE_PEEK_MAX_INDEX)) instead of queuePop
 #define QUEUE_PEEK_MAX_INDEX (8) // Max offset for peeking ahead
+
+#define CONSUMER_SLEEP_ON_EMPTY_QUEUE_US 500 // Sleep time in microseconds for the consumer loop, when queue was empty
+
 #endif
 
 //-------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -98,11 +101,11 @@ static void lock_test_init(void) {
 
     // Calibrate
     uint64_t sum = 0;
-    for (int i = 0; i < 1000; i++) {
-        uint64_t time = clockGetMonotonicNs();
+    for (int i = 0; i < 10000; i++) {
+        volatile uint64_t time = clockGetMonotonicNs();
         sum += clockGetMonotonicNs() - time;
     }
-    lock_calibration = sum / 1000;
+    lock_calibration = sum / 10000;
 }
 
 static void lock_test_add_sample(uint64_t d) {
@@ -394,7 +397,6 @@ void *task(void *p)
 
 static void print_test_info(void) {
 
-#
     DBG_PRINT3("queue_test for mc_queue API reference implementation\n");
 
 #ifdef TEST_QUEUE_SHM
@@ -432,7 +434,6 @@ static void print_test_info(void) {
     DBG_PRINTF3("QUEUE_ENTRY_USER_HEADER_SIZE=%d\n", QUEUE_ENTRY_USER_HEADER_SIZE);
     DBG_PRINTF3("QUEUE_ENTRY_USER_PAYLOAD_SIZE=%u\n", QUEUE_ENTRY_USER_PAYLOAD_SIZE);
     DBG_PRINTF3("QUEUE_ENTRY_USER_SIZE=%u\n", QUEUE_ENTRY_USER_SIZE);
-    DBG_PRINTF3("QUEUE_SEGMENT_SIZE=%u\n", QUEUE_SEGMENT_SIZE);
     DBG_PRINTF3("QUEUE_MAX_ENTRY_SIZE=%u\n", QUEUE_MAX_ENTRY_SIZE);
     DBG_PRINTF3("QUEUE_PAYLOAD_SIZE_ALIGNMENT=%u\n", QUEUE_PAYLOAD_SIZE_ALIGNMENT);
     DBG_PRINT3("\n");
@@ -518,7 +519,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Create multiple instances of the produces tasks (not in consumer only mode)
+    // Create multiple instances of the producer task (not in consumer only mode)
     THREAD_HANDLE t[THREAD_COUNT];
     for (int i = 0; i < THREAD_COUNT; i++) {
         t[i] = 0;
@@ -533,11 +534,13 @@ int main(int argc, char *argv[]) {
     uint32_t msg_count = 0;
     uint32_t msg_lost = 0;
     uint32_t msg_bytes = 0;
+    uint32_t max_level = 0;
     uint64_t last_msg_time = clockGetMonotonicUs();
     uint32_t last_msg_count = 0;
     uint32_t last_msg_bytes = 0;
     uint64_t last_counter[MAX_PRODUCERS * THREAD_COUNT];
     memset(last_counter, 0, sizeof(last_counter));
+    uint32_t sleep_time = CONSUMER_SLEEP_ON_EMPTY_QUEUE_US;
 
 // Create XCP DAQ measurements
 #ifdef USE_XCP
@@ -568,6 +571,15 @@ int main(int argc, char *argv[]) {
 
                 tQueueBuffer buffer[QUEUE_PEEK_MAX_INDEX + 1];
                 uint32_t buffer_count = 0;
+
+                // Check queue level and print if it increased, to monitor how full the queue is getting
+                uint32_t level_max;
+                uint32_t level_cur = queueLevel(queue_handle, &level_max);
+                uint32_t level_rel = ((level_cur * 100) / level_max);
+                if (level_rel > max_level) {
+                    max_level = level_rel;
+                    printf("New max queue level: %u %% (%u Bytes)\n", max_level, level_cur);
+                }
 
                 // Set max max_peek_index to a random number between 0 and QUEUE_PEEK_MAX_INDEX
                 uint32_t max_peek_index = rand() % (QUEUE_PEEK_MAX_INDEX + 1);
@@ -690,7 +702,9 @@ int main(int argc, char *argv[]) {
             DaqTriggerEvent(mainloop);
 #endif
 
-        sleepUs(500); // 500us
+        sleepUs(sleep_time);
+        if (max_level < 80)
+            sleep_time++;
 
         // Producer mode: check consumer liveness once per main loop iteration.
         // kill(pid, 0) with ESRCH means the consumer process is gone (graceful or crash).
@@ -715,6 +729,7 @@ int main(int argc, char *argv[]) {
             }
             last_msg_time = clockGetMonotonicUs();
         }
+
     } // gRun
 
     // Wait for all threads to finish
@@ -747,7 +762,14 @@ int main(int argc, char *argv[]) {
     }
 #endif
 
-// Print queue statistics
+    // Print queue statistics
+    printf("\n\nFinal statistics:\n");
+    printf("Messages received: %u, bytes received: %u, messages lost: %u\n", msg_count, msg_bytes, msg_lost);
+    printf("Data rate: %u msg/s, %u kbytes/s\n", (uint32_t)(msg_count * 1000000 / (clockGetMonotonicUs() - last_msg_time)),
+           (uint32_t)(msg_bytes * 1000000 / (clockGetMonotonicUs() - last_msg_time)) / 1024);
+    printf("Max queue level: %u\n", max_level);
+    printf("\n");
+
 #ifdef TEST_ACQUIRE_LOCK_TIMING
     if (!g_shm_consumer) {
         lock_test_print_results();

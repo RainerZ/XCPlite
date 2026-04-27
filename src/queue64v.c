@@ -354,10 +354,10 @@ tQueueBuffer queueAcquire(tQueueHandle queue_handle, uint16_t packet_len) {
     // Prepare a new entry in reserved state
     tQueueEntry *entry = NULL;
 
-    // Load the head first will synchronize the queue header cache line
-    // The tail is read relaxed, head and tail are in the same cache line, but even if the tail could be stale, it is no problem
+    // The head acquire read provides the most up to date queue overrun detection
+    // The tail acquire read make sure the entry headers cleared by the consumer are visible
     uint64_t head = atomic_load_explicit(&queue->h.head, memory_order_acquire);
-    uint64_t tail = atomic_load_explicit(&queue->h.tail, memory_order_relaxed);
+    uint64_t tail = atomic_load_explicit(&queue->h.tail, memory_order_acquire);
 
     // CAS loop
     // In reserved state, the message entry is between tail and head, has valid dlc and ctr must be 0
@@ -365,20 +365,22 @@ tQueueBuffer queueAcquire(tQueueHandle queue_handle, uint16_t packet_len) {
     for (;;) {
 
         // Check for overrun
-        if (queue->h.queue_size - (entry_len + QUEUE_ENTRY_HEADER_SIZE) < (head - tail)) {
-            break; // Overrun
+        // Note that head<tail may be observed, in this case the queue is considered empty
+        if (head > tail) {
+            if (queue->h.queue_size - (entry_len + QUEUE_ENTRY_HEADER_SIZE) < (head - tail)) {
+                break; // Overrun
+            }
         }
-
         // Try to increment the head
         // Compare exchange weak in acq_rel/acq mode serializes with other producers, false negatives will spin
-        if (atomic_compare_exchange_weak_explicit(&queue->h.head, &head, head + (entry_len + QUEUE_ENTRY_HEADER_SIZE), memory_order_acq_rel, memory_order_acquire)) {
+        if (atomic_compare_exchange_weak_explicit(&queue->h.head, &head, head + (entry_len + QUEUE_ENTRY_HEADER_SIZE), memory_order_acq_rel, memory_order_relaxed)) {
             entry = (tQueueEntry *)(queue->buffer + (head % queue->h.queue_size));
             atomic_store_explicit(&entry->header, (CTR_RESERVED << 16) | (uint32_t)entry_len, memory_order_release);
             break;
         }
 
-        // Refresh tail on each iteration ?
-        // It is probably more efficient, to keep the tail stale and save the cost for the atomic load on each iteration
+        // Refresh tail or sync head on each iteration ?
+        // It is probably more efficient, to accept them stale and just spin more instead of synchronizing
         // If the queue is already saturated, packet loss will happen anyway
 
         // No hint, spin count is usually very low and we prefer the locked sequence as fast as possible
@@ -397,7 +399,7 @@ tQueueBuffer queueAcquire(tQueueHandle queue_handle, uint16_t packet_len) {
 #endif
 
     if (entry == NULL) {
-        uint32_t lost = (uint32_t)atomic_fetch_add_explicit(&queue->h.packets_lost, 1, memory_order_acq_rel);
+        uint32_t lost = (uint32_t)atomic_fetch_add_explicit(&queue->h.packets_lost, 1, memory_order_relaxed);
         if (lost == 0) {
             DBG_PRINTF6("Queue overrun, len=%u, head=%" PRIu64 ", tail=%" PRIu64 ", level=%u, size=%u\n", entry_len, head, tail, (uint32_t)(head - tail), queue->h.queue_size);
         }
@@ -455,7 +457,9 @@ uint32_t queueLevel(tQueueHandle queue_handle, uint32_t *queue_max_level) {
         *queue_max_level = queue->h.queue_size;
     uint64_t head = atomic_load_explicit(&queue->h.head, memory_order_relaxed);
     uint64_t tail = atomic_load_explicit(&queue->h.tail, memory_order_relaxed);
-    assert(head >= tail);
+    if (head <= tail) { // When head<tail is observed, the queue is considered empty
+        return 0;
+    }
     assert(head - tail <= queue->h.queue_size);
     return (uint32_t)(head - tail);
 }
@@ -468,7 +472,7 @@ tQueueBuffer queuePeek(tQueueHandle queue_handle, uint32_t peek_index, uint32_t 
 
     // Return the number of packets lost since the last call
     if (packets_lost != NULL) {
-        uint32_t lost = (uint32_t)atomic_exchange_explicit(&queue->h.packets_lost, 0, memory_order_acq_rel);
+        uint32_t lost = (uint32_t)atomic_exchange_explicit(&queue->h.packets_lost, 0, memory_order_relaxed);
         *packets_lost = lost;
         if (lost) {
             DBG_PRINTF6("queuePeek: packets lost since last call: %u\n", lost);
@@ -598,7 +602,10 @@ void queueRelease(tQueueHandle queue_handle, const tQueueBuffer *queue_buffer) {
     // Clear the entire memory completely, to avoid inconsistent reserved states after incrementing the head in the producer
     // This is the tradeoff of not using a fixed entry size, this approach might be optimal for medium data throughput,
     memset(queue_buffer->buffer - QUEUE_ENTRY_HEADER_SIZE, 0, queue_buffer->size + QUEUE_ENTRY_HEADER_SIZE);
-    atomic_fetch_add_explicit(&queue->h.tail, queue_buffer->size + QUEUE_ENTRY_HEADER_SIZE, memory_order_relaxed); // Write access to tail is single threaded
+
+    // Release store to the tail to make the cleared entry headers visible to the producers
+    // This synchronizes with the acquire load of the tail in the producers and makes sure that the producers see the cleared memory before they can acquire the entry
+    atomic_fetch_add_explicit(&queue->h.tail, queue_buffer->size + QUEUE_ENTRY_HEADER_SIZE, memory_order_release);
 
     // Reset cached index and tail for optimized peek
     queue->h.cached_peek_index = 0;

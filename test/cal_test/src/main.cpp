@@ -114,11 +114,11 @@ static void lock_test_init(void) {
 
     // Calibrate
     uint64_t sum = 0;
-    for (int i = 0; i < 1000; i++) {
-        uint64_t time = clockGetMonotonicNs();
+    for (int i = 0; i < 10000; i++) {
+        volatile uint64_t time = clockGetMonotonicNs();
         sum += clockGetMonotonicNs() - time;
     }
-    lock_calibration = sum / 1000;
+    lock_calibration = sum / 10000;
 }
 
 static void lock_test_add_sample(uint64_t d) {
