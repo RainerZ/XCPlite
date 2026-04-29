@@ -283,7 +283,7 @@ int main(int argc, char *argv[]) {
     // Initialize the test clock synchronizer, using the system monotonic clock as reference and with no initial offset
     {
         systemClockInit();
-        syncInit(&gClockSynchronizer, SYNC_MODE_DEFAULT);
+        syncInit(&gClockSynchronizer, SYNC_MODE_DEFAULT, 0);
         uint64_t t = systemClock();
         syncSet(&gClockSynchronizer, t, t, clock_params.drift); // Initialize, set to sync
         if (!gClockSynchronizer.is_sync) {

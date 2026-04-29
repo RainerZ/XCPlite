@@ -540,9 +540,9 @@ bool linreg_filter_compare(tLinregFilter *f1, tLinregFilter *f2, double x, doubl
 |       dt2*drift   <= 10e9 * 6e5 = 6e15  << INT64_MAX  -> safe
 */
 
-/// Initialize the synchronizer state.
-/// mode: SYNC_MODE_DEFAULT or SYNC_MODE_PI
-void syncInit(tClockSynchronizer *s, uint8_t mode) {
+// Initialize the synchronizer state.
+// mode: SYNC_MODE_DEFAULT or SYNC_MODE_PI
+void syncInit(tClockSynchronizer *s, uint8_t mode, size_t median_window) {
     assert(s != NULL);
     memset(s, 0, sizeof(*s));
     s->mode = mode;
@@ -550,26 +550,24 @@ void syncInit(tClockSynchronizer *s, uint8_t mode) {
         s->kp_shift = SYNC_PI_KP_SHIFT_DEFAULT;
         s->ki_shift = SYNC_PI_KI_SHIFT_DEFAULT;
     }
-    /* Always initialise the median filter so it is ready to use.
-     * It is disabled by default (use_median == false after memset).
-     * Enable: s->use_median = true;
-     * Resize: median_filter_init(&s->median_filter, N);  */
-    median_filter_init(&s->median_filter, SYNC_MEDIAN_WINDOW_DEFAULT);
+    // Always initialize the median filter, even if median_window is zero.
+    median_filter_init(&s->median_filter, median_window);
+    s->use_median = (median_window > 0);
 }
 
-/// Return true if the synchronizer has received enough valid pairs to produce estimates.
+// Return true if the synchronizer has received enough valid pairs to produce estimates.
 bool syncState(const tClockSynchronizer *s) {
     assert(s != NULL);
     return s->is_sync;
 }
 
-/// Interpolate t1 (target clock) from t2 (reference clock).
-/// All arithmetic in int64_t for precision and performance.
-///
-/// Overflow analysis for  dt2 * drift_ppb / 1e9:
-///   dt2          <= ~10 s  = 10_000_000_000 ns  (normal call rate >> 0.1 Hz)
-///   |drift_ppb|  <=  1_000_000 ppb  (1000 ppm -- extreme clock error)
-///   product      <= 10e9 * 1e6 = 1e16  << INT64_MAX (9.2e18)  -> safe
+// Interpolate t1 (target clock) from t2 (reference clock).
+// All arithmetic in int64_t for precision and performance.
+//
+// Overflow analysis for  dt2 * drift_ppb / 1e9:
+//   dt2          <= ~10 s  = 10_000_000_000 ns  (normal call rate >> 0.1 Hz)
+//   |drift_ppb|  <=  1_000_000 ppb  (1000 ppm -- extreme clock error)
+//   product      <= 10e9 * 1e6 = 1e16  << INT64_MAX (9.2e18)  -> safe
 uint64_t syncInterpolateT1(tClockSynchronizer *s, uint64_t t2) {
     assert(s != NULL);
     assert(s->is_sync);
@@ -591,17 +589,16 @@ uint64_t syncInterpolateT1(tClockSynchronizer *s, uint64_t t2) {
         DBG_PRINTF_WARNING("syncInterpolateT1FromT2: non-monotonic output adjusted to %" PRIu64 "\n", t1_est);
     }
     s->last_t1_out = t1_est;
-
     return t1_est;
 }
 
-/// Feed a new (t1, t2) timestamp pair.
-/// Calculate drift and update the interpolation anchor.
-///
-/// On the first call only the anchor is stored.
-/// On the second call is_sync is set to true (both modes).
-/// From the third call onwards, SYNC_MODE_PI drives drift_ppb via the PI servo.
-/// Invalid pairs (non-monotonic timestamps) are silently dropped.
+// Feed a new (t1, t2) timestamp pair.
+// Calculate drift and update the interpolation anchor.
+//
+// On the first call only the anchor is stored.
+// On the second call is_sync is set to true (both modes).
+// From the third call onwards, SYNC_MODE_PI drives drift_ppb via the PI servo.
+// Invalid pairs (non-monotonic timestamps) are silently dropped.
 void syncUpdate(tClockSynchronizer *s, uint64_t t1, uint64_t t2) {
     assert(s != NULL);
 
@@ -713,8 +710,8 @@ void syncUpdate(tClockSynchronizer *s, uint64_t t1, uint64_t t2) {
     s->cycle_count++;
 }
 
-/// Feed a new (t1,t2) timestamp anchor and set drift parameters directly.
-/// Used for testing and simulation of clock properties
+// Feed a new (t1,t2) timestamp anchor and set drift parameters directly.
+// Used for testing and simulation of clock properties
 void syncSet(tClockSynchronizer *s, uint64_t t1, int64_t t2, int64_t drift_ppb) {
     assert(s != NULL);
     s->t1 = t1;

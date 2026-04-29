@@ -4,8 +4,8 @@
 #include <stdbool.h> // for bool
 #include <stdint.h>  // for uintxx_t
 
-#include "filter.h"   // Average and linreg filter
 #include "platform.h" // from libxcplite for SOCKET_HANDLE, MUTEX, ...
+#include "util.h"     // from libxcplite for average and linear regression filters
 
 #include "ptp.h"    // for tPtp, OPTION_ENABLE_XCP
 #include "ptpHdr.h" // PTP protocol message structures

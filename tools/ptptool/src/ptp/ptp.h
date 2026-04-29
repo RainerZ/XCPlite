@@ -4,15 +4,15 @@
 #include <stdbool.h> // for bool
 #include <stdint.h>  // for uintxx_t
 
-#include "filter.h"   // for average filter
 #include "platform.h" // from libxcplite for SOCKET_HANDLE, THREAD_HANDLE, ...
 #include "ptpHdr.h"   // for struct ptphdr
+#include "util.h"     // for average filter
 
 //-------------------------------------------------------------------------------------------------------
 // Options
 
 // Enable buildin PTP client clock
-// #define OPTION_ENABLE_PTP_CLIENT
+#define OPTION_ENABLE_PTP_CLIENT
 
 // Enable buildin PTP master
 #define OPTION_ENABLE_PTP_MASTER

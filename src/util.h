@@ -219,11 +219,9 @@ typedef struct {
 
 /* Initialize (or reset) a clock synchronizer.
  * mode: SYNC_MODE_DEFAULT or SYNC_MODE_PI.
- * For SYNC_MODE_PI the default gains (SYNC_PI_KP/KI_SHIFT_DEFAULT) are used.
- * Override gains by writing s->kp_shift / s->ki_shift after this call.
- * The median pre-filter is initialized but disabled (use_median = false).
- * Enable with s->use_median = true; resize with median_filter_init().   */
-void syncInit(tClockSynchronizer *s, uint8_t mode);
+ * median_filter_size: Set to 0 for no filtering
+ */
+void syncInit(tClockSynchronizer *s, uint8_t mode, size_t median_filter_size);
 
 /* Return true if the synchronizer has received at least two timestamp pairs
  * and is ready to interpolate.                                          */

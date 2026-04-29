@@ -30,7 +30,7 @@
 #include <sys/ioctl.h> // for ioctl
 #include <unistd.h>    // for close
 
-#include "filter.h" // for average filter
+#include "util.h" // from libxcplite for average filter
 
 extern uint8_t ptp_log_level;
 #define DBG_LEVEL ptp_log_level
