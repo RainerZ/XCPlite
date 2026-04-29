@@ -48,25 +48,23 @@ void XcpSetLogLevel(uint8_t level);
 // Note: If logging enabled with log level 6 OPTION_MAX_DBG_LEVEL must be set to 6
 #define OPTION_LOG_LEVEL 5 // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug, 5 = trace, 6 = verbose
 
-#define QUEUE_SIZE (1024 * 256) // Size of the test queue in bytes
+#define QUEUE_SIZE (1024 * 64) // Size of the test queue in bytes
 
 // Test parameters
-// 64 byte payload  * THREAD_COUNT * 1000000/THREAD_DELAY_US = Throughput in byte/s
+// 40-128 byte payload * THREAD_COUNT * 1000000/THREAD_DELAY_US = Throughput in byte/s
 
-// Parameters for 2000000 msg/s with 10 threads, 64 byte payload, 10us delay
-#define THREAD_COUNT 10                            // Number of threads to create
-#define MAX_PRODUCERS 8                            // Max concurrent producer processes (SHM mode); also bounds last_counter[] in single-process mode
-#define THREAD_DELAY_US 10                         // Delay in microseconds for the thread loops
-#define THREAD_BURST_SIZE 2                        // Acquire and push this many entries in a burst before sleeping
-#define THREAD_PAYLOAD_SIZE (4 * sizeof(uint64_t)) // Size of the test payload produced by the threads
+// Parameters for 2000000 msg/s with 10 threads, 40 byte payload, 10us delay
+#define THREAD_COUNT 10             // Number of threads to create
+#define THREAD_DELAY_US 10          // Delay in microseconds for the thread loops
+#define THREAD_BURST_SIZE 4         // Acquire and push this many entries in a burst before sleeping (stop bursting on overrun)
+#define THREAD_PAYLOAD_MIN_SIZE 40  // Min size of the test payload produced by the threads
+#define THREAD_PAYLOAD_MAX_SIZE 128 // Max size of the test payload produced by the threads (random)
 
 // The queue implementations in reference.c, queue62v.c and queue64f.c support peeking ahead
 #if defined(OPTION_QUEUE_64_VAR_SIZE) || defined(OPTION_QUEUE_64_FIX_SIZE)
-#define TEST_QUEUE_PEEK          // Use queuePeek(random(QUEUE_PEEK_MAX_INDEX)) instead of queuePop
-#define QUEUE_PEEK_MAX_INDEX (8) // Max offset for peeking ahead
-
-#define CONSUMER_SLEEP_ON_EMPTY_QUEUE_US 500 // Sleep time in microseconds for the consumer loop, when queue was empty
-
+#define TEST_QUEUE_PEEK                      // Use queuePeek(random(QUEUE_PEEK_MAX_INDEX)) instead of queuePop
+#define QUEUE_PEEK_MAX_INDEX (8)             // Max offset for peeking ahead
+#define CONSUMER_SLEEP_ON_EMPTY_QUEUE_US 128 // Start sleep time in microseconds for the consumer loop, when queue was empty (incremented over time))
 #endif
 
 //-------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -337,8 +335,8 @@ void *task(void *p)
 {
     bool run = true;
 
-    // Task local measurement variables on stack
     uint64_t counter = 0;
+    uint64_t overruns = 0;
 
     // Build the task name from the event index
     uint16_t task_index = atomic_fetch_add_explicit(&task_index_ctr, 1, memory_order_relaxed);
@@ -356,9 +354,9 @@ void *task(void *p)
 
         for (int n = 0; n < THREAD_BURST_SIZE; n++) {
 
-            counter++;
-
-            uint16_t size = THREAD_PAYLOAD_SIZE + rand() % 32; // Add some random size to the payload to increase the variability of the test
+            assert(THREAD_PAYLOAD_MIN_SIZE >= sizeof(uint32_t) + 4 * sizeof(uint64_t));
+            uint16_t size = THREAD_PAYLOAD_MIN_SIZE +
+                            rand() % (THREAD_PAYLOAD_MAX_SIZE - THREAD_PAYLOAD_MIN_SIZE + 1); // Add some random size to the payload to increase the variability of the test
 
 #ifdef TEST_ACQUIRE_LOCK_TIMING
             uint64_t start_time = clockGetMonotonicNs();
@@ -375,14 +373,22 @@ void *task(void *p)
                 uint64_t *b = (uint64_t *)(queue_buffer.buffer + sizeof(uint32_t));
                 b[0] = thread_id;
                 b[1] = size;
-                b[2] = counter;
-
+                b[2] = ++counter;
+                b[3] = overruns;
+                overruns = 0; // Reset overrun counter after reporting it in the payload
                 queuePush(queue_handle, &queue_buffer, false);
+            } else {
+                overruns++;
             }
 
 #ifdef TEST_ACQUIRE_LOCK_TIMING
             lock_test_add_sample(clockGetMonotonicNs() - start_time);
 #endif
+
+            if (overruns > 0) {
+                sleepUs(THREAD_DELAY_US * 2);
+                break;
+            }
         }
 
         // Sleep for the specified delay parameter in microseconds, defines the approximate sampling rate
@@ -428,7 +434,8 @@ static void print_test_info(void) {
     DBG_PRINTF3("THREAD_COUNT=%d\n", THREAD_COUNT);
     DBG_PRINTF3("THREAD_BURST_SIZE=%d\n", THREAD_BURST_SIZE);
     DBG_PRINTF3("THREAD_DELAY_US=%d\n", THREAD_DELAY_US);
-    DBG_PRINTF3("THREAD_PAYLOAD_SIZE=%zu\n", THREAD_PAYLOAD_SIZE);
+    DBG_PRINTF3("THREAD_PAYLOAD_MIN_SIZE=%u\n", THREAD_PAYLOAD_MIN_SIZE);
+    DBG_PRINTF3("THREAD_PAYLOAD_MAX_SIZE=%u\n", THREAD_PAYLOAD_MAX_SIZE);
     DBG_PRINT3("\n");
     DBG_PRINT3("Queue parameters:\n");
     DBG_PRINTF3("QUEUE_ENTRY_USER_HEADER_SIZE=%d\n", QUEUE_ENTRY_USER_HEADER_SIZE);
@@ -452,7 +459,7 @@ static void print_help(void) {
 #endif
 
     printf("  Queue size:    %u bytes\n", QUEUE_SIZE);
-    printf("  Threads:       %d producers, payload %zu bytes, burst %d, delay %d us\n", THREAD_COUNT, (size_t)THREAD_PAYLOAD_SIZE, THREAD_BURST_SIZE, THREAD_DELAY_US);
+    printf("  Threads:       %d producers, payload %zu bytes, burst %d, delay %d us\n", THREAD_COUNT, (size_t)THREAD_PAYLOAD_MIN_SIZE, THREAD_BURST_SIZE, THREAD_DELAY_US);
 }
 
 int main(int argc, char *argv[]) {
@@ -532,15 +539,16 @@ int main(int argc, char *argv[]) {
 
     // Local variables for the consumer loop
     uint32_t msg_count = 0;
-    uint32_t msg_lost = 0;
+    uint32_t msg_overruns = 0;
+    uint32_t msg_errors = 0;
     uint32_t msg_bytes = 0;
     uint32_t max_level = 0;
     uint64_t last_msg_time = clockGetMonotonicUs();
     uint32_t last_msg_count = 0;
     uint32_t last_msg_bytes = 0;
-    uint64_t last_counter[MAX_PRODUCERS * THREAD_COUNT];
+    uint64_t last_counter[THREAD_COUNT];
     memset(last_counter, 0, sizeof(last_counter));
-    uint32_t sleep_time = CONSUMER_SLEEP_ON_EMPTY_QUEUE_US;
+    uint32_t sleep_time_ns = CONSUMER_SLEEP_ON_EMPTY_QUEUE_US * 1000;
 
 // Create XCP DAQ measurements
 #ifdef USE_XCP
@@ -549,7 +557,7 @@ int main(int argc, char *argv[]) {
         DaqCreateEvent(mainloop);
         A2lSetStackAddrMode(mainloop);
         A2lCreateMeasurement(msg_count, "Message count");
-        A2lCreateMeasurement(msg_lost, "Messages lost");
+        A2lCreateMeasurement(msg_overruns, "Messages lost");
         A2lCreateMeasurement(msg_bytes, "Message bytes");
         A2lUnlock();
     }
@@ -586,13 +594,13 @@ int main(int argc, char *argv[]) {
                 for (uint32_t index = 0; index <= max_peek_index; index++) {
                     uint32_t lost = 0;
                     buffer[index] = queuePeek(queue_handle, index, &lost, NULL);
-                    msg_lost += lost;
+                    msg_overruns += lost;
                     if (buffer[index].size == 0) { // Empty buffer, no more messages in the queue
                         break;
                     }
                     buffer_count++;
                     assert(buffer[index].buffer != NULL);
-                    assert(buffer[index].size >= THREAD_PAYLOAD_SIZE);
+                    assert(buffer[index].size >= THREAD_PAYLOAD_MIN_SIZE);
                     assert((uint64_t)buffer[index].buffer % 2 == 0);
 
                     // Check test data
@@ -601,18 +609,28 @@ int main(int argc, char *argv[]) {
                     uint64_t thread_id = b[0];
                     uint64_t size = b[1];
                     uint64_t counter = b[2];
+                    uint64_t overruns = b[3];
 
                     // printf("Peeked index %u: thread_id=%llu, size=%llu, counter=%llu\n", index, thread_id, size, counter);
 
                     // Check counter incrementing
-                    assert(size >= THREAD_PAYLOAD_SIZE);
-                    assert(thread_id < MAX_PRODUCERS * THREAD_COUNT);
-                    if (msg_count > 0) {
-                        if (counter != last_counter[thread_id] + 1) {
-                            printf("Messages lost in thread %u, expected counter %llu, got %llu\n", (uint32_t)thread_id, last_counter[thread_id] + 1, counter);
+                    if (size < THREAD_PAYLOAD_MIN_SIZE || thread_id >= THREAD_COUNT) {
+                        printf(ANSI_COLOR_RED "Corrupt message received \n" ANSI_COLOR_RESET);
+                        msg_errors++;
+                    } else {
+                        if (msg_count > 0) {
+                            if (counter != last_counter[thread_id] + 1) {
+                                printf(ANSI_COLOR_RED "Counter error in thread %u, expected counter %llu, got %llu\n" ANSI_COLOR_RESET, (uint32_t)thread_id,
+                                       last_counter[thread_id] + 1, counter);
+                                msg_errors++;
+                            }
                         }
+                        last_counter[thread_id] = counter;
                     }
-                    last_counter[thread_id] = counter;
+                    // Check overruns
+                    if (overruns > 0) {
+                        printf(ANSI_COLOR_YELLOW "Overruns in thread %u, count = %llu)\n" ANSI_COLOR_RESET, (uint32_t)thread_id, overruns);
+                    }
 
                     // Write to the user header
 #if QUEUE_ENTRY_USER_HEADER_SIZE >= 4
@@ -643,7 +661,7 @@ int main(int argc, char *argv[]) {
 
             uint32_t lost = 0;
             tQueueBuffer segment_buffer = queuePop(queue_handle, true, false, &lost); // May accumulate multiple messages in one segment (message has a transport layer header)
-            msg_lost += lost;
+            msg_overruns += lost;
             if (segment_buffer.size == 0)
                 break;
 
@@ -657,7 +675,7 @@ int main(int argc, char *argv[]) {
             for (;;) {
 
                 assert(buffer.buffer != NULL);
-                assert(buffer.size >= THREAD_PAYLOAD_SIZE);
+                assert(buffer.size >= THREAD_PAYLOAD_MIN_SIZE);
                 assert((uint64_t)buffer.buffer % 2 == 0);
 
                 uint64_t *b = (uint64_t *)(buffer.buffer + 8); // Test payload starts + 8 (Transport layer header + XCP DAQ header)
@@ -665,8 +683,8 @@ int main(int argc, char *argv[]) {
                 uint64_t size = b[1];
                 uint64_t counter = b[2];
 
-                assert(size >= THREAD_PAYLOAD_SIZE);
-                assert(thread_id < MAX_PRODUCERS * THREAD_COUNT);
+                assert(size >= THREAD_PAYLOAD_MIN_SIZE);
+                assert(thread_id < THREAD_COUNT);
                 if (msg_count > 0) {
                     if (counter != last_counter[thread_id] + 1) {
                         printf("Messages lost in thread %u, expected counter %llu, got %llu\n", (uint32_t)thread_id, last_counter[thread_id] + 1, counter);
@@ -702,13 +720,14 @@ int main(int argc, char *argv[]) {
             DaqTriggerEvent(mainloop);
 #endif
 
-        sleepUs(sleep_time);
-        if (max_level < 80)
-            sleep_time++;
+        // Iterate close to the overrun limit to test the behavior with high level
+        sleepUs(sleep_time_ns / 1000);
+        if (max_level < 98 && msg_overruns == 0)
+            sleep_time_ns += 10;
 
-        // Producer mode: check consumer liveness once per main loop iteration.
-        // kill(pid, 0) with ESRCH means the consumer process is gone (graceful or crash).
-        // Set gRun=false to exit the main loop and join all producer threads.
+// Producer mode: check consumer liveness once per main loop iteration.
+// kill(pid, 0) with ESRCH means the consumer process is gone (graceful or crash).
+// Set gRun=false to exit the main loop and join all producer threads.
 #ifdef TEST_QUEUE_SHM
         if (g_shm_producer && g_shm_hdr != NULL) {
             int32_t cpid = atomic_load_explicit(&g_shm_hdr->consumer_pid, memory_order_relaxed);
@@ -722,8 +741,8 @@ int main(int argc, char *argv[]) {
         // Print statistics every second
         if (clockGetMonotonicUs() - last_msg_time >= 1000000) {
             if (!g_shm_producer) {
-                printf("Messages received: %u, bytes received: %u, messages lost: %u, data rate: %u msg/s, %u kbytes/s\n", msg_count, msg_bytes, msg_lost,
-                       (msg_count - last_msg_count), (msg_bytes - last_msg_bytes) / 1024);
+                printf("Messages received: %u, overruns: %u, errors: %u, data rate: %u msg/s, %u kbytes/s\n", msg_count, msg_overruns, msg_errors, (msg_count - last_msg_count),
+                       (msg_bytes - last_msg_bytes) / 1024);
                 last_msg_bytes = msg_bytes;
                 last_msg_count = msg_count;
             }
@@ -764,7 +783,7 @@ int main(int argc, char *argv[]) {
 
     // Print queue statistics
     printf("\n\nFinal statistics:\n");
-    printf("Messages received: %u, bytes received: %u, messages lost: %u\n", msg_count, msg_bytes, msg_lost);
+    printf("Messages received: %u, bytes received: %u, messages lost: %u\n", msg_count, msg_bytes, msg_overruns);
     printf("Data rate: %u msg/s, %u kbytes/s\n", (uint32_t)(msg_count * 1000000 / (clockGetMonotonicUs() - last_msg_time)),
            (uint32_t)(msg_bytes * 1000000 / (clockGetMonotonicUs() - last_msg_time)) / 1024);
     printf("Max queue level: %u\n", max_level);

@@ -15,8 +15,7 @@
 
 #include "dbg_print.h" // for DBG_PRINT_ERROR, DBG_PRINTF_WARNING, ...
 #include "platform.h"  // for clockGetRealtimeNs, clockGetMonotonicNs
-#include "sync.h"      // for  syncInit, syncUpdate, syncState, syncInterpolateT1
-#include "util.h"      // for tMedianFilter
+#include "util.h"      // for syncInit, syncUpdate, syncInterpolateT1
 
 //-----------------------------------------------------------------------------------------------------
 // XCP
