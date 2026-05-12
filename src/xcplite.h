@@ -17,15 +17,23 @@
 #include <stdbool.h> // for bool
 #include <stdint.h>  // for uint16_t, uint32_t, uint8_t
 
-#include "cal.h"        // for calibration segment management if enabled
-#include "dbg_print.h"  // for DBG_LEVEL, DBG_PRINTF, DBG_PRINT, ...
-#include "platform.h"   // for atomics
-#include "queue.h"      // for tQueueHandle
-#include "shm.h"        // for shared memory management if enabled
-#include "xcp.h"        // for XCP protocol definitions
-#include "xcp_cfg.h"    // for XCP_PROTOCOL_LAYER_VERSION, XCP_ENABLE_...
 #include "xcplib_cfg.h" // for OPTION_xxx
-#include "xcptl_cfg.h"  // for XCPTL_MAX_CTO_SIZE
+
+#include "dbg_print.h" // for DBG_LEVEL, DBG_PRINTF, DBG_PRINT, ...
+#include "platform.h"  // for atomics
+#include "queue.h"     // for tQueueHandle
+#include "xcp.h"       // for XCP protocol definitions
+#include "xcp_cfg.h"   // for XCP_PROTOCOL_LAYER_VERSION, XCP_ENABLE_...
+#include "xcptl_cfg.h" // for XCPTL_MAX_CTO_SIZE
+
+// @@@@ TODO: Check why we need this include files here
+#ifdef OPTION_CAL_SEGMENTS
+#include "cal.h" // for calibration segment management if enabled
+#endif
+
+#ifdef OPTION_SHM_MODE
+#include "shm.h" // for shared memory management if enabled
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -241,7 +249,10 @@ typedef struct {
     uint8_t addr_ext;
 } tXcpDaqList;
 #pragma pack(pop)
+
+#ifndef _FREE_RTOS // @@@@ TODO: FreeRTOS
 static_assert(sizeof(tXcpDaqList) == 12, "Error: size of tXcpDaqList is not equal to 12");
+#endif
 
 /* Dynamic DAQ list structure in a linear memory block with size XCP_DAQ_MEM_SIZE + 8  */
 #pragma pack(push, 1)

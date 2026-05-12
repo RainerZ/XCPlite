@@ -67,16 +67,18 @@
 #include <unistd.h> // for getpid()
 #endif
 
-#include "dbg_print.h" // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
-#include "platform.h"  // for atomics
-
-#include "cal.h"         // for XcpCalSegXxx
+#include "dbg_print.h"   // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
 #include "persistence.h" // for XcpBinFreezeCalSeg
+#include "platform.h"    // for atomics
 #include "queue.h"       // for QueueXxx transport queue layer interface
 #include "shm.h"         // for shared memory management
 #include "xcp.h"         // XCP protocol definitions
+#include "xcptl.h"       // for transport layer abstraction XcpTlWaitForTransmitQueueEmpty and XcpTlSendCrm
 
-#include "xcptl.h" // for transport layer abstraction XcpTlWaitForTransmitQueueEmpty and XcpTlSendCrm
+#ifdef OPTION_CAL_SEGMENTS
+#include "cal.h" // for XcpCalSegXxx
+#endif
+
 #if defined(XCPTL_ENABLE_MULTICAST)
 #include "xcpethtl.h" // for ethernet specific transport layer functions XcpEthTl
 #endif

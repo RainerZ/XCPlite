@@ -22,7 +22,7 @@
 #include "xcplib_cfg.h" // for OPTION_xxx
 #include "xcplite.h"    // for tXcpDaqLists, XcpXxx, ApplXcpXxx, ...
 
-#if !defined(_WIN) && !defined(_LINUX) && !defined(_MACOS) && !defined(_QNX)
+#if !defined(_WIN) && !defined(_LINUX) && !defined(_MACOS) && !defined(_QNX) && !defined(_FREE_RTOS)
 #error "Please define platform _WIN, _MACOS or _LINUX or _QNX"
 #endif
 

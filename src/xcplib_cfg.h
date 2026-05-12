@@ -26,13 +26,22 @@
 #define OPTION_CANAPE_24
 
 //-------------------------------------------------------------------------------
-// Rust specific settings
+//-------------------------------------------------------------------------------
+// Specific settings
 
-#ifdef XCPLIB_FOR_RUST // Set by the Rust build script
+#if defined(XCPLIB_FOR_RTOS)
+
+#include "xcplib_rtos_cfg.h"
+
+#elif defined(XCPLIB_FOR_RUST) // Set by the Rust build script
 
 #include "xcplib_rust_cfg.h" // for Rust xcp-lite specific configuration
 
 #else
+
+//-------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------
+// Default settings
 
 //-------------------------------------------------------------------------------
 // Logging

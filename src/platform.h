@@ -31,8 +31,13 @@
 #define PLATFORM_32BIT
 #endif
 
+// FreeRTOS
+#if defined(__FreeRTOS__) || defined(FREERTOS) || defined(_FREERTOS) || defined(__FREERTOS) || defined(_FREE_RTOS) || defined(FREE_RTOS)
+
+#define _FREE_RTOS
+
 // Windows
-#if defined(_WIN32) || defined(_WIN64)
+#elif defined(_WIN32) || defined(_WIN64)
 
 #define _WIN
 
@@ -53,14 +58,14 @@
 
 #else
 
-#error "32 Bit *X OS currently not supported"
+#error "Platform not supported"
 
 #endif
 
 #endif
 
-#if !defined(_WIN) && !defined(_LINUX) && !defined(_MACOS) && !defined(_QNX)
-#error "Please define platform _WIN or _MACOS or _LINUX or _QNX"
+#if !defined(_WIN) && !defined(_LINUX) && !defined(_MACOS) && !defined(_QNX) && !defined(_FREE_RTOS)
+#error "Please define platform _WIN, _MACOS, _LINUX, _QNX or _FREE_RTOS"
 #endif
 
 //-------------------------------------------------------------------------------------------------
@@ -78,17 +83,20 @@ OPTION_CLOCK_EPOCH_ARB or OPTION_CLOCK_EPOCH_PTP
 #include "xcplib_cfg.h" // for OPTION_xxx in xcplib context
 
 //-------------------------------------------------------------------------------------------------
+
+#include <inttypes.h> // for PRIx32, PRIu64
+#include <stdbool.h>  // for bool
+#include <stdint.h>   // for uintxx_t, uint_fastxx_t
+
+//-------------------------------------------------------------------------------------------------
 // Platform specific functions
 
 #if defined(_WIN)
 
-#include <assert.h>   // for assert
-#include <inttypes.h> // for PRIx32, PRIu64
-#include <stdbool.h>  // for bool
-#include <stdint.h>   // for uintxx_t, uint_fastxx_t
-#include <stdio.h>    // for printf
 #include <time.h>
 #include <windows.h>
+
+#elif defined(_FREE_RTOS)
 
 #else
 
@@ -103,13 +111,8 @@ OPTION_CLOCK_EPOCH_ARB or OPTION_CLOCK_EPOCH_PTP
 // #define _POSIX_C_SOURCE 200809L
 // #endif
 
-#include <assert.h>   // for assert
-#include <inttypes.h> // for PRIx32, PRIu64
-#include <net/if.h>   // for IFNAMSIZ
-#include <pthread.h>  // for pthread_mutex
-#include <stdbool.h>  // for bool
-#include <stdint.h>   // for uintxx_t, uint_fastxx_t
-#include <stdio.h>    // for printf
+#include <net/if.h>  // for IFNAMSIZ
+#include <pthread.h> // for pthread_mutex
 
 #ifndef OPTION_ATOMIC_EMULATION
 #ifndef __cplusplus
@@ -205,7 +208,10 @@ void sleepMs(uint32_t ms);
 void *platformMemAlloc(size_t size);
 void platformMemFree(void *ptr, size_t size);
 
-#if !defined(_WIN) // POSIX shared memory — not available on Windows
+//-------------------------------------------------------------------------------
+// Shared memory
+
+#if !defined(_WIN) && !defined(_FREE_RTOS)
 
 // Open or create a named POSIX shared-memory region of `size` bytes.
 // `name`      : SHM object name, e.g. "/data"
@@ -240,7 +246,14 @@ void platformShmUnlink(const char *name);
 #define mutexLock EnterCriticalSection
 #define mutexUnlock LeaveCriticalSection
 
-#else
+#elif defined(_FREE_RTOS) // FreeRTOS
+
+#define MUTEX uint32_t
+#define MUTEX_INTIALIZER 0
+#define mutexLock(m)
+#define mutexUnlock(m)
+
+#else // Other
 
 #define MUTEX pthread_mutex_t
 #define MUTEX_INTIALIZER PTHREAD_MUTEX_INITIALIZER
@@ -268,7 +281,15 @@ typedef HANDLE THREAD_HANDLE;
     }
 #define get_thread_id() GetCurrentThreadId()
 
-#else
+#elif defined(_FREE_RTOS) // FreeRTOS
+
+typedef uint32_t THREAD_HANDLE;
+#define create_thread(thread_handle_ptr, attr, thread, args)
+#define join_thread(h)
+#define cancel_thread(h)
+#define get_thread_id() 0
+
+#else // Other
 
 typedef pthread_t THREAD_HANDLE;
 #define create_thread(thread_handle_ptr, attr, thread, params) pthread_create(thread_handle_ptr, attr, thread, params)
@@ -606,6 +627,8 @@ bool fexists(const char *filename);
 #define ATOMIC_BOOL uint64_t
 #define uint_fast32_t uint64_t
 
+#ifdef _WIN
+
 // Volatile casts for load/store: prevents register caching; TSO guarantees ordering on x86-64
 #define atomic_store_explicit(a, b, c) (*(volatile LONGLONG *)(a) = (LONGLONG)(b))
 #define atomic_load_explicit(a, b) ((uint64_t)*(volatile LONGLONG *)(a))
@@ -634,6 +657,46 @@ static __inline bool atomic_compare_exchange_strong_explicit(uint64_t *a, uint64
 static __inline bool atomic_compare_exchange_weak_explicit(uint64_t *a, uint64_t *b, uint64_t c, int d, int e) {
     return atomic_compare_exchange_strong_explicit(a, b, c, d, e); // no spurious failure on x86-64
 }
+
+#else
+
+#if !defined(PLATFORM_64BIT)
+#error "Atomic emulation requires a 64-bit platform"
+#endif
+
+// Volatile casts for load/store: prevents register caching; TSO guarantees ordering on x86-64
+#define atomic_store_explicit(a, b, c) (*a) = (b)
+#define atomic_load_explicit(a, b) *(a)
+
+static __inline uint64_t atomic_exchange_explicit(uint64_t *a, uint64_t b, int c) {
+    (void)c;
+    uint64_t old = *a;
+    *a = b;
+    return old;
+}
+static __inline uint64_t atomic_fetch_add_explicit(uint64_t *a, uint64_t b, int c) {
+    (void)c;
+    uint64_t old = *a;
+    (*a)++;
+    return old;
+}
+static __inline uint64_t atomic_fetch_sub_explicit(uint64_t *a, uint64_t b, int c) {
+    (void)c;
+    uint64_t old = *a;
+    (*a)--;
+    return old;
+}
+static __inline bool atomic_compare_exchange_strong_explicit(uint64_t *a, uint64_t *b, uint64_t c, int d, int e) {
+    (void)d;
+    (void)e;
+    // @@@@ TODO: FREE_RTOS
+    return false;
+}
+static __inline bool atomic_compare_exchange_weak_explicit(uint64_t *a, uint64_t *b, uint64_t c, int d, int e) {
+    return atomic_compare_exchange_strong_explicit(a, b, c, d, e); // no spurious failure on x86-64
+}
+
+#endif
 
 #endif // OPTION_ATOMIC_EMULATION
 

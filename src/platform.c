@@ -25,8 +25,10 @@
 
 #endif
 
-#include "dbg_print.h"  // for DBG_LEVEL, DBG_PRINT, ...
 #include "xcplib_cfg.h" // for OPTION_xxx ...
+
+#include "assert.h"    // for assert
+#include "dbg_print.h" // for DBG_LEVEL, DBG_PRINT, ...
 
 /**************************************************************************/
 // Keyboard
@@ -77,37 +79,9 @@ int _kbhit(void) {
 // Sleep
 /**************************************************************************/
 
-#if !defined(_WIN)
+#if defined(_FREE_RTOS) // FreeRTOS
 
-#include <time.h>   // for timespec, nanosleep, CLOCK_MONOTONIC_RAW
-#include <unistd.h> // for sleep
-
-void sleepUs(uint32_t us) {
-    // DBG_PRINTF3(ANSI_COLOR_RED "Sleep for %u us\n" ANSI_COLOR_RESET, us);
-    if (us == 0) {
-        sleep(0);
-    } else {
-        struct timespec timeout, timerem;
-        assert(us < 1000000UL);
-        timeout.tv_sec = 0;
-        timeout.tv_nsec = (long)us * 1000;
-        nanosleep(&timeout, &timerem);
-    }
-}
-
-void sleepMs(uint32_t ms) {
-    // DBG_PRINTF3(ANSI_COLOR_RED "Sleep for %u ms\n" ANSI_COLOR_RESET, ms);
-    if (ms == 0) {
-        sleep(0);
-    } else {
-        struct timespec timeout, timerem;
-        timeout.tv_sec = (long)ms / 1000;
-        timeout.tv_nsec = (long)(ms % 1000) * 1000000;
-        nanosleep(&timeout, &timerem);
-    }
-}
-
-#else // Windows
+#elif defined(_WIN) // Windows
 
 void sleepUs(uint32_t us) {
 
@@ -140,12 +114,43 @@ void sleepMs(uint32_t ms) {
     }
     Sleep(ms);
 }
+#else               // Other
 
-#endif // Windows
+#include <time.h>   // for timespec, nanosleep, CLOCK_MONOTONIC_RAW
+#include <unistd.h> // for sleep
+
+void sleepUs(uint32_t us) {
+    // DBG_PRINTF3(ANSI_COLOR_RED "Sleep for %u us\n" ANSI_COLOR_RESET, us);
+    if (us == 0) {
+        sleep(0);
+    } else {
+        struct timespec timeout, timerem;
+        assert(us < 1000000UL);
+        timeout.tv_sec = 0;
+        timeout.tv_nsec = (long)us * 1000;
+        nanosleep(&timeout, &timerem);
+    }
+}
+
+void sleepMs(uint32_t ms) {
+    // DBG_PRINTF3(ANSI_COLOR_RED "Sleep for %u ms\n" ANSI_COLOR_RESET, ms);
+    if (ms == 0) {
+        sleep(0);
+    } else {
+        struct timespec timeout, timerem;
+        timeout.tv_sec = (long)ms / 1000;
+        timeout.tv_nsec = (long)(ms % 1000) * 1000000;
+        nanosleep(&timeout, &timerem);
+    }
+}
+
+#endif // Other
 
 /**************************************************************************/
 // Memory mapping
 /**************************************************************************/
+
+#if defined(OPTION_SHM_MODE)
 
 #if !defined(_WIN)
 #include <sys/mman.h>
@@ -345,6 +350,8 @@ void platformShmUnlink(const char *name) {
 
 #endif // !_WIN
 
+#endif
+
 /**************************************************************************/
 // Atomics
 /**************************************************************************/
@@ -353,7 +360,19 @@ void platformShmUnlink(const char *name) {
 // Mutex
 /**************************************************************************/
 
-#if !defined(_WIN) // Non-Windows platforms
+#if defined(_FREE_RTOS) // FreeRTOS
+
+#elif defined(_WIN) // Windows
+
+void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
+    (void)recursive;
+    // Window critical sections are always recursive
+    (void)InitializeCriticalSectionAndSpinCount(m, spinCount);
+}
+
+void mutexDestroy(MUTEX *m) { DeleteCriticalSection(m); }
+
+#else // Other
 
 void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
     (void)spinCount;
@@ -368,16 +387,6 @@ void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
 }
 
 void mutexDestroy(MUTEX *m) { pthread_mutex_destroy(m); }
-
-#else // Windows
-
-void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
-    (void)recursive;
-    // Window critical sections are always recursive
-    (void)InitializeCriticalSectionAndSpinCount(m, spinCount);
-}
-
-void mutexDestroy(MUTEX *m) { DeleteCriticalSection(m); }
 
 #endif
 
@@ -413,6 +422,47 @@ const char *socketGetErrorString(int32_t err) {
     }
 #endif
 }
+
+//--------------------------------------------------------------------------
+#if defined(_FREE_RTOS) // FreeRTOS
+
+bool socketStartup(void) { return true; }
+
+void socketCleanup(void) {}
+
+// Create a socket, TCP or UDP
+// flag SOCKET_MODE_HW_TIMESTAMPING: Enable hardware timestamping (Linux only, requires root)
+// flag SOCKET_MODE_SW_TIMESTAMPING: Enable software timestamping (Linux only)
+bool socketOpen(SOCKET_HANDLE *socketp, uint16_t flags) { return true; }
+
+bool socketBind(SOCKET_HANDLE socket, const uint8_t *addr, uint16_t port) { return true; }
+
+// Bind socket to a specific network interface by name (Linux only)
+// This is useful for multicast reception on a specific interface while binding to INADDR_ANY
+// Requires root privileges on Linux
+bool socketBindToDevice(SOCKET_HANDLE socket, const char *ifname) { return true; }
+
+// Hardware timestamping not supported on this platform
+// Stub for non-Linux platforms
+bool socketEnableTimestamps(SOCKET_HANDLE socket, bool ptpOnly) {
+    (void)socket;
+    (void)ptpOnly;
+    DBG_PRINT_ERROR("socketEnableTimestamps: Socket hardware timestamping not supported on this platform!\n");
+    return false;
+}
+
+// Shutdown socket
+// Block rx and tx direction
+bool socketShutdown(SOCKET_HANDLE socket) { return true; }
+
+// Close socket
+// Make addr reusable
+bool socketClose(SOCKET_HANDLE *socketp) { return true; }
+
+// Get MAC address of a network interface by name
+bool socketGetMAC(char *ifname, uint8_t *mac) { return false; }
+
+#else
 
 //--------------------------------------------------------------------------
 #if !defined(_WIN) // Non-Windows platforms
@@ -791,7 +841,7 @@ bool socketGetLocalAddr(uint8_t *mac, uint8_t *addr) {
 #endif // OPTION_ENABLE_GET_LOCAL_ADDR
 
 //--------------------------------------------------------------------------
-#else // Windows platform
+#else  // Windows platform
 
 // Winsock
 #pragma comment(lib, "ws2_32.lib")
@@ -1736,6 +1786,8 @@ bool socketGetSendTime(SOCKET_HANDLE socket, uint64_t *hw_time, uint64_t *sw_tim
 
 #endif
 
+#endif
+
 /**************************************************************************/
 // Clock
 /**************************************************************************/
@@ -1761,7 +1813,9 @@ void clockGetPrintStatistic(void) {
 // }
 // #endif
 
-#if !defined(_WIN) // Non-Windows platforms
+#if defined(_FREE_RTOS)
+
+#elif !defined(_WIN) // Non-Windows platforms
 
 #if !defined(OPTION_CLOCK_EPOCH_PTP) && !defined(OPTION_CLOCK_EPOCH_ARB)
 #error "Please define OPTION_CLOCK_EPOCH_ARB or OPTION_CLOCK_EPOCH_PTP"
@@ -1877,7 +1931,7 @@ uint64_t clockGet(void) {
     clock_gettime(CLOCK_TYPE, &__gClock);
 #ifdef OPTION_CLOCK_TICKS_1NS // ns
     return (((uint64_t)(__gClock.tv_sec) * 1000000000ULL) + (uint64_t)(__gClock.tv_nsec));
-#else // us
+#else                         // us
     return (((uint64_t)(__gClock.tv_sec) * 1000000ULL) + (uint64_t)(__gClock.tv_nsec / 1000)); // us
 #endif
 }
@@ -1886,7 +1940,7 @@ uint64_t clockGet(void) {
 uint64_t clockGetLast(void) {
 #ifdef OPTION_CLOCK_TICKS_1NS // ns
     return (((uint64_t)(__gClock.tv_sec) * 1000000000ULL) + (uint64_t)(__gClock.tv_nsec));
-#else // us
+#else                         // us
     return (((uint64_t)(__gClock.tv_sec) * 1000000ULL) + (uint64_t)(__gClock.tv_nsec / 1000)); // us
 #endif
 }

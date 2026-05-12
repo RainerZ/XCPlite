@@ -19,7 +19,6 @@
 #include <stdint.h>   // for uintxx_t
 #include <stdio.h>    // for printf
 
-#include "a2l.h"        // for A2lFinalize()
 #include "dbg_print.h"  // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
 #include "platform.h"   // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex
 #include "queue.h"      // for tQueueHandle, queueInitFromMemory, ...
@@ -27,7 +26,11 @@
 #include "xcplib_cfg.h" // for OPTION_xxx, TEST_xxx
 #include "xcplite.h"    // for tXcpDaqLists, XcpXxx, ApplXcpXxx, ...
 
-#if !defined(_WIN) && !defined(_LINUX) && !defined(_MACOS) && !defined(_QNX)
+#ifdef OPTION_SHM_MODE
+#include "a2l.h" // for A2lFinalize()
+#endif
+
+#if !defined(_WIN) && !defined(_LINUX) && !defined(_MACOS) && !defined(_QNX) && !defined(_FREE_RTOS)
 #error "Please define platform _WIN, _MACOS or _LINUX or _QNX"
 #endif
 
