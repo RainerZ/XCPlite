@@ -210,7 +210,8 @@ impl ElfReader {
     pub fn register_segments_and_events(&self, reg: &mut Registry, segment_relative: bool, verbose: usize) -> Result<(), Box<dyn Error>> {
         info!("Registering segment and event information:");
 
-        let mut next_event_id: u16 = 0;
+        let xcp_event_section_addr = self.debug_data.get_xcp_event_section_addr();
+
         let mut next_segment_number: u16 = 0;
 
         // Iterate over variables
@@ -379,8 +380,8 @@ impl ElfReader {
                 }
             }
 
-            // evt__<name> (thread local static, name is event name)
-            // Event definitions (thread local static variaables)
+            // Event definitions (by markers from DaqCreateEvent macro)
+            // (thread local) static evt__<name>, name is event name
             if var_name.starts_with("evt__") {
                 // remove the "evt__" prefix
                 let evt_name = var_name.strip_prefix("evt__").unwrap_or("unnamed");
@@ -390,17 +391,27 @@ impl ElfReader {
                 } else {
                     format!("{evt_unit_idx}")
                 };
+
                 let evt_function = if let Some(f) = var_infos[0].function.as_ref() { f.as_str() } else { "" };
-                info!("Event definition for event '{}' found in {}:{}", evt_name, evt_unit_name, evt_function);
-                // Find the event in the registry
+                info!(
+                    "Event definition for event '{}' found in {}:{}, addr = {:#x}",
+                    evt_name, evt_unit_name, evt_function, var_infos[0].address.1
+                );
+                // Find the event already exists in the registry
                 if let Some(_evt) = reg.event_list.find_event(evt_name, 0) {
                     continue; // event already exists
-                } else {
-                    // @@@@ TODO: Event number unknown !!!!!!!!!!!!!!!
-                    reg.event_list.add_event(McEvent::new(evt_name.to_string(), 0, next_event_id, 0)).unwrap();
-                    error!("Unknown event '{}': Created with event id = {}", evt_name, next_event_id);
-                    next_event_id += 1;
-                    continue; // skip this variable
+                }
+                // Create a new event and try to determine the event number from the event memory section
+                else {
+                    if xcp_event_section_addr > 0 {
+                        let event_id: u16 = ((var_infos[0].address.1 - xcp_event_section_addr) / 0x10) as u16; // @@@@ size of tXcpEventDescriptor hardcoded
+                        reg.event_list.add_event(McEvent::new(evt_name.to_string(), 0, event_id, 0)).unwrap();
+                        info!("New event '{}' found: event id = {}", evt_name, event_id);
+                        continue; // event id has to be fixed later, for now we just create it with a unique id based on the address of the event marker variable
+                    } else {
+                        reg.event_list.add_event(McEvent::new(evt_name.to_string(), 0, 0xFFFF, 0)).unwrap();
+                        warn!("New event '{}' found, created with undefined event id 0xFFFF", evt_name);
+                    }
                 }
             }
         }

@@ -126,7 +126,7 @@ struct Args {
     // --create-a2l
     /// Build an A2L file template from XCP server information about events and memory segments.
     /// Requires that the XCP server supports the GET_EVENT_INFO and GET_SEGMENT_INFO commands.
-    /// Insert all visible measurement and calibration variables from ELF file if specified with --elf.
+    /// Insert all visible measurement and calibration variables from ELF file if specified with --elf or --upload-elf.
     #[arg(long, default_value_t = false)]
     create_a2l: bool,
 
@@ -501,7 +501,7 @@ async fn xcp_client(
             // Connect to the XCP server
             // Print protocol information
             info!("XCP Connect using {}", if tcp { "TCP" } else { "UDP" });
-            let daq_decoder = Arc::new(Mutex::new(DaqDecoder::new(2, &csv_filename))); 
+            let daq_decoder = Arc::new(Mutex::new(DaqDecoder::new(2, &csv_filename)));
             match xcp_client.connect(connect_mode, Arc::clone(&daq_decoder), ServTextDecoder::new()).await {
                 Ok(_) => {
                     info!("Connected to XCP server at {}", dest_addr);
@@ -612,7 +612,6 @@ async fn xcp_client(
         };
         warn!("A2L path: {}", a2l_path.display());
 
-
         //----------------------------------------------------------------
         // Upload A2L
         // From XCP server and load it into the xcp_client registry
@@ -640,14 +639,14 @@ async fn xcp_client(
         }
         //----------------------------------------------------------------
         // Create A2L file
-        // If an ELF file is specified create an A2L file from the XCP server information and the ELF file
+        // If an ELF file is available, create an A2L file from the XCP server information and the ELF file
         // If option create-a2l is specified and no ELF file, create a A2L template from XCP server information
         // Read segment and event information obtained from the XCP server into registry
         // Add measurement and calibration variables from ELF file if specified
         // Addressing scheme may be XCPLITE__ACSDD or XCPLITE__CASDD depending on the target configuration
-        else if create_a2l || !elf_filename.is_empty() {
+        else if create_a2l || !elf_filename.is_empty() || upload_elf {
             let mode = if xcp_client.is_connected() {
-                if !elf_filename.is_empty() {
+                if !elf_filename.is_empty() || upload_elf {
                     "target XCP event/segment and ELF/DWARF variable and type information, online mode"
                 } else {
                     "target XCP event/segment information only, online mode"
@@ -675,11 +674,14 @@ async fn xcp_client(
             // Read binary file if specified and create calibration variables in segments and all global measurement variables
             // Events and calibration segments found in the ELF file, must match the XCP server information if present
             // If not, they are created, but with dummy event id and segment number, which has to be fixed later !!!
-            if !elf_filename.is_empty() {
-                info!("Reading ELF file: {}", elf_filename);
-
+            if !elf_filename.is_empty() || upload_elf {
                 // Upload ELF file
                 if upload_elf {
+                    if elf_filename.is_empty() {
+                        error!("ELF file name must be specified with --elf when using --upload-elf");
+                        return Err("ELF file name not specified".into());
+                    }
+                    info!("Upload ELF file: {}", elf_filename);
                     let res = xcp_client.upload_elf_file(&elf_filename).await;
                     if let Err(e) = res {
                         error!("ELF upload failed, Error: {}", e);
@@ -688,13 +690,14 @@ async fn xcp_client(
                 }
 
                 // Read ELF file and DWARF debug information, compilation unit number may be limited to reduce processing time and memory needed
+                info!("Reading ELF file: {}", elf_filename);
                 let elf_reader = ElfReader::new(&elf_filename, verbose, elf_idx_unit_limit).ok_or(format!("Failed to read ELF file '{}'", elf_filename))?;
                 if verbose > 0 {
                     elf_reader.debug_data.print_debug_info(verbose, elf_idx_unit_limit); // print only variables <= compilation unit 0
                 }
 
                 // Detect addressing scheme for calibration segments
-                // Get target signature (CASDD, ACSDD, ...)from ELF file if available
+                // Get target signature (CASDD, ACSDD, ...) from ELF file if available
                 // true - addr_ext==0 is segment relative addressing, addr_ext==1 is absolute addressing
                 // false - addr_ext==0 is absolute addressing, addr_ext==1 is segment relative addressing
                 segment_relative = {
@@ -743,7 +746,6 @@ async fn xcp_client(
                 info!("Created A2L with file: {} {}", a2l_path.display(), mode);
             }
         }
-        
         //----------------------------------------------------------------
         // Load A2L from local file
         // If not upload or create option load  A2L from specified file into reg

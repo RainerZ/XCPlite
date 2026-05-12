@@ -222,7 +222,7 @@ void bar(void) { DaqCreateEvent(bar); }
 //-----------------------------------------------------------------------------------------------------
 // Demo main
 
-int main(void) {
+int main(int argc, char *argv[]) {
 
     printf("\nXCP on Ethernet no_a2l_demo C demo\n");
 
@@ -246,6 +246,7 @@ int main(void) {
 
     // XCP: Initialize the XCP singleton, activate XCP, must be called before starting the server
     XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
+    XcpSetElfName(argv[0]); // Set ELF file name for upload via GET_ID, optional with OPTION_ENABLE_ELF_UPLOAD
 
     // XCP: Initialize the XCP Server
     const uint8_t __addr[4] = OPTION_SERVER_ADDR;

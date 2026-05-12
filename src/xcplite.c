@@ -592,8 +592,8 @@ uint8_t XcpReadMta(uint8_t size, uint8_t *data) {
         return 0; // Ok
     }
 
-#ifdef XCP_ENABLE_IDT_A2L_UPLOAD
-    // Ext == XCP_ADDR_EXT_FILE - A2L file upload address space
+#if defined(XCP_ENABLE_IDT_A2L_UPLOAD) || defined(XCP_ENABLE_IDT_ELF_UPLOAD)
+    // Ext == XCP_ADDR_EXT_FILE - A2L or ELF file upload address space
     if (local.mta_ext == XCP_ADDR_EXT_FILE) {
         if (!ApplXcpReadFile(size, local.mta_addr, data))
             return CRC_ACCESS_DENIED; // Access violation

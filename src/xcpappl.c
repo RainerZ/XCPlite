@@ -546,9 +546,10 @@ static uint32_t openFile(const char *filename) {
 
 // Called by the protocol layer to read a chunk of a file for upload
 bool ApplXcpReadFile(uint8_t size, uint32_t addr, uint8_t *data) {
-    if (gXcpFile == NULL)
+    if (gXcpFile == NULL) {
+        DBG_PRINT_ERROR("File not open for reading!\n");
         return false;
-    assert(gXcpFile != NULL);
+    }
     if (addr + size > gXcpFileLength || size != fread(data, 1, (uint32_t)size, gXcpFile)) {
         closeFile();
         DBG_PRINTF_ERROR("ApplXcpReadFile addr=%u size=%u exceeds file length=%u\n", addr, size, gXcpFileLength);
@@ -645,7 +646,7 @@ uint32_t ApplXcpGetId(uint8_t id, uint8_t *buf, uint32_t bufLen) {
             return 0; // ELF not available as response buffer
         // Assuming gXcpA2lName is the name of the ELF file without extension
         len = openFile(gXcpElfName);
-        DBG_PRINTF3("ApplXcpGetId GET_ID %02X ELF as upload (len=%u)\n", id, len);
+        DBG_PRINTF3("ApplXcpGetId GET_ID 0x%02X ELF file '%s' as upload (len=%u)\n", id, gXcpElfName, len);
     } break;
 #endif
 

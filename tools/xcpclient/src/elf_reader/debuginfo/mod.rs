@@ -118,6 +118,18 @@ impl DebugData {
         Some(file_name.replace('.', "_"))
     }
 
+    // Get the address of the XCP event descriptor memory section
+    pub(crate) fn get_xcp_event_section_addr(&self) -> u64 {
+        let sections: Vec<(&String, &(u64, u64))> = self.sections.iter().collect();
+        for (name, (addr, size)) in sections {
+            if name == "xcp_events" {
+                log::info!("Found XCP event descriptor memory section at address = 0x{:08X}, size = {} bytes", *addr, *size);
+                return *addr;
+            }
+        }
+        return 0;
+    }
+
     /// print the debug statistics
     pub(crate) fn print_debug_stats(&self) {
         println!("\n====================================================================================================");
