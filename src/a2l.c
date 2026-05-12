@@ -28,6 +28,7 @@
 #include "persistence.h" // for XcpBinWrite, XcpBinDelete
 #include "platform.h"    // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex
 #include "xcp_cfg.h"     // for XCP_xxx
+#include "xcplite.h"     // for XcpGetEpk
 #include "xcptl_cfg.h"   // for XCPTL_xxx
 
 //----------------------------------------------------------------------------------
@@ -1688,3 +1689,6 @@ bool A2lFinalize(void) {
 }
 
 #endif // XCP_ENABLE_A2L_GENERATOR
+
+// Suppress -Wpedantic "empty translation unit" warning
+typedef int a2l_dummy_t;

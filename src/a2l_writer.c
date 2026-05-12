@@ -540,3 +540,6 @@ bool A2lWriter(const char *a2l_filename, uint8_t a2l_mode, const char *project_n
 }
 
 #endif // XCP_ENABLE_A2L_GENERATOR
+
+// Suppress -Wpedantic "empty translation unit" warning
+typedef int a2l_writer_dummy_t;

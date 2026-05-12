@@ -285,7 +285,7 @@ static tXcpEventId evt__dynname
 static __typeof__(var) daq__##event##__##var
 
 // Daq event trigger macro event id once pattern
-// From C macros DaqCreateAndTriggerXxx(name), DaqEventVar(name, ...), DaqEventExtVar(name, ...), ...)
+// From C macros DaqCreateAndTriggerXxx(name), DaqEventVar(name, ...), ...)
 static tXcpEventId trg__AAS__##name // For absloute and stack relative addressing [XCP_ADDR_EXT_ABS and XCP_ADDR_EXT_DYN]
 static tXcpEventId trg__AASD__##name // For absolute, stack and relative addressing [XCP_ADDR_EXT_ABS, XCP_ADDR_EXT_DYN, XCP_ADDR_EXT_DYN+1]
 static tXcpEventId trg__AASDD__##name // for multiple DYN address extensions [XCP_ADDR_EXT_DYN+1 ..= XCP_ADDR_EXT_DYN_MAX] 

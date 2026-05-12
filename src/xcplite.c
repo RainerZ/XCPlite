@@ -68,6 +68,10 @@
 #ifdef OPTION_SHM_MODE
 #include <unistd.h> // for getpid()
 #endif
+#ifdef __APPLE__
+#include <mach-o/getsect.h> // for getsectiondata(), used by XcpRegisterSectionEvents()
+#include <mach-o/ldsyms.h>  // for _mh_execute_header
+#endif
 
 #include "dbg_print.h"   // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
 #include "persistence.h" // for XcpBinFreezeCalSeg
@@ -941,11 +945,52 @@ tXcpEventId XcpCreateEvent(const char *name, uint32_t cycle_time_ns, uint8_t pri
     return id;
 }
 
-#else  // XCP_ENABLE_DAQ_EVENT_LIST
+// Pre-register all tXcpEventDescriptor variables placed in the xcp_events section by DaqCreateEvent().
+// Must be called after SS_ACTIVATED is set (XcpCreateEvent requires isActivated()).
+// If a persistence file was loaded before this call, events are matched by name and keep their saved id.
+static uint16_t XcpRegisterSectionEvents(void) {
+
+    uint16_t count = 0;
+
+#if defined(__ELF__)
+    // Declared weak: if no object file contributes to the xcp_events section the symbols
+    // resolve to NULL rather than causing an undefined-reference linker error.
+    extern tXcpEventDescriptor __start_xcp_events[] __attribute__((weak));
+    extern tXcpEventDescriptor __stop_xcp_events[] __attribute__((weak));
+    if (__start_xcp_events != NULL) {
+        for (tXcpEventDescriptor *e = __start_xcp_events; e < __stop_xcp_events; e++) {
+            if (e->id == XCP_UNDEFINED_EVENT_ID) {
+                e->id = XcpCreateEvent(e->name, e->cycle_time_ns, e->priority);
+                count++;
+            }
+        }
+    }
+#elif defined(__APPLE__)
+    unsigned long sz = 0;
+    tXcpEventDescriptor *begin = (tXcpEventDescriptor *)getsectiondata(&_mh_execute_header, "__DATA", "xcp_evts", &sz);
+    if (begin != NULL) {
+        tXcpEventDescriptor *end = begin + sz / sizeof(tXcpEventDescriptor);
+        for (tXcpEventDescriptor *e = begin; e < end; e++) {
+            if (e->id == XCP_UNDEFINED_EVENT_ID) {
+                e->id = XcpCreateEvent(e->name, e->cycle_time_ns, e->priority);
+                count++;
+            }
+        }
+    }
+#endif
+
+    if (count > 0)
+        DBG_PRINTF3(ANSI_COLOR_GREEN "Preregistered %u events from event descriptor section\n" ANSI_COLOR_RESET, count);
+    return count;
+}
+
+#else // XCP_ENABLE_DAQ_EVENT_LIST
+
 const char *XcpGetEventName(tXcpEventId event) {
     (void)event;
     return "";
 }
+
 #endif // XCP_ENABLE_DAQ_EVENT_LIST
 
 /****************************************************************************/
@@ -3154,6 +3199,14 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     (void)cal__epk; // Avoid unused variable warning
     assert(cal__epk == 0);
 #endif
+#endif
+
+#ifdef XCP_ENABLE_DAQ_EVENT_LIST
+    // Pre-register all events whose tXcpEventDescriptor lives in the xcp_events binary section.
+    // This optionally replaces the lazy creation at all DaqCreateEvent(), DaqCreateEventExt macro call sites
+    // This is done after loading the persistence file, to ensure that all events from the persistence file are already in the event list, in particular events from other
+    // applications in SHM mode
+    XcpRegisterSectionEvents();
 #endif
 
 #ifdef OPTION_SHM_MODE // XcpInit print inital SHM state

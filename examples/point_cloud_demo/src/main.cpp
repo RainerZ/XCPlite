@@ -322,7 +322,7 @@ template <uint16_t N> class PointCloud {
 
         // Create a cyclic event for the simulation step measurement
         // Specify cycle_time_us in microseconds to enable time downscaling in CANape using the cyclic mode
-        DaqCreateCyclicEvent(step, kParameters.cycle_time_us);
+        DaqCreateEventExt(step, kParameters.cycle_time_us, 0);
 
         std::cout << "PointCloud<" << (unsigned int)N << "> instance created" << std::endl;
 

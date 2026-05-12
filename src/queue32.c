@@ -17,7 +17,7 @@
 #include "xcplib_cfg.h" // for OPTION_xxx
 
 // Use queue32.c for 32 Bit platforms, on Windows or with atomic emulation
-// Explictly force with OPTION_QUEUE_32
+// Explicitly force with OPTION_QUEUE_32
 #if defined(OPTION_QUEUE_32) || defined(PLATFORM_32BIT) || defined(_WIN) || defined(OPTION_ATOMIC_EMULATION)
 
 #include "queue.h"

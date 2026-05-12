@@ -78,6 +78,17 @@ void XcpDisconnect(void);
 // XCP event identifier type
 typedef uint16_t tXcpEventId;
 
+// Event descriptor used by DaqCreateEvent() for section-based pre-registration.
+// Also defined in xcplib.h; this guard prevents redefinition when both headers are included.
+#ifndef __XCPLIB_H__
+typedef struct {
+    const char *name;
+    uint32_t cycle_time_ns;
+    uint8_t priority;
+    tXcpEventId id;
+} tXcpEventDescriptor;
+#endif
+
 // Trigger a XCP data acquisition event
 // Absolute base address only
 void XcpEvent(tXcpEventId event);

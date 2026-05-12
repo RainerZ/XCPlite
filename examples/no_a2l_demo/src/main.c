@@ -45,11 +45,11 @@ static void sig_handler(int sig) { global_running = false; }
 // XCP params
 
 #define OPTION_PROJECT_NAME "no_a2l_demo" // Project name, used to build the volatile and BIN file name
-#define OPTION_PROJECT_VERSION __TIME__   // EPK version string
-#define OPTION_USE_TCP true               // TCP or UDP
+#define OPTION_PROJECT_VERSION "V100"     // EPK version string
+#define OPTION_USE_TCP false              // TCP or UDP
 #define OPTION_SERVER_PORT 5555           // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}   // Bind addr, 0.0.0.0 = ANY
-#define OPTION_QUEUE_SIZE (1024 * 32)     // Size of the measurement queue in bytes, must be a multiple of 8
+#define OPTION_QUEUE_SIZE (1024 * 8)      // Size of the measurement queue in bytes, must be a multiple of 8
 #define OPTION_LOG_LEVEL 3                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 //-----------------------------------------------------------------------------------------------------
@@ -185,7 +185,7 @@ void *task(void *p)
 }
 
 //-----------------------------------------------------------------------------------------------------
-// Demo function
+// Demo functions
 
 void foo(void) {
 
@@ -214,6 +214,10 @@ void foo(void) {
 
     DaqCreateAndTriggerEvent(foo);
 }
+
+// Never called
+// Just to demonstrate the DaqCreateEvent macro creates the event
+void bar(void) { DaqCreateEvent(bar); }
 
 //-----------------------------------------------------------------------------------------------------
 // Demo main

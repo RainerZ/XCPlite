@@ -12,15 +12,16 @@
 |
  ----------------------------------------------------------------------------*/
 
-#include <assert.h>   // for assert
-#include <inttypes.h> // for PRIu64
-#include <math.h>     // for fabs
-#include <signal.h>   // for signal handling
-#include <stdbool.h>  // for bool
-#include <stdint.h>   // for uintxx_t
-#include <stdio.h>    // for printf
-#include <stdlib.h>   // for malloc, free
-#include <string.h>   // for sprintf
+#include <arpa/inet.h> // for htons, htonl
+#include <assert.h>    // for assert
+#include <inttypes.h>  // for PRIu64
+#include <math.h>      // for fabs
+#include <signal.h>    // for signal handling
+#include <stdbool.h>   // for bool
+#include <stdint.h>    // for uintxx_t
+#include <stdio.h>     // for printf
+#include <stdlib.h>    // for malloc, free
+#include <string.h>    // for sprintf
 
 #include "platform.h" // from libxcplite for SOCKET_HANDLE, ...
 
