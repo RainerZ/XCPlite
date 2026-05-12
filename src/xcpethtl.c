@@ -16,7 +16,6 @@
 #include <inttypes.h> // for PRIu64
 #include <stdbool.h>  // for bool
 #include <stdint.h>   // for uintxx_t
-#include <stdio.h>    // for printf
 #include <string.h>   // for memcpy, strcmp
 
 #include "dbg_print.h" // for DBG_LEVEL, DBG_PRINT, ...
@@ -27,6 +26,10 @@
 #include "xcplib_cfg.h" // for OPTION_xxx
 #include "xcplite.h"    // for tXcpDaqLists, XcpXxx, ApplXcpXxx, ...
 #include "xcptl_cfg.h"  // for XCPTL_xxx
+
+#ifdef DBG_LEVEL
+#include <stdio.h> // for printf
+#endif
 
 // Parameter checks
 #if XCPTL_TRANSPORT_LAYER_HEADER_SIZE != 4
@@ -506,7 +509,7 @@ static int handleXcpMulticastCommand(int n, tXcpCtoMessage *p, uint8_t *dstAddr,
             return 0;                                                 // Error
         XcpCommand((const uint32_t *)&p->packet[0], (uint8_t)p->dlc); // Handle command
     } else {
-        printf("MULTICAST ignored\n");
+        DBG_PRINT_WARNING("MULTICAST ignored\n");
     }
     return 1; // Ok
 }

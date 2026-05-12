@@ -26,7 +26,6 @@
 #include <stdatomic.h> // for atomic_
 #include <stdbool.h>   // for bool
 #include <stdint.h>    // for uint32_t, uint64_t, uint8_t, int64_t
-#include <stdio.h>     // for NULL, snprintf
 #include <stdlib.h>    // for free, malloc
 #include <string.h>    // for memcpy, strcmp
 
@@ -91,6 +90,8 @@ static_assert(sizeof(void *) == 8, "This implementation requires a 64 Bit platfo
 // For high contention test use example queue_test or daq_test with xcpclient --upload-a2l --udp --mea .  --dest-addr 192.168.0.206
 // Note that this tests have significant performance impact, do not turn on for production use !!!!!!!!!!!
 #ifdef TEST_ACQUIRE_LOCK_TIMING
+
+#include <stdio.h> // for snprintf
 
 static MUTEX lock_mutex = MUTEX_INTIALIZER;
 static uint64_t lock_time_max = 0;

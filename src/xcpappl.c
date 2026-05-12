@@ -12,7 +12,6 @@
 #include <assert.h>  // for assert
 #include <stdbool.h> // for bool
 #include <stdint.h>  // for uintxx_t
-#include <stdio.h>   // for fclose, fopen, fread, fseek, ftell
 #include <string.h>  // for strncpy
 
 #include "dbg_print.h"  // for DBG_PRINTF3, DBG_PRINT4, DBG_PRINTF4, DBG...
@@ -511,6 +510,8 @@ void XcpSetElfName(const char *name) {
 const char *XcpGetElfName(void) { return gXcpElfName; }
 
 #if defined(XCP_ENABLE_IDT_A2L_UPLOAD) || defined(XCP_ENABLE_IDT_ELF_UPLOAD) // Enable GET_ID A2L or ELF content upload to host
+
+#include <stdio.h> // for fclose, fopen, fread, fseek, ftell
 
 static FILE *gXcpFile = NULL;       // file content
 static uint32_t gXcpFileLength = 0; // file length

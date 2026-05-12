@@ -10,8 +10,12 @@
 |
  ----------------------------------------------------------------------------*/
 
-#include "a2l_writer.h"
+#include "xcplib_cfg.h" // for OPTION_xxx
+
+#ifdef OPTION_ENABLE_A2L_GENERATOR
+
 #include "a2l.h"
+#include "a2l_writer.h"
 
 #include <assert.h>   // for assert
 #include <inttypes.h> // for PRIu64
@@ -21,13 +25,10 @@
 #include <stdio.h>    // for fclose, fopen, fread
 #include <string.h>   // for
 
-#include "dbg_print.h"  // for DBG_PRINT
-#include "xcp_cfg.h"    // for XCP_xxx
-#include "xcplib_cfg.h" // for OPTION_xxx
-#include "xcplite.h"    // for tXcpCalSeg, tXcpDaqLists, XcpXxx, ApplXcpXxx, ...
-#include "xcptl_cfg.h"  // for XCPTL_xxx
-
-#ifdef OPTION_ENABLE_A2L_GENERATOR
+#include "dbg_print.h" // for DBG_PRINT
+#include "xcp_cfg.h"   // for XCP_xxx
+#include "xcplite.h"   // for tXcpCalSeg, tXcpDaqLists, XcpXxx, ApplXcpXxx, ...
+#include "xcptl_cfg.h" // for XCPTL_xxx
 
 //----------------------------------------------------------------------------------
 // Static

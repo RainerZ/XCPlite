@@ -94,7 +94,7 @@
 //-------------------------------------------------------------------------------
 // XCP server options
 
-#define OPTION_ENABLE_TCP
+// #define OPTION_ENABLE_TCP
 #define OPTION_ENABLE_UDP
 #define OPTION_MTU 8000                     // Ethernet packet size (MTU), must be %8 - Jumbo frames supported
 #define OPTION_SERVER_FORCEFULL_TERMINATION // Don't wait for the rx and tx thread to finish, just terminate them
@@ -118,7 +118,7 @@
 
 // Enable persistence, a binary (.BIN) file is used to store events and calibration segments
 // This allows to safely build the A2L file only once per build, even if the creation order of events and segments changes
-#define OPTION_ENABLE_PERSISTENCE
+// #define OPTION_ENABLE_PERSISTENCE
 
 // Enable EPK calibration segment to check HEX/BIN file compatibility
 // If the EPK is included in the HEX/BIN file, the version of the data structure can be checked using the EPK address specified in the A2L file
@@ -147,7 +147,7 @@
 
 // Transport layer queue, vectored IO, lockless with variable queue entry size
 // Default:
-#define OPTION_QUEUE_64_VAR_SIZE
+// #define OPTION_QUEUE_64_VAR_SIZE
 
 // Transport layer queue, vectored IO, lockless with fixed queue entry size
 // For maximum performance with large DTO size, but less efficient memory usage with partially filled queue entries
@@ -159,7 +159,7 @@
 
 // Transport layer queue, with variable queue entry size, 32 bit not lockless with mutex synchronization
 // Mandatory for Windows and 32 bit platforms
-// #define OPTION_QUEUE_32
+#define OPTION_QUEUE_32
 #if defined(OPTION_ATOMIC_EMULATION) || defined(PLATFORM_32_BIT)
 #undef OPTION_QUEUE_64_VAR_SIZE
 #undef OPTION_QUEUE_64_FIX_SIZE
@@ -169,9 +169,9 @@
 //-------------------------------------------------------------------------------
 // A2L generation settings
 
-#define OPTION_ENABLE_A2L_GENERATOR // Enable A2L generator
-#define OPTION_ENABLE_A2L_UPLOAD    // Enable A2L upload via XCP
-#define OPTION_ENABLE_ELF_UPLOAD    // Enable ELF upload via XCP
+// #define OPTION_ENABLE_A2L_GENERATOR // Enable A2L generator
+// #define OPTION_ENABLE_A2L_UPLOAD    // Enable A2L upload via XCP
+// #define OPTION_ENABLE_ELF_UPLOAD    // Enable ELF upload via XCP
 
 // Enable socketGetLocalAddr for A2L file generation
 // Used for convenience to get an existing ip address in A2L, when bound to ANY 0.0.0.0

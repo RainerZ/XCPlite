@@ -59,9 +59,11 @@
 #include <stdarg.h>   // for va_list, va_start, va_arg, va_end
 #include <stdbool.h>  // for bool
 #include <stdint.h>   // for uint8_t, uint16_t,...
-#include <stdio.h>    // for printf
 #include <stdlib.h>   // for size_t, NULL, abort
 #include <string.h>   // for memcpy, memset, strlen, strncpy
+#ifdef DBG_LEVEL
+#include <stdio.h> // for printf
+#endif
 
 #ifdef OPTION_SHM_MODE
 #include <unistd.h> // for getpid()
@@ -2971,6 +2973,12 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
         XcpBindOwnerThread();
 #endif
 #else
+        // Persistence not enabled
+        if ((mode & XCP_MODE_PERSISTENCE) != 0) {
+            DBG_PRINT_WARNING("XcpInit: Persistence mode requested, but xcplib is compiled without persistence support, ignoring persistence flag\n");
+            mode &= ~XCP_MODE_PERSISTENCE;
+        }
+
         // Not compiled for SHM mode
         if ((mode & (XCP_MODE_SHM | XCP_MODE_SHM_AUTO | XCP_MODE_SHM_SERVER)) != 0) {
             DBG_PRINT_ERROR("XcpInit: SHM mode requested, but xcplib is compiled in non-SHM mode, switch to XCP_MODE_LOCAL\n");

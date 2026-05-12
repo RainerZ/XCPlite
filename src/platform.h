@@ -160,8 +160,8 @@ int _kbhit(void);
 //-------------------------------------------------------------------------------
 // Safe sprintf, strncpy, ...
 
-#include <stdio.h>
-#include <string.h>
+#include <stdio.h>  // for sprintf, snprintf
+#include <string.h> // for strnlen
 
 // Portable implementation of strnlen for systems that don't have it
 static inline size_t safe_strnlen(const char *s, size_t maxlen) {

@@ -62,10 +62,10 @@ void XcpSetLogLevel(uint8_t level);
 
 // The queue implementations in reference.c, queue62v.c and queue64f.c support peeking ahead
 #if defined(OPTION_QUEUE_64_VAR_SIZE) || defined(OPTION_QUEUE_64_FIX_SIZE)
-#define TEST_QUEUE_PEEK                      // Use queuePeek(random(QUEUE_PEEK_MAX_INDEX)) instead of queuePop
-#define QUEUE_PEEK_MAX_INDEX (8)             // Max offset for peeking ahead
-#define CONSUMER_SLEEP_ON_EMPTY_QUEUE_US 128 // Start sleep time in microseconds for the consumer loop, when queue was empty (incremented over time))
+#define TEST_QUEUE_PEEK          // Use queuePeek(random(QUEUE_PEEK_MAX_INDEX)) instead of queuePop
+#define QUEUE_PEEK_MAX_INDEX (8) // Max offset for peeking ahead
 #endif
+#define CONSUMER_SLEEP_ON_EMPTY_QUEUE_US 128 // Start sleep time in microseconds for the consumer loop, when queue was empty (incremented over time))
 
 //-------------------------------------------------------------------------------------------------------------------------------------------------------
 // Acquire timing test

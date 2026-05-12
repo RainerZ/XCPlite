@@ -10,6 +10,10 @@
 |
  ----------------------------------------------------------------------------*/
 
+#include "xcplib_cfg.h" // for OPTION_xxx
+
+#ifdef OPTION_ENABLE_A2L_GENERATOR
+
 #include "a2l.h"
 #include "a2l_writer.h"
 
@@ -24,10 +28,7 @@
 #include "persistence.h" // for XcpBinWrite, XcpBinDelete
 #include "platform.h"    // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex
 #include "xcp_cfg.h"     // for XCP_xxx
-#include "xcplib_cfg.h"  // for OPTION_xxx
 #include "xcptl_cfg.h"   // for XCPTL_xxx
-
-#ifdef OPTION_ENABLE_A2L_GENERATOR
 
 //----------------------------------------------------------------------------------
 
@@ -1515,17 +1516,14 @@ bool A2lInit(const uint8_t *addr, uint16_t port, bool useTCP, uint8_t mode) {
     gA2lOptionPort = port;
     gA2lUseTCP = useTCP;
 
-    // Save mode
-    gA2lMode = mode;
-
-#ifndef OPTION_ENABLE_PERSISTENCE
-    assert(gA2lMode & A2L_MODE_WRITE_ALWAYS && "Persistence mode not enabled, mode A2L_MODE_WRITE_ONCE cannot be used!");
-#else
+    // Check mode
     if ((gA2lMode & A2L_MODE_WRITE_ALWAYS) == 0 && (XcpGetInitMode() & XCP_MODE_PERSISTENCE) == 0) {
         mode |= A2L_MODE_WRITE_ALWAYS;
         DBG_PRINT_WARNING("Persistence mode not enabled, mode A2L_MODE_WRITE_ONCE ignored!\n");
     }
-#endif
+
+    // Save mode
+    gA2lMode = mode;
 
     // Initialize
     A2lRstAddrMode();

@@ -3,6 +3,28 @@
 // See ../README.md for details
 // Requires manual or tool based XCPlite specific A2L file creation and update process
 
+// This allows to build libxcplite without A2L generation and persistence support
+// Reduces the code size and dependencies (file system) for use cases on microcontrollers RTOS like FreeRTOS, Zephyr, ThreadX, ...
+
+// Configuration options for XCPlite are set in src/xcplib_cfg.h, see comments in that file for details and available options
+// A typical configuration (xcplib_cfg.h) for microcontrollers without file system and TCP support:
+//  #undef OPTION_ENABLE_PERSISTENCE
+//  #undef OPTION_ENABLE_TCP
+//  #define OPTION_ENABLE_UDP
+//  #define OPTION_QUEUE_32
+//  #undef OPTION_ENABLE_A2L_GENERATOR
+//  #undef OPTION_ENABLE_A2L_UPLOAD
+//  #undef OPTION_ENABLE_ELF_UPLOAD
+
+// Build the no_a2l_demo example:
+// The other examples depend on the A2L generator and upload features, so they won't build with this configuration
+//  Clean
+//   cmake --build build --target clean
+//  Configure
+//   cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug
+//  Build
+//   cmake --build build --target no_a2l_demo
+
 #include <assert.h>  // for assert
 #include <signal.h>  // for signal handling
 #include <stdbool.h> // for bool
@@ -219,7 +241,6 @@ int main(void) {
     XcpSetLogLevel(OPTION_LOG_LEVEL);
 
     // XCP: Initialize the XCP singleton, activate XCP, must be called before starting the server
-    //      If XCP is not activated, the server will not start and all XCP instrumentation will be passive with minimal overhead
     XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
 
     // XCP: Initialize the XCP Server

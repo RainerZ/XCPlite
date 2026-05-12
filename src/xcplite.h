@@ -26,13 +26,12 @@
 #include "xcp_cfg.h"   // for XCP_PROTOCOL_LAYER_VERSION, XCP_ENABLE_...
 #include "xcptl_cfg.h" // for XCPTL_MAX_CTO_SIZE
 
-// @@@@ TODO: Check why we need this include files here
 #ifdef OPTION_CAL_SEGMENTS
-#include "cal.h" // for calibration segment management if enabled
+#include "cal.h" // for tXcpCalSegList
 #endif
 
 #ifdef OPTION_SHM_MODE
-#include "shm.h" // for shared memory management if enabled
+#include "shm.h" // for tShmHeader
 #endif
 
 #ifdef __cplusplus

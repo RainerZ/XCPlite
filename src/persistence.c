@@ -10,6 +10,10 @@
 |
  ----------------------------------------------------------------------------*/
 
+#include "xcplib_cfg.h" // for OPTION_xxx
+
+#ifdef OPTION_ENABLE_PERSISTENCE
+
 #include "persistence.h"
 
 #include <assert.h>   // for assert
@@ -20,17 +24,14 @@
 #include <stdio.h>    // for fclose, fopen, fread, fseek, ftell
 #include <string.h>   // for strlen, strncpy
 
-#include "a2l.h"        // for A2lGetAppFilename
-#include "dbg_print.h"  // for DBG_PRINTF3, DBG_PRINT4, DBG_PRINTF4, DBG...
-#include "platform.h"   // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex
-#include "shm.h"        // for shared memory management
-#include "xcp.h"        // for CRC_XXX
-#include "xcp_cfg.h"    // for XCP_xxx
-#include "xcplib_cfg.h" // for OPTION_xxx
-#include "xcplite.h"    // for tXcpDaqLists, XcpXxx, ApplXcpXxx, ...
-#include "xcptl_cfg.h"  // for XCPTL_xxx
-
-#ifdef OPTION_ENABLE_PERSISTENCE
+#include "a2l.h"       // for A2lGetAppFilename
+#include "dbg_print.h" // for DBG_PRINTF3, DBG_PRINT4, DBG_PRINTF4, DBG...
+#include "platform.h"  // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex
+#include "shm.h"       // for shared memory management
+#include "xcp.h"       // for CRC_XXX
+#include "xcp_cfg.h"   // for XCP_xxx
+#include "xcplite.h"   // for tXcpDaqLists, XcpXxx, ApplXcpXxx, ...
+#include "xcptl_cfg.h" // for XCPTL_xxx
 
 #if !defined(XCP_ENABLE_DAQ_EVENT_LIST) || !defined(XCP_ENABLE_CALSEG_LIST)
 #error "XCP_ENABLE_DAQ_EVENT_LIST and XCP_ENABLE_CALSEG_LIST must be enabled for calibration segment persistence"

@@ -17,7 +17,6 @@
 #include <inttypes.h> // for PRIu64
 #include <stdbool.h>  // for bool
 #include <stdint.h>   // for uintxx_t
-#include <stdio.h>    // for printf
 
 #include "dbg_print.h"  // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
 #include "platform.h"   // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex
@@ -339,7 +338,7 @@ bool XcpEthServerInit(const uint8_t *addr, uint16_t port, bool useTCP, uint32_t 
 #ifdef TEST_STACK_SIZE
         size_t receive_stack_size = RECEIVE_STACK_SIZE;
         if (receive_stack_size < (size_t)PTHREAD_STACK_MIN) {
-            printf("WARNING: RECEIVE_STACK_SIZE %zu < PTHREAD_STACK_MIN %zu, clamping\n", receive_stack_size, (size_t)PTHREAD_STACK_MIN);
+            DBG_PRINTF_WARNING("RECEIVE_STACK_SIZE %zu < PTHREAD_STACK_MIN %zu, clamping\n", receive_stack_size, (size_t)PTHREAD_STACK_MIN);
             receive_stack_size = (size_t)PTHREAD_STACK_MIN;
         }
         gXcpServer.receive_thread_stack = mmap(NULL, receive_stack_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
@@ -366,7 +365,7 @@ bool XcpEthServerInit(const uint8_t *addr, uint16_t port, bool useTCP, uint32_t 
 #ifdef TEST_STACK_SIZE
         size_t transmit_stack_size = TRANSMIT_STACK_SIZE;
         if (transmit_stack_size < (size_t)PTHREAD_STACK_MIN) {
-            printf("WARNING: TRANSMIT_STACK_SIZE %zu < PTHREAD_STACK_MIN %zu, clamping\n", transmit_stack_size, (size_t)PTHREAD_STACK_MIN);
+            DBG_PRINTF_WARNING("TRANSMIT_STACK_SIZE %zu < PTHREAD_STACK_MIN %zu, clamping\n", transmit_stack_size, (size_t)PTHREAD_STACK_MIN);
             transmit_stack_size = (size_t)PTHREAD_STACK_MIN;
         }
         gXcpServer.transmit_thread_stack = mmap(NULL, transmit_stack_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
@@ -470,8 +469,10 @@ bool XcpEthServerShutdown(void) {
             break;
         }
     }
-    printf("transmit thread stack high-water mark: %zu bytes (of %zu allocated)\n", gXcpServer.actual_transmit_stack_size - transmit_unused, gXcpServer.actual_transmit_stack_size);
-    printf("receive thread stack high-water mark: %zu bytes (of %zu allocated)\n", gXcpServer.actual_receive_stack_size - receive_unused, gXcpServer.actual_receive_stack_size);
+    DBG_PRINTF3("transmit thread stack high-water mark: %zu bytes (of %zu allocated)\n", gXcpServer.actual_transmit_stack_size - transmit_unused,
+                gXcpServer.actual_transmit_stack_size);
+    DBG_PRINTF3("receive thread stack high-water mark: %zu bytes (of %zu allocated)\n", gXcpServer.actual_receive_stack_size - receive_unused,
+                gXcpServer.actual_receive_stack_size);
     munmap(gXcpServer.transmit_thread_stack, gXcpServer.actual_transmit_stack_size);
     munmap(gXcpServer.receive_thread_stack, gXcpServer.actual_receive_stack_size);
 

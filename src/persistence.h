@@ -13,14 +13,15 @@
 |
  ----------------------------------------------------------------------------*/
 
+#include "xcplib_cfg.h" // for OPTION_xxx
+
+#ifdef OPTION_ENABLE_PERSISTENCE
+
 #include <assert.h>  // for assert
 #include <stdbool.h> // for bool
 #include <stdint.h>  // for uintxx_t
 
-#include "xcplib_cfg.h" // for OPTION_xxx
-#include "xcplite.h"    // for tXcpCalSegIndex
-
-#ifdef OPTION_ENABLE_PERSISTENCE
+#include "xcplite.h" // for tXcpCalSegIndex
 
 #ifdef __cplusplus
 extern "C" {
