@@ -177,7 +177,7 @@ template <typename T> class CalBlk {
 
 /// Convenience macro to create a calibration value with automatic name stringification
 /// Usage: auto calval = CalVal(initial_value);
-#define CalValCreate(value) xcplib::CalBlk<decltype(value)>(#value, &value)
+#define CalBlkCreate(value) xcplib::CalBlk<decltype(value)>(#value, &value)
 
 } // namespace xcp
 

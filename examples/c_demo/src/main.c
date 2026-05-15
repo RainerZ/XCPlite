@@ -381,7 +381,7 @@ int main(void) {
         // This can be done at any place in the code
         // delay_us must not necessarily have static lifetime
         // It supports RAM/FLASH page switching and persistence (save to BIN file)
-        // tXcpCalSegIndex v = CalValCreate(delay_us);
+        // tXcpCalSegIndex v = CalBlkCreate("delay_us", delay_us, sizeof(delay_us));
         // {
         //     A2lOnce() {
         //         A2lSetSegmentAddrMode(v, delay_us);

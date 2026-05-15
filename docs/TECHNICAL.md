@@ -274,7 +274,7 @@ CPP is not supported yet.
 
 ```c
 //Create calibration segment macro segment index once pattern
-static tXcpCalSegIndex cal__##name;
+static tXcpCalSegIndex calseg__##name;
 
 // Create measurement event macro event id once pattern
 // From  DaqCreateXxx(name), 

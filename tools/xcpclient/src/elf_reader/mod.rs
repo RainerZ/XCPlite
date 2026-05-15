@@ -80,6 +80,8 @@ Possible future improvements:
 mod debuginfo;
 use debuginfo::{DbgDataType, DebugData, TypeInfo};
 
+//use crate::xcp_client::xcp;
+
 //------------------------------------------------------------------------
 //  ELF reader and A2L creator
 
@@ -194,6 +196,7 @@ impl ElfReader {
         Ok(())
     }
 
+    // Find the addressing mode marker variable (naming convention "XCPLITE__<signature>") and return the signature, if found
     pub fn get_target_signature(&self) -> Option<&str> {
         // Iterate over variables and look for XCPlite addressing mode marker
         for (var_name, var_infos) in &self.debug_data.variables {
@@ -207,10 +210,9 @@ impl ElfReader {
         return None;
     }
 
-    pub fn register_segments_and_events(&self, reg: &mut Registry, segment_relative: bool, verbose: usize) -> Result<(), Box<dyn Error>> {
-        info!("Registering segment and event information:");
-
-        let xcp_event_section_addr = self.debug_data.get_xcp_event_section_addr();
+    // Register segments from segment creation markers (calseg__name) found in the code
+    pub fn register_segments(&self, reg: &mut Registry, segment_relative: bool, verbose: usize) -> Result<(), Box<dyn Error>> {
+        info!("Registering segment information:");
 
         let mut next_segment_number: u16 = 0;
 
@@ -222,10 +224,12 @@ impl ElfReader {
                 continue;
             }
 
-            // From CalSegCreate macro
-            // cal__<name> (local scope static, name is calibration segment name and type name)
+            // From CalSegCreate or CalBlkCreate macro
+            // calseg__<name> (local scope static, name is calibration segment name and type name !)
             // Calibration segment definition
-            if var_name.starts_with("cal__") {
+            let is_calseg = var_name.starts_with("calseg__");
+            let is_calblk = var_name.starts_with("calblk__");
+            if is_calseg || is_calblk {
                 assert!(var_infos.len() == 1); // @@@@ Only one definition allowed
                 let var_info = &var_infos[0];
                 let function_name = if let Some(f) = var_info.function.as_ref() { f.as_str() } else { "" };
@@ -236,22 +240,34 @@ impl ElfReader {
                     format!("{unit_idx}")
                 };
 
-                // remove the "cal__" prefix to get the segment name
-                let seg_name = var_name.strip_prefix("cal__").unwrap_or(var_name);
+                // remove the "calseg__" or "calblk__" prefix to get the segment name
+                let seg_name = if is_calseg {
+                    var_name.strip_prefix("calseg__").unwrap_or(var_name)
+                } else {
+                    var_name.strip_prefix("calblk__").unwrap_or(var_name)
+                };
                 info!(
-                    "Calibration segment definition marker variable 'cal__{}' for segment '{}' found in {}:'{}'",
-                    seg_name, seg_name, unit_name, function_name
+                    "Calibration segment definition marker variable '{}{}' for segment '{}' found in {}:'{}'",
+                    if is_calseg { "calseg__" } else { "calblk__" },
+                    seg_name,
+                    seg_name,
+                    unit_name,
+                    function_name
                 );
 
-                // If it is not the epk segment
+                // If it is the epk segment
+                // @@@@ TODO: How to determine the EPK string
+                /*
                 if seg_name == "epk" {
                     info!("  'epk' calibration segment is predefined, skipping");
                     // Now we know, there is an epk segment
                     // Set the EPK information in the registry
-                    // @@@@ TODO: How to determine the EPK string
                     reg.application.set_version("<unknown>", 0x80000000);
                     continue;
-                } else {
+                } else
+                */
+
+                {
                     // Lookup the reference page variable (naming convention is segment name!) information
                     let seg_var_info = if let Some(x) = self.debug_data.variables.get(seg_name) {
                         if x.len() != 1 {
@@ -334,7 +350,7 @@ impl ElfReader {
 
                         if segment_relative {
                             // Add in segment relative addressing mode
-                            let res = reg.cal_seg_list.add_cal_seg(seg_name.to_string(), next_segment_number, length as u32);
+                            let res = reg.cal_seg_list.add_cal_seg(seg_name.to_string(), None, length as u32);
                             if let Err(e) = res {
                                 error!("Failed to add calibration segment '{}': {}", seg_name, e);
                                 continue;
@@ -357,9 +373,7 @@ impl ElfReader {
                                 );
                                 continue; // skip this variable
                             }
-                            let res = reg
-                                .cal_seg_list
-                                .add_cal_seg_by_addr(seg_name.to_string(), next_segment_number, addr_ext, addr as u32, length as u32);
+                            let res = reg.cal_seg_list.add_cal_seg_by_addr(seg_name.to_string(), None, addr_ext, addr as u32, length as u32);
                             if let Err(e) = res {
                                 error!("Failed to add calibration segment '{}': {}", seg_name, e);
                                 continue;
@@ -378,6 +392,24 @@ impl ElfReader {
                         }
                     }
                 }
+            }
+        }
+        Ok(())
+    }
+
+    // Register events from event creation markers (evt__name) in the code
+    pub fn register_events(&self, reg: &mut Registry, verbose: usize) -> Result<(), Box<dyn Error>> {
+        info!("Registering event information:");
+
+        // Get the address of the XCP event descriptor memory section
+        let xcp_event_section_addr = self.debug_data.get_event_section_addr();
+
+        // Iterate over variables
+        for (var_name, var_infos) in &self.debug_data.variables {
+            // Skip standard library variables and system/compiler internals (__<name>)s
+            // Skip global XCP variables (gXCP.. and gA2L..)
+            if var_name.starts_with("__") || var_name.starts_with("gXcp") || var_name.starts_with("gA2l") {
+                continue;
             }
 
             // Event definitions (by markers from DaqCreateEvent macro)
@@ -496,11 +528,12 @@ impl ElfReader {
         // Iterate over variables
         for (var_name, var_infos) in &self.debug_data.variables {
             // Skip standard library variables and system/compiler internals (__<name>)s
-            // Skip global XCP variables (gXCP.. and gA2L..) and special marker variables (cal__, evt__, trg__)
+            // Skip global XCP variables (gXCP.. and gA2L..) and special marker variables (calseg__, evt__, trg__)
             if var_name.starts_with("__")
                 || var_name.starts_with("gXcp")
                 || var_name.starts_with("gA2l")
-                || var_name.starts_with("cal__")
+                || var_name.starts_with("calseg__")
+                || var_name.starts_with("calblk__")
                 || var_name.starts_with("evt__")
                 || var_name.starts_with("trg__")
             {
@@ -617,7 +650,7 @@ impl ElfReader {
                     continue; // skip this variable
                 };
 
-                // Check if the absolute address is in a calibration segment
+                // Check if the absolute address is in a calibration segment or block
                 // For segments with segment relative and absolute addressing mode, we always need to check with the memory address of the segment, not the a2l address
                 let seg_name = reg.cal_seg_list.find_cal_seg_by_mem_address(mem_addr);
                 let (object_type, mc_addr) = if let Some(seg_name) = seg_name {

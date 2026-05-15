@@ -62,7 +62,7 @@ static const char *gA2lMemorySegment =
     // DATA = program data allowed for online calibration
     "/begin MEMORY_SEGMENT %s \"\" DATA FLASH INTERN 0x%08X %u -1 -1 -1 -1 -1\n" // name, start addr, size
     "/begin IF_DATA XCP\n"
-    "  /begin SEGMENT %u 2 0 0 0\n" // index
+    "  /begin SEGMENT %u /* number */ 2 /* pages */ 0 /*addr_ext*/ 0 0\n" // number
     "  /begin CHECKSUM XCP_CRC_16_CITT MAX_BLOCK_SIZE 0xFFFF EXTERNAL_FUNCTION \"\" /end CHECKSUM\n"
     "  /begin PAGE 0 ECU_ACCESS_DONT_CARE XCP_READ_ACCESS_DONT_CARE XCP_WRITE_ACCESS_DONT_CARE /end PAGE\n"
     "  /begin PAGE 1 ECU_ACCESS_DONT_CARE XCP_READ_ACCESS_DONT_CARE XCP_WRITE_ACCESS_NOT_ALLOWED /end PAGE\n"
@@ -72,7 +72,7 @@ static const char *gA2lMemorySegment =
     // 1 calibration page
     "/begin MEMORY_SEGMENT %s \"\" DATA RAM INTERN 0x%08X %u -1 -1 -1 -1 -1\n" // name, start addr, size
     "/begin IF_DATA XCP\n"
-    "  /begin SEGMENT %u 1 0 0 0\n" // index
+    "  /begin SEGMENT %u /* number */ 1 /* pages */ 0 /*addr_ext*/ 0 0\n" // number
     "  /begin CHECKSUM XCP_CRC_16_CITT MAX_BLOCK_SIZE 0xFFFF EXTERNAL_FUNCTION \"\" /end CHECKSUM\n"
     "  /begin PAGE 0 ECU_ACCESS_DONT_CARE XCP_READ_ACCESS_WITH_ECU_ONLY XCP_WRITE_ACCESS_WITH_ECU_ONLY /end PAGE\n"
     "  /end SEGMENT\n"

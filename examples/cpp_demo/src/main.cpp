@@ -237,7 +237,7 @@ int main() {
 /*
 
  // Make kDelayUs a tunable parameter
-        // auto delay_us = CalValCreate(kDelayUs);
+        // auto delay_us = CalBlkCreate("kDelayUs",&kDelayUs,sizeof(kDelayUs));
         // if (A2lOnce()) { // Create the parameter description in A2L once
         //     A2lCreateParameter(kDelayUs, "Loop delay in microseconds", "", 0, 1000000);
         // }

@@ -27,26 +27,7 @@
 
 //-------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------
-// Specific build settings of libxcplite
-
-#if defined(XCPLIB_FOR_RTOS)
-
-#include "xcplib_rtos_cfg.h"
-
-#elif defined(XCPLIB_NO_A2l)
-
-#include "xcplib_no_a2l_cfg.h" // for Rust xcp-lite specific configuration
-
-#elif defined(XCPLIB_FOR_RUST) // Set by the Rust build script
-
-#include "xcplib_rust_cfg.h" // for Rust xcp-lite specific configuration
-
-#else
-
-//-------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------
 // Default settings
-// For 64 bit targets with on-target A2L generation and file system support
 
 //-------------------------------------------------------------------------------
 // Logging
@@ -123,17 +104,17 @@
 
 // Enable persistence, a binary (.BIN) file is used to store events and calibration segments
 // This allows to safely build the A2L file only once per build, even if the creation order of events and segments changes
-#define OPTION_ENABLE_PERSISTENCE
+// #define OPTION_ENABLE_PERSISTENCE
 
 // Enable EPK calibration segment to check HEX/BIN file compatibility
 // If the EPK is included in the HEX/BIN file, the version of the data structure can be checked using the EPK address specified in the A2L file
-#define OPTION_CAL_SEGMENT_EPK
+// #define OPTION_CAL_SEGMENT_EPK
 
 // Enable absolute addressing for calibration segments and calibration blocks
 // Default is segment relative addressing, uses address extension 0 for segment relative and 1 for absolute and encodes the segment number in the address high word
 // As this is not compatible to most well known tools to update, modify and create A2L files, this option switches to absolute addressing on address extension 0
 // Requirement is, that the address of all default/reference pages must be stable and in address range of 0x0000_0000 to 0xFFFF_FFFF
-// #define OPTION_CAL_SEGMENTS_ABS
+#define OPTION_CAL_SEGMENTS_ABS
 
 // Start on reference/default page instead of on working page
 // #define OPTION_CAL_SEGMENTS_START_ON_REFERENCE_PAGE
@@ -152,7 +133,7 @@
 
 // Transport layer queue, vectored IO, lockless with variable queue entry size
 // Default:
-#define OPTION_QUEUE_64_VAR_SIZE
+// #define OPTION_QUEUE_64_VAR_SIZE
 
 // Transport layer queue, vectored IO, lockless with fixed queue entry size
 // For maximum performance with large DTO size, but less efficient memory usage with partially filled queue entries
@@ -164,7 +145,7 @@
 
 // Transport layer queue, with variable queue entry size, 32 bit not lockless with mutex synchronization
 // Mandatory for Windows and 32 bit platforms
-// #define OPTION_QUEUE_32
+#define OPTION_QUEUE_32
 #if defined(OPTION_ATOMIC_EMULATION) || defined(PLATFORM_32_BIT)
 #undef OPTION_QUEUE_64_VAR_SIZE
 #undef OPTION_QUEUE_64_FIX_SIZE
@@ -174,9 +155,9 @@
 //-------------------------------------------------------------------------------
 // A2L generation settings
 
-#define OPTION_ENABLE_A2L_GENERATOR // Enable A2L generator
-#define OPTION_ENABLE_A2L_UPLOAD    // Enable A2L upload via XCP
-#define OPTION_ENABLE_ELF_UPLOAD    // Enable ELF upload via XCP
+// #define OPTION_ENABLE_A2L_GENERATOR // Enable A2L generator
+// #define OPTION_ENABLE_A2L_UPLOAD    // Enable A2L upload via XCP
+#define OPTION_ENABLE_ELF_UPLOAD // Enable ELF upload via XCP
 
 // Enable socketGetLocalAddr for A2L file generation
 // Used for convenience to get an existing ip address in A2L, when bound to ANY 0.0.0.0
@@ -196,5 +177,3 @@
 // #define TEST_STACK_SIZE // Enable stack size measurement for the transmit and receive thread
 
 #endif // !defined(NDEBUG)
-
-#endif

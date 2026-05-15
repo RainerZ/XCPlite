@@ -945,7 +945,7 @@ tXcpEventId XcpCreateEvent(const char *name, uint32_t cycle_time_ns, uint8_t pri
     return id;
 }
 
-// Pre-register all tXcpEventDescriptor variables placed in the xcp_events section by DaqCreateEvent().
+// Pre-register all tXcpEventDescriptor variables placed in the xcp_evts section by DaqCreateEvent().
 // Must be called after SS_ACTIVATED is set (XcpCreateEvent requires isActivated()).
 // If a persistence file was loaded before this call, events are matched by name and keep their saved id.
 static uint16_t XcpRegisterSectionEvents(void) {
@@ -953,12 +953,12 @@ static uint16_t XcpRegisterSectionEvents(void) {
     uint16_t count = 0;
 
 #if defined(__ELF__)
-    // Declared weak: if no object file contributes to the xcp_events section the symbols
+    // Declared weak: if no object file contributes to the xcp_evts section the symbols
     // resolve to NULL rather than causing an undefined-reference linker error.
-    extern tXcpEventDescriptor __start_xcp_events[] __attribute__((weak));
-    extern tXcpEventDescriptor __stop_xcp_events[] __attribute__((weak));
-    if (__start_xcp_events != NULL) {
-        for (tXcpEventDescriptor *e = __start_xcp_events; e < __stop_xcp_events; e++) {
+    extern tXcpEventDescriptor __start_xcp_evts[] __attribute__((weak));
+    extern tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
+    if (__start_xcp_evts != NULL) {
+        for (tXcpEventDescriptor *e = __start_xcp_evts; e < __stop_xcp_evts; e++) {
             if (e->id == XCP_UNDEFINED_EVENT_ID) {
                 e->id = XcpCreateEvent(e->name, e->cycle_time_ns, e->priority);
                 count++;
@@ -2337,7 +2337,7 @@ static uint8_t XcpAsyncCommand(bool async, const uint32_t *cmdBuf, uint8_t cmdLe
             page = ApplXcpGetCalPage(segment, CRO_GET_CAL_PAGE_MODE);
 #endif
             if (page == 0xFF)
-                error(CRC_MODE_NOT_VALID);
+                error(CRC_SEGMENT_NOT_VALID);
             CRM_GET_CAL_PAGE_PAGE = page;
         } break;
 
@@ -3192,17 +3192,16 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     // Create the EPK calibration segment with index 0
     // In SHM multiapplication mode, only the leader reaches this point, and creates a EPK segment for the whole system
     // @@@@ TODO: Currently the EPK segment is treated like any other segment, even if it is read-only and should only expose the default page
-    static tXcpCalSegIndex cal__epk = XCP_UNDEFINED_CALSEG; // Create the linker file marker for the EPK segment
     const char *ecu_epk = XcpGetEcuEpk();
     DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s', ecu_epk = '%s'\n", XCP_EPK_CALSEG_NAME, ecu_epk);
-    cal__epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, ecu_epk, XCP_EPK_MAX_LENGTH + 1);
-    (void)cal__epk; // Avoid unused variable warning
-    assert(cal__epk == 0);
+    tXcpCalSegIndex calseg_epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, ecu_epk, XCP_EPK_MAX_LENGTH + 1);
+    (void)calseg_epk; // Avoid unused variable warning
+    assert(calseg_epk == 0);
 #endif
 #endif
 
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
-    // Pre-register all events whose tXcpEventDescriptor lives in the xcp_events binary section.
+    // Pre-register all events whose tXcpEventDescriptor lives in the xcp_evts binary section.
     // This optionally replaces the lazy creation at all DaqCreateEvent(), DaqCreateEventExt macro call sites
     // This is done after loading the persistence file, to ensure that all events from the persistence file are already in the event list, in particular events from other
     // applications in SHM mode

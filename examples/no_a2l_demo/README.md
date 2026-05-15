@@ -1,30 +1,42 @@
 # no_a2l_demo Demo
 
-Demonstrates XCPlite operation without runtime A2L generation.  
-This is experimental and work in progress.  
-The A2L creator and ELF/DWARF reader are quick and dirty code, partly AI generated, partly taken from DanielT a2ltool and from the VectorGrp Rust xcp-lite MC registry and A2L writer.  
-Not ready for production.  
-This is could be be the base for the planned ThreadX version of XCPlite.  
+Demonstrates XCPlite usage without runtime on-target A2L database generation.  
+No file system support needed.  
 
-## The Build Time A2L Generation Concept
+This is still work in progress, intended to support RTOS like microcontroller operating systems.  
+Not stable yet.  
+
+The A2L database creator and ELF/DWARF reader in the xcpclient tool are part of the solution to replace the on-target A2L generation. 
+The rust crate for the xcpclient tool can now be found in the XCPlite repository tools folder.  
+See comments in main.c.  
+
+
+## The XCPlite Build Time A2L Generation Concept
   
-### Current State/* Achievements
+The fundamental idea is to provide a specialized A2L database creator (ELF -> A2L converter) designed exclusively for XCPlite.  
+The XCPlite A2L creator knows implementation details of the XCPlite code instrumentation library to automate the A2L generation process as much as possible.  
+It automatically detects all events and calibration memory segments created by the XCPlite instrumentation macros.
+It detects the code locations of the event trigger points and automatically associates local and member variables with complex types existing in each events scope.  
+The test XCP client in the xcpclient tool can work with the ELF file directly, no need for a separate A2L file. 
 
-Needs a XCPlite specific A2L writer and an ELF/DWARF reader in a separate tool at build time to:  
+
+### Concept of the xcpclient A2L Creator
+
+An XCPlite specific A2L creator/writer with ELF/DWARF reader is built into the xcpclient tool.  
 
 Step 1: A2L template generation:
 
-- Create an A2L template from ELF by detecting segments and events
-    Event and segment numbers are sequentially allocated an may not have the correct number
+- Creates a complete A2L template with IF_DATA, memory segments and events from ELF by detecting static segment and event marker variables created by the XCPlite code instrumentaion
 
-Step 2: AL2 content generation:
 
-- Add parameters
+Step 2: A2L content generation:
+
+- Add  calibration parameters
     The reference pages of all calibration parameters must be in addressable (4 GB - 32bit) global memory (.bss segment must be in this range)
     Parameters must be in a structure, a calibration segment contains a single structure to assure a defined memory area and layout
     Detect calibration parameters by the address of their reference page by naming convention and segment marker variable
     XCP needs to be configure for absolute calibration segment addressing
-- Add measurements
+- Add measurement variables
     Global or static measurements must be in addressable (4 GB - 32bit) global memory (.bss segment must be in this range)
     Takes all global, static and local variables into account in specified compilation units
     Try to detect an appropriate fixed event for each variable by detecting a event trigger in the same function, if not use the unsafe standard async event as default event
@@ -32,25 +44,19 @@ Step 2: AL2 content generation:
 
 Content generation step 2 can alternatively be done by hand, with any other A2L tool from Vector or open source
 
-Step 3: A2L Fix:
+Step 3: Optional A2L Fix:
 
-- The remaining problem is the wrong event and segment numbers. The A2L file is consistent and complete, but the numbers do not match the runtime numbers
-  This can be fixed connecting to the target and querying segments and events
+- There may be still unknown event and segment numbers, when events are created dynamically. The A2L file is consistent and complete, but the numbers do not match the runtime numbers
+  This can be fixed by connecting to the target and querying segments and events via XCP
   CANape already does this for events, but not for segments
-  The associating is done by namme
-  Problem is, that the XCP standard command GET_SEGMENT_INFO does not support segment names, only numbers
-  The is a small extension in XCPlite, which supports segment name query
 
-  The proposal is, to simply integrate this into CANape and we are done ....
 
-  Of course the whole process could be integrated into CANape, which would eliminate the need for an A2L file at all!
+### TODO List and open issues
 
-### TODO List
-
-- The xcpclient tool is just proof of concept
+- The xcpclient tool is just proof of concept yet
     Make it more flexible by adding a regular expression filter to the xcpclient tool, allow to specify a list of compilation units, ...
 - Support relative calibration segment addressing
-    XCPlite can then be configured for relative calibration segment addressing as an option
+    XCPlite is configured for relative calibration segment addressing as default, this needs to be changed to absolute addressing for the A2L creator to work
     As long as all reference pages are in a 4 GB addressable range, there is no benefit of relative addressing
     By convention, parameters always use address extension 0 ACFDD or CAFDD
     Currently we preliminary use AAFDD, because the XCPlite macros for event triggering so not detect the calibration segment addressing mode and CANape can not handle ACFDD
@@ -69,23 +75,13 @@ Step 3: A2L Fix:
     Detect if the target application has a EPK segment or not
     Currently no EPK segment is generated, switched off in XCPlite
 - Function parameters
-    Define a macro to declare function parameters as XCP_MEA, which sills them to stack
+    Define a macro to declare function parameters as XCP_MEA, which spills them to stack
     A2L Creator ELF reader parser must detect the function parameters with the CFA offset in the stack frame
 - bool
     The A2L creator must create a BOOL conversion rule and detect the size of the bool type
-- Nested structures
-    Should work, if Daniel handles it correct, not tested yet
-- Arrays of structures
-    Should work, if Daniel handles it correct, not tested yet
-- Multiple source files not tested yet
 - Support for C++, name spaces, classes, member functions, ...
 
-## Using the xcpclient tool
-
-The xcpclient tool from Rust xcp-lite can generate A2L file templates for XCPlite, for further processing with other tools.  
-It can update A2L files with all visible measurement and calibration variables.  
-To generate the correct (safe) event id and calibration segment number for the XCP protocol, the application can be run on the target to enable xcpclient to upload event and calibration segment information via XCP.  
-CANape currently only detects and corrects event ids, but not calibration segment numbers !!!
+## Using the xcpclient tool for A2L generation
 
 Example: Create an A2L template from target:  
 (Note that the tool will connect to the target ECU to get event id and calibration memory segment number information)
@@ -124,6 +120,8 @@ XCP_MEA uint8_t counter = 0;
 
 .
 
+## Other A2L generation options
+
 ### Using Vector CANape
 
 Drop the template generated by xcpclient into CANape and create a new XCP on Ethernet device.  
@@ -138,24 +136,10 @@ The example code contains some A2L creator metadata annotation to add metadata s
 ### Using Open Source a2ltool
 
 Example:
-Add the calibration segment 'params' and the measurment variable 'counter' to the A2L template:
+Add the calibration segment 'params' and the measurement variable 'counter' to the A2L template:
 
 ```bash
 a2ltool  --update --measurement-regex "counter"  --characteristic-regex "params" --elffile  no_a2l_demo  --enable-structures --output no_a2l_demo no_a2l_demo 
 ```
 
-### Demo
 
-The demo script create_a2l.sh automates the complete remote build and A2L generation process.
-
-```bash
-./create_a2l.sh
-```
-
-### Work in progress
-
-This is currently experimental.  
-The approach will be used for the upcoming ThreadX demo with build time A2L generation.
-
-objdump -W no_a2l_demo
-objdump --all-headers no_a2l_demo

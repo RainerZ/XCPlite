@@ -82,7 +82,7 @@ typedef uint16_t tXcpEventId;
 // Also defined in xcplib.h; this guard prevents redefinition when both headers are included.
 #ifndef __XCPLIB_H__
 typedef struct {
-    const char *name;
+    const char *name; // @@@@ TODO: Remove and save the memory, not used
     uint32_t cycle_time_ns;
     uint8_t priority;
     tXcpEventId id;

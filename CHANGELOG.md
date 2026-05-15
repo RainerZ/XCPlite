@@ -5,8 +5,12 @@ All notable changes to XCPlite are documented in this file.
 
 ## [V2.0.5]
 
-- Addressing schema XCPLITE__AXSDD without calibration segment managgement (preparation for ThreadX and freeRTOS demo)
-- Work in progress, not released yet
+- Features and changes for RTOS like microcontroller operating systems
+- Improved support for offline A2L creation from ELF files, file system dependency is now optional 
+- XCP event descriptor memory section to preregister events in XcpInit, for build time deterministic event numbers without .BIN file
+- The A2L generator in xcpclient can create XCP events from ELF file in offline mode, by inspecting the event descriptor memory section
+- Optional custom GET_ID to upload the ELF file instead of the A2L file
+- Addressing schema XCPLITE__AXSDD, memory access via callbacks, no calibration segment management 
 
 
 ## [V2.0.4]
@@ -17,7 +21,7 @@ All notable changes to XCPlite are documented in this file.
 ## [V2.0.3]
 
 - Bug fixes and improvements, see commit history for details
-- `silkit_demo` with separate XCP server participant
+- `silkit_demo` with optional separate XCP server participant
 
 
 ## [V2.0.2]

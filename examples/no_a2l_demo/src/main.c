@@ -7,7 +7,16 @@
 // Reduces the code size and dependencies (file system) for use cases on microcontrollers RTOS like FreeRTOS, Zephyr, ThreadX, ...
 
 // Configuration options for XCPlite are set in src/xcplib_cfg.h, see comments in that file for details and available options
-// A typical configuration (xcplib_cfg.h) for microcontrollers without file system and TCP support:
+
+// Example configuration for libxcplite (xcplib_cfg.h) for 32 bit microcontrollers
+// No file system needed: no on target A2L generation, no binary calibration segment persistence file
+// TCP support disabled
+// Memory segments disabled, no EPK segment and calibration access is handled by calibration parameter blocks
+// Address extension 0 is absoluted memory addressing
+// 32 bit queue selected
+//
+//  #define OPTION_CAL_SEGMENTS_ABS
+//  #undef OPTION_CAL_SEGMENT_EPK
 //  #undef OPTION_ENABLE_PERSISTENCE
 //  #undef OPTION_ENABLE_TCP
 //  #define OPTION_ENABLE_UDP
@@ -19,11 +28,21 @@
 // Build the no_a2l_demo example:
 // The other examples depend on the A2L generator and upload features, so they won't build with this configuration
 //  Clean
+//   rm build/CMakeCache.txt
 //   cmake --build build --target clean
 //  Configure
-//   cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug
+//   cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-DXCPLIB_NO_A2L"
 //  Build
 //   cmake --build build --target no_a2l_demo
+
+// Use xcpclient tool to generate the A2L file for the no_a2l_demo example in offline mode
+// xcpclient   --offline --elf no_a2l_demo.elf --a2l no_a2l_demo.a2l   --create-a2l
+// Option: Write the given IP and protocol (UDP/TCP) to the A2L file
+// xcpclient --udp --dest-addr 192.168.8.135  --offline --elf no_a2l_demo.elf  --a2l no_a2l_demo.a2l  --create-a2l
+// Option: Upload ELF file from target (requires OPTION_ENABLE_ELF_UPLOAD)
+// xcpclient --udp --dest-addr 192.168.8.135  --elf no_a2l_demo.elf --upload-elf  --create-a2l
+// Option: Get detailled information
+// xcpclient --offline --elf no_a2l_demo.elf  --a2l no_a2l_demo.a2l --create-a2l --verbose 2. >no_a2l_demo.log
 
 #include <assert.h>  // for assert
 #include <signal.h>  // for signal handling
@@ -33,10 +52,10 @@
 #include <stdlib.h>  // for malloc, free
 #include <string.h>  // for sprintf
 
-#include "xcplib.h" // for application programming interface
+#include "xcplib.h" // for libxcplite application programming interface
 
 // Internal libxcplite includes to simplify multi platform support
-#include "platform.h" // for platform abstraction for thread local, threads, mutex, sockets, sleepUs, ...
+#include "platform.h" // for platform abstraction - thread local, threads, mutex, sockets, sleepUs, ...
 
 static volatile bool global_running = true;
 static void sig_handler(int sig) { global_running = false; }
@@ -50,7 +69,7 @@ static void sig_handler(int sig) { global_running = false; }
 #define OPTION_SERVER_PORT 5555           // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}   // Bind addr, 0.0.0.0 = ANY
 #define OPTION_QUEUE_SIZE (1024 * 8)      // Size of the measurement queue in bytes, must be a multiple of 8
-#define OPTION_LOG_LEVEL 3                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
+#define OPTION_LOG_LEVEL 4                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
@@ -73,19 +92,7 @@ struct params {
     } test_par_struct;
 };
 
-// Example A2L Creator code parser annotation
-/*
-   @@ ELEMENT = counter_max
-   @@ STRUCTURE = params
-   @@ DATA_TYPE = UWORD [0 ... 10000]
-   @@ END
-*/
-
-// Example A2L Creator linker map parser annotation
-XCP_LIMITS(delay_us, 1.0, 10000.0);
-XCP_UNIT(delay_us, "us");
-
-// Default values (reference page, "FLASH") for the calibration parameters
+// Default values for the calibration parameters
 const struct params params = {.counter_max = 1024,
                               .delay_us = 1000,
                               .test_par_double = 0.123456789,
@@ -93,6 +100,21 @@ const struct params params = {.counter_max = 1024,
                               .test_par_enum = ENUM_2,
                               .test_par_uint8_array = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
                               .test_par_struct = {2, -2, 0.4f, {0, 1, 2}}};
+
+//-----------------------------------------------------------------------------------------------------
+// Experiments
+
+// Example Vector A2L Creator code parser annotation
+/*
+@@ ELEMENT = counter_max
+@@ STRUCTURE = params
+@@ DATA_TYPE = UWORD [0 ... 10000]
+@@ END
+*/
+
+// Example xcpclient A2L Creator linker map parser annotation
+XCP_LIMITS(delay_us, 1.0, 10000.0);
+XCP_UNIT(delay_us, "us");
 
 //-----------------------------------------------------------------------------------------------------
 // Demo global measurement values
@@ -244,6 +266,9 @@ int main(int argc, char *argv[]) {
     // XCP: Set log level (1-error, 2-warning, 3-info, 4-show XCP commands)
     XcpSetLogLevel(OPTION_LOG_LEVEL);
 
+    // XCP: Create the EPK software version string in an initialized memory section for offline A2L generation
+    XcpCreateEpk(OPTION_PROJECT_VERSION);
+
     // XCP: Initialize the XCP singleton, activate XCP, must be called before starting the server
     XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
     XcpSetElfName(argv[0]); // Set ELF file name for upload via GET_ID, optional with OPTION_ENABLE_ELF_UPLOAD
@@ -254,8 +279,8 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // XCP: Create a calibration segment named 'params' for the calibration parameters in 'const struct params params' as reference page
-    CalSegCreate(params);
+    // XCP: Create a calibration parameter block named 'params' for the calibration parameters in 'const struct params params' as default/reference page
+    CalBlkCreate(params);
 
     // Create threads
     THREAD_HANDLE __t1 = 0;
@@ -278,7 +303,7 @@ int main(int argc, char *argv[]) {
         //      Calibration segment locking is wait-free, locks may be recursive, calibration segments may be shared among multiple threads
         //      Returns a pointer to the active page (working or reference) of the calibration segment
         {
-            const struct params *p = CalSegLock(params);
+            const struct params *p = CalBlkLock(params);
 
             delay_us = p->delay_us; // Get the delay_us calibration value
 
@@ -288,7 +313,7 @@ int main(int argc, char *argv[]) {
             }
 
             // XCP: Unlock the calibration segment
-            CalSegUnlock(params);
+            CalBlkUnlock(params);
         }
 
         counter = global_counter;

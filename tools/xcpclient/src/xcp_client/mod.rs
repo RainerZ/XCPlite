@@ -770,7 +770,7 @@ impl XcpClient {
         }
 
         // Get calibration page count and freeze support
-        let res = self.send_command(XcpCommandBuilder::new(CC_GET_PAGE_PROCESSOR_INFO).add_u8(0).build()).await;
+        let res = self.send_command(XcpCommandBuilder::new(CC_GET_PAG_PROCESSOR_INFO).add_u8(0).build()).await;
         match res {
             Ok(data) => {
                 assert!(data.len() >= 3);
@@ -1314,7 +1314,6 @@ impl XcpClient {
         Ok(timestamp_ns)
     }
 
-
     //-------------------------------------------------------------------------------------------------
     // ELF upload
 
@@ -1348,8 +1347,6 @@ impl XcpClient {
 
         Ok(())
     }
-
-
 
     //-------------------------------------------------------------------------------------------------
     // A2L upload
@@ -1434,17 +1431,12 @@ impl XcpClient {
         }
 
         // Get segment information
-        let mut n = 0;
         for i in 0..self.max_segments {
             let (addr_ext, addr, length, name) = self.get_segment_info(i).await?;
             info!(" Segment {}: {} addr={}:0x{:08X} length={} ", i, name, addr_ext, addr, length);
 
-            // Otherwise the EPK segment would be handled like a normal calibration segment with 2 pages
             // Segment relative addressing is ignored, all addresses are treated as raw A2L addr_ext/addr
-            // Segment relative addressing would be reg.cal_seg_list.add_cal_seg(name, i as u16, length as u32).unwrap();
-            reg.cal_seg_list.add_cal_seg_by_addr(name, n, addr_ext, addr, length as u32).unwrap();
-
-            n += 1;
+            reg.cal_seg_list.add_cal_seg_by_addr(name, Some(i), addr_ext, addr, length as u32).unwrap();
         }
 
         Ok(())
@@ -1824,18 +1816,28 @@ impl XcpClient {
 
     /// Set all calibration segments to page 0, working page
     pub async fn init_calibration_segments(&mut self) -> Result<(), Box<dyn Error>> {
-        let reg = self.registry.as_mut().unwrap();
-        for index in 0..reg.cal_seg_list.len() {
-            let ecu_page = self.get_ecu_page(index.try_into().unwrap()).await?;
-            let xcp_page = self.get_xcp_page(index.try_into().unwrap()).await?;
-            info!("Calibration segment {}: ecu_page={}, xcp_page={}", index, ecu_page, xcp_page);
+        let calseg_numbers = self
+            .registry
+            .as_ref()
+            .unwrap()
+            .cal_seg_list
+            .0
+            .iter()
+            .filter_map(|cal_seg| cal_seg.get_number())
+            .collect::<Vec<u8>>();
+        for number in &calseg_numbers {
+            let ecu_page = self.get_ecu_page(*number).await?;
+            let xcp_page = self.get_xcp_page(*number).await?;
+            info!("Calibration segment {}: ecu_page={}, xcp_page={}", number, ecu_page, xcp_page);
         }
 
         // Set all segments to working page 0
-        info!("Set ECU page access to working page for all segments");
-        self.set_ecu_page(0).await?;
-        info!("Set XCP page access to working page for all segments");
-        self.set_xcp_page(0).await?;
+        if calseg_numbers.len() > 0 {
+            info!("Set ECU page access to working page for all segments");
+            self.set_ecu_page(0).await?;
+            info!("Set XCP page access to working page for all segments");
+            self.set_xcp_page(0).await?;
+        }
 
         Ok(())
     }

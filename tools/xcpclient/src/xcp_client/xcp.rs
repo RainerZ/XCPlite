@@ -49,7 +49,7 @@ pub const CC_DOWNLOAD: u8 = 0xF0;
 pub const CC_NOP: u8 = 0xC1;
 pub const CC_SET_CAL_PAGE: u8 = 0xEB;
 pub const CC_GET_CAL_PAGE: u8 = 0xEA;
-pub const CC_GET_PAGE_PROCESSOR_INFO: u8 = 0xE9;
+pub const CC_GET_PAG_PROCESSOR_INFO: u8 = 0xE9;
 pub const CC_GET_SEGMENT_INFO: u8 = 0xE8;
 pub const CC_GET_PAGE_INFO: u8 = 0xE7;
 pub const CC_SET_SEGMENT_MODE: u8 = 0xE6;
@@ -259,7 +259,7 @@ pub enum XcpCommand {
     GetId = CC_GET_ID as isize,
     SetCalPage = CC_SET_CAL_PAGE as isize,
     GetCalPage = CC_GET_CAL_PAGE as isize,
-    GetPageProcessorInfo = CC_GET_PAGE_PROCESSOR_INFO as isize,
+    GetPageProcessorInfo = CC_GET_PAG_PROCESSOR_INFO as isize,
     GetSegmentInfo = CC_GET_SEGMENT_INFO as isize,
     GetPageInfo = CC_GET_PAGE_INFO as isize,
     SetSegmentMode = CC_SET_SEGMENT_MODE as isize,
@@ -301,7 +301,7 @@ impl From<u8> for XcpCommand {
             CC_GET_ID => XcpCommand::GetId,
             CC_SET_CAL_PAGE => XcpCommand::SetCalPage,
             CC_GET_CAL_PAGE => XcpCommand::GetCalPage,
-            CC_GET_PAGE_PROCESSOR_INFO => XcpCommand::GetPageProcessorInfo,
+            CC_GET_PAG_PROCESSOR_INFO => XcpCommand::GetPageProcessorInfo,
             CC_GET_SEGMENT_INFO => XcpCommand::GetSegmentInfo,
             CC_GET_PAGE_INFO => XcpCommand::GetPageInfo,
             CC_SET_SEGMENT_MODE => XcpCommand::SetSegmentMode,

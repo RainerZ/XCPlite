@@ -40,9 +40,8 @@ pub fn get_cfa_from_object(object_file: &object::File<'_>, cfa_info: &mut Vec<Cf
     }
     log::info!("CFA parser: Found {} functions:", n);
 
-    // Summary
-    // Group by compilation unit
-    if verbose >= 1 {
+    // Log all functions grouped by compilation unit
+    if verbose >= 2 {
         let mut by_cu: HashMap<usize, Vec<&CfaInfo>> = HashMap::new();
         for func in cfa_info {
             by_cu.entry(func.unit_idx).or_default().push(func);
