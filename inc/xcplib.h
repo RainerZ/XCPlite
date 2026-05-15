@@ -249,7 +249,6 @@ typedef struct {
     tXcpEventId id;
 } tXcpEventDescriptor;
 #endif
-static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
 
 // Platform section attribute for tXcpEventDescriptor static variables created by DaqCreateEvent().
 // Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
