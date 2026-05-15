@@ -87,6 +87,7 @@ typedef struct {
     uint8_t priority;
     tXcpEventId id;
 } tXcpEventDescriptor;
+static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
 #endif
 
 // Trigger a XCP data acquisition event
