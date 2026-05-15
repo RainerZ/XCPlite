@@ -52,6 +52,8 @@ bool XcpEthServerStatus(void);
 /// Calibration segment handle
 typedef uint16_t tXcpCalSegIndex;
 #define XCP_UNDEFINED_CALSEG ((tXcpCalSegIndex)0xFFFF)
+typedef uint8_t tXcpCalSegNumber;
+#define XCP_UNDEFINED_CALSEG_NUM 0xFF
 
 /// Create a calibration segment and add it to the list of calibration segments.
 /// This calibration segment has a working page (RAM) and a reference page (FLASH), it creates a MEMORY_SEGMENT in the A2L file
@@ -74,23 +76,28 @@ tXcpCalSegIndex XcpCreateCalSeg(const char *name, const void *default_page, uint
 tXcpCalSegIndex XcpCreateCalBlk(const char *name, const void *default_page, uint16_t size);
 
 /// Get the number of calibration segments
-/// @return the number of calibration segments
+/// @return the number of calibration segments and blocks
 uint16_t XcpGetCalSegCount(void);
 
 /// Find a calibration segment by name
-/// @param name Name of the calibration segment
+/// @param name Name of the calibration segment or block
 /// @return the Handle of the calibration segment or XCP_UNDEFINED_CALSEG if not found
 tXcpCalSegIndex XcpFindCalSeg(const char *name);
 
 /// Get the name of the calibration segment
-/// @param index Handle of the calibration segment
+/// @param index Handle of the calibration segment or block
 /// @return the name of the calibration segment or NULL if the index is invalid.
 const char *XcpGetCalSegName(tXcpCalSegIndex index);
 
 /// Get the size of the calibration segment
-/// @param calseg Handle of the calibration segment
+/// @param calseg Handle of the calibration segment or block
 /// @return the size of the calibration segment in bytes
 uint16_t XcpGetCalSegSize(tXcpCalSegIndex calseg);
+
+/// Get the number of the calibration segment
+/// @param calseg Handle of the calibration segment
+/// @return the number of the calibration segment, calibration blocks don't have a number and return XCP_UNDEFINED_CALSEG_NUM
+tXcpCalSegNumber XcpGetCalSegNumber(tXcpCalSegIndex calseg);
 
 /// Lock a calibration segment.
 /// @param index Calibration segment index.
