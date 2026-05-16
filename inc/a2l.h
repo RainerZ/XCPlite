@@ -50,7 +50,7 @@
 #include <stddef.h>  // for offsetof
 #include <stdint.h>  // for uintxx_t
 
-#include "xcplib.h" // for tXcpEventId, tXcpCalSegIndex, xcp_get_frame_addr, ...
+#include "xcplib.h" // for tXcpEventId, tXcpCalSegIndex, ...
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // A2L generation modes

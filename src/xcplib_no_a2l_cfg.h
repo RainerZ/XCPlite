@@ -108,7 +108,7 @@
 
 // Enable EPK calibration segment to check HEX/BIN file compatibility
 // If the EPK is included in the HEX/BIN file, the version of the data structure can be checked using the EPK address specified in the A2L file
-// #define OPTION_CAL_SEGMENT_EPK
+#define OPTION_CAL_SEGMENT_EPK
 
 // Enable absolute addressing for calibration segments and calibration blocks
 // Default is segment relative addressing, uses address extension 0 for segment relative and 1 for absolute and encodes the segment number in the address high word

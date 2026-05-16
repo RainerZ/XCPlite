@@ -33,7 +33,7 @@
 
 #include "xcplib_rtos_cfg.h"
 
-#elif defined(XCPLIB_NO_A2l)
+#elif defined(XCPLIB_NO_A2L)
 
 #include "xcplib_no_a2l_cfg.h" // for Rust xcp-lite specific configuration
 

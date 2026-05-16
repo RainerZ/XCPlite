@@ -75,38 +75,6 @@ void XcpBackgroundTasks(void);
 // Disconnect, stop DAQ, flush queue, flush pending calibrations
 void XcpDisconnect(void);
 
-// XCP event identifier type
-typedef uint16_t tXcpEventId;
-
-// Event descriptor used by DaqCreateEvent() for section-based pre-registration.
-// Also defined in xcplib.h; this guard prevents redefinition when both headers are included.
-#ifndef __XCPLIB_H__
-typedef struct {
-    const char *name; // @@@@ TODO: Remove and save the memory, not used
-    uint32_t cycle_time_ns;
-    uint8_t priority;
-    tXcpEventId id;
-} tXcpEventDescriptor;
-static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
-#endif
-
-// Trigger a XCP data acquisition event
-// Absolute base address only
-void XcpEvent(tXcpEventId event);
-void XcpEventAt(tXcpEventId event, uint64_t clock);
-// Single dyn base address
-void XcpEventExt(tXcpEventId event, const uint8_t *base2);
-void XcpEventExtAt(tXcpEventId event, const uint8_t *base2, uint64_t clock);
-// Explicit dyn base address list
-void XcpEventExt_(tXcpEventId event, int count, const uint8_t **bases);
-void XcpEventExtAt_(tXcpEventId event, int count, const uint8_t **bases, uint64_t clock);
-// Variadic dyn base address list
-void XcpEventExt_Var(tXcpEventId event, int count, ...);
-void XcpEventExtAt_Var(tXcpEventId event, uint64_t clock, int count, ...);
-
-// Enable or disable a XCP DAQ event
-void XcpEventEnable(tXcpEventId event, bool enable);
-
 // Send a XCP event message
 void XcpSendEvent(uint8_t evc, const uint8_t *d, uint8_t l);
 
@@ -127,11 +95,6 @@ bool XcpIsDaqEventRunning(uint16_t event);
 uint64_t XcpGetDaqStartTime(void);
 uint32_t XcpGetDaqOverflowCount(void);
 
-// Check DAQ lists (running or selected, all events or given event, via ApplXcpCheckMemory)
-#define DAQ_STATE_SELECTED ((uint8_t)0x01) /* Selected */
-#define DAQ_STATE_RUNNING ((uint8_t)0x02)  /* Running */
-bool XcpCheckDaqLists(uint8_t daq_state, tXcpEventId event_id);
-
 // Time synchronisation
 #ifdef XCP_ENABLE_DAQ_CLOCK_MULTICAST
 #if XCP_PROTOCOL_LAYER_VERSION < 0x0103
@@ -144,10 +107,44 @@ uint16_t XcpGetClusterId(void);
 void XcpSetLogLevel(uint8_t level);
 
 /****************************************************************************/
+/* XCP packet                                                               */
+/****************************************************************************/
+
+typedef union {
+    uint8_t b[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC)];
+    uint16_t w[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC) / 2];
+    uint32_t dw[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC) / 4];
+} tXcpCto;
+
+/****************************************************************************/
 /* DAQ events                                                               */
 /****************************************************************************/
 
+// XCP event identifier type
+typedef uint16_t tXcpEventId;
 #define XCP_UNDEFINED_EVENT_ID 0xFFFF
+
+// Trigger a XCP data acquisition event
+// Absolute base address only
+void XcpEvent(tXcpEventId event);
+void XcpEventAt(tXcpEventId event, uint64_t clock);
+// Single dyn base address
+void XcpEventExt(tXcpEventId event, const uint8_t *base2);
+void XcpEventExtAt(tXcpEventId event, const uint8_t *base2, uint64_t clock);
+// Explicit dyn base address list
+void XcpEventExt_(tXcpEventId event, int count, const uint8_t **bases);
+void XcpEventExtAt_(tXcpEventId event, int count, const uint8_t **bases, uint64_t clock);
+// Variadic dyn base address list
+void XcpEventExt_Var(tXcpEventId event, int count, ...);
+void XcpEventExtAt_Var(tXcpEventId event, uint64_t clock, int count, ...);
+
+// Enable or disable a XCP DAQ event
+void XcpEventEnable(tXcpEventId event, bool enable);
+
+// Check DAQ lists (running or selected, all events or given event, via ApplXcpCheckMemory)
+#define DAQ_STATE_SELECTED ((uint8_t)0x01) /* Selected */
+#define DAQ_STATE_RUNNING ((uint8_t)0x02)  /* Running */
+bool XcpCheckDaqLists(uint8_t daq_state, tXcpEventId event_id);
 
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
 
@@ -213,16 +210,6 @@ uint8_t XcpGetEventAppId(tXcpEventId event);
 #endif // SHM_MODE
 
 #endif // XCP_ENABLE_DAQ_EVENT_LIST
-
-/****************************************************************************/
-/* XCP packet                                                               */
-/****************************************************************************/
-
-typedef union {
-    uint8_t b[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC)];
-    uint16_t w[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC) / 2];
-    uint32_t dw[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC) / 4];
-} tXcpCto;
 
 /****************************************************************************/
 /* DAQ tables                                                               */
@@ -447,7 +434,7 @@ uint8_t ApplXcpUserCommand(uint8_t cmd);
 #endif
 
 // Calibration segment number
-// Is the type (uint8_t) used by XCP commands like GET_SEGMENT_INFO, SET_CAL_PAGE, ...
+// Is the type (uint8_t) used by A2L and XCP commands to identify calibration memoryy segments (GET_SEGMENT_INFO, SET_CAL_PAGE, ...)
 typedef uint8_t tXcpCalSegNumber;
 
 // Calibration page number
@@ -535,6 +522,10 @@ const char *XcpGetElfName(void);
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+/****************************************************************************/
+/* Test                                                                     */
+/****************************************************************************/
 
 // Some metrics collected by the XCP protocol layer for debugging and performance analysis
 #ifdef TEST_ENABLE_DBG_METRICS

@@ -24,6 +24,11 @@
 #include <stdlib.h>   // for size_t, NULL, abort
 #include <string.h>   // for memcpy, memset
 
+#ifdef __APPLE__
+#include <mach-o/getsect.h> // for getsectiondata(), used by XcpRegisterSectionEvents()
+#include <mach-o/ldsyms.h>  // for _mh_execute_header
+#endif
+
 #include "dbg_print.h"   // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
 #include "persistence.h" // for XcpBinFreezeCalSeg
 #include "platform.h"    // for atomics OS abstraction
@@ -90,22 +95,8 @@ extern tXcpLocalData gXcpLocalData;
 /**************************************************************************/
 // Forward declarations
 
-static void *XcpCalMemAlloc_(size_t size);
 static bool XcpInitCalSeg_(tXcpCalSeg *calseg, const char *name, const void *default_page, FILE *default_page_file, uint16_t page_size, bool memory_segment);
 static tXcpCalSegIndex XcpCreateCalSeg_(const char *name, bool lookup, const void *default_page, FILE *default_page_file, uint16_t page_size, bool memory_segment);
-
-/**************************************************************************/
-
-// Initialize the calibration segment list
-void XcpInitCalSegList(void) {
-    atomic_store_explicit(&shared_mut_safe.cal_seg_list.count, 0, memory_order_relaxed);
-    atomic_store_explicit(&shared_mut_safe.cal_seg_list.cal_mem_used, 0, memory_order_relaxed);
-    shared_mut.cal_seg_list.memory_segment_count = 0;
-    shared_mut.cal_seg_list.write_delayed = false;
-    mutexInit(&local_mut.cal_seg_list_mutex, false, 0); // Non-recursive mutex, no spin count
-
-    DBG_PRINTF6("Calibration segment list initialized, sizeof(tXcpCalSegHeader) = %zu, sizeof(tXcpCalSegList) = %zu\n", sizeof(tXcpCalSegHeader), sizeof(tXcpCalSegList));
-}
 
 // Thread-safe bump allocator for calibration segment memory
 // Memory is only freed as a whole when the calibration segment list is destroyed
@@ -125,6 +116,60 @@ static void *XcpCalMemAlloc_(size_t size) {
         }
     } while (!atomic_compare_exchange_weak_explicit(&shared_mut_safe.cal_seg_list.cal_mem_used, &old_used, new_used, memory_order_relaxed, memory_order_relaxed));
     return &shared_mut_safe.cal_seg_list.cal_mem.pool[old_used];
+}
+
+// Pre-register all tXcpEventDescriptor variables placed in the xcp_cals section by DaqCreateEvent().
+// Must be called after SS_ACTIVATED is set (XcpCreateEvent requires isActivated()).
+// If a persistence file was loaded before this call, events are matched by name and keep their saved id.
+uint16_t XcpRegisterSectionCalSegs(void) {
+
+    uint16_t count = 0;
+
+#if defined(__ELF__)
+    // Declared weak: if no object file contributes to the xcp_cals section the symbols
+    // resolve to NULL rather than causing an undefined-reference linker error.
+    extern tXcpCalDescriptor __start_xcp_cals[] __attribute__((weak));
+    extern tXcpCalDescriptor __stop_xcp_cals[] __attribute__((weak));
+    if (__start_xcp_cals != NULL) {
+        for (tXcpCalDescriptor *e = __start_xcp_cals; e < __stop_xcp_cals; e++) {
+            if (e->index == XCP_UNDEFINED_CALSEG) {
+                assert(e->type == XCP_CALSEG_TYPE_SEGMENT || e->type == XCP_CALSEG_TYPE_BLOCK);
+                e->index = XcpCreateCalSeg_(e->name, false, e->addr, NULL, e->size, e->type == XCP_CALSEG_TYPE_SEGMENT);
+                count++;
+            }
+        }
+    }
+#elif defined(__APPLE__)
+    unsigned long sz = 0;
+    tXcpCalDescriptor *begin = (tXcpCalDescriptor *)getsectiondata(&_mh_execute_header, "__DATA", "xcp_cals", &sz);
+    if (begin != NULL) {
+        tXcpCalDescriptor *end = begin + sz / sizeof(tXcpCalDescriptor);
+        for (tXcpCalDescriptor *e = begin; e < end; e++) {
+            if (e->index == XCP_UNDEFINED_CALSEG) {
+                assert(e->type == XCP_CALSEG_TYPE_SEGMENT || e->type == XCP_CALSEG_TYPE_BLOCK);
+                e->index = XcpCreateCalSeg_(e->name, false, e->addr, NULL, e->size, e->type == XCP_CALSEG_TYPE_SEGMENT);
+                count++;
+            }
+        }
+    }
+#endif
+
+    if (count > 0)
+        DBG_PRINTF3(ANSI_COLOR_GREEN "Preregistered %u calibration segments or blocks from descriptor section\n" ANSI_COLOR_RESET, count);
+    return count;
+}
+
+/**************************************************************************/
+
+// Initialize the calibration segment list
+void XcpInitCalSegList(void) {
+    atomic_store_explicit(&shared_mut_safe.cal_seg_list.count, 0, memory_order_relaxed);
+    atomic_store_explicit(&shared_mut_safe.cal_seg_list.cal_mem_used, 0, memory_order_relaxed);
+    shared_mut.cal_seg_list.memory_segment_count = 0;
+    shared_mut.cal_seg_list.write_delayed = false;
+    mutexInit(&local_mut.cal_seg_list_mutex, false, 0); // Non-recursive mutex, no spin count
+
+    DBG_PRINTF6("Calibration segment list initialized, sizeof(tXcpCalSegHeader) = %zu, sizeof(tXcpCalSegList) = %zu\n", sizeof(tXcpCalSegHeader), sizeof(tXcpCalSegList));
 }
 
 // Free the calibration segment list

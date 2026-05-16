@@ -255,7 +255,7 @@ impl DebugData {
         if level >= 1 {
             if level >= 5 {
                 println!("\n====================================================================================================");
-                println!("System variables  in compilation unit 0..{unit_idx_limit}:");
+                println!("System variables in compilation unit 0..{unit_idx_limit}:");
                 for (var_name, var_info) in &self.variables {
                     if var_name.starts_with("__") {
                         println!("{}: ", var_name);

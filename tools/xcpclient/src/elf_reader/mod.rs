@@ -212,7 +212,15 @@ impl ElfReader {
 
     // Register segments from segment creation markers (calseg__name) found in the code
     pub fn register_segments(&self, reg: &mut Registry, segment_relative: bool, verbose: usize) -> Result<(), Box<dyn Error>> {
-        info!("Registering segment information:");
+        info!("===============================================================");
+        info!(
+            "Registering segment information {}:",
+            if !segment_relative {
+                "(absolute addressing mode)"
+            } else {
+                "(relative addressing mode)"
+            }
+        );
 
         let mut next_segment_number: u16 = 0;
 
@@ -256,19 +264,17 @@ impl ElfReader {
                 );
 
                 // If it is the epk segment
-                // @@@@ TODO: How to determine the EPK string
-                /*
-                if seg_name == "epk" {
-                    info!("  'epk' calibration segment is predefined, skipping");
-                    // Now we know, there is an epk segment
-                    // Set the EPK information in the registry
-                    reg.application.set_version("<unknown>", 0x80000000);
-                    continue;
-                } else
-                */
+                // if seg_name == "epk" {
+                //     info!("  Found calibration segment 'epk', skipping");
+                // @@@@ TODO: Implement
+                // Now we know, there is an epk segment
+                // Set the EPK information in the registry
+                //reg.application.set_version("<unknown>", 0x80000000);
+                //     continue;
+                // } else
 
                 {
-                    // Lookup the reference page variable (naming convention is segment name!) information
+                    // Lookup the reference page variable (naming convention is same as segment name!) information
                     let seg_var_info = if let Some(x) = self.debug_data.variables.get(seg_name) {
                         if x.len() != 1 {
                             error!("Calibration segment reference page variable '{}' has {} definitions, expected 1", seg_name, x.len());
@@ -333,24 +339,36 @@ impl ElfReader {
                         // Absolute addressing mode
                         else {
                             // Check if address and length match
-                            if reg_seg.mem_addr == addr && reg_seg.size == length as u32 {
-                                info!(" matches existing registry entry");
-                            } else {
-                                warn!("Calibration segment '{}' does not match existing registry entry, registry information updated", seg_name);
+                            if reg_seg.addr as u64 != addr {
+                                warn!(
+                                    "Calibration segment '{}' address does not match existing registry entry, reg = {:08X} vs. {:08X}",
+                                    seg_name, reg_seg.addr, addr
+                                );
                                 unimplemented!();
+                            } else if reg_seg.size != length as u32 {
+                                warn!(
+                                    "Calibration segment '{}' length does not match existing registry entry, reg = {} vs. {}",
+                                    seg_name, reg_seg.size, length
+                                );
+                                unimplemented!();
+                            } else {
+                                info!(" matches existing registry entry");
                             }
                         }
 
                         continue; // segment already exists, leave it as it is
                     }
-                    // If not create the segment
+                    //
+                    // If not exists create the segment
                     // Use segment relative or absolute addressing mode
                     else {
                         info!("Calibration segment '{}' not yet defined in registry", seg_name);
 
                         if segment_relative {
                             // Add in segment relative addressing mode
-                            let res = reg.cal_seg_list.add_cal_seg(seg_name.to_string(), None, length as u32);
+                            // @@@@ TODO: determine the segment number from linker map section xcp_cals
+                            let segment_number = next_segment_number as u8;
+                            let res = reg.cal_seg_list.add_cal_seg(seg_name.to_string(), Some(segment_number), length as u32);
                             if let Err(e) = res {
                                 error!("Failed to add calibration segment '{}': {}", seg_name, e);
                                 continue;
@@ -373,7 +391,12 @@ impl ElfReader {
                                 );
                                 continue; // skip this variable
                             }
-                            let res = reg.cal_seg_list.add_cal_seg_by_addr(seg_name.to_string(), None, addr_ext, addr as u32, length as u32);
+
+                            // @@@@ TODO: determine the segment number from linker map section xcp_cals
+                            let segment_number = next_segment_number as u8;
+                            let res = reg
+                                .cal_seg_list
+                                .add_cal_seg_by_addr(seg_name.to_string(), Some(segment_number), addr_ext, addr as u32, length as u32);
                             if let Err(e) = res {
                                 error!("Failed to add calibration segment '{}': {}", seg_name, e);
                                 continue;
@@ -387,6 +410,7 @@ impl ElfReader {
                                 "Not yet defined segment: Created segment {}: '{}' absolute addr = {:#x}, size = {:#x}",
                                 new_seg.index, new_seg.name, new_seg.addr, new_seg.size
                             );
+
                             next_segment_number += 1;
                             continue;
                         }
@@ -399,6 +423,8 @@ impl ElfReader {
 
     // Register events from event creation markers (evt__name) in the code
     pub fn register_events(&self, reg: &mut Registry, verbose: usize) -> Result<(), Box<dyn Error>> {
+        info!("===============================================================");
+
         info!("Registering event information:");
 
         // Get the address of the XCP event descriptor memory section
@@ -452,6 +478,8 @@ impl ElfReader {
 
     // Find event triggers in the code and register their location (compilation unit, function, CFA offset)
     pub fn register_event_locations(&self, reg: &mut Registry, verbose: usize) -> Result<(), Box<dyn Error>> {
+        info!("===============================================================");
+
         info!("Registering event locations:");
 
         // Iterate over variables
@@ -523,6 +551,7 @@ impl ElfReader {
 
     pub fn register_variables(&self, reg: &mut Registry, segment_relative: bool, verbose: usize, unit_idx_limit: usize) -> Result<(), Box<dyn Error>> {
         // Load debug information from the ELF file
+        info!("===============================================================");
         info!("Registering variables:");
 
         // Iterate over variables

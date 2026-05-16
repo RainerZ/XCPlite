@@ -41,7 +41,7 @@
 // xcpclient --udp --dest-addr 192.168.8.135  --offline --elf no_a2l_demo.elf  --a2l no_a2l_demo.a2l  --create-a2l
 // Option: Upload ELF file from target (requires OPTION_ENABLE_ELF_UPLOAD)
 // xcpclient --udp --dest-addr 192.168.8.135  --elf no_a2l_demo.elf --upload-elf  --create-a2l
-// Option: Get detailled information
+// Option: Get detailed information
 // xcpclient --offline --elf no_a2l_demo.elf  --a2l no_a2l_demo.a2l --create-a2l --verbose 2. >no_a2l_demo.log
 
 #include <assert.h>  // for assert
@@ -101,10 +101,10 @@ const struct params params = {.counter_max = 1024,
                               .test_par_uint8_array = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
                               .test_par_struct = {2, -2, 0.4f, {0, 1, 2}}};
 
-//-----------------------------------------------------------------------------------------------------
-// Experiments
+// Define a calibration parameter segment named 'params' for the calibration parameters in 'const struct params params' as default/reference page
+CalSegDecl(params);
 
-// Example Vector A2L Creator code parser annotation
+// Example Vector A2L Creator code parser annotation for a calibration parameter in the params calibration segment
 /*
 @@ ELEMENT = counter_max
 @@ STRUCTURE = params
@@ -112,7 +112,7 @@ const struct params params = {.counter_max = 1024,
 @@ END
 */
 
-// Example xcpclient A2L Creator linker map parser annotation
+// Example meta data annotations via linker map file
 XCP_LIMITS(delay_us, 1.0, 10000.0);
 XCP_UNIT(delay_us, "us");
 
@@ -164,9 +164,6 @@ void *task(void *p)
 {
     printf("Start thread %u ...\n", get_thread_id());
 
-    // Thread local measurement variables
-    static THREAD_LOCAL volatile uint16_t thread_local_counter = 0;
-
     // Static local scope measurement variable
     volatile static uint16_t static_counter = 0;
 
@@ -188,14 +185,8 @@ void *task(void *p)
 
     while (global_running) {
 
-        counter = global_counter;
-        static_counter = global_counter;
-        thread_local_counter = global_counter;
-
-        // @@@@ TODO: Thread local variables
-        // The A2L creator in xcpclient can not handle thread local variables yet
-        // The DAQ capture method does not work for TLS
-        // DaqCapture(task, thread_local_counter);
+        counter++;
+        static_counter++;
 
         DaqTriggerEventExt(task, heap_struct);
 
@@ -238,8 +229,8 @@ void foo(void) {
 }
 
 // Never called
-// Just to demonstrate the DaqCreateEvent macro creates the event
-void bar(void) { DaqCreateEvent(bar); }
+// Just to demonstrate the DaqCreateAndTriggerEvent macro creates the event, without runing the code in foo
+void bar(void) { DaqCreateAndTriggerEvent(bar); }
 
 //-----------------------------------------------------------------------------------------------------
 // Demo main
@@ -247,6 +238,7 @@ void bar(void) { DaqCreateEvent(bar); }
 int main(int argc, char *argv[]) {
 
     printf("\nXCP on Ethernet no_a2l_demo C demo\n");
+    printf("XCPlite version: %u.%u.%u\n", OPTION_VERSION_MAJOR, OPTION_VERSION_MINOR, OPTION_VERSION_PATCH);
 
     // Print build configuration
 #ifdef NDEBUG
@@ -259,6 +251,9 @@ int main(int argc, char *argv[]) {
 #else
     printf("(no optimization)\n");
 #endif
+    printf("Address of 'params': %p (%u:%08X)(%zu bytes)\n", &params, ApplXcpGetAddrExt((uint8_t *)&params), ApplXcpGetAddr((uint8_t *)&params), sizeof(params));
+    printf("Address of 'global_counter': %p (%u:%08X)\n", &global_counter, ApplXcpGetAddrExt((uint8_t *)&global_counter), ApplXcpGetAddr((uint8_t *)&global_counter));
+    printf("\n");
 
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
@@ -280,16 +275,14 @@ int main(int argc, char *argv[]) {
     }
 
     // XCP: Create a calibration parameter block named 'params' for the calibration parameters in 'const struct params params' as default/reference page
-    CalBlkCreate(params);
+    // CalSegCreate(params);
 
     // Create threads
     THREAD_HANDLE __t1 = 0;
     create_thread(&__t1, NULL, task, NULL);
 
-    // Local measurement variable
+    // Demo measurement variables
     volatile uint16_t counter = 0;
-
-    // Local scope static measurement variable
     volatile static uint16_t static_counter = 0;
 
     // XCP: Create a measurement event named "mainloop"
@@ -297,35 +290,39 @@ int main(int argc, char *argv[]) {
 
     // Mainloop
     printf("Start main loop...\n");
-    uint32_t delay_us;
     while (global_running) {
-        // XCP: Lock the calibration parameter segment for consistent and safe access
-        //      Calibration segment locking is wait-free, locks may be recursive, calibration segments may be shared among multiple threads
-        //      Returns a pointer to the active page (working or reference) of the calibration segment
+
+        uint32_t delay_us;
+
+        counter++;
+        static_counter++;
+        global_counter++;
+
+        // XCP: Create a scope to safely access calibration parameters
         {
-            const struct params *p = CalBlkLock(params);
+            // XCP: Lock the calibration parameter segment for consistent and safe access
+            // Calibration segment locking is wait-free, locks may be recursive, calibration segments may be shared among multiple threads
+            // Returns a pointer to the active page (working or reference) of the calibration segment
+            const struct params *p = CalSegLock(params);
 
             delay_us = p->delay_us; // Get the delay_us calibration value
 
-            global_counter++;
-            if (global_counter > p->counter_max) {
+            if (global_counter > p->counter_max) { // Limit the global counter with the counter_max calibration value
                 global_counter = 0;
             }
 
             // XCP: Unlock the calibration segment
-            CalBlkUnlock(params);
+            CalSegUnlock(params);
         }
 
-        counter = global_counter;
-        static_counter = global_counter;
+        foo(); // Call a function to demonstrate the DaqCreateAndTriggerEvent macro in foo
+        // bar(); // Uncomment to demonstrate that the event in bar is created, but the code is never executed, so the event exists, but is never triggered
 
         // XCP: Trigger the measurement event "mainloop"
         DaqTriggerEvent(mainloop);
 
         // Sleep for the specified delay parameter in microseconds, don't sleep with the XCP lock held to give the XCP client a chance to update params
         sleepUs(delay_us);
-
-        foo();
 
     } // for (;;)
 
@@ -335,8 +332,6 @@ int main(int argc, char *argv[]) {
     // Wait for the thread to stop
     if (__t1)
         join_thread(__t1);
-    // if (__t2)
-    //     join_thread(__t2);
 
     // XCP: Stop the XCP server
     XcpEthServerShutdown();

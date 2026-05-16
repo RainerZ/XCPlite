@@ -700,23 +700,24 @@ async fn xcp_client(
                 // Get target signature (CASDD, ACSDD, ...) from ELF file if available
                 // true - addr_ext==0 is segment relative addressing, addr_ext==1 is absolute addressing
                 // false - addr_ext==0 is absolute addressing, addr_ext==1 is segment relative addressing
+                info!("===============================================================");
                 segment_relative = {
                     let signature = elf_reader.get_target_signature();
                     if let Some(sig) = signature {
-                        info!("Target signature: {}", sig);
+                        info!("Target signature found: {}", sig);
                         if sig.starts_with("C") { true } else { false }
                     } else {
                         warn!("No target signature found in ELF file");
                         false
                     }
                 };
-
                 info!(
                     "Using {} addressing for calibration segments",
                     if segment_relative { "segment relative" } else { "absolute" }
                 );
 
                 // Get the EPK string and address from debug_data and set it in the registry application version information, if available
+                info!("===============================================================");
                 if elf_reader.debug_data.epk_addr > 0 {
                     info!("EPK segment memory section found at address = 0x{:08X}", elf_reader.debug_data.epk_addr);
                     let epk = elf_reader.debug_data.epk_string.clone().unwrap_or_else(|| "<unknown>".to_string());

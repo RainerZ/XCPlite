@@ -68,6 +68,7 @@
 #ifdef OPTION_SHM_MODE
 #include <unistd.h> // for getpid()
 #endif
+
 #ifdef __APPLE__
 #include <mach-o/getsect.h> // for getsectiondata(), used by XcpRegisterSectionEvents()
 #include <mach-o/ldsyms.h>  // for _mh_execute_header
@@ -944,6 +945,18 @@ tXcpEventId XcpCreateEvent(const char *name, uint32_t cycle_time_ns, uint8_t pri
     mutexUnlock(&local_mut.event_list_mutex);
     return id;
 }
+
+// Event descriptor used by DaqCreateEvent() for section-based pre-registration.
+// Also defined in xcplib.h; this guard prevents redefinition when both headers are included.
+#ifndef __XCPLIB_H__
+typedef struct {
+    const char *name;
+    uint32_t cycle_time_ns;
+    uint8_t priority;
+    tXcpEventId id;
+} tXcpEventDescriptor;
+static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
+#endif
 
 // Pre-register all tXcpEventDescriptor variables placed in the xcp_evts section by DaqCreateEvent().
 // Must be called after SS_ACTIVATED is set (XcpCreateEvent requires isActivated()).
@@ -3192,12 +3205,21 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     // Create the EPK calibration segment with index 0
     // In SHM multiapplication mode, only the leader reaches this point, and creates a EPK segment for the whole system
     // @@@@ TODO: Currently the EPK segment is treated like any other segment, even if it is read-only and should only expose the default page
-    const char *ecu_epk = XcpGetEcuEpk();
-    DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s', ecu_epk = '%s'\n", XCP_EPK_CALSEG_NAME, ecu_epk);
-    tXcpCalSegIndex calseg_epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, ecu_epk, XCP_EPK_MAX_LENGTH + 1);
-    (void)calseg_epk; // Avoid unused variable warning
-    assert(calseg_epk == 0);
+    static tXcpCalDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {XCP_EPK_CALSEG_NAME, (void *)&local.epk, XCP_EPK_MAX_LENGTH + 1, XCP_UNDEFINED_CALSEG, true};
+    DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s'\n", XCP_EPK_CALSEG_NAME);
+#ifdef OPTION_SHM_MODE
+    calseg__epk.index = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, XcpGetEcuEpk(), XCP_EPK_MAX_LENGTH + 1);
+#else
+    calseg__epk.index = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, local.epk, XCP_EPK_MAX_LENGTH + 1);
 #endif
+    assert(calseg__epk.index == 0);
+#endif
+
+    // Pre-register all segments whose tXcpCalDescriptor lives in the xcp_cals binary section.
+    // This optionally replaces the lazy creation at all CalSegCreate(), CalBlkCreate() macro call sites
+    // This is done after loading the persistence file, to ensure that all segments from the persistence file are already in the segment list, in particular segments from other
+    // applications in SHM mode
+    XcpRegisterSectionCalSegs();
 #endif
 
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST

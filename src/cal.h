@@ -178,9 +178,39 @@ void XcpCalUpdateEpkSeg(const char *epk);
 // Single-threaded
 /**************************************************************************/
 
+#ifndef __XCPLIB_H__
+
+#define XCP_CALSEG_TYPE_SEGMENT 0x8001
+#define XCP_CALSEG_TYPE_BLOCK 0x8002
+
+// Calibration segment or block descriptor used by CalSegCreate() and CalBlkCreate() for section-based pre-registration
+typedef struct {
+    const char *name;
+    void *addr;
+    uint16_t size;
+    uint16_t type;
+    tXcpCalSegIndex index;
+} tXcpCalDescriptor;
+
+// Platform section attribute for tXcpCalDescriptor static variables created by CalSegCreate() and CalBlkCreate().
+// Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
+// pre-register every calibration segment or block before the first use, without requiring the call site of the creation to execute first.
+#if defined(__ELF__)
+#define XCP_CAL_SECTION_ATTR __attribute__((section("xcp_cals"), used))
+#elif defined(__APPLE__)
+#define XCP_CAL_SECTION_ATTR __attribute__((section("__DATA,xcp_cals"), used))
+#else
+#define XCP_CAL_SECTION_ATTR /* section-based registration not supported on this platform */
+#endif
+
+#endif // __XCPLIB_H__
+
 // Initialize the calibration segment list
 void XcpInitCalSegList(void);
 void XcpDeinitCalSegList(void);
+
+// Register all calibration segments from the xcp_cals section, returns the number of registered segments
+uint16_t XcpRegisterSectionCalSegs(void);
 
 // Get the number of calibration segments
 uint16_t XcpGetCalSegCount(void);
