@@ -377,15 +377,13 @@ impl ElfReader {
                             "Calibration segment '{}' address does not match existing registry entry, reg = {:08X} vs. {:08X}",
                             seg_name, reg_seg.addr, seg_addr
                         );
-                        unimplemented!();
                     } else if reg_seg.size != seg_length as u32 {
                         warn!(
                             "Calibration segment '{}' length does not match existing registry entry, reg = {} vs. {}",
                             seg_name, reg_seg.size, seg_length
                         );
-                        unimplemented!();
                     } else {
-                        info!(" matches existing registry entry");
+                        info!("Calibration segment '{}' matches existing registry entry", seg_name);
                     }
                 } // absolute addressing mode
             }

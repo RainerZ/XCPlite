@@ -28,23 +28,31 @@ static void sig_handler(int sig) { global_running = false; }
 #define OPTION_SERVER_PORT 5555           // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}   // Bind addr, 0.0.0.0 = ANY
 #define OPTION_QUEUE_SIZE (1024 * 8)      // Size of the measurement queue in bytes, must be a multiple of 8
-#define OPTION_LOG_LEVEL 5                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
+#define OPTION_LOG_LEVEL 3                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
 
-// Calibration parameter
-const uint32_t delay_us = 1000; // Sleep time in microseconds for the main loop
+// Local calibration parameters
+struct counter_control {
+    uint16_t counter_max;
+    uint16_t counter_inc;
+};
+const struct counter_control counter_control = {.counter_max = 1000, .counter_inc = 1};
 
-// Calibration parameters structure
+// Global calibration parameters
 struct params {
-    uint16_t counter_max; // Maximum value for the counter
 
-    // Test parameters of various types
-    uint8_t test_par_uint8_array[10];
+    uint32_t delay_us; // Sleep time in microseconds for the main and the task loop
+
+    // Calibration parameters of various basic and complex types
     double test_par_double;
     bool test_par_bool;
+    uint64_t test_par_uint64;
+    uint32_t test_par_uint32;
+    uint16_t test_par_uint16;
     enum { ENUM_0 = 0, ENUM_1 = 1, ENUM_2 = 2, ENUM_3 = 3 } test_par_enum;
+    uint8_t test_par_uint8_array[10];
     struct test_par_struct {
         uint16_t test_field_uint16;
         int16_t test_field_int16;
@@ -52,14 +60,17 @@ struct params {
         uint8_t test_field_uint8_array[3];
     } test_par_struct;
 };
-const struct params params = {.counter_max = 1024,
+const struct params params = {.delay_us = 1000,
                               .test_par_double = 0.123456789,
                               .test_par_bool = true,
+                              .test_par_uint64 = 0x1234567812345678,
+                              .test_par_uint32 = 0x1234,
+                              .test_par_uint16 = 0x1234,
                               .test_par_enum = ENUM_2,
                               .test_par_uint8_array = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
                               .test_par_struct = {2, -2, 0.4f, {0, 1, 2}}};
 
-// Define a calibration parameter segment named 'params' for the calibration parameters in 'const struct params params' as default/reference page
+// Define a global calibration parameter segment named 'params' for the calibration parameters in 'const struct params params' as default/reference page
 CalSegDecl(params);
 
 // Example Vector A2L Creator code parser annotation for a calibration parameter in the params calibration segment
@@ -148,7 +159,10 @@ void *task(void *p)
 
         DaqTriggerEventExt(task, heap_struct);
 
-        sleepUs(1000);
+        // Sleep for a tunable amount of time (not inside the lock for the calibration parameter block, to not block the XCP server or other threads unnecessarily long)
+        uint32_t delay = ((const struct params *)CalSegLock(params))->delay_us;
+        CalSegUnlock(params);
+        sleepUs(delay);
     }
 
     free(heap_struct);
@@ -232,16 +246,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Make constant delay_us tunable using a thread safe calibration parameter block
-    CalBlkCreate(delay_us);
-
     // Create threads
     THREAD_HANDLE __t1 = 0;
     create_thread(&__t1, NULL, task, NULL);
 
     // Demo measurement variables
-    volatile uint16_t counter = 0;
+    volatile uint16_t local_counter = 0;
     volatile static uint16_t static_counter = 0;
+
+    // Calibration parameter counter_max
+    CalSegCreate(counter_control);
 
     // Create a measurement event named "mainloop"
     DaqCreateEvent(mainloop);
@@ -250,25 +264,34 @@ int main(int argc, char *argv[]) {
     printf("Start main loop...\n");
     while (global_running) {
 
-        counter++;
-        static_counter++;
-        global_counter++;
+        // Lock the calibration parameter block for safe access
+        // Calibration segment or block locking is wait-free, locks may be recursive, calibration segments may be shared among multiple threads
+        // Returns a pointer to the active page (working or reference) of the calibration segment or block
+        const struct counter_control *p_counter_control = CalSegLock(counter_control);
 
-        // Create a scope to safely access calibration parameters
-        {
-            // Lock the calibration parameter segment for consistent and safe access
-            // Calibration segment locking is wait-free, locks may be recursive, calibration segments may be shared among multiple threads
-            // Returns a pointer to the active page (working or reference) of the calibration segment
-            const struct params *p = CalSegLock(params);
-
-            if (global_counter > p->counter_max) { // Limit the global counter with the counter_max calibration value
-                global_counter = 0;
-            }
-
-            // Unlock the calibration segment
-            CalSegUnlock(params);
+        global_counter += p_counter_control->counter_inc;
+        if (global_counter > p_counter_control->counter_max) { // Limit the global counter with the counter_max calibration value
+            global_counter = 0;
         }
 
+        // Unlock the calibration block
+        CalSegUnlock(counter_control);
+
+        local_counter = global_counter;
+        static_counter = global_counter;
+
+        // Demonstrate calibration thread safety and consistency
+        const struct params *p_params = CalSegLock(params);
+        if (!((p_params->test_par_uint64 >> 32) == (p_params->test_par_uint64 & 0xFFFFFFFF))) {
+            printf("Calibration parameter test_par_uint64 is not consistent, value: %016" PRIx64 "\n", p_params->test_par_uint64);
+        }
+        if (!(p_params->test_par_uint32 == p_params->test_par_uint16)) {
+            printf("Calibration parameter test_par_uint32 is not consistently changed with test_par_uint16, value: %08" PRIx32 " != %04" PRIx16 "\n", p_params->test_par_uint32,
+                   p_params->test_par_uint16);
+        }
+        CalSegUnlock(params);
+
+        // Function calls
         foo(); // Call a function to demonstrate the DaqCreateAndTriggerEvent macro in foo
         // bar(); // Uncomment to demonstrate that the event in bar is created, but the code is never executed, so the event exists, but is never triggered
 
@@ -276,8 +299,8 @@ int main(int argc, char *argv[]) {
         DaqTriggerEvent(mainloop);
 
         // Sleep for a tunable amount of time (not inside the lock for the calibration parameter block, to not block the XCP server or other threads unnecessarily long)
-        uint32_t delay = *CalBlkLock(delay_us);
-        CalBlkUnlock(delay_us);
+        uint32_t delay = ((const struct params *)CalSegLock(params))->delay_us;
+        CalSegUnlock(params);
         sleepUs(delay);
 
     } // for (;;)
