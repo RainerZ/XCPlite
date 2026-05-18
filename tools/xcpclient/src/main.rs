@@ -717,15 +717,7 @@ async fn xcp_client(
                 );
 
                 // Get the EPK string and address from debug_data and set it in the registry application version information, if available
-                info!("===============================================================");
-                if elf_reader.debug_data.epk_addr > 0 {
-                    info!("EPK segment memory section found at address = 0x{:08X}", elf_reader.debug_data.epk_addr);
-                    let epk = elf_reader.debug_data.epk_string.clone().unwrap_or_else(|| "<unknown>".to_string());
-                    info!("EPK string: '{}'", epk);
-                    reg.application.set_version(epk, elf_reader.debug_data.epk_addr.try_into().unwrap());
-                } else {
-                    warn!("EPK segment memory section not found in ELF file");
-                }
+                elf_reader.register_epk_addr_info(&mut reg, verbose);
 
                 // Register events from event creation markers (evt__name) in the code
                 elf_reader.register_events(&mut reg, verbose)?;

@@ -163,12 +163,12 @@ typedef struct {
 /// @param name given as identifier, &name is used as pointer to the default page, sizeof(name) is used as size of the calibration segment
 // calseg__##name is the linker map file marker for calibration segments
 #define CalSegCreate(name)                                                                                                                                                         \
-    static tXcpCalDescriptor calseg__##name XCP_CAL_SECTION_ATTR = {#name, (void *)&name, sizeof(name), XCP_UNDEFINED_CALSEG, true};                                               \
+    static tXcpCalDescriptor calseg__##name XCP_CAL_SECTION_ATTR = {#name, (void *)&name, sizeof(name), XCP_CALSEG_TYPE_SEGMENT, XCP_UNDEFINED_CALSEG};                            \
     if (calseg__##name.index == XCP_UNDEFINED_CALSEG) {                                                                                                                            \
         calseg__##name.index = XcpCreateCalSeg(#name, (uint8_t *)&(name), sizeof(name));                                                                                           \
     }
 #define CalBlkCreate(name)                                                                                                                                                         \
-    static tXcpCalDescriptor calblk__##name XCP_CAL_SECTION_ATTR = {#name, (void *)&name, sizeof(name), XCP_UNDEFINED_CALSEG, false};                                              \
+    static tXcpCalDescriptor calblk__##name XCP_CAL_SECTION_ATTR = {#name, (void *)&name, sizeof(name), XCP_CALSEG_TYPE_BLOCK, XCP_UNDEFINED_CALSEG};                              \
     if (calblk__##name.index == XCP_UNDEFINED_CALSEG) {                                                                                                                            \
         calblk__##name.index = XcpCreateCalBlk(#name, (uint8_t *)&(name), sizeof(name));                                                                                           \
     }

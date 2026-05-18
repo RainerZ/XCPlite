@@ -97,11 +97,10 @@ The A2l file may then be created and updated with any usual method of your choic
 - Thread safe parameter modification using calibration segments is still assured
 - Thread safety of measurement data acquisition is now in your responsibility, by using a safe fixed event for each individual measurement variable
 
-### Option 5: XCPlite-Specific A2L Creator (Experimental)
+### Option 5: XCPlite-Specific A2L Creator 
 
-Experimental. Use a XCPlite specific A2L creator tool, which is aware of the different addressing schemes and static markers created by the code instrumentation macros.
-
-Experimental, work in progress. See `no_a2l_demo`.
+Use the XCPlite specific A2L creator tool (xcpclient), which is aware of the different addressing schemes and static markers created by the code instrumentation macros.
+See `no_a2l_demo`.
 
 ## Addressing Modes
 

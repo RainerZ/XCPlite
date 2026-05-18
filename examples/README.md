@@ -98,13 +98,15 @@ Creates and measures an array of structures representing 3D points with addition
 
 ### no_a2l_demo
 
-Demonstrates XCPlite without runtime A2L generation by using an A2L generation tool during the build process.  
-Work in progress.
+Demonstrates XCPlite without on-target runtime A2L generation.  
+Offline A2L generation is performed using the XCPlite specific A2L creator tool (xcpclient)during the build process and ELF/DWARF linker informations.  
+Does no need file system support on the target and A2L upload.  
  
 
 ### threadx_demo and freertos_demo
 
-Planned
+Planned.  
+Based on offline A2L generation, similar to `no_a2l_demo`.
 
 
 ### bpf_demo

@@ -132,6 +132,7 @@ uint16_t XcpRegisterSectionCalSegs(void) {
     extern tXcpCalDescriptor __stop_xcp_cals[] __attribute__((weak));
     if (__start_xcp_cals != NULL) {
         for (tXcpCalDescriptor *e = __start_xcp_cals; e < __stop_xcp_cals; e++) {
+            DBG_PRINTF6("Found calibration segment descriptor in section: name=%s, addr=%p, size=%u, type=%x, index=%u\n", e->name, e->addr, e->size, e->type, e->index);
             if (e->index == XCP_UNDEFINED_CALSEG) {
                 assert(e->type == XCP_CALSEG_TYPE_SEGMENT || e->type == XCP_CALSEG_TYPE_BLOCK);
                 e->index = XcpCreateCalSeg_(e->name, false, e->addr, NULL, e->size, e->type == XCP_CALSEG_TYPE_SEGMENT);
@@ -145,6 +146,7 @@ uint16_t XcpRegisterSectionCalSegs(void) {
     if (begin != NULL) {
         tXcpCalDescriptor *end = begin + sz / sizeof(tXcpCalDescriptor);
         for (tXcpCalDescriptor *e = begin; e < end; e++) {
+            DBG_PRINTF6("Found calibration segment descriptor in section: name=%s, addr=%p, size=%u, type=%x, index=%u\n", e->name, e->addr, e->size, e->type, e->index);
             if (e->index == XCP_UNDEFINED_CALSEG) {
                 assert(e->type == XCP_CALSEG_TYPE_SEGMENT || e->type == XCP_CALSEG_TYPE_BLOCK);
                 e->index = XcpCreateCalSeg_(e->name, false, e->addr, NULL, e->size, e->type == XCP_CALSEG_TYPE_SEGMENT);

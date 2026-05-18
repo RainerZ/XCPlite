@@ -3205,7 +3205,7 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     // Create the EPK calibration segment with index 0
     // In SHM multiapplication mode, only the leader reaches this point, and creates a EPK segment for the whole system
     // @@@@ TODO: Currently the EPK segment is treated like any other segment, even if it is read-only and should only expose the default page
-    static tXcpCalDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {XCP_EPK_CALSEG_NAME, (void *)&local.epk, XCP_EPK_MAX_LENGTH + 1, XCP_UNDEFINED_CALSEG, true};
+    static tXcpCalDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {XCP_EPK_CALSEG_NAME, (void *)&local.epk, XCP_EPK_MAX_LENGTH + 1, XCP_CALSEG_TYPE_SEGMENT, XCP_UNDEFINED_CALSEG};
     DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s'\n", XCP_EPK_CALSEG_NAME);
 #ifdef OPTION_SHM_MODE
     calseg__epk.index = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, XcpGetEcuEpk(), XCP_EPK_MAX_LENGTH + 1);

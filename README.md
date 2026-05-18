@@ -57,7 +57,7 @@ Multiple examples demonstrating different features are available in the [example
 - `multi_thread_demo` - Multi-threaded measurement and parameter sharing among threads
 - `point_cloud_demo` - Visualizing dynamic data structures in CANape 3D scene window
 - `ptp4l_demo` - Using a PTP synchronized clock as XCP timestamp source
-- `no_a2l_demo` - Workflow without runtime A2L generation (experimental, supported by xcpclient tool)
+- `no_a2l_demo` - Workflow without runtime A2L generation (offline A2L generation by xcpclient tool)
 - `bpf_demo` - eBPF based syscall tracing (experimental)
 
 For detailed information about each example and how to set up CANape projects, see the [examples documentation](examples/README.md).

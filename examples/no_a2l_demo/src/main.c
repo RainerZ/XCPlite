@@ -3,47 +3,6 @@
 // See ../README.md for details
 // Requires manual or tool based XCPlite specific A2L file creation and update process
 
-// This allows to build libxcplite without A2L generation and persistence support
-// Reduces the code size and dependencies (file system) for use cases on microcontrollers RTOS like FreeRTOS, Zephyr, ThreadX, ...
-
-// Configuration options for XCPlite are set in src/xcplib_cfg.h, see comments in that file for details and available options
-
-// Example configuration for libxcplite (xcplib_cfg.h) for 32 bit microcontrollers
-// No file system needed: no on target A2L generation, no binary calibration segment persistence file
-// TCP support disabled
-// Memory segments disabled, no EPK segment and calibration access is handled by calibration parameter blocks
-// Address extension 0 is absoluted memory addressing
-// 32 bit queue selected
-//
-//  #define OPTION_CAL_SEGMENTS_ABS
-//  #undef OPTION_CAL_SEGMENT_EPK
-//  #undef OPTION_ENABLE_PERSISTENCE
-//  #undef OPTION_ENABLE_TCP
-//  #define OPTION_ENABLE_UDP
-//  #define OPTION_QUEUE_32
-//  #undef OPTION_ENABLE_A2L_GENERATOR
-//  #undef OPTION_ENABLE_A2L_UPLOAD
-//  #undef OPTION_ENABLE_ELF_UPLOAD
-
-// Build the no_a2l_demo example:
-// The other examples depend on the A2L generator and upload features, so they won't build with this configuration
-//  Clean
-//   rm build/CMakeCache.txt
-//   cmake --build build --target clean
-//  Configure
-//   cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-DXCPLIB_NO_A2L"
-//  Build
-//   cmake --build build --target no_a2l_demo
-
-// Use xcpclient tool to generate the A2L file for the no_a2l_demo example in offline mode
-// xcpclient   --offline --elf no_a2l_demo.elf --a2l no_a2l_demo.a2l   --create-a2l
-// Option: Write the given IP and protocol (UDP/TCP) to the A2L file
-// xcpclient --udp --dest-addr 192.168.8.135  --offline --elf no_a2l_demo.elf  --a2l no_a2l_demo.a2l  --create-a2l
-// Option: Upload ELF file from target (requires OPTION_ENABLE_ELF_UPLOAD)
-// xcpclient --udp --dest-addr 192.168.8.135  --elf no_a2l_demo.elf --upload-elf  --create-a2l
-// Option: Get detailed information
-// xcpclient --offline --elf no_a2l_demo.elf  --a2l no_a2l_demo.a2l --create-a2l --verbose 2. >no_a2l_demo.log
-
 #include <assert.h>  // for assert
 #include <signal.h>  // for signal handling
 #include <stdbool.h> // for bool
@@ -64,20 +23,22 @@ static void sig_handler(int sig) { global_running = false; }
 // XCP params
 
 #define OPTION_PROJECT_NAME "no_a2l_demo" // Project name, used to build the volatile and BIN file name
-#define OPTION_PROJECT_VERSION "V100"     // EPK version string
+#define OPTION_PROJECT_VERSION "V101"     // EPK version string
 #define OPTION_USE_TCP false              // TCP or UDP
 #define OPTION_SERVER_PORT 5555           // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}   // Bind addr, 0.0.0.0 = ANY
 #define OPTION_QUEUE_SIZE (1024 * 8)      // Size of the measurement queue in bytes, must be a multiple of 8
-#define OPTION_LOG_LEVEL 4                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
+#define OPTION_LOG_LEVEL 5                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
 
+// Calibration parameter
+const uint32_t delay_us = 1000; // Sleep time in microseconds for the main loop
+
 // Calibration parameters structure
 struct params {
     uint16_t counter_max; // Maximum value for the counter
-    uint32_t delay_us;    // Sleep time in microseconds for the main loop
 
     // Test parameters of various types
     uint8_t test_par_uint8_array[10];
@@ -91,10 +52,7 @@ struct params {
         uint8_t test_field_uint8_array[3];
     } test_par_struct;
 };
-
-// Default values for the calibration parameters
 const struct params params = {.counter_max = 1024,
-                              .delay_us = 1000,
                               .test_par_double = 0.123456789,
                               .test_par_bool = true,
                               .test_par_enum = ENUM_2,
@@ -258,24 +216,24 @@ int main(int argc, char *argv[]) {
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
 
-    // XCP: Set log level (1-error, 2-warning, 3-info, 4-show XCP commands)
+    // Set log level (1-error, 2-warning, 3-info, 4-show XCP commands)
     XcpSetLogLevel(OPTION_LOG_LEVEL);
 
-    // XCP: Create the EPK software version string in an initialized memory section for offline A2L generation
+    // Create the EPK software version string in an initialized memory section for offline A2L generation
     XcpCreateEpk(OPTION_PROJECT_VERSION);
 
-    // XCP: Initialize the XCP singleton, activate XCP, must be called before starting the server
+    // Initialize the XCP singleton, activate XCP, must be called before starting the server
     XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
     XcpSetElfName(argv[0]); // Set ELF file name for upload via GET_ID, optional with OPTION_ENABLE_ELF_UPLOAD
 
-    // XCP: Initialize the XCP Server
+    // Initialize the XCP Server
     const uint8_t __addr[4] = OPTION_SERVER_ADDR;
     if (!XcpEthServerInit(__addr, OPTION_SERVER_PORT, OPTION_USE_TCP, OPTION_QUEUE_SIZE)) {
         return 1;
     }
 
-    // XCP: Create a calibration parameter block named 'params' for the calibration parameters in 'const struct params params' as default/reference page
-    // CalSegCreate(params);
+    // Make constant delay_us tunable using a thread safe calibration parameter block
+    CalBlkCreate(delay_us);
 
     // Create threads
     THREAD_HANDLE __t1 = 0;
@@ -285,55 +243,53 @@ int main(int argc, char *argv[]) {
     volatile uint16_t counter = 0;
     volatile static uint16_t static_counter = 0;
 
-    // XCP: Create a measurement event named "mainloop"
+    // Create a measurement event named "mainloop"
     DaqCreateEvent(mainloop);
 
     // Mainloop
     printf("Start main loop...\n");
     while (global_running) {
 
-        uint32_t delay_us;
-
         counter++;
         static_counter++;
         global_counter++;
 
-        // XCP: Create a scope to safely access calibration parameters
+        // Create a scope to safely access calibration parameters
         {
-            // XCP: Lock the calibration parameter segment for consistent and safe access
+            // Lock the calibration parameter segment for consistent and safe access
             // Calibration segment locking is wait-free, locks may be recursive, calibration segments may be shared among multiple threads
             // Returns a pointer to the active page (working or reference) of the calibration segment
             const struct params *p = CalSegLock(params);
-
-            delay_us = p->delay_us; // Get the delay_us calibration value
 
             if (global_counter > p->counter_max) { // Limit the global counter with the counter_max calibration value
                 global_counter = 0;
             }
 
-            // XCP: Unlock the calibration segment
+            // Unlock the calibration segment
             CalSegUnlock(params);
         }
 
         foo(); // Call a function to demonstrate the DaqCreateAndTriggerEvent macro in foo
         // bar(); // Uncomment to demonstrate that the event in bar is created, but the code is never executed, so the event exists, but is never triggered
 
-        // XCP: Trigger the measurement event "mainloop"
+        // Trigger the measurement event "mainloop"
         DaqTriggerEvent(mainloop);
 
-        // Sleep for the specified delay parameter in microseconds, don't sleep with the XCP lock held to give the XCP client a chance to update params
-        sleepUs(delay_us);
+        // Sleep for a tunable amount of time (not inside the lock for the calibration parameter block, to not block the XCP server or other threads unnecessarily long)
+        uint32_t delay = *CalBlkLock(delay_us);
+        CalBlkUnlock(delay_us);
+        sleepUs(delay);
 
     } // for (;;)
 
-    // XCP: Force disconnect the XCP client
+    // Force disconnect the XCP client
     XcpDisconnect();
 
     // Wait for the thread to stop
     if (__t1)
         join_thread(__t1);
 
-    // XCP: Stop the XCP server
+    // Stop the XCP server
     XcpEthServerShutdown();
 
     return 0;

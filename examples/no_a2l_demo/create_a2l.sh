@@ -57,14 +57,14 @@ OFFLINE_A2L_CREATION_AND_FIX=false
 
 # Target connection details
 TARGET_USER="rainer"
-TARGET_HOST="192.168.0.206"
+TARGET_HOST="192.168.8.135"
 TARGET_PATH="~/XCPlite-RainerZ/build/no_a2l_demo"
 
 # Path to a2ltool executable
 A2LTOOL="../a2ltool-RainerZ/target/debug/a2ltool"
 
-# Path to xcpclient tool executable
-XCPCLIENT="../xcp-lite-RainerZ/target/debug/xcpclient"
+# Path to xcpclient tool executable (assuming cargo installed it to ~/.cargo/bin)
+XCPCLIENT="xcpclient"
 
 
 # Run a simple measurement with the created A2L file to verify that measurements and characteristics are working
@@ -88,7 +88,7 @@ if [ $ECU_ONLINE == true ]; then
 
 # Sync target
 echo "Sync target ..."            
-rsync -avz --delete --exclude=build/ --exclude=.git/ --exclude="*.o" --exclude="*.a" ./ rainer@192.168.0.206:~/XCPlite-RainerZ/ 1> /dev/null
+rsync -avz --delete --exclude=build/ --exclude=target/ --exclude=.git/ --exclude="*.o" --exclude="*.a" ./ rainer@192.168.8.135:~/XCPlite-RainerZ/ 1> /dev/null
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: Rsync with target"
     exit 1
@@ -97,7 +97,7 @@ fi
 
 # Build on target
 echo "Build executable on Target ..."
-ssh $TARGET_USER@$TARGET_HOST "cd ~/XCPlite-RainerZ && ./build.sh $BUILD_TYPE" 1> /dev/null
+ssh $TARGET_USER@$TARGET_HOST "cd ~/XCPlite-RainerZ && ./examples/no_a2l_demo/build.sh $BUILD_TYPE" 1> /dev/null
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: Build on target"
     exit 1
@@ -206,7 +206,7 @@ if kill -0 $SSH_PID 2>/dev/null; then
     kill $SSH_PID
 fi
 # Also kill the remote process by name to be sure
-# ssh rainer@192.168.0.206  "pkill -f no_a2l_demo" 
+# ssh ...  "pkill -f no_a2l_demo" 
 ssh $TARGET_USER@$TARGET_HOST "pkill -f no_a2l_demo" 2>/dev/null || true
 # Give target some time to shutdown
 sleep 1
