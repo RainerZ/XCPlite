@@ -44,17 +44,8 @@
 #include <unistd.h> // for getpid()
 #endif
 
-#if defined(_WIN) // Windows
-static DWORD WINAPI XcpServerReceiveThread(LPVOID lpParameter);
-#else
-static void *XcpServerReceiveThread(void *par);
-#endif
-
-#if defined(_WIN) // Windows
-static DWORD WINAPI XcpServerTransmitThread(LPVOID lpParameter);
-#else
-static void *XcpServerTransmitThread(void *par);
-#endif
+static THREAD_FUNC_RETURN XcpServerReceiveThread(void *par);
+static THREAD_FUNC_RETURN XcpServerTransmitThread(void *par);
 
 #if !defined(OPTION_ENABLE_TCP) && !defined(OPTION_ENABLE_UDP)
 #error "Please define OPTION_ENABLE_TCP or OPTION_ENABLE_UDP"
@@ -64,11 +55,7 @@ static void *XcpServerTransmitThread(void *par);
 
 #ifdef OPTION_SHM_MODE // SHM mode thread
 
-#if defined(_WIN) // Windows
-static DWORD WINAPI ShmThread_(LPVOID lpParameter);
-#else
-static void *ShmThread_(void *par);
-#endif
+static THREAD_FUNC_RETURN ShmThread_(void *par);
 
 // In SHM mode, the queue is in shared memory and has an additional shared memory header
 // SHM queue region header for /xcpqueue
@@ -187,12 +174,7 @@ void ShmServerShutdown_(void) {
 // Background thread in all other applications which are not an XCP server in SHM mode
 // Polls the A2L finalize request flag, so applications can write their A2L file on request by the server
 // Also increments the alive_counter to detect stale processes.
-#if defined(_WIN) // Windows
-DWORD WINAPI ShmThread_(LPVOID par)
-#else
-extern void *ShmThread_(void *par)
-#endif
-{
+THREAD_FUNC_RETURN ShmThread_(void *par) {
     (void)par;
     DBG_PRINT3(ANSI_COLOR_BLUE "SHM thread started\n" ANSI_COLOR_RESET);
 
@@ -225,7 +207,7 @@ extern void *ShmThread_(void *par)
 
     gXcpServer.shm_thread_running = false;
     DBG_PRINT3(ANSI_COLOR_BLUE "SHM background thread terminated!\n" ANSI_COLOR_RESET);
-    return 0;
+    THREAD_FUNC_END;
 }
 
 //-------------------------------------------------------------------------------------------------------
@@ -485,12 +467,7 @@ bool XcpEthServerShutdown(void) {
 // Server threads
 
 // XCP server unicast command receive thread
-#if defined(_WIN) // Windows
-DWORD WINAPI XcpServerReceiveThread(LPVOID par)
-#else
-extern void *XcpServerReceiveThread(void *par)
-#endif
-{
+THREAD_FUNC_RETURN XcpServerReceiveThread(void *par) {
     (void)par;
     DBG_PRINT3("Start XCP receive thread\n");
 
@@ -559,16 +536,11 @@ extern void *XcpServerReceiveThread(void *par)
     gXcpServer.receive_thread_running = false;
 
     DBG_PRINT3("XCP receive thread terminated!\n");
-    return 0;
+    THREAD_FUNC_END;
 }
 
 // XCP server transmit thread
-#if defined(_WIN) // Windows
-DWORD WINAPI XcpServerTransmitThread(LPVOID par)
-#else
-extern void *XcpServerTransmitThread(void *par)
-#endif
-{
+THREAD_FUNC_RETURN XcpServerTransmitThread(void *par) {
     (void)par;
 
     DBG_PRINT3("Start XCP transmit thread\n");
@@ -607,5 +579,5 @@ extern void *XcpServerTransmitThread(void *par)
     gXcpServer.transmit_thread_running = false;
 
     DBG_PRINT3("XCP transmit thread terminated!\n");
-    return 0;
+    THREAD_FUNC_END;
 }

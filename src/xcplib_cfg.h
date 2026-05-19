@@ -15,10 +15,10 @@
   The values for XCP_xxx and XCPTL_xxx define constants (in xcp_cfg.h and xcptl_cfg.h) may depend on options
 */
 
-// XCPlite version, currently V2.0.5
+// XCPlite version, currently V2.1.0
 #define OPTION_VERSION_MAJOR 2
-#define OPTION_VERSION_MINOR 0
-#define OPTION_VERSION_PATCH 5
+#define OPTION_VERSION_MINOR 1
+#define OPTION_VERSION_PATCH 0
 
 // CANape version compatibility
 // Disable workarounds for CANape versions < 24SP2
@@ -29,15 +29,7 @@
 //-------------------------------------------------------------------------------
 // Specific build settings of libxcplite
 
-#if defined(XCPLIB_FOR_RTOS)
-
-#include "xcplib_rtos_cfg.h"
-
-#elif defined(XCPLIB_NO_A2L)
-
-#include "xcplib_no_a2l_cfg.h" // for Rust xcp-lite specific configuration
-
-#elif defined(XCPLIB_FOR_RUST) // Set by the Rust build script
+#if defined(XCPLIB_FOR_RUST) // Set by the Rust build script
 
 #include "xcplib_rust_cfg.h" // for Rust xcp-lite specific configuration
 
@@ -196,5 +188,13 @@
 // #define TEST_STACK_SIZE // Enable stack size measurement for the transmit and receive thread
 
 #endif // !defined(NDEBUG)
+
+// Optional application-specific override — patches any of the above defaults.
+// Pass the filename of your override header via:
+//   cmake: target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"my_xcplib_overrides.h\"")
+// See xcplib_rtos_cfg.h and xcplib_no_a2l_cfg.h for example override files.
+#ifdef XCPLIB_CFG_OVERRIDE
+#include XCPLIB_CFG_OVERRIDE
+#endif
 
 #endif

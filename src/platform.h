@@ -34,7 +34,9 @@
 // FreeRTOS
 #if defined(__FreeRTOS__) || defined(FREERTOS) || defined(_FREERTOS) || defined(__FREERTOS) || defined(_FREE_RTOS) || defined(FREE_RTOS)
 
+#ifndef _FREE_RTOS // may already be defined as 1 via -D_FREE_RTOS on the compiler command line
 #define _FREE_RTOS
+#endif
 
 // Windows
 #elif defined(_WIN32) || defined(_WIN64)
@@ -97,6 +99,54 @@ OPTION_CLOCK_EPOCH_ARB or OPTION_CLOCK_EPOCH_PTP
 #include <windows.h>
 
 #elif defined(_FREE_RTOS)
+// FreeRTOS kernel headers – required for task, semaphore, and timer APIs.
+// On the POSIX simulator these are backed by pthreads; on the target they use the port-specific implementation.
+#include "FreeRTOS.h"
+#include "semphr.h"
+#include "task.h"
+
+// C11 atomics: ARM GCC provides <stdatomic.h> for Cortex-M4 (32-bit LDREX/STREX).
+// 64-bit atomics are NOT available on ARMv7-M – use OPTION_QUEUE_32 in xcplib_rtos_cfg.h.
+#ifndef __cplusplus
+#include <stdatomic.h>
+#define ATOMIC_BOOL_TYPE uint_fast8_t
+#define ATOMIC_BOOL atomic_uint_fast8_t
+#else
+#include <atomic>
+#define ATOMIC_BOOL_TYPE uint_fast8_t
+#define ATOMIC_BOOL std::atomic<uint_fast8_t>
+using std::atomic_uint_fast16_t;
+using std::atomic_uint_fast32_t;
+using std::atomic_uint_fast64_t;
+using std::atomic_uint_fast8_t;
+using std::atomic_uint_least16_t;
+using std::atomic_uint_least32_t;
+using std::atomic_uint_least64_t;
+using std::atomic_uint_least8_t;
+#endif
+
+// FREERTOS_POSIX_SIM: When testing FreeRTOS code paths on macOS/Linux, detect the host OS
+// so that OS-specific socket / clock code in platform.c compiles correctly.
+// This block is skipped when compiling for a real embedded target.
+#if defined(FREERTOS_POSIX_SIM)
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#if defined(__APPLE__)
+#define _MACOS
+#include <net/if.h>
+#include <pthread.h>
+#include <unistd.h>
+#elif defined(__linux__)
+#define _LINUX
+#include <net/if.h>
+#include <pthread.h>
+#include <unistd.h>
+#endif
+#endif // FREERTOS_POSIX_SIM
 
 #else
 
@@ -248,10 +298,12 @@ void platformShmUnlink(const char *name);
 
 #elif defined(_FREE_RTOS) // FreeRTOS
 
-#define MUTEX uint32_t
-#define MUTEX_INTIALIZER 0
-#define mutexLock(m)
-#define mutexUnlock(m)
+#define MUTEX SemaphoreHandle_t
+#define MUTEX_INTIALIZER NULL
+// Callers always pass &mutex (matching the POSIX pattern where MUTEX is a struct).
+// FreeRTOS handles are already pointers, so dereference m to obtain the handle.
+#define mutexLock(m) xSemaphoreTakeRecursive(*(m), portMAX_DELAY)
+#define mutexUnlock(m) xSemaphoreGiveRecursive(*(m))
 
 #else // Other
 
@@ -283,11 +335,20 @@ typedef HANDLE THREAD_HANDLE;
 
 #elif defined(_FREE_RTOS) // FreeRTOS
 
-typedef uint32_t THREAD_HANDLE;
-#define create_thread(thread_handle_ptr, attr, thread, args)
-#define join_thread(h)
-#define cancel_thread(h)
-#define get_thread_id() 0
+// Stack depth (in bytes) and priority for internal XCP server tasks.
+// Override in xcplib_rtos_cfg.h or FreeRTOSConfig.h if the defaults do not fit your target.
+#ifndef XCPLIB_FREERTOS_STACK_BYTES
+#define XCPLIB_FREERTOS_STACK_BYTES 2048U
+#endif
+#ifndef XCPLIB_FREERTOS_PRIORITY
+#define XCPLIB_FREERTOS_PRIORITY (tskIDLE_PRIORITY + 2U)
+#endif
+
+typedef TaskHandle_t THREAD_HANDLE;
+#define create_thread(h, attr, fn, args) xTaskCreate((TaskFunction_t)(fn), "xcptask", (XCPLIB_FREERTOS_STACK_BYTES / sizeof(StackType_t)), (args), XCPLIB_FREERTOS_PRIORITY, (h))
+#define join_thread(h) /* No blocking join in FreeRTOS; synchronize via event flag or semaphore */
+#define cancel_thread(h) vTaskDelete(h)
+#define get_thread_id() ((uint32_t)(uintptr_t)xTaskGetCurrentTaskHandle())
 
 #else // Other
 
@@ -302,6 +363,24 @@ typedef pthread_t THREAD_HANDLE;
 #define yield_thread(void) sched_yield(void)
 #define get_thread_id() ((uint32_t)(uintptr_t)pthread_self())
 
+#endif
+
+//-------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------
+// Thread function signature adapter
+// Use THREAD_FUNC_RETURN as the return type and THREAD_FUNC_END as the exit statement
+// of XCP server thread functions.  This makes a single function body compile correctly
+// for all three ABIs: POSIX (void*), Windows (DWORD WINAPI), and FreeRTOS (void).
+
+#if defined(_WIN)
+#define THREAD_FUNC_RETURN DWORD WINAPI
+#define THREAD_FUNC_END return 0
+#elif defined(_FREE_RTOS)
+#define THREAD_FUNC_RETURN void
+#define THREAD_FUNC_END vTaskDelete(NULL) /* deletes the calling task; does not return */
+#else                                     // POSIX
+#define THREAD_FUNC_RETURN void *
+#define THREAD_FUNC_END return NULL
 #endif
 
 //-------------------------------------------------------------------------------

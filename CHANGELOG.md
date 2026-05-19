@@ -3,7 +3,7 @@
 All notable changes to XCPlite are documented in this file.
 
 
-## [V2.0.5]
+## [V2.1.0]
 
 - Features and changes for RTOS like microcontroller operating systems
 - Improved support for offline A2L creation from ELF files, file system dependency is now optional 

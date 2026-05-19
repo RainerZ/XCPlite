@@ -1078,8 +1078,6 @@ fn parse_dest_addr(dest_addr: &str, default_port: u16) -> Result<std::net::Socke
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    info!("xcp_client");
-
     // Parse command line arguments
     let args = Args::parse();
 
@@ -1092,6 +1090,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .format_module_path(false)
         .format_target(false)
         .init();
+
+    info!(
+        "xcp_client - version {}.{}.{}",
+        env!("CARGO_PKG_VERSION_MAJOR"),
+        env!("CARGO_PKG_VERSION_MINOR"),
+        env!("CARGO_PKG_VERSION_PATCH")
+    );
 
     // Parse IP addresses and ports
     let mut tcp = args.tcp;

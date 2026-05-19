@@ -55,6 +55,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # This value is stored in CMakeCache.txt and persists across CMake runs
 option(XCPLITE_BUILD_TESTS "Build xcplite test targets" OFF)
 
+# Create a user-configurable CMake option for building tool targets
+# (ptptool, shmtool, xcpdaemon)
+# Users can override via: cmake -DXCPLITE_BUILD_TOOLS=ON/OFF
+option(XCPLITE_BUILD_TOOLS "Build xcplite tool targets (ptptool, shmtool, xcpdaemon)" OFF)
+
+# Create a user-configurable CMake option for building Rust tool targets
+# (xcpclient, bintool) via cargo. Requires Rust/cargo to be installed.
+# Users can override via: cmake -DXCPLITE_BUILD_RUST_TOOLS=ON/OFF
+option(XCPLITE_BUILD_RUST_TOOLS "Build Rust tool targets (xcpclient, bintool) via cargo" OFF)
+
 # Platform detection for library selection
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(STATUS "64-bit platform")
@@ -160,7 +170,8 @@ if(XCPLITE_BUILD_EXAMPLES)
     add_executable(hello_xcp examples/hello_xcp/src/main.c)
     target_link_libraries(hello_xcp PRIVATE xcplite)
 
-    # Example no_a2l_demo
+    # Example no_a2l_demo (built without config override — A2L generator still compiled in)
+    # To build with proper no-A2L configuration use: cmake -DXCPLITE_BUILD_NO_A2L_DEMO=ON
     add_executable(no_a2l_demo examples/no_a2l_demo/src/main.c)
     target_link_libraries(no_a2l_demo PRIVATE xcplite)
 
@@ -205,34 +216,6 @@ if(XCPLITE_BUILD_EXAMPLES)
         endif()
     endif()
 
-    # Tool ptptool (main.cpp as C++, rest as C)
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        set(ptptool_CPP_SOURCES tools/ptptool/src/main.cpp)
-        set(ptptool_C_SOURCES tools/ptptool/src/ptp/ptp.c tools/ptptool/src/ptp/ptp_client.c tools/ptptool/src/ptp/ptp_observer.c tools/ptptool/src/ptp/ptp_master.c tools/ptptool/src/ptp/phc.c)
-        set_source_files_properties(${ptptool_C_SOURCES} PROPERTIES LANGUAGE C)
-        add_executable(ptptool ${ptptool_CPP_SOURCES} ${ptptool_C_SOURCES})
-        target_link_libraries(ptptool PRIVATE xcplite)
-    else()
-        message(STATUS "Non Linux platform - skipping ptptool build")
-    endif()
-
-    # Tool shmtool — POSIX shared memory diagnostic tool (macOS + Linux only)
-    if(NOT WIN32)
-        add_executable(shmtool tools/shmtool/src/main.cpp)
-        target_link_libraries(shmtool PRIVATE xcplite)
-        # On Linux, shm_open/shm_unlink live in librt on older glibc versions
-        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-            target_link_libraries(shmtool PRIVATE rt)
-        endif()
-        message(STATUS "Building shmtool")
-    else()
-        message(STATUS "Windows platform - skipping shmtool build")
-    endif()
-
-        # Tool xcpdaemon
-    add_executable(xcpdaemon tools/xcpdaemon/src/main.c)
-    target_link_libraries(xcpdaemon PRIVATE xcplite)
-
 endif()
 
 # Tests
@@ -264,35 +247,119 @@ if(XCPLITE_BUILD_TESTS)
     add_executable(clock_test test/clock_test/src/main.cpp)
     target_link_libraries(clock_test PRIVATE xcplite)
 
-    # Queue stress test
-    # Optionally build queue_test with the MC reference queue implementation (-DQUEUE_TEST_MC_QUEUE=ON)
-    option(QUEUE_TEST_MC_QUEUE "Test the MC reference queue API via the XCPlite queue wrapper" OFF)
-    # Optionally build queue_testfor the two-process SHM test (-DQUEUE_TEST_MC_SHM=ON)
-    # Uses the MC reference queue directly (no xcplite wrapper) and enables --provider/--consumer mode
-    option(QUEUE_TEST_MC_SHM "Test the MC reference queue with shared memory two-process scenario" OFF)
-
-    if(QUEUE_TEST_MC_SHM)
-        add_executable(queue_test
-            test/queue_test/src/main.c test/queue_test/src/mc/reference.c)
-        # Use the XCPlite queue wrapper so SHM init routes to the tested queueInitFromMemory
-        target_compile_definitions(queue_test PRIVATE TEST_MC_QUEUE MC_USE_XCPLITE_QUEUE)
-        # Link librt on Linux for shm_open/shm_unlink
-        if(UNIX AND NOT APPLE)
-            target_link_libraries(queue_test PRIVATE rt)
-        endif()
-    elseif(QUEUE_TEST_MC_QUEUE)
-        add_executable(queue_test
-            test/queue_test/src/main.c test/queue_test/src/mc/reference.c)
-        # Use the XCPlite queue wrapper in reference.h instead of the original spinlock MC queue implementation
-        target_compile_definitions(queue_test PRIVATE TEST_MC_QUEUE MC_USE_XCPLITE_QUEUE)
-        # Use the original spinlock MC queue implementation in reference.h for testing
-        # target_compile_definitions(queue_test PRIVATE TEST_MC_QUEUE )
-    else()
-        add_executable(queue_test test/queue_test/src/main.c)
-    endif()
+    # Queue test (C version)   
+    add_executable(queue_test test/queue_test/src/main.c)
     target_link_libraries(queue_test PRIVATE xcplite)
 endif()
 
+# Tools: ptptool, shmtool, xcpdaemon
+if(XCPLITE_BUILD_TOOLS)
+
+    # Tool ptptool (main.cpp as C++, rest as C)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set(ptptool_CPP_SOURCES tools/ptptool/src/main.cpp)
+        set(ptptool_C_SOURCES tools/ptptool/src/ptp/ptp.c tools/ptptool/src/ptp/ptp_client.c tools/ptptool/src/ptp/ptp_observer.c tools/ptptool/src/ptp/ptp_master.c tools/ptptool/src/ptp/phc.c)
+        set_source_files_properties(${ptptool_C_SOURCES} PROPERTIES LANGUAGE C)
+        add_executable(ptptool ${ptptool_CPP_SOURCES} ${ptptool_C_SOURCES})
+        target_link_libraries(ptptool PRIVATE xcplite)
+        message(STATUS "Building ptptool")
+    else()
+        message(STATUS "Non Linux platform - skipping ptptool build")
+    endif()
+
+    # Tool shmtool — POSIX shared memory diagnostic tool (macOS + Linux only)
+    if(NOT WIN32)
+        add_executable(shmtool tools/shmtool/src/main.cpp)
+        target_link_libraries(shmtool PRIVATE xcplite)
+        # On Linux, shm_open/shm_unlink live in librt on older glibc versions
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            target_link_libraries(shmtool PRIVATE rt)
+        endif()
+        message(STATUS "Building shmtool")
+    else()
+        message(STATUS "Windows platform - skipping shmtool build")
+    endif()
+
+    # Tool xcpdaemon
+    add_executable(xcpdaemon tools/xcpdaemon/src/main.c)
+    target_link_libraries(xcpdaemon PRIVATE xcplite)
+    message(STATUS "Building xcpdaemon")
+
+endif()
+
+# Rust tools: xcpclient, bintool (built with cargo)
+if(XCPLITE_BUILD_RUST_TOOLS)
+    find_program(CARGO_EXECUTABLE cargo)
+    if(NOT CARGO_EXECUTABLE)
+        message(WARNING "cargo not found — XCPLITE_BUILD_RUST_TOOLS=ON but cargo is not in PATH; skipping Rust tools")
+    else()
+        # Build args: add --release for Release/RelWithDebInfo, otherwise debug (default)
+        set(_cargo_args build)
+        if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+            list(APPEND _cargo_args --release)
+        endif()
+
+        add_custom_target(xcpclient ALL
+            COMMAND ${CARGO_EXECUTABLE} ${_cargo_args}
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tools/xcpclient"
+            COMMENT "Building xcpclient (Rust)"
+            VERBATIM
+        )
+        message(STATUS "Building xcpclient (Rust, cargo)")
+
+        add_custom_target(bintool ALL
+            COMMAND ${CARGO_EXECUTABLE} ${_cargo_args}
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tools/bintool"
+            COMMENT "Building bintool (Rust)"
+            VERBATIM
+        )
+        message(STATUS "Building bintool (Rust, cargo)")
+
+        # Install Rust tools system-wide via cargo install (to ~/.cargo/bin / $CARGO_HOME/bin)
+        install(CODE "
+            message(STATUS \"Installing xcpclient (cargo install)\")
+            execute_process(
+                COMMAND ${CARGO_EXECUTABLE} install --path \"${CMAKE_CURRENT_SOURCE_DIR}/tools/xcpclient\" --force
+                RESULT_VARIABLE _cargo_result
+            )
+            if(NOT _cargo_result EQUAL 0)
+                message(WARNING \"cargo install xcpclient failed\")
+            endif()
+            message(STATUS \"Installing bintool (cargo install)\")
+            execute_process(
+                COMMAND ${CARGO_EXECUTABLE} install --path \"${CMAKE_CURRENT_SOURCE_DIR}/tools/bintool\" --force
+                RESULT_VARIABLE _cargo_result
+            )
+            if(NOT _cargo_result EQUAL 0)
+                message(WARNING \"cargo install bintool failed\")
+            endif()
+        ")
+    endif()
+endif()
+
+# Example no_a2l_demo with xcplib_no_a2l_cfg.h override (opt-in, independent of XCPLITE_BUILD_EXAMPLES)
+# Applies XCPLIB_CFG_OVERRIDE=xcplib_no_a2l_cfg.h to xcplite — disables A2L generator/upload.
+# Incompatible with other examples that use A2L (hello_xcp, c_demo, cpp_demo, ...).
+# Use an isolated build directory: cmake -DXCPLITE_BUILD_NO_A2L_DEMO=ON -DXCPLITE_BUILD_EXAMPLES=OFF
+option(XCPLITE_BUILD_NO_A2L_DEMO "Build no_a2l_demo with xcplib_no_a2l_cfg.h override (no A2L generator; requires isolated build)" OFF)
+if(XCPLITE_BUILD_NO_A2L_DEMO)
+    target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"xcplib_no_a2l_cfg.h\"")
+    if(NOT TARGET no_a2l_demo)
+        add_executable(no_a2l_demo examples/no_a2l_demo/src/main.c)
+        target_link_libraries(no_a2l_demo PRIVATE xcplite)
+    endif()
+    message(STATUS "no_a2l_demo: enabled (XCPLIB_CFG_OVERRIDE=xcplib_no_a2l_cfg.h)")
+endif()
+
+# Example freertos_demo (opt-in, independent of XCPLITE_BUILD_EXAMPLES)
+# Downloads FreeRTOS-Kernel via FetchContent. Requires macOS or Linux.
+# Enable with: cmake -DXCPLITE_BUILD_FREERTOS_DEMO=ON
+option(XCPLITE_BUILD_FREERTOS_DEMO "Build freertos_demo (downloads FreeRTOS-Kernel via FetchContent)" OFF)
+if(XCPLITE_BUILD_FREERTOS_DEMO AND NOT WIN32)
+    add_subdirectory(examples/freertos_demo)
+elseif(XCPLITE_BUILD_FREERTOS_DEMO AND WIN32)
+    message(STATUS "freertos_demo: skipping – not supported on Windows")
+endif()
 
 # ============================================================================
 # Installation Configuration

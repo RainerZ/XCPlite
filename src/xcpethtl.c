@@ -523,12 +523,7 @@ void XcpEthTlSetClusterId(uint16_t clusterId) {
 #error "Please define platform _WIN, _MACOS or _LINUX or _QNX"
 #endif
 
-#if defined(_WIN) // Windows
-DWORD WINAPI XcpTlMulticastThread(LPVOID par)
-#else
-extern void *XcpTlMulticastThread(void *par)
-#endif
-{
+extern THREAD_FUNC_RETURN XcpTlMulticastThread(void *par) {
     uint8_t buffer[256];
     int16_t n;
     uint16_t srcPort;
@@ -553,7 +548,7 @@ extern void *XcpTlMulticastThread(void *par)
     }
     DBG_PRINT3("XCP multicast thread terminated\n");
     socketClose(&gXcpTl.multicast_sock);
-    return 0;
+    THREAD_FUNC_END; // Exit the thread
 }
 
 #endif // XCPTL_ENABLE_MULTICAST

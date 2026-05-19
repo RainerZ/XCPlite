@@ -125,12 +125,7 @@ struct test_struct global_test_struct = {1, -2, 0.3f, {1, 2, 3}};
 //-----------------------------------------------------------------------------------------------------
 // Demo thread
 
-#ifdef _WIN32 // Windows 32 or 64 bit
-DWORD WINAPI task(LPVOID p)
-#else
-void *task(void *p)
-#endif
-{
+THREAD_FUNC_RETURN task(void *p) {
     printf("Start thread %u ...\n", get_thread_id());
 
     // Static local scope measurement variable
@@ -166,7 +161,7 @@ void *task(void *p)
     }
 
     free(heap_struct);
-    return 0;
+    THREAD_FUNC_END; // Exit the thread
 }
 
 //-----------------------------------------------------------------------------------------------------

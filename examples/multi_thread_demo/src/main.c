@@ -256,12 +256,7 @@ static void sig_handler(int sig) { gRun = false; }
 
 // Task function that runs in a separate thread
 // Calculates a sine wave, square wave, and sawtooth wave signal
-#ifdef _WIN32 // Windows 32 or 64 bit
-DWORD WINAPI task(LPVOID p)
-#else
-void *task(void *p)
-#endif
-{
+THREAD_FUNC_RETURN task(void *p) {
     (void)p;
 
     bool run = true;
@@ -339,7 +334,7 @@ void *task(void *p)
         sleepUs(delay_us);
     }
 
-    return 0; // Exit the thread
+    THREAD_FUNC_END; // Exit the thread
 }
 
 //-----------------------------------------------------------------------------------------------------

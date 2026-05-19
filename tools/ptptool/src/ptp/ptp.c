@@ -318,12 +318,7 @@ bool ptpSendDelayRequest(tPtp *ptp, uint8_t domain, const uint8_t *client_uuid, 
 // PTP threads for socket handling (319, 320) for both master and observer mode
 
 // Time critical event messages (Sync, Delay_Req) on port 319
-#if defined(_WIN) // Windows
-static DWORD WINAPI ptpThread319(LPVOID par)
-#else
-static void *ptpThread319(void *par)
-#endif
-{
+static THREAD_FUNC_RETURN ptpThread319(void *par) {
     uint8_t buffer[256];
     uint8_t addr[4];
     uint64_t rxTime;
@@ -350,16 +345,11 @@ static void *ptpThread319(void *par)
     if (ptp_log_level >= 3)
         printf("Terminate PTP multicast 319 thread\n");
     socketClose(&ptp->sock319);
-    return 0;
+    THREAD_FUNC_END; // Exit the thread
 }
 
 // General messages (Announce, Follow_Up, Delay_Resp) on port 320
-#if defined(_WIN) // Windows
-static DWORD WINAPI ptpThread320(LPVOID par)
-#else
-static void *ptpThread320(void *par)
-#endif
-{
+static THREAD_FUNC_RETURN ptpThread320(void *par) {
     uint8_t buffer[256];
     uint8_t addr[4];
     uint64_t rxTime;
@@ -386,7 +376,7 @@ static void *ptpThread320(void *par)
     if (ptp_log_level >= 3)
         printf("Terminate PTP multicast 320 thread\n");
     socketClose(&ptp->sock320);
-    return 0;
+    THREAD_FUNC_END; // Exit the thread
 }
 
 //-------------------------------------------------------------------------------------------------------

@@ -6,7 +6,8 @@ This directory contains various examples demonstrating different features and ca
 
 To get started, take a first look at the C example `hello_xcp` or at `hello_xcp_cpp` for C++.
 
-## Example CANape Projects
+
+### Example CANape Projects
 
 There is a CANape project for each example in a directory folder `examples/<ExampleName>/CANape`.  
 To load a project into CANape, select load project and navigate to the CANape.ini file in this folder.  
@@ -16,7 +17,10 @@ The examples should run with a CANape demo version, which can be downloaded from
 The demo installation must be explicitly enabled in the installer and has some limitations:  
 It will store only the first seconds of measurement data and the number of measurement signals is limited.
 
-## Example Details
+
+
+## Examples
+
 
 ### hello_xcp
 
@@ -36,6 +40,20 @@ An example in C++ using more idiomatic C++ to demonstrate the capabilities of th
 - Define events for measurement of global, local (stack), and  heap variables and instances.  
 - Use the variadic C++ macro/template API.  
 - Instrument a member function: Register and measure local function variables and parameters.  
+
+
+### no_a2l_demo
+
+Demonstrates XCPlite without on-target runtime A2L generation.  
+Offline A2L generation is performed using the XCPlite specific A2L creator tool (xcpclient)during the build process and ELF/DWARF linker informations.  
+Does no need file system support on the target and A2L upload.  
+
+
+### freertos_demo
+
+Demonstrates XCPlite running inside FreeRTOS tasks.  
+Uses the FreeRTOS POSIX simulator port so the demo builds and runs on macOS / Linux.  
+before switching to the real embedded target.  
 
 
 ### external_example
@@ -75,6 +93,7 @@ Demonstrates measurement of member variables and stack variables in class instan
 Shows how to create a class with a calibration parameter segment as a member variable.  
 Note: If CANAPE_24 is defined in sig_gen.hpp, the lookup table is a nested typedef, it uses a THIS. references to its shared axis contained in the typedef.
 
+
 ### struct_demo
 
 Shows how to define measurement variables in nested structs, multidimensional fields and arrays of structs.
@@ -96,23 +115,13 @@ Demonstrates how to visualize dynamic data structures in the CANape 3D scene win
 Creates and measures an array of structures representing 3D points with additional information.
 
 
-### no_a2l_demo
-
-Demonstrates XCPlite without on-target runtime A2L generation.  
-Offline A2L generation is performed using the XCPlite specific A2L creator tool (xcpclient)during the build process and ELF/DWARF linker informations.  
-Does no need file system support on the target and A2L upload.  
- 
-
-### threadx_demo and freertos_demo
-
-Planned.  
-Based on offline A2L generation, similar to `no_a2l_demo`.
-
-
 ### bpf_demo
 
-Experimental, work in progress.  
+Experimental.  
 Demonstrates tracing of process creations and selected syscalls.  
+
+
+
 
 ## Advanced Topics Covered
 
@@ -127,6 +136,8 @@ The examples demonstrate various advanced topics:
 - Use consistent atomic parameter modification
 - Make parameter changes persistent (freeze)
 - Use the API to create context and span, measure durations
+
+
 
 
 ## Building a CANape Project from Scratch

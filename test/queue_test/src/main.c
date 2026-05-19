@@ -327,12 +327,7 @@ static atomic_uint_least16_t task_index_ctr = 0;
 
 // Task function that runs in a separate thread
 // Simulates a producer that acquires buffers from the queue, fills them with test data and pushes them to the queue
-#ifdef _WIN32 // Windows 32 or 64 bit
-DWORD WINAPI task(LPVOID p)
-#else
-void *task(void *p)
-#endif
-{
+THREAD_FUNC_RETURN task(void *p) {
     bool run = true;
 
     uint64_t counter = 0;
@@ -395,7 +390,7 @@ void *task(void *p)
         sleepUs(THREAD_DELAY_US);
     }
 
-    return 0; // Exit the thread
+    THREAD_FUNC_END; // Exit the thread
 }
 
 //-----------------------------------------------------------------------------------------------------

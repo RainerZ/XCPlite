@@ -81,6 +81,15 @@ int _kbhit(void) {
 
 #if defined(_FREE_RTOS) // FreeRTOS
 
+// Minimum granularity is one tick (1 ms at configTICK_RATE_HZ = 1000).
+// Sub-millisecond delays are rounded up to the next tick.
+void sleepUs(uint32_t us) {
+    TickType_t ticks = (us * configTICK_RATE_HZ) / 1000000UL;
+    vTaskDelay(ticks == 0U ? 1U : ticks);
+}
+
+void sleepMs(uint32_t ms) { vTaskDelay(pdMS_TO_TICKS(ms == 0U ? 1U : ms)); }
+
 #elif defined(_WIN) // Windows
 
 void sleepUs(uint32_t us) {
@@ -362,6 +371,19 @@ void platformShmUnlink(const char *name) {
 
 #if defined(_FREE_RTOS) // FreeRTOS
 
+void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
+    (void)spinCount;
+    *m = recursive ? xSemaphoreCreateRecursiveMutex() : xSemaphoreCreateMutex();
+    assert(*m != NULL); // heap exhausted – increase configTOTAL_HEAP_SIZE
+}
+
+void mutexDestroy(MUTEX *m) {
+    if (m != NULL && *m != NULL) {
+        vSemaphoreDelete(*m);
+        *m = NULL;
+    }
+}
+
 #elif defined(_WIN) // Windows
 
 void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
@@ -424,7 +446,11 @@ const char *socketGetErrorString(int32_t err) {
 }
 
 //--------------------------------------------------------------------------
-#if defined(_FREE_RTOS) // FreeRTOS
+// FREERTOS_POSIX_SIM: Define this macro to bridge socket calls to POSIX BSD sockets
+// for testing the FreeRTOS build on macOS/Linux (see freertos_demo CMakeLists.txt).
+// @@@@ TODO: For embedded targets replace the stub section below with an lwIP or
+//            FreeRTOS+TCP socket implementation that calls the FreeRTOS+TCP API.
+#if defined(_FREE_RTOS) && !defined(FREERTOS_POSIX_SIM) // Bare-metal FreeRTOS stubs
 
 bool socketStartup(void) { return true; }
 
@@ -1815,6 +1841,60 @@ void clockGetPrintStatistic(void) {
 
 #if defined(_FREE_RTOS)
 
+// ---------------------------------------------------------------------------
+// FreeRTOS clock using xTaskGetTickCount()
+// Granularity = 1/configTICK_RATE_HZ (1 ms at 1 kHz).
+// For higher resolution on Cortex-M targets, replace clockGet() with a
+// hardware free-running counter (e.g. DWT->CYCCNT scaled to ns or us).
+// The 32-bit tick counter wraps after ~49 days at 1 kHz; sufficient for testing.
+// ---------------------------------------------------------------------------
+
+static volatile uint64_t gClockLast_ = 0;
+
+// Convert a FreeRTOS tick count to the configured clock unit (ns or us)
+static inline uint64_t tickToClockUnit_(TickType_t ticks) {
+#ifdef OPTION_CLOCK_TICKS_1NS
+    return (uint64_t)ticks * (1000000000ULL / configTICK_RATE_HZ);
+#else // OPTION_CLOCK_TICKS_1US
+    return (uint64_t)ticks * (1000000ULL / configTICK_RATE_HZ);
+#endif
+}
+
+bool clockInit(void) {
+    DBG_PRINT3("Init clock\n");
+#ifdef OPTION_CLOCK_TICKS_1NS
+    DBG_PRINT3("  ticks = OPTION_CLOCK_TICKS_1NS\n");
+    DBG_PRINTF3("  FreeRTOS tick resolution = %u ns\n", (unsigned)(1000000000UL / configTICK_RATE_HZ));
+#else
+    DBG_PRINT3("  ticks = OPTION_CLOCK_TICKS_1US\n");
+    DBG_PRINTF3("  FreeRTOS tick resolution = %u us\n", (unsigned)(1000000UL / configTICK_RATE_HZ));
+#endif
+    gClockLast_ = 0;
+    return true;
+}
+
+uint64_t clockGet(void) {
+    uint64_t t = tickToClockUnit_(xTaskGetTickCount());
+    gClockLast_ = t;
+    return t;
+}
+
+uint64_t clockGetLast(void) { return gClockLast_; }
+
+char *clockGetString(char *s, uint32_t l, uint64_t c) {
+    SNPRINTF(s, l, "%gs", (double)c / CLOCK_TICKS_PER_S);
+    return s;
+}
+
+uint64_t clockGetMonotonicNs(void) { return (uint64_t)xTaskGetTickCount() * (1000000000ULL / configTICK_RATE_HZ); }
+uint64_t clockGetMonotonicUs(void) { return (uint64_t)xTaskGetTickCount() * (1000000ULL / configTICK_RATE_HZ); }
+uint64_t clockGetRealtimeNs(void) { return clockGetMonotonicNs(); }
+uint64_t clockGetRealtimeUs(void) { return clockGetMonotonicUs(); }
+uint64_t clockGetMonotonicNsLast(void) { return gClockLast_; }
+uint64_t clockGetMonotonicUsLast(void) { return gClockLast_; }
+uint64_t clockGetRealtimeNsLast(void) { return gClockLast_; }
+uint64_t clockGetRealtimeUsLast(void) { return gClockLast_; }
+
 #elif !defined(_WIN) // Non-Windows platforms
 
 #if !defined(OPTION_CLOCK_EPOCH_PTP) && !defined(OPTION_CLOCK_EPOCH_ARB)
@@ -2155,10 +2235,10 @@ char *clockGetTimeString(char *str, uint32_t l, int64_t t) {
 // File system utilities
 /**************************************************************************/
 
-#ifdef _WIN
+#if defined(_WIN)
 #include <io.h> // for _access
-#else
-#include <unistd.h> // for access
+#elif !defined(_FREE_RTOS)
+#include <unistd.h> // for access (POSIX; not available on bare-metal FreeRTOS)
 #endif
 
 // Check if a file exists
@@ -2167,12 +2247,14 @@ bool fexists(const char *filename) {
     if (filename == NULL) {
         return false;
     }
-
-#ifdef _WIN
+#if defined(_FREE_RTOS)
+    (void)filename;
+    return false; // No filesystem on bare-metal FreeRTOS
+#elif defined(_WIN)
     // Windows: use _access from io.h
     return (_access(filename, 0) == 0);
 #else
-    // Linux/macOS: use access from unistd.h
+    // Linux/macOS/QNX: use access from unistd.h
     return (access(filename, F_OK) == 0);
 #endif
 }

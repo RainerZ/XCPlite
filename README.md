@@ -51,14 +51,15 @@ Multiple examples demonstrating different features are available in the [example
 - `hello_xcp_cpp` - Basic XCP server setup and instrumentation in C++
 
 **Advanced examples:**
-- `c_demo` - Complex data objects, calibration objects, and page switching
-- `cpp_demo` - C++ class instrumentation and RAII wrappers
-- `struct_demo` - Nested structs and multidimensional arrays
-- `multi_thread_demo` - Multi-threaded measurement and parameter sharing among threads
-- `point_cloud_demo` - Visualizing dynamic data structures in CANape 3D scene window
-- `ptp4l_demo` - Using a PTP synchronized clock as XCP timestamp source
 - `no_a2l_demo` - Workflow without runtime A2L generation (offline A2L generation by xcpclient tool)
-- `bpf_demo` - eBPF based syscall tracing (experimental)
+- `freertos_demo` - FreeRTOS application with XCP instrumentation running in the POSIX simulator (Linux)
+- `ptp4l_demo` - Using a PTP synchronized clock as XCP timestamp source
+- `multi_thread_demo` - Multi-threaded measurement and parameter sharing among threads
+- `bpf_demo` - eBPF based syscall tracing
+- `point_cloud_demo` - Visualizing dynamic data structures in CANape 3D scene window
+- `c_demo` - More detailed complex data objects, calibration objects, and page switching
+- `cpp_demo` - More detailed C++ class instrumentation and RAII wrappers
+- `struct_demo` - More detailed nested structs and multidimensional arrays
 
 For detailed information about each example and how to set up CANape projects, see the [examples documentation](examples/README.md).
 
