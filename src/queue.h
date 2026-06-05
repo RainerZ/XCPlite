@@ -35,9 +35,8 @@
 // Other use cases can use this space for other purposes, e.g. to store a timestamp or a protocol header, or it can be set to 0 if not needed.
 #include "xcptl_cfg.h" // for XCPTL_TRANSPORT_LAYER_HEADER_SIZE, XCPTL_MAX_DTO_SIZE, XCPTL_MAX_SEGMENT_SIZE, QUEUE_PAYLOAD_SIZE_ALIGNMENT
 #define QUEUE_ENTRY_USER_HEADER_SIZE (XCPTL_TRANSPORT_LAYER_HEADER_SIZE) // (for XCP transport layer header with XCPTL_TRANSPORT_LAYER_HEADER_SIZE)
-#define QUEUE_ENTRY_USER_PAYLOAD_SIZE (XCPTL_MAX_DTO_SIZE)
+#define QUEUE_ENTRY_USER_PAYLOAD_SIZE (XCPTL_MAX_DTO_SIZE)               // In the variable size queue, used for plausibility checking the requested payload size in queueAcquire
 #define QUEUE_ENTRY_USER_SIZE (XCPTL_MAX_DTO_SIZE + XCPTL_TRANSPORT_LAYER_HEADER_SIZE)
-#define QUEUE_SEGMENT_SIZE (XCPTL_MAX_SEGMENT_SIZE) // for accumulating multiple messages in one segment with queuePop
 #define QUEUE_MAX_ENTRY_SIZE (XCPTL_MAX_DTO_SIZE + XCPTL_TRANSPORT_LAYER_HEADER_SIZE)
 #define QUEUE_PAYLOAD_SIZE_ALIGNMENT (XCPTL_PACKET_ALIGNMENT)
 
@@ -53,6 +52,9 @@
 // Check preconditions
 #if (QUEUE_MAX_ENTRY_SIZE % QUEUE_PAYLOAD_SIZE_ALIGNMENT) != 0
 #error "QUEUE_MAX_ENTRY_SIZE should be aligned to QUEUE_PAYLOAD_SIZE_ALIGNMENT"
+#endif
+#if (QUEUE_MAX_ENTRY_SIZE > 0xFFFF)
+#error "QUEUE_MAX_ENTRY_SIZE must not exceed 0xFFFF"
 #endif
 
 // Note:
@@ -127,7 +129,7 @@ tQueueBuffer queuePeek(tQueueHandle queue_handle, uint32_t index, uint32_t *pack
 /// Get the next entry or multiple accumulated entries from the queue.
 /// Single consumer thread only, not thread safe.
 /// @param queue_handle         Queue handle.
-/// @param accumulate           Accumulate multiple message entries into one segment (sequential memory), up to the maximum segment size (QUEUE_SEGMENT_SIZE).
+/// @param accumulate           Accumulate multiple message entries into one segment (sequential memory), up to the maximum segment size (queue32 only).
 /// @param flush                Disable any optimizations to guarantee it returns any commited data currently available. No lazy updates, no false negatives.
 /// @param packets_lost         Optional out parameter to get the number of packets lost since the last call. Packet lost happens on the producer side when the queue is full
 /// @return Queue buffer    tQueueBuffer::size is 0 if no buffer can be popped from the queue.

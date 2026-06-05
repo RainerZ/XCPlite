@@ -36,6 +36,8 @@ struct DebugDataReader<'elffile> {
     endian: Endianness,
     sections: HashMap<String, (u64, u64)>,
     cfa_info: Vec<CfaInfo>,
+    epk_string: Option<String>,
+    epk_addr: u64,
 }
 
 // load the debug info from an elf file
@@ -71,6 +73,17 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
     // get the elf sections for DebugDataReader
     let sections = get_elf_sections(&elffile);
 
+    // read the EPK string and address from the xcp_epk ELF section
+    let epk_section = elffile.section_by_name("xcp_epk");
+    let epk_addr: u64 = epk_section.as_ref().map_or(0, |s| s.address());
+    let epk_string: Option<String> = epk_section
+        .and_then(|s| s.data().ok())
+        .and_then(|data| std::ffi::CStr::from_bytes_until_nul(data).ok())
+        .map(|cs| cs.to_string_lossy().into_owned());
+    if let Some(ref epk) = epk_string {
+        log::info!("EPK string read from xcp_epk section: '{}' at address 0x{:08X}", epk, epk_addr);
+    }
+
     // get CFA information for DebugDataReader
     let mut cfa_info = Vec::new();
     let res = get_cfa_from_object(&elffile, &mut cfa_info, verbose, unit_idx_limit);
@@ -97,6 +110,8 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
         endian: elffile.endianness(),
         sections,
         cfa_info,
+        epk_string,
+        epk_addr,
     };
     log::debug!("Reading debug info entries");
     Ok(dbg_reader.read_debug_info_entries(unit_idx_limit))
@@ -123,7 +138,8 @@ fn load_elf_file<'data>(filename: &str, filedata: &'data [u8], verbose: usize) -
     match object::File::parse(filedata) {
         Ok(object_file) => {
             if verbose >= 1 {
-                println!("\nELF file format: {:?}", object_file.format());
+                println!("\nParsed object file file: {}", filename);
+                println!("ELF file format: {:?}", object_file.format());
                 println!("Architecture: {:?}", object_file.architecture());
                 println!("Endianness: {:?}", object_file.endianness());
                 println!("\nSections:");
@@ -219,6 +235,8 @@ impl DebugDataReader<'_> {
             unit_names,
             sections: self.sections,
             cfa_info: self.cfa_info,
+            epk_string: self.epk_string,
+            epk_addr: self.epk_addr,
         }
     }
 

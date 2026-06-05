@@ -10,8 +10,12 @@
 |
  ----------------------------------------------------------------------------*/
 
-#include "a2l_writer.h"
+#include "xcplib_cfg.h" // for OPTION_xxx
+
+#ifdef OPTION_ENABLE_A2L_GENERATOR
+
 #include "a2l.h"
+#include "a2l_writer.h"
 
 #include <assert.h>   // for assert
 #include <inttypes.h> // for PRIu64
@@ -21,13 +25,10 @@
 #include <stdio.h>    // for fclose, fopen, fread
 #include <string.h>   // for
 
-#include "dbg_print.h"  // for DBG_PRINT
-#include "xcp_cfg.h"    // for XCP_xxx
-#include "xcplib_cfg.h" // for OPTION_xxx
-#include "xcplite.h"    // for tXcpCalSeg, tXcpDaqLists, XcpXxx, ApplXcpXxx, ...
-#include "xcptl_cfg.h"  // for XCPTL_xxx
-
-#ifdef OPTION_ENABLE_A2L_GENERATOR
+#include "dbg_print.h" // for DBG_PRINT
+#include "xcp_cfg.h"   // for XCP_xxx
+#include "xcplite.h"   // for tXcpCalSeg, tXcpDaqLists, XcpXxx, ApplXcpXxx, ...
+#include "xcptl_cfg.h" // for XCPTL_xxx
 
 //----------------------------------------------------------------------------------
 // Static
@@ -61,7 +62,7 @@ static const char *gA2lMemorySegment =
     // DATA = program data allowed for online calibration
     "/begin MEMORY_SEGMENT %s \"\" DATA FLASH INTERN 0x%08X %u -1 -1 -1 -1 -1\n" // name, start addr, size
     "/begin IF_DATA XCP\n"
-    "  /begin SEGMENT %u 2 0 0 0\n" // index
+    "  /begin SEGMENT %u /* number */ 2 /* pages */ 0 /*addr_ext*/ 0 0\n" // number
     "  /begin CHECKSUM XCP_CRC_16_CITT MAX_BLOCK_SIZE 0xFFFF EXTERNAL_FUNCTION \"\" /end CHECKSUM\n"
     "  /begin PAGE 0 ECU_ACCESS_DONT_CARE XCP_READ_ACCESS_DONT_CARE XCP_WRITE_ACCESS_DONT_CARE /end PAGE\n"
     "  /begin PAGE 1 ECU_ACCESS_DONT_CARE XCP_READ_ACCESS_DONT_CARE XCP_WRITE_ACCESS_NOT_ALLOWED /end PAGE\n"
@@ -71,17 +72,18 @@ static const char *gA2lMemorySegment =
     // 1 calibration page
     "/begin MEMORY_SEGMENT %s \"\" DATA RAM INTERN 0x%08X %u -1 -1 -1 -1 -1\n" // name, start addr, size
     "/begin IF_DATA XCP\n"
-    "  /begin SEGMENT %u 1 0 0 0\n" // index
+    "  /begin SEGMENT %u /* number */ 1 /* pages */ 0 /*addr_ext*/ 0 0\n" // number
     "  /begin CHECKSUM XCP_CRC_16_CITT MAX_BLOCK_SIZE 0xFFFF EXTERNAL_FUNCTION \"\" /end CHECKSUM\n"
     "  /begin PAGE 0 ECU_ACCESS_DONT_CARE XCP_READ_ACCESS_WITH_ECU_ONLY XCP_WRITE_ACCESS_WITH_ECU_ONLY /end PAGE\n"
     "  /end SEGMENT\n"
     "/end IF_DATA\n"
 #endif
-#ifdef OPTION_CAL_SEGMENTS_ABS
-    "/begin IF_DATA CANAPE_ADDRESS_UPDATE\n"
-    "/begin MEMORY_SEGMENT \"%s\" FIRST \"%s\" 0 LAST \"%s\" %u /end MEMORY_SEGMENT\n"
-    "/end IF_DATA\n"
-#endif
+    // @@@@ TODO: Check if there is a use case for this
+    // #ifdef OPTION_CAL_SEGMENTS_ABS
+    //     "/begin IF_DATA CANAPE_ADDRESS_UPDATE\n"
+    //     "/begin MEMORY_SEGMENT \"%s\" FIRST \"%s\" 0 LAST \"%s\" %u /end MEMORY_SEGMENT\n"
+    //     "/end IF_DATA\n"
+    // #endif
     "/end MEMORY_SEGMENT\n";
 
 #endif
@@ -231,6 +233,7 @@ static const char *A2lGetEventName_(const char *project_name, tXcpEventId id) {
 }
 #endif
 
+#ifdef OPTION_CAL_SEGMENTS
 // Get the prefixed memory segment name
 static const char *A2lGetCalSegName_(const char *project_name, uint8_t app_id, const char *name) {
 #ifdef OPTION_SHM_MODE // prefixed memory segment name
@@ -241,6 +244,7 @@ static const char *A2lGetCalSegName_(const char *project_name, uint8_t app_id, c
 #endif // SHM_MODE
     return A2lGetPrefixedName_(project_name, name);
 }
+#endif
 
 //----------------------------------------------------------------------------------
 
@@ -537,3 +541,6 @@ bool A2lWriter(const char *a2l_filename, uint8_t a2l_mode, const char *project_n
 }
 
 #endif // XCP_ENABLE_A2L_GENERATOR
+
+// Suppress -Wpedantic "empty translation unit" warning
+typedef int a2l_writer_dummy_t;

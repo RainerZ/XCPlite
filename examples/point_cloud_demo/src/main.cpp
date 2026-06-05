@@ -46,7 +46,7 @@ struct ParametersT {
 };
 
 // Default parameter values
-const ParametersT kParameters = {
+constexpr ParametersT kParameters = {
     .max_points = 50,     // points in the cloud
     .boundary = 1.0,      // boundary_ in m
     .min_radius = 0.02,   // min_radius in m
@@ -322,7 +322,7 @@ template <uint16_t N> class PointCloud {
 
         // Create a cyclic event for the simulation step measurement
         // Specify cycle_time_us in microseconds to enable time downscaling in CANape using the cyclic mode
-        DaqCreateCyclicEvent(step, kParameters.cycle_time_us);
+        DaqCreateEventExt(step, kParameters.cycle_time_us, 0);
 
         std::cout << "PointCloud<" << (unsigned int)N << "> instance created" << std::endl;
 
@@ -430,9 +430,9 @@ int main() {
     srand(static_cast<unsigned int>(time(nullptr)));
 
     // XCP: Initialize
-    XcpSetLogLevel(OPTION_LOG_LEVEL);                                                                   // Set log level (1-error, 2-warning, 3-info, 4-show XCP commands)
-    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION /* EPK version*/, XCP_MODE_LOCAL);              // Initialize the XCP singleton and activate XCP
-    if (!XcpEthServerInit(OPTION_SERVER_ADDR, OPTION_SERVER_PORT, OPTION_USE_TCP, OPTION_QUEUE_SIZE)) { // Initialize the XCP Server
+    XcpSetLogLevel(OPTION_LOG_LEVEL);                                                                             // Set log level (1-error, 2-warning, 3-info, 4-show XCP commands)
+    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION /* EPK version*/, XCP_MODE_PERSISTENCE | XCP_MODE_LOCAL); // Initialize the XCP singleton and activate XCP
+    if (!XcpEthServerInit(OPTION_SERVER_ADDR, OPTION_SERVER_PORT, OPTION_USE_TCP, OPTION_QUEUE_SIZE)) {           // Initialize the XCP Server
         std::cerr << "Failed to initialize XCP server" << std::endl;
         return 1;
     }

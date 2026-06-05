@@ -1,12 +1,12 @@
 
-build
-build-*
+build*
 clang_tidy
 
 
 # CANape artefacts
 *.hex 
 *.mf4
+*.csv
 *.cnaxml
 *.tmp
 *.fup
@@ -15,15 +15,15 @@ CANapeTmpMea.ini
 RecycleBin.ini
 
 
-# Examples .a2l and .bin files
+# Examples .a2l, *.elf and .bin files
 /*.a2l
+*.elf
 *.bin
 
 # Temporary files
 test_bintool
 *.bak
 *.log
-
 
 # Other
 .vscode
@@ -34,3 +34,5 @@ test_bintool
 /shm_*.sh
 
 
+/examples/esp32_freertos_demo/src/wlan.h
+/tools/xcpclient/esp32_freertos_demo.a2l

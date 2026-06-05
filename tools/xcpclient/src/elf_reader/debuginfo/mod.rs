@@ -92,6 +92,8 @@ pub(crate) struct DebugData {
     pub(crate) unit_names: Vec<Option<String>>,           // list of compilation unit names by unit index
     pub(crate) sections: HashMap<String, (u64, u64)>,     // section name -> (start, end)
     pub(crate) cfa_info: Vec<CfaInfo>,                    // CFA information for functions which contain an event trigger, the CFA is valid for  the location of the event trigger
+    pub(crate) epk_string: Option<String>,                // EPK string read from xcp_epk ELF section
+    pub(crate) epk_addr: u64,                             // Address of the xcp_epk ELF section (0 if not found)
 }
 
 // load_dwarf - loads and parses the DWARF debug information from an ELF file
@@ -116,6 +118,30 @@ impl DebugData {
         };
 
         Some(file_name.replace('.', "_"))
+    }
+
+    // Get the address of the XCP event descriptor memory section
+    pub(crate) fn get_event_section_addr(&self) -> u64 {
+        let sections: Vec<(&String, &(u64, u64))> = self.sections.iter().collect();
+        for (name, (addr, size)) in sections {
+            if name == "xcp_evts" {
+                log::info!("Found XCP event descriptor memory section at address = 0x{:08X}, size = {} bytes", *addr, *size);
+                return *addr;
+            }
+        }
+        return 0;
+    }
+
+    // Get the address of the XCP EPK memory section
+    pub(crate) fn get_epk_section_addr(&self) -> u64 {
+        let sections: Vec<(&String, &(u64, u64))> = self.sections.iter().collect();
+        for (name, (addr, size)) in sections {
+            if name == "xcp_epk" {
+                log::info!("Found XCP EPK memory section at address = 0x{:08X}, size = {} bytes", *addr, *size);
+                return *addr;
+            }
+        }
+        return 0;
     }
 
     /// print the debug statistics
@@ -210,7 +236,7 @@ impl DebugData {
         println!("\n====================================================================================================");
         println!("A2L Creator variables in compilation unit 0..{unit_idx_limit}:");
         for (var_name, var_info) in &self.variables {
-            if var_name.starts_with("cal__") || var_name.starts_with("evt__") || var_name.starts_with("trg__") {
+            if var_name.starts_with("calblk__") || var_name.starts_with("calseg__") || var_name.starts_with("evt__") || var_name.starts_with("trg__") {
                 print!("'{}': ", var_name);
                 assert!(var_info.len() == 1);
                 let var = &var_info[0];
@@ -229,7 +255,7 @@ impl DebugData {
         if level >= 1 {
             if level >= 5 {
                 println!("\n====================================================================================================");
-                println!("System variables  in compilation unit 0..{unit_idx_limit}:");
+                println!("System variables in compilation unit 0..{unit_idx_limit}:");
                 for (var_name, var_info) in &self.variables {
                     if var_name.starts_with("__") {
                         println!("{}: ", var_name);

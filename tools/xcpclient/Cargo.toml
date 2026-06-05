@@ -1,10 +1,10 @@
 [package]
 name = "xcpclient"
-version = "2.0.0"
+version = "2.1.0"
 edition = "2024"
 resolver = "2"
 authors = ["RainerZ"]
-description = "Simple XCP test client and utilities"
+description = "Simple XCP test client and ELF/A2L utilities"
 readme = "README.md"
 keywords = ["XCP","ASAM","CANape","A2L"]
 license = "MIT"
@@ -41,7 +41,9 @@ cpp_demangle = "0.4"
 a2lfile = "3.3.0"
 
 # xcp-lite on Github https://github.com/RainerZ/xcp-lite.git
-xcp_lite = { git = "https://github.com/RainerZ/xcp-lite.git", branch = "V2.0.0", features = ["a2l_reader"] }
+# xcp_lite = { git = "https://github.com/RainerZ/xcp-lite.git", branch = "V2.1.0", features = ["a2l_reader"] }
+xcp_lite = { path = "../../../xcp-lite-RainerZ", features = ["a2l_reader"] } 
+
 
 [lints.rust]
 dead_code = "allow"

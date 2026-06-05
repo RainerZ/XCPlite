@@ -26,7 +26,7 @@
 // XCP parameters
 
 #define OPTION_PROJECT_NAME "cal_test"  // A2L project name
-#define OPTION_PROJECT_VERSION "V2.0.0" // EPK version string
+#define OPTION_PROJECT_VERSION "V2.1.0" // EPK version string
 #define OPTION_USE_TCP false            // TCP or UDP
 #define OPTION_SERVER_PORT 5555         // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0} // Bind addr, 0.0.0.0 = ANY
@@ -114,11 +114,11 @@ static void lock_test_init(void) {
 
     // Calibrate
     uint64_t sum = 0;
-    for (int i = 0; i < 1000; i++) {
-        uint64_t time = clockGetMonotonicNs();
+    for (int i = 0; i < 10000; i++) {
+        volatile uint64_t time = clockGetMonotonicNs();
         sum += clockGetMonotonicNs() - time;
     }
-    lock_calibration = sum / 1000;
+    lock_calibration = sum / 10000;
 }
 
 static void lock_test_add_sample(uint64_t d) {

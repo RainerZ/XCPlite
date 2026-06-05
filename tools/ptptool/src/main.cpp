@@ -150,6 +150,7 @@ bool ptpClientGetClockInfo(uint8_t *client_uuid, uint8_t *grandmaster_uuid, uint
             return true;
         }
     }
+    return false;
 #else
     if (client_uuid != NULL)
         memcpy(client_uuid, XCP_CLIENT_UUID, 8);
@@ -182,11 +183,25 @@ static void print_usage(const char *prog_name) {
     std::cout << "Usage: " << prog_name << " [options]\n"
               << "Options:\n"
               << "  -i, --interface <name>        Network interface name (default: eth0)\n"
+#ifdef OPTION_ENABLE_PTP_MASTER
+              << "  -m, --master                  Creates a PTP master with uuid and domain\n"
+#endif
 #ifdef OPTION_ENABLE_PTP_CLIENT
               << "  -c, --client                  Enable PTP client mode\n"
 #endif
+#ifdef OPTION_ENABLE_PTP_OBSERVER
+              << "  -o, --observer                Observer for uuid and domain\n"
+              << "  -a, --auto                    Multi observer mode\n"
+              << "  -p, --passive                 Passive observer mode (default: active)\n"
+#endif
+              << "  -d, --domain <number>         Domain number 0-255 (default: 0)\n"
+              << "  -u, --uuid <hex>              UUID as 16 hex digits (default: 001AB60000000001)\n"
+              << "  -l, --ptp_log_level <level>   Set PTP log level (3..7, default: 3)\n"
+              << "  -x, --xcp_log_level <level>   Set XCP log level (0..5, default: 2 - errors+warnings)\n"
+              << "  -h, --help                    Show this help message\n\n"
+
 #ifdef OPTION_ENABLE_PTP_MASTER
-              << "  -m, --master                  Creates a PTP master with uuid and domain\n"
+              << "\nMaster parameters:\n"
               << "      --announce_interval <ms>  Announce interval in ms (default: 1000)\n"
               << "      --sync_interval <ms>      SYNC interval in ms (default: 1000)\n"
               << "      --offset <ns>             PTP master time offset in ns (default: 0)\n"
@@ -194,25 +209,11 @@ static void print_usage(const char *prog_name) {
               << "      --drift_drift <ns/s2>     PTP master time drift drift in ns/s2 (default: 0)\n"
               << "      --jitter <ns>             PTP master time jitter in ns (default: 0)\n"
 #endif
-#ifdef OPTION_ENABLE_PTP_OBSERVER
-              << "  -o, --observer                Observer for uuid and domain\n"
-              << "  -a, --auto                    Multi observer mode\n"
-              << "  -p, --passive                 Passive observer mode (default: active)\n"
-#endif
-              << "  -d, --domain <number>        Domain number 0-255 (default: 0)\n"
-              << "  -u, --uuid <hex>             UUID as 16 hex digits (default: 001AB60000000001)\n"
-              << "  -l, --ptp_log_level <level>  Set PTP log level (3..7, default: 3)\n"
-              << "  -x, --xcp_log_level <level>  Set XCP log level (0..5, default: 2 - errors+warnings)\n"
-              << "  -h, --help                   Show this help message\n\n"
-              << "Example:\n  " << prog_name << " -i en0 -m master -d 1 -u 001AB60000000002\n";
+
+              << "\nExample:\n  " << prog_name << " -i en0 -m master -d 1 -u 001AB60000000002\n";
 }
 
 int main(int argc, char *argv[]) {
-
-#ifndef OPTION_SOCKET_HW_TIMESTAMPS
-    printf("Please enable OPTION_SOCKET_HW_TIMESTAMPS in src/xcplib_cfg.h for PTP tool\n");
-    return 1;
-#endif
 
     // Default values
     uint8_t xcp_log_level = XCP_OPTION_LOG_LEVEL;
@@ -415,6 +416,11 @@ int main(int argc, char *argv[]) {
             return 1;
         }
     }
+
+#ifndef OPTION_SOCKET_HW_TIMESTAMPS
+    printf("Please enable OPTION_SOCKET_HW_TIMESTAMPS when building xcplib for PTP tools\n");
+    return 1;
+#endif
 
     const char *mode_str = (ptp_mode == PTP_MODE_MASTER) ? "master" : (ptp_mode == PTP_MODE_OBSERVER) ? "observer" : "client";
     std::cout << "\nPTP " << mode_str << " at " << ptp_interface << std::endl;

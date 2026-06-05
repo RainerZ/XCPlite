@@ -89,6 +89,9 @@ Use only absolute addressing mode, which is in this mode associated to address e
 
 The A2l file may then be created and updated with any usual method of your choice, using CANape, A2L-Studio, A2L-Creator, a2ltool, ...
 
+See no_a2l_demo or free_rtos_demo.  
+
+
 **Limitations:**
 - Measurement of heap and stack is not possible anymore
 - You are now limited to 32 bit address range starting at the module load address (`ApplXcpGetBaseAddr()`/`xcp_get_base_addr()`)
@@ -97,11 +100,10 @@ The A2l file may then be created and updated with any usual method of your choic
 - Thread safe parameter modification using calibration segments is still assured
 - Thread safety of measurement data acquisition is now in your responsibility, by using a safe fixed event for each individual measurement variable
 
-### Option 5: XCPlite-Specific A2L Creator (Experimental)
+### Option 5: XCPlite-Specific A2L Creator 
 
-Experimental. Use a XCPlite specific A2L creator tool, which is aware of the different addressing schemes and static markers created by the code instrumentation macros.
-
-Experimental, work in progress. See `no_a2l_demo`.
+Use the XCPlite specific A2L creator tool (xcpclient), which is aware of the different addressing schemes and static markers created by the code instrumentation macros.
+See `no_a2l_demo`.
 
 ## Addressing Modes
 
@@ -142,6 +144,7 @@ Depending on `#define OPTION_CAL_SEGMENTS_ABS` in `xcplib_cfg.h`, address extens
 The 2 modes are named **CASDD** and **ACSDD**. The A2L variable `project_no` is used to indicate the addressing mode to A2L creators or updaters.  
 This is important, because CANape does not support address extensions >0 for parameters in calibration segments.  
 Parameters in calibration segments may be accessed by their segment relative address or by their absolute address, using the corresponding address extension.  
+Note that this requires that the default page address given to the `XcpCreateCalSeg` function is in the 32 bit address range and has static lifetime.
 
 ### Absolute Addressing Mode (XCP_ENABLE_ABS_ADDRESSING)
 
@@ -274,18 +277,18 @@ CPP is not supported yet.
 
 ```c
 //Create calibration segment macro segment index once pattern
-static tXcpCalSegIndex cal__##name;
+static tXcpCalSegIndex calseg_id_##name;
 
 // Create measurement event macro event id once pattern
 // From  DaqCreateXxx(name), 
-static tXcpEventId evt__##name
+static tXcpEventId evt_id_##name
 static tXcpEventId evt__dynname
 
 // Daq capture macro (DaqCapture(event, var)) capture buffer
 static __typeof__(var) daq__##event##__##var
 
 // Daq event trigger macro event id once pattern
-// From C macros DaqCreateAndTriggerXxx(name), DaqEventVar(name, ...), DaqEventExtVar(name, ...), ...)
+// From C macros DaqCreateAndTriggerXxx(name), DaqEventVar(name, ...), ...)
 static tXcpEventId trg__AAS__##name // For absloute and stack relative addressing [XCP_ADDR_EXT_ABS and XCP_ADDR_EXT_DYN]
 static tXcpEventId trg__AASD__##name // For absolute, stack and relative addressing [XCP_ADDR_EXT_ABS, XCP_ADDR_EXT_DYN, XCP_ADDR_EXT_DYN+1]
 static tXcpEventId trg__AASDD__##name // for multiple DYN address extensions [XCP_ADDR_EXT_DYN+1 ..= XCP_ADDR_EXT_DYN_MAX] 

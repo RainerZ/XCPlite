@@ -16,6 +16,7 @@
 #include <stdbool.h> // for bool
 #include <stdint.h>  // for uint16_t, uint32_t, uint8_t
 
+#include "assert.h"     // for static_assert
 #include "dbg_print.h"  // for DBG_LEVEL, DBG_PRINTF, DBG_PRINT, ...
 #include "platform.h"   // for atomics
 #include "queue.h"      // for tQueueHandle
@@ -51,7 +52,7 @@ extern "C" {
 
 // Calibration segment number
 // Used in A2l and XCP commands to identify a calibration segment
-// Currently only 256 segments are supported
+// Currently only 256 segments are supported (XCP/A2L limitation), from max 64K calibration blocks (tCalSegIndex)
 typedef uint8_t tXcpCalSegNumber;
 #define XCP_UNDEFINED_CALSEG_NUM 0xFF
 
@@ -60,53 +61,82 @@ typedef uint8_t tXcpCalSegNumber;
 typedef uint16_t tXcpCalSegIndex;
 #define XCP_UNDEFINED_CALSEG ((tXcpCalSegIndex)0xFFFF)
 
-#define XCP_CALPAGE_ALIGNMENT 8   // Page alignment in bytes
-#define XCP_CALSEG_HEADER_SIZE 64 // Must be & XCP_CALPAGE_ALIGNMENT
-
-// Sentinel value for "null" page offsets (replaces NULL pointer)
+// Sentinel value for "null" page offsets
 #define XCP_CALSEG_NO_PAGE UINT32_MAX
 
-// Calibration segment header struct
+// Calibration segment header struct, 64 byte length, aligned to 8 bytes for atomic access
 // All page references are stored as uint32_t byte offsets from c->b[0] so that
 // the entire tXcpCalSeg (header + pages) is position-independent and safe to
 // place in POSIX shared memory without pointer fixup across processes.
-typedef struct {
+#define XCP_CALPAGE_ALIGNMENT 8   // Page alignment in bytes
+#define XCP_CALSEG_HEADER_SIZE 64 // Must be & XCP_CALPAGE_ALIGNMENT
+#if defined(PLATFORM_32BIT)
+#define XCP_CALSEG_HEADER_PAD (XCP_MAX_CALSEG_NAME + 12)
+#else
+#define XCP_CALSEG_HEADER_PAD (XCP_MAX_CALSEG_NAME + 8)
+#endif
 
+typedef struct {
+#if defined(XCP_ENABLE_ABS_ADDRESSING) && XCP_ADDR_EXT_ABS == 0x00
+    uint8_t *default_page_ptr; // Pointer to static lifetime default page
+#else
+    uint8_t *res1; // Default, there is no pointer to the default page
+#endif
+    // 8
     atomic_uint_least32_t ecu_page_next; // offset into c->b[]
     atomic_uint_least32_t free_page;     // offset into c->b[]
-    atomic_uint_fast8_t ecu_access;      // page number for ECU access
-    atomic_uint_fast8_t lock_count;      // lock count for the segment, 0 = unlocked
-
-#if defined(XCP_ENABLE_ABS_ADDRESSING) && XCP_ADDR_EXT_ABS == 0x00
-    uint8_t *default_page_ptr; // process-local ptr to caller's static data, NOT sharable, used for
+    uint32_t ecu_page;                   // offset into c->b[], or XCP_CALSEG_NO_PAGE
+    uint32_t xcp_page;                   // offset into c->b[], or XCP_CALSEG_NO_PAGE
+#ifdef XCP_ENABLE_CAL_PERSISTENCE
+    uint32_t file_pos; // position of the calibration segment in the persistence file
 #else
-    uint8_t *res1; // In SHM mode, there is no pointer to the default page
+    uint32_t res2;
 #endif
-    uint32_t ecu_page; // offset into c->b[], or XCP_CALSEG_NO_PAGE
-    uint32_t xcp_page; // offset into c->b[], or XCP_CALSEG_NO_PAGE
+    // 28
     uint16_t size;
-    tXcpCalSegNumber calseg_number; // segment number, XCP_UNDEFINED_CALSEG_NUM if not a MEMORY_SEGMENT
+    // 30
+    atomic_uint_least8_t ecu_access; // page number for ECU access
+    atomic_uint_least8_t lock_count; // lock count for the segment, 0 = unlocked
     uint8_t xcp_access;             // page number for XCP access
     bool write_pending;             // write pending because write delay
     bool free_page_hazard;          // safe free page use is not guaranteed yet, it may be in use
+    tXcpCalSegNumber calseg_number; // segment number, XCP_UNDEFINED_CALSEG_NUM if a calibration block, but not a MEMORY_SEGMENT
+    uint8_t app_id;                 // Application id for SHM_MODE
 #ifdef XCP_ENABLE_CAL_PERSISTENCE
-    uint32_t file_pos; // position of the calibration segment in the persistence file
-    uint8_t mode;      // requested for freeze and preload
+    uint8_t mode; // for freeze and preload flags
 #else
-    uint32_t res2;
     uint8_t res3;
 #endif
-    uint8_t app_id; // Application id for SHM_MODE
+    // 38
     char name[XCP_MAX_CALSEG_NAME + 1];
-
-#ifdef OPTION_ATOMIC_EMULATION
-    uint8_t res[64 - 22];
-#endif
-
+    uint8_t res[XCP_CALSEG_HEADER_PAD - XCP_MAX_CALSEG_NAME];
 } tXcpCalSegHeader;
+
+static_assert(sizeof(bool) == 1, "Error: bool is not 1 byte");
+static_assert(sizeof(atomic_uint_least32_t) == 4, "Error: atomic_uint_least32_t is not 4 bytes");
+static_assert(sizeof(atomic_uint_least8_t) == 1, "Error: atomic_uint_least8_t is not 1 byte");
+static_assert(XCP_CALSEG_HEADER_SIZE % XCP_CALPAGE_ALIGNMENT == 0, "Error: XCP_CALSEG_HEADER_SIZE is not a multiple of XCP_CALPAGE_ALIGNMENT");
+static_assert(sizeof(tXcpCalSegHeader) == XCP_CALSEG_HEADER_SIZE, "Error: size of tXcpCalSegHeader is not equal to XCP_CALSEG_HEADER_SIZE");
 
 // Accessor helpers: resolve a page offset to a pointer within c->b[]
 // Returns NULL when offset is XCP_CALSEG_NO_PAGE
+#if defined(XCP_ENABLE_ABS_ADDRESSING) && XCP_ADDR_EXT_ABS == 0x00
+
+// In absolute addressing mode
+// Save the memory for the default page copy in absolute addressing mode, default page has static lifetime
+#define CALSEG_PAGE_COUNT 3                                           // default page, ECU page and XCP page
+#define XCP_PAGE_OFFSET(aligned_page_size) (0)        // Initial offset of the XCP working page in the allocated memory buffer
+#define ECU_PAGE_OFFSET(aligned_page_size) (aligned_page_size)  // Initial of the ECU working page in the allocated memory buffer
+#define FREE_PAGE_OFFSET(aligned_page_size) (2 * (aligned_page_size)) // Initial of the free swap page in the allocated memory buffer
+#define CalSegDefaultPage(c) (const uint8_t *)(c)->h.default_page_ptr
+#define CalSegEcuPage(c) &(c)->b[(c)->h.ecu_page]
+#define CalSegXcpPage(c) &(c)->b[(c)->h.xcp_page]
+
+#else
+
+// In segment relative addressing mode
+// Maintain a copy of the default page, mandatory for SHM mode, using shared memory
+#define CALSEG_PAGE_COUNT 4                                           // default page, ECU page, XCP page and free swap page
 #define DEFAULT_PAGE_OFFSET (0)                                       // Constant offset of the default page in the allocated memory buffer
 #define XCP_PAGE_OFFSET(aligned_page_size) (aligned_page_size)        // Initial offset of the XCP working page in the allocated memory buffer
 #define ECU_PAGE_OFFSET(aligned_page_size) (2 * (aligned_page_size))  // Initial of the ECU working page in the allocated memory buffer
@@ -115,29 +145,29 @@ typedef struct {
 #define CalSegEcuPage(c) &(c)->b[(c)->h.ecu_page]
 #define CalSegXcpPage(c) &(c)->b[(c)->h.xcp_page]
 
-static_assert(sizeof(tXcpCalSegHeader) % XCP_CALPAGE_ALIGNMENT == 0, "Error: size of tXcpCalSegHeader is not a multiple of XCP_CALPAGE_ALIGNMENT");
-static_assert(sizeof(tXcpCalSegHeader) % XCP_CALSEG_HEADER_SIZE == 0, "Error: size of tXcpCalSegHeader is not a multiple of XCP_CALSEG_HEADER_SIZE");
+#endif
 
 // Calibration segment
 typedef struct {
-    tXcpCalSegHeader h;
-    // variable size data block for the pages, actual size is page_size * 3, for working page, free page and xcp page
+    tXcpCalSegHeader h; // 64 byte header, must be first for CalSegPtr() to work
+    // variable size data block for the pages, actual size is page_size * CALSEG_PAGE_COUNT, for [default_page], working page, free page and xcp page
     uint8_t b[];
 } tXcpCalSeg;
 
 // Calibration segment list
 typedef struct {
-    atomic_uint_least32_t offset[XCP_MAX_CALSEG_COUNT]; // calseg_offset[i] is the byte offset of calseg i from cal_mem[0], XCP_CALSEG_NO_PAGE means slot is unused
-    atomic_uint_fast16_t count;                         // Number of calibration segments, max XCP_MAX_CALSEG_COUNT
+    atomic_uint_least32_t offset[XCP_MAX_CALSEG_COUNT]; // offset[i] is the byte offset of calseg i from cal_mem[0], XCP_CALSEG_NO_PAGE means slot is unused
+    atomic_uint_least16_t count;                         // Number of calibration segments, max XCP_MAX_CALSEG_COUNT
     uint16_t memory_segment_count;                      // Number of memory segments used by calibration segments, max 255
     bool write_delayed;                                 // atomic calibration (begin/end user command) in progress
 
     // Thread-safe bump allocator pool for calibration segment memory segments
-    atomic_uint_fast32_t cal_mem_used; // Bytes consumed so far, updated with CAS
+    atomic_uint_least32_t cal_mem_used; // Bytes consumed so far, updated with CAS
 
+    // Calibration segment/block memory pool
     union {
         uint64_t pool_alignment;        // Force alignment of the memory pool to 8 bytes for safe atomic access
-        uint8_t pool[XCP_CAL_MEM_SIZE]; // Flat memory pool, all calseg structs allocated here
+        uint8_t pool[XCP_CAL_MEM_SIZE]; // Flat memory pool, all tXcpCalSeg structs allocated here
     } cal_mem;
 
 } tXcpCalSegList;
@@ -177,9 +207,44 @@ void XcpCalUpdateEpkSeg(const char *epk);
 // Single-threaded
 /**************************************************************************/
 
+#ifndef __XCPLIB_H__
+
+#define XCP_CALSEG_TYPE_SEGMENT 0x8001
+#define XCP_CALSEG_TYPE_BLOCK 0x8002
+
+// Calibration segment or block descriptor used by CalSegCreate() and CalBlkCreate() for section-based pre-registration
+typedef struct {
+    const char *name;
+    const void *addr;
+    tXcpCalSegIndex *indexp;
+    uint16_t size;
+    uint16_t type;
+#ifdef PLATFORM_32BIT
+    uint8_t res[16];
+#endif
+} tXcpCalDescriptor;
+
+static_assert(sizeof(tXcpCalDescriptor) == 32, "sizeof(XcpCalDescriptor) must be 32");
+
+// Platform section attribute for tXcpCalDescriptor static variables created by CalSegCreate() and CalBlkCreate().
+// Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
+// pre-register every calibration segment or block before the first use, without requiring the call site of the creation to execute first.
+#if defined(__ELF__)
+#define XCP_CAL_SECTION_ATTR __attribute__((section("xcp_cals"), used))
+#elif defined(__APPLE__)
+#define XCP_CAL_SECTION_ATTR __attribute__((section("__DATA,xcp_cals"), used))
+#else
+#define XCP_CAL_SECTION_ATTR /* section-based registration not supported on this platform */
+#endif
+
+#endif // __XCPLIB_H__
+
 // Initialize the calibration segment list
 void XcpInitCalSegList(void);
 void XcpDeinitCalSegList(void);
+
+// Register all calibration segments from the xcp_cals section, returns the number of registered segments
+uint16_t XcpRegisterSectionCalSegs(void);
 
 // Get the number of calibration segments
 uint16_t XcpGetCalSegCount(void);
@@ -192,7 +257,9 @@ uint8_t XcpGetMemSegCount(void);
 tXcpCalSegIndex XcpFindCalSeg(const char *name);
 
 // Find a calibration segment by a pointer into its static default page memory, returns XCP_UNDEFINED_CALSEG if not found
+#if defined(XCP_ENABLE_ABS_ADDRESSING) && XCP_ADDR_EXT_ABS == 0x00
 tXcpCalSegIndex XcpFindCalSegByAddr(uint8_t *addr);
+#endif
 
 // Convert between segment number and segment index, returns XCP_UNDEFINED_CALSEG or XCP_UNDEFINED_CALSEG_NUM if not found
 tXcpCalSegIndex XcpGetCalSegIndex(tXcpCalSegNumber segment_number);

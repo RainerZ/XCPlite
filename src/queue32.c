@@ -17,7 +17,7 @@
 #include "xcplib_cfg.h" // for OPTION_xxx
 
 // Use queue32.c for 32 Bit platforms, on Windows or with atomic emulation
-// Explictly force with OPTION_QUEUE_32
+// Explicitly force with OPTION_QUEUE_32
 #if defined(OPTION_QUEUE_32) || defined(PLATFORM_32BIT) || defined(_WIN) || defined(OPTION_ATOMIC_EMULATION)
 
 #include "queue.h"
@@ -26,7 +26,6 @@
 #include <inttypes.h> // for PRIu64
 #include <stdbool.h>  // for bool
 #include <stdint.h>   // for uint32_t, uint64_t, uint8_t, int64_t
-#include <stdio.h>    // for NULL
 #include <stdlib.h>   // for free, malloc
 #include <string.h>   // for memcpy, strcmp
 
@@ -152,7 +151,7 @@ tQueueHandle queueInit(size_t queue_buffer_size) {
         queue->queue[i].size = 0;           // No data in this segment
     }
 
-    DBG_PRINT3("Init transport layer lockless queue (queue32)\n");
+    DBG_PRINT3("Init transport layer queue (queue32)\n");
     DBG_PRINTF3("  buffer_size=%" PRIu32 ", queue_size=%" PRIu32 " (%" PRIu32 " Bytes)\n", queue->queue_buffer_size, queue->queue_size, queue->queue_buffer_size);
 
     mutexInit(&queue->Mutex_Queue, false, 1000);
@@ -160,6 +159,7 @@ tQueueHandle queueInit(size_t queue_buffer_size) {
     mutexLock(&queue->Mutex_Queue);
     queue->queue_rp = 0;
     queue->queue_len = 0;
+    queue->packets_lost = 0;
     queue->msg_ptr = NULL;
     newSegmentBuffer(queue);
     mutexUnlock(&queue->Mutex_Queue);
@@ -239,7 +239,7 @@ tQueueBuffer queueAcquire(tQueueHandle queue_handle, uint16_t packet_size) {
     } else {
         // No segment buffer available, queue overflow
         queue->packets_lost++;
-        DBG_PRINTF_ERROR("queueAcquire: queue overflow, packet_size=%u, msg_size=%u, queue_len=%u\n", packet_size, msg_size, queue->queue_len);
+        DBG_PRINTF6("queueAcquire: queue overflow, packet_size=%u, msg_size=%u, queue_len=%u\n", packet_size, msg_size, queue->queue_len);
     }
 
     mutexUnlock(&queue->Mutex_Queue);
@@ -318,10 +318,10 @@ tQueueBuffer queuePop(tQueueHandle queue_handle, bool accumulate, bool flush, ui
 
     // Return the number of packets lost since the last call to queuePop
     if (packets_lost != NULL) {
-        *packets_lost = queue->packets_lost;
-        if (*packets_lost > 0)
-            DBG_PRINTF6("queuePop: packets_lost=%" PRIu32 "\n", *packets_lost);
+        if (queue->packets_lost > 0)
+            DBG_PRINTF6("queuePop: packets_lost=%" PRIu32 "\n", queue->packets_lost);
         queue->packets_lost = 0; // Reset lost packets count
+        *packets_lost = queue->packets_lost;
     }
 
     // Check if there is a message segment ready in the transmit queue

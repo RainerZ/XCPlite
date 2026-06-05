@@ -108,6 +108,8 @@ uint8_t cb_read(uint32_t src, uint8_t size, uint8_t *dst) {
 // Write callback for application specific memory access, called by XCP when the master writes to an address with the application specific address extension
 uint8_t cb_write(uint32_t dst, uint8_t size, const uint8_t *src, uint8_t delay) {
 
+    (void)delay; // Not used in this example, but could be used to implement delayed writes for consistent calibration updates
+
     if (dst + size > sizeof(app_memory)) {
         printf("ERROR: Write out of bounds: dst=%u, size=%u\n", dst, size);
         return CRC_ACCESS_DENIED;
@@ -136,7 +138,7 @@ int main(void) {
 
     // Initialize the XCP singleton, activate XCP, must be called before starting the server
     // If XCP is not activated, the server will not start and all XCP instrumentation will be passive with minimal overhead
-    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
+    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_PERSISTENCE | XCP_MODE_LOCAL);
 #ifdef XCP_ENABLE_APP_ADDRESSING
     ApplXcpRegisterReadCallback(cb_read);
     ApplXcpRegisterWriteCallback(cb_write);
@@ -204,7 +206,7 @@ int main(void) {
     A2lCreateParameter(g_param8, "test calibration parameter without calibration segment", "", 0, 255);
     A2lCreateParameter(g_param16, "test calibration parameter without calibration segment", "", 0, 65535);
     A2lCreateParameter(g_param32, "test calibration parameter without calibration segment", "", 0, 4294967295);
-    A2lCreateParameter(g_param64, "test calibration parameter without calibration segment", "", 0, 18446744073709551615U);
+    A2lCreateParameter(g_param64, "test calibration parameter without calibration segment", "", 0, 1E20);
 
     // Variables on stack
     uint16_t counter = 0;
@@ -379,7 +381,7 @@ int main(void) {
         // This can be done at any place in the code
         // delay_us must not necessarily have static lifetime
         // It supports RAM/FLASH page switching and persistence (save to BIN file)
-        // tXcpCalSegIndex v = CalValCreate(delay_us);
+        // tXcpCalSegIndex v = CalBlkCreate("delay_us", delay_us, sizeof(delay_us));
         // {
         //     A2lOnce() {
         //         A2lSetSegmentAddrMode(v, delay_us);

@@ -40,9 +40,8 @@ pub fn get_cfa_from_object(object_file: &object::File<'_>, cfa_info: &mut Vec<Cf
     }
     log::info!("CFA parser: Found {} functions:", n);
 
-    // Summary
-    // Group by compilation unit
-    if verbose >= 1 {
+    // Log all functions grouped by compilation unit
+    if verbose >= 2 {
         let mut by_cu: HashMap<usize, Vec<&CfaInfo>> = HashMap::new();
         for func in cfa_info {
             by_cu.entry(func.unit_idx).or_default().push(func);
@@ -312,8 +311,7 @@ fn parse_eh_frame(file: &object::File, function_address: u64) -> Result<Option<i
     let eh_frame_section = match file.section_by_name(".eh_frame") {
         Some(section) => section,
         None => {
-            log::error!("No .eh_frame section found");
-
+            log::debug!("No .eh_frame section found");
             return Ok(None);
         }
     };

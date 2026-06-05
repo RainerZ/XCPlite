@@ -3,6 +3,19 @@
 All notable changes to XCPlite are documented in this file.
 
 
+## [V2.1.0]
+
+- esp32_freertos_demo with FreeRTOS and lwip
+- freertos_demo using FreeRTOS POSIX emulator port
+- Heap allocation removed from socket platform abstraction layer
+- Improved compatibility for 32 bit microcontroller RTOS operating systems (like freeRTOS, zephyr, ThreadX etc.)
+- Improved support for offline A2L creation from ELF files, file system dependency is now optional 
+- XCP event and segment descriptor memory sections to preregister events and calibration segments/block in XcpInit, for deterministic event numbers without .BIN file
+- The A2L generator in xcpclient can create an A2L file template with XCP events and segments from the ELF file only, by inspecting the event and segment descriptor memory sections
+- Optional custom GET_ID to upload the ELF file instead of the A2L file
+- Addressing schema XCPLITE__AXSDD, memory access via callbacks, no calibration segment management 
+
+
 ## [V2.0.4]
 
 - gcc compatibility issue fixed
@@ -11,7 +24,7 @@ All notable changes to XCPlite are documented in this file.
 ## [V2.0.3]
 
 - Bug fixes and improvements, see commit history for details
-- `silkit_demo` with separate XCP server participant
+- `silkit_demo` with optional separate XCP server participant
 
 
 ## [V2.0.2]

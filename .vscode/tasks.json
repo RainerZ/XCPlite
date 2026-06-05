@@ -2,7 +2,7 @@
     "tasks": [
         {
             "type": "shell",
-            "label": "XCPlite: sync clock on Pi",
+            "label": "XCPlite: sync clock on Linux",
             "command": "ssh rainer@192.168.0.206 \"sudo date -s @$(date +%s)\"",
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -13,42 +13,23 @@
                 "focus": false,
                 "panel": "shared"
             },
-            "detail": "Sync system clock on Raspberry Pi with local time"
+            "detail": "Sync system clock on Linux with local time"
         },
         {
             "type": "shell",
-            "label": "XCPlite: Remote clean build on Pi",
-            "command": "ssh",
-            "args": [
-                "rainer@192.168.0.206",
-                "cd ~/XCPlite-RainerZ && rm -rf build && cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug && cmake --build build"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "dependsOn": "XCPlite: sync to Pi",
-            "group": "build",
-            "problemMatcher": [
-                "$gcc"
-            ],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "detail": "Clean rebuild on Raspberry Pi (removes build dir and rebuilds from scratch)"
-        },
-        {
-            "type": "shell",
-            "label": "XCPlite: sync to Pi",
+            "label": "XCPlite: sync to Linux",
             "command": "rsync",
             "args": [
                 "-avz",
                 "--delete",
                 "--exclude=build/",
+                "--exclude=build_freertos/",
+                "--exclude=build_no_a2l_demo/",
+                "--exclude=build_ptptool/",
                 "--exclude=tools/xcpclient/target/",
                 "--exclude=.git/",
+                "--exclude=.examples/esp32_freertos_demo/.pio/",
+                "--exclude=.venv/",
                 "--exclude=\"*.o\"",
                 "--exclude=\"*.a\"",
                 "--exclude=\"*.mf4\"",
@@ -62,75 +43,18 @@
                 "kind": "build",
                 "isDefault": true
             },
-            "dependsOn": "XCPlite: sync clock on Pi",
+            "dependsOn": "XCPlite: sync clock on Linux",
             "presentation": {
                 "echo": true,
                 "reveal": "always",
                 "focus": false,
                 "panel": "shared"
             },
-            "detail": "rsync to Raspberry Pi rainer@192.168.0.206:~/XCPlite-RainerZ/"
+            "detail": "rsync to Linux rainer@192.168.0.206:~/XCPlite-RainerZ/"
         },
         {
             "type": "shell",
-            "label": "XCPlite: sync to CM5",
-            "command": "rsync",
-            "args": [
-                "-avz",
-                "--delete",
-                "--exclude=build/",
-                "--exclude=.git/",
-                "--exclude=\"*.o\"",
-                "--exclude=\"*.a\"",
-                "--exclude=\"*.mf4\"",
-                "./",
-                "admin@192.168.0.207:~/XCPlite-RainerZ/"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "detail": "rsync to Raspberry CM5 admin@192.168.0.207:~/XCPlite-RainerZ/"
-        },
-        {
-            "type": "shell",
-            "label": "XCPlite: sync to VP6450",
-            "command": "rsync",
-            "args": [
-                "-avz",
-                "--delete",
-                "--exclude=build/",
-                "--exclude=.git/",
-                "--exclude=\"*.o\"",
-                "--exclude=\"*.a\"",
-                "--exclude=\"*.mf4\"",
-                "./",
-                "rainer@192.168.0.143:~/XCPlite-RainerZ/"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "detail": "rsync to VP6450 rainer@192.168.0.143:~/XCPlite-RainerZ/"
-        },
-        {
-            "type": "shell",
-            "label": "XCPlite: Remote build all on Pi",
+            "label": "XCPlite: Remote build lib and examples on Linux",
             "command": "ssh",
             "args": [
                 "rainer@192.168.0.206",
@@ -140,47 +64,11 @@
                 "kind": "build",
                 "isDefault": false
             },
-            "dependsOn": "XCPlite: Remote configure CMake on Pi",
+            "dependsOn": "XCPlite: Remote configure CMake on Linux",
             "problemMatcher": [
                 "$gcc"
             ],
-            "detail": "Build all targets on Raspberry Pi"
-        },
-        {
-            "type": "shell",
-            "label": "XCPlite: Remote build all on CM5",
-            "command": "ssh",
-            "args": [
-                "admin@192.168.0.207",
-                "cd ~/XCPlite-RainerZ && cmake --build build"
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": false
-            },
-            "dependsOn": "XCPlite: Remote configure CMake on CM5",
-            "problemMatcher": [
-                "$gcc"
-            ],
-            "detail": "Build all targets on CM5"
-        },
-        {
-            "type": "shell",
-            "label": "XCPlite: Remote build all on VP6450",
-            "command": "ssh",
-            "args": [
-                "VP6450",
-                "cd ~/XCPlite-RainerZ && cmake --build build"
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": false
-            },
-            "dependsOn": "XCPlite: Remote configure CMake on VP6450",
-            "problemMatcher": [
-                "$gcc"
-            ],
-            "detail": "Build all targets on VP6450"
+            "detail": "Build all targets on Linux"
         },
         {
             "type": "cppbuild",
@@ -227,62 +115,97 @@
         },
         {
             "type": "shell",
-            "label": "XCPlite: Remote configure CMake on Pi",
+            "label": "XCPlite: Remote configure CMake on Linux",
             "command": "ssh",
             "args": [
                 "rainer@192.168.0.206",
                 "cd ~/XCPlite-RainerZ && cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug"
             ],
             "group": "build",
-            "dependsOn": "XCPlite: sync to Pi",
-            "detail": "Configure CMake build system on Raspberry Pi"
+            "dependsOn": "XCPlite: sync to Linux",
+            "detail": "Configure CMake build system on Linux"
+        },
+        {
+            "type": "cargo",
+            "label": "cargo build xcpclient",
+            "command": "build",
+            "args": [],
+            "options": {
+                "cwd": "${workspaceFolder}/tools/xcpclient"
+            },
+            "group": "build",
+            "detail": "Build xcpclient (debug)"
         },
         {
             "type": "shell",
-            "label": "XCPlite: Remote configure CMake on CM5",
-            "command": "ssh",
+            "label": "XCPlite: configure freertos_demo",
+            "command": "cmake",
             "args": [
-                "admin@192.168.0.207",
-                "cd ~/XCPlite-RainerZ && cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug"
+                "-B",
+                "build-freertos",
+                "-S",
+                ".",
+                "-DXCPLITE_BUILD_FREERTOS_DEMO=ON",
+                "-DCMAKE_BUILD_TYPE=Debug"
             ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
             "group": "build",
-            "dependsOn": "XCPlite: sync to CM5",
-            "detail": "Configure CMake build system on CM5"
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "detail": "Configure CMake for freertos_demo with Debug symbols"
         },
         {
             "type": "shell",
-            "label": "XCPlite: Remote configure CMake on VP6450",
-            "command": "ssh",
+            "label": "XCPlite: build freertos_demo",
+            "command": "cmake",
             "args": [
-                "VP6450",
-                "cd ~/XCPlite-RainerZ && cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug"
+                "--build",
+                "build-freertos",
+                "--target",
+                "freertos_demo"
             ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
             "group": "build",
-            "dependsOn": "XCPlite: sync to VP6450",
-            "detail": "Configure CMake build system on VP6450"
+            "dependsOn": "XCPlite: configure freertos_demo",
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "detail": "Build freertos_demo (Debug)"
         },
         {
             "type": "shell",
-            "label": "XCPlite: Remote kill XCP processes on Pi",
-            "command": "ssh",
+            "label": "XCPlite: Fetch freertos_demo ELF from Linux",
+            "command": "rsync",
             "args": [
-                "rainer@192.168.0.206",
-                "pkill -f 'hello_xcp\\|hello_xcp_cpp\\|cpp_demo\\|c_demo\\|multi_thread_demo' || true"
+                "-avz",
+                "--exclude=CMakeFiles/",
+                "--exclude=_deps/",
+                "--exclude=\"*.cmake\"",
+                "--exclude=\"Makefile*\"",
+                "--exclude=\"*.txt\"",
+                "--exclude=\"*.json\"",
+                "--exclude=\"*.a\"",
+                "--exclude=\"*.o\"",
+                "rainer@192.168.0.206:~/XCPlite-RainerZ/build-freertos/",
+                "./"
             ],
-            "group": "build",
-            "detail": "Kill any running XCP demo processes on Raspberry Pi"
-        },
-        {
-            "type": "shell",
-            "label": "XCPlite: Remote kill XCP processes on VP6450",
-            "command": "ssh",
-            "args": [
-                "VP6450",
-                "pkill -f 'hello_xcp\\|cpp_demo\\|c_demo\\|multi_thread_demo' || true"
-            ],
-            "group": "build",
-            "detail": "Kill any running XCP demo processes on VP6450"
-        },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "detail": "Fetch compiled ELF binaries from Linux into build/pi/",
+            "problemMatcher": []
+        }
     ],
     "version": "2.0.0"
 }

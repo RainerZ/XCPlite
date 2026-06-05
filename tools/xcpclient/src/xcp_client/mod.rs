@@ -323,7 +323,23 @@ enum XcpSocket {
 impl XcpSocket {
     async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> Result<usize, std::io::Error> {
         match self {
-            XcpSocket::Udp(udp_socket) => udp_socket.send_to(buf, addr).await,
+            XcpSocket::Udp(udp_socket) => {
+                // On macOS, sendto() on a UDP socket returns EHOSTUNREACH immediately when
+                // the ARP cache is empty, instead of queuing the packet like Linux does.
+                // Retry with backoff to allow ARP resolution to complete.
+                let mut delay_ms = 50u64;
+                loop {
+                    match udp_socket.send_to(buf, addr).await {
+                        Ok(n) => return Ok(n),
+                        Err(e) if e.kind() == std::io::ErrorKind::HostUnreachable && delay_ms <= 400 => {
+                            debug!("send_to: EHOSTUNREACH, retrying after {}ms (ARP not yet resolved)", delay_ms);
+                            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                            delay_ms *= 2;
+                        }
+                        Err(e) => return Err(e),
+                    }
+                }
+            }
             XcpSocket::Tcp(tcp_stream) => {
                 // But for now, let's revert to the working approach:
                 let mut pos = 0;
@@ -527,6 +543,7 @@ impl XcpClient {
 
                 // Handle the data from socket
                 res = Self::socket_receive(&socket, &mut buf) => {
+                    trace!("receive_task: socket receive res={:?}, buf={:?}", res, buf[..12].to_vec());
                     match res {
                         Ok((size, _addr)) => {
                             // Handle the data from recv_from/read
@@ -534,15 +551,16 @@ impl XcpClient {
                                 warn!("receive_task: stop, socket closed");
                                 return Ok(());
                             }
-
                             let mut i: usize = 0;
                             while i < size {
                                 // Decode the next transport layer message header in the packet
                                 if size < 5 {
+                                    error!("receive_task: stop, corrupt packet received, size {} too small for header", size);
                                     return Err(Box::new(XcpError::new(ERROR_TL_HEADER,0)) as Box<dyn Error>);
                                 }
                                 let len = buf[i] as usize + ((buf[i + 1] as usize) << 8);
                                 if len > size - 4 || len == 0 { // Corrupt packet received, not enough data received or no content
+                                    error!("receive_task: stop, corrupt packet received, invalid length {} in header, size={}", len, size   );
                                     return Err(Box::new(XcpError::new(ERROR_TL_HEADER,0)) as Box<dyn Error>);
                                 }
                                 let ctr = buf[i + 2] as u16 + ((buf[i + 3] as u16) << 8);
@@ -754,7 +772,7 @@ impl XcpClient {
         }
 
         // Get calibration page count and freeze support
-        let res = self.send_command(XcpCommandBuilder::new(CC_GET_PAGE_PROCESSOR_INFO).add_u8(0).build()).await;
+        let res = self.send_command(XcpCommandBuilder::new(CC_GET_PAG_PROCESSOR_INFO).add_u8(0).build()).await;
         match res {
             Ok(data) => {
                 assert!(data.len() >= 3);
@@ -837,7 +855,7 @@ impl XcpClient {
     // Get server identification
     // Returns (size, name) where name is only set if the server returned the name in the response, otherwise the caller must do an upload to get the data
     pub async fn get_id(&mut self, id_type: u8) -> Result<(u32, Option<String>), Box<dyn Error>> {
-        assert!( id_type == IDT_VECTOR_ELF_UPLOAD || id_type == IDT_ASAM_UPLOAD || id_type == IDT_ASAM_NAME || id_type == IDT_ASCII || id_type == IDT_ASAM_EPK); // others not supported yet
+        assert!(id_type == IDT_VECTOR_ELF_UPLOAD || id_type == IDT_ASAM_UPLOAD || id_type == IDT_ASAM_NAME || id_type == IDT_ASCII || id_type == IDT_ASAM_EPK); // others not supported yet
 
         let data = self.send_command(XcpCommandBuilder::new(CC_GET_ID).add_u8(id_type).build()).await?;
         assert_eq!(data[0], 0xFF);
@@ -1215,7 +1233,7 @@ impl XcpClient {
 
     // CC_TIME_CORRELATION_PROPERTIES
     async fn time_correlation_properties(&mut self) -> Result<(), Box<dyn Error>> {
-        let request: u8 = 2; // set responce format to SERVER_CONFIG_RESPONSE_FMT_ADVANCED
+        let request: u8 = 2; // set response format to SERVER_CONFIG_RESPONSE_FMT_ADVANCED
         let properties: u8 = 0;
         let cluster_id: u16 = 0;
         let _data = self
@@ -1298,7 +1316,6 @@ impl XcpClient {
         Ok(timestamp_ns)
     }
 
-
     //-------------------------------------------------------------------------------------------------
     // ELF upload
 
@@ -1332,8 +1349,6 @@ impl XcpClient {
 
         Ok(())
     }
-
-
 
     //-------------------------------------------------------------------------------------------------
     // A2L upload
@@ -1418,17 +1433,12 @@ impl XcpClient {
         }
 
         // Get segment information
-        let mut n = 0;
         for i in 0..self.max_segments {
             let (addr_ext, addr, length, name) = self.get_segment_info(i).await?;
             info!(" Segment {}: {} addr={}:0x{:08X} length={} ", i, name, addr_ext, addr, length);
 
-            // Otherwise the EPK segment would be handled like a normal calibration segment with 2 pages
             // Segment relative addressing is ignored, all addresses are treated as raw A2L addr_ext/addr
-            // Segment relative addressing would be reg.cal_seg_list.add_cal_seg(name, i as u16, length as u32).unwrap();
-            reg.cal_seg_list.add_cal_seg_by_addr(name, n, addr_ext, addr, length as u32).unwrap();
-
-            n += 1;
+            reg.cal_seg_list.add_cal_seg_by_addr(name, Some(i), addr_ext, addr, length as u32).unwrap();
         }
 
         Ok(())
@@ -1808,18 +1818,28 @@ impl XcpClient {
 
     /// Set all calibration segments to page 0, working page
     pub async fn init_calibration_segments(&mut self) -> Result<(), Box<dyn Error>> {
-        let reg = self.registry.as_mut().unwrap();
-        for index in 0..reg.cal_seg_list.len() {
-            let ecu_page = self.get_ecu_page(index.try_into().unwrap()).await?;
-            let xcp_page = self.get_xcp_page(index.try_into().unwrap()).await?;
-            info!("Calibration segment {}: ecu_page={}, xcp_page={}", index, ecu_page, xcp_page);
+        let calseg_numbers = self
+            .registry
+            .as_ref()
+            .unwrap()
+            .cal_seg_list
+            .0
+            .iter()
+            .filter_map(|cal_seg| cal_seg.get_number())
+            .collect::<Vec<u8>>();
+        for number in &calseg_numbers {
+            let ecu_page = self.get_ecu_page(*number).await?;
+            let xcp_page = self.get_xcp_page(*number).await?;
+            info!("Calibration segment {}: ecu_page={}, xcp_page={}", number, ecu_page, xcp_page);
         }
 
         // Set all segments to working page 0
-        info!("Set ECU page access to working page for all segments");
-        self.set_ecu_page(0).await?;
-        info!("Set XCP page access to working page for all segments");
-        self.set_xcp_page(0).await?;
+        if calseg_numbers.len() > 0 {
+            info!("Set ECU page access to working page for all segments");
+            self.set_ecu_page(0).await?;
+            info!("Set XCP page access to working page for all segments");
+            self.set_xcp_page(0).await?;
+        }
 
         Ok(())
     }

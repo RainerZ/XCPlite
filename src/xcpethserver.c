@@ -17,9 +17,7 @@
 #include <inttypes.h> // for PRIu64
 #include <stdbool.h>  // for bool
 #include <stdint.h>   // for uintxx_t
-#include <stdio.h>    // for printf
 
-#include "a2l.h"        // for A2lFinalize()
 #include "dbg_print.h"  // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
 #include "platform.h"   // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex
 #include "queue.h"      // for tQueueHandle, queueInitFromMemory, ...
@@ -27,32 +25,30 @@
 #include "xcplib_cfg.h" // for OPTION_xxx, TEST_xxx
 #include "xcplite.h"    // for tXcpDaqLists, XcpXxx, ApplXcpXxx, ...
 
-#if !defined(_WIN) && !defined(_LINUX) && !defined(_MACOS) && !defined(_QNX)
-#error "Please define platform _WIN, _MACOS or _LINUX or _QNX"
+#ifdef OPTION_SHM_MODE
+#include "a2l.h" // for A2lFinalize()
+#endif
+
+#if !defined(_WIN) && !defined(_LINUX) && !defined(_MACOS) && !defined(_QNX) && !defined(_FREE_RTOS)
+#error "Please define platform _WIN, _MACOS or _LINUX, _QNX or _FREE_RTOS"
 #endif
 
 #include "xcpethtl.h" // for XcpEthTlxxx
 #include "xcptl.h"    // for XcpTlHandleTransmitQueue
 
 #ifdef TEST_STACK_SIZE
+#ifdef _FREE_RTOS
+#else
 #include <limits.h>   // for PTHREAD_STACK_MIN
 #include <sys/mman.h> // for mmap, munmap
+#endif
 #endif
 #ifdef OPTION_SHM_MODE
 #include <unistd.h> // for getpid()
 #endif
 
-#if defined(_WIN) // Windows
-static DWORD WINAPI XcpServerReceiveThread(LPVOID lpParameter);
-#else
-static void *XcpServerReceiveThread(void *par);
-#endif
-
-#if defined(_WIN) // Windows
-static DWORD WINAPI XcpServerTransmitThread(LPVOID lpParameter);
-#else
-static void *XcpServerTransmitThread(void *par);
-#endif
+static THREAD_FUNC_RETURN XcpServerReceiveThread(void *par);
+static THREAD_FUNC_RETURN XcpServerTransmitThread(void *par);
 
 #if !defined(OPTION_ENABLE_TCP) && !defined(OPTION_ENABLE_UDP)
 #error "Please define OPTION_ENABLE_TCP or OPTION_ENABLE_UDP"
@@ -62,11 +58,7 @@ static void *XcpServerTransmitThread(void *par);
 
 #ifdef OPTION_SHM_MODE // SHM mode thread
 
-#if defined(_WIN) // Windows
-static DWORD WINAPI ShmThread_(LPVOID lpParameter);
-#else
-static void *ShmThread_(void *par);
-#endif
+static THREAD_FUNC_RETURN ShmThread_(void *par);
 
 // In SHM mode, the queue is in shared memory and has an additional shared memory header
 // SHM queue region header for /xcpqueue
@@ -105,12 +97,15 @@ static struct {
 #endif
 
 #ifdef TEST_STACK_SIZE
+#ifdef _FREE_RTOS
+#else
 #define RECEIVE_STACK_SIZE (16 * 1024)
 #define TRANSMIT_STACK_SIZE (16 * 1024)
     uint8_t *transmit_thread_stack;    // mmap'd stack buffer
     uint8_t *receive_thread_stack;     // mmap'd stack buffer
     size_t actual_transmit_stack_size; // actual allocated size (>= PTHREAD_STACK_MIN)
     size_t actual_receive_stack_size;  // actual allocated size (>= PTHREAD_STACK_MIN)
+#endif
 #endif
 
 } gXcpServer;
@@ -185,12 +180,7 @@ void ShmServerShutdown_(void) {
 // Background thread in all other applications which are not an XCP server in SHM mode
 // Polls the A2L finalize request flag, so applications can write their A2L file on request by the server
 // Also increments the alive_counter to detect stale processes.
-#if defined(_WIN) // Windows
-DWORD WINAPI ShmThread_(LPVOID par)
-#else
-extern void *ShmThread_(void *par)
-#endif
-{
+THREAD_FUNC_RETURN ShmThread_(void *par) {
     (void)par;
     DBG_PRINT3(ANSI_COLOR_BLUE "SHM thread started\n" ANSI_COLOR_RESET);
 
@@ -223,7 +213,7 @@ extern void *ShmThread_(void *par)
 
     gXcpServer.shm_thread_running = false;
     DBG_PRINT3(ANSI_COLOR_BLUE "SHM background thread terminated!\n" ANSI_COLOR_RESET);
-    return 0;
+    THREAD_FUNC_END;
 }
 
 //-------------------------------------------------------------------------------------------------------
@@ -286,6 +276,8 @@ bool XcpEthServerStatus(void) {
 // XCP on ethernet server init
 bool XcpEthServerInit(const uint8_t *addr, uint16_t port, bool useTCP, uint32_t queue_size) {
 
+    DBG_PRINTF5("XcpEthServerInit: queue_size=%u, sizeof(gXcpServer)=%u\n", queue_size, (uint32_t)sizeof(gXcpServer));
+
     // Check and ignore, if the XCP singleton has not been initialized and activated
     if (!XcpIsActivated()) {
         DBG_PRINT5("XcpEthServerInit: XCP is deactivated!\n");
@@ -334,9 +326,11 @@ bool XcpEthServerInit(const uint8_t *addr, uint16_t port, bool useTCP, uint32_t 
 
 // Create the receive thread which starts the XCP protocol layer and handles incoming XCP unicast commands
 #ifdef TEST_STACK_SIZE
+#ifdef _FREE_RTOS
+#else
         size_t receive_stack_size = RECEIVE_STACK_SIZE;
         if (receive_stack_size < (size_t)PTHREAD_STACK_MIN) {
-            printf("WARNING: RECEIVE_STACK_SIZE %zu < PTHREAD_STACK_MIN %zu, clamping\n", receive_stack_size, (size_t)PTHREAD_STACK_MIN);
+            DBG_PRINTF_WARNING("RECEIVE_STACK_SIZE %zu < PTHREAD_STACK_MIN %zu, clamping\n", receive_stack_size, (size_t)PTHREAD_STACK_MIN);
             receive_stack_size = (size_t)PTHREAD_STACK_MIN;
         }
         gXcpServer.receive_thread_stack = mmap(NULL, receive_stack_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
@@ -348,22 +342,29 @@ bool XcpEthServerInit(const uint8_t *addr, uint16_t port, bool useTCP, uint32_t 
         int r1 = pthread_attr_setstack(&receive_thread_attr, gXcpServer.receive_thread_stack, receive_stack_size);
         assert(r1 == 0);
 #define receive_thread_attr_ptr &receive_thread_attr
+#endif
 #else
 #define receive_thread_attr_ptr NULL
 #endif
         create_thread(&gXcpServer.receive_thread_handle, receive_thread_attr_ptr, XcpServerReceiveThread, NULL);
 
         // Wait until receive thread is running to avoid races
+        // On FreeRTOS the newly created task cannot run until vTaskStartScheduler() is called,
+        // so the spin-wait would deadlock – skip it and let the scheduler sort out ordering.
+#if !defined(_FREE_RTOS)
         while (!gXcpServer.receive_thread_running) {
             sleepUs(20);
         }
+#endif
 
         // Create the transmit thread
         // @@@@ TODO: Check, why start the transmit thread after the receive thread, should it better be before, once we implement first cycle data acquisition ?
 #ifdef TEST_STACK_SIZE
+#ifdef _FREE_RTOS
+#else
         size_t transmit_stack_size = TRANSMIT_STACK_SIZE;
         if (transmit_stack_size < (size_t)PTHREAD_STACK_MIN) {
-            printf("WARNING: TRANSMIT_STACK_SIZE %zu < PTHREAD_STACK_MIN %zu, clamping\n", transmit_stack_size, (size_t)PTHREAD_STACK_MIN);
+            DBG_PRINTF_WARNING("TRANSMIT_STACK_SIZE %zu < PTHREAD_STACK_MIN %zu, clamping\n", transmit_stack_size, (size_t)PTHREAD_STACK_MIN);
             transmit_stack_size = (size_t)PTHREAD_STACK_MIN;
         }
         gXcpServer.transmit_thread_stack = mmap(NULL, transmit_stack_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
@@ -375,6 +376,7 @@ bool XcpEthServerInit(const uint8_t *addr, uint16_t port, bool useTCP, uint32_t 
         int r2 = pthread_attr_setstack(&transmit_thread_attr, gXcpServer.transmit_thread_stack, transmit_stack_size);
         assert(r2 == 0);
 #define transmit_thread_attr_ptr &transmit_thread_attr
+#endif
 #else
 #define transmit_thread_attr_ptr NULL
 #endif
@@ -421,7 +423,6 @@ bool XcpEthServerShutdown(void) {
     cancel_thread(gXcpServer.receive_thread_handle);
     cancel_thread(gXcpServer.transmit_thread_handle);
     sleepMs(10); // Give threads some time to terminate after cancellation before cleaning up sockets and other resources
-    XcpEthTlShutdown();
 #else
     // Gracefull termination
     // @@@@ TODO: Does not terminate socketAccept
@@ -429,11 +430,10 @@ bool XcpEthServerShutdown(void) {
     gXcpServer.transmit_thread_running = false;
     join_thread(gXcpServer.receive_thread_handle);
     join_thread(gXcpServer.transmit_thread_handle);
-    XcpEthTlShutdown();
 #endif
 
+    XcpEthTlShutdown();
     socketCleanup();
-
     gXcpServer.is_init = false;
 
 #ifdef OPTION_SHM_MODE // SHM queue deinit
@@ -450,6 +450,12 @@ bool XcpEthServerShutdown(void) {
 #endif
 
 #ifdef TEST_STACK_SIZE
+#ifdef _FREE_RTOS
+    UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(gXcpServer.transmit_thread_handle);
+    UBaseType_t rxHighWaterMark = uxTaskGetStackHighWaterMark(gXcpServer.receive_thread_handle);
+    DBG_PRINTF3("transmit thread stack high-water mark: %zu bytes (of %zu allocated)\n", uxHighWaterMark, OPTION_FREERTOS_STACK_BYTES);
+    DBG_PRINTF3("receive thread stack high-water mark: %zu bytes (of %zu allocated)\n", rxHighWaterMark, OPTION_FREERTOS_STACK_BYTES);
+#else
     // Stack grows downward: unused canary bytes are at the LOW end (index 0..N), used bytes at the HIGH end
     size_t transmit_unused = 0;
     for (size_t i = 0; i < gXcpServer.actual_transmit_stack_size; i++) {
@@ -467,11 +473,13 @@ bool XcpEthServerShutdown(void) {
             break;
         }
     }
-    printf("transmit thread stack high-water mark: %zu bytes (of %zu allocated)\n", gXcpServer.actual_transmit_stack_size - transmit_unused, gXcpServer.actual_transmit_stack_size);
-    printf("receive thread stack high-water mark: %zu bytes (of %zu allocated)\n", gXcpServer.actual_receive_stack_size - receive_unused, gXcpServer.actual_receive_stack_size);
+    DBG_PRINTF3("transmit thread stack high-water mark: %zu bytes (of %zu allocated)\n", gXcpServer.actual_transmit_stack_size - transmit_unused,
+                gXcpServer.actual_transmit_stack_size);
+    DBG_PRINTF3("receive thread stack high-water mark: %zu bytes (of %zu allocated)\n", gXcpServer.actual_receive_stack_size - receive_unused,
+                gXcpServer.actual_receive_stack_size);
     munmap(gXcpServer.transmit_thread_stack, gXcpServer.actual_transmit_stack_size);
     munmap(gXcpServer.receive_thread_stack, gXcpServer.actual_receive_stack_size);
-
+#endif
 #endif
 
     return true;
@@ -481,12 +489,7 @@ bool XcpEthServerShutdown(void) {
 // Server threads
 
 // XCP server unicast command receive thread
-#if defined(_WIN) // Windows
-DWORD WINAPI XcpServerReceiveThread(LPVOID par)
-#else
-extern void *XcpServerReceiveThread(void *par)
-#endif
-{
+THREAD_FUNC_RETURN XcpServerReceiveThread(void *par) {
     (void)par;
     DBG_PRINT3("Start XCP receive thread\n");
 
@@ -555,16 +558,11 @@ extern void *XcpServerReceiveThread(void *par)
     gXcpServer.receive_thread_running = false;
 
     DBG_PRINT3("XCP receive thread terminated!\n");
-    return 0;
+    THREAD_FUNC_END;
 }
 
 // XCP server transmit thread
-#if defined(_WIN) // Windows
-DWORD WINAPI XcpServerTransmitThread(LPVOID par)
-#else
-extern void *XcpServerTransmitThread(void *par)
-#endif
-{
+THREAD_FUNC_RETURN XcpServerTransmitThread(void *par) {
     (void)par;
 
     DBG_PRINT3("Start XCP transmit thread\n");
@@ -603,5 +601,5 @@ extern void *XcpServerTransmitThread(void *par)
     gXcpServer.transmit_thread_running = false;
 
     DBG_PRINT3("XCP transmit thread terminated!\n");
-    return 0;
+    THREAD_FUNC_END;
 }

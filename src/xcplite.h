@@ -17,15 +17,22 @@
 #include <stdbool.h> // for bool
 #include <stdint.h>  // for uint16_t, uint32_t, uint8_t
 
-#include "cal.h"        // for calibration segment management if enabled
-#include "dbg_print.h"  // for DBG_LEVEL, DBG_PRINTF, DBG_PRINT, ...
-#include "platform.h"   // for atomics
-#include "queue.h"      // for tQueueHandle
-#include "shm.h"        // for shared memory management if enabled
-#include "xcp.h"        // for XCP protocol definitions
-#include "xcp_cfg.h"    // for XCP_PROTOCOL_LAYER_VERSION, XCP_ENABLE_...
 #include "xcplib_cfg.h" // for OPTION_xxx
-#include "xcptl_cfg.h"  // for XCPTL_MAX_CTO_SIZE
+
+#include "dbg_print.h" // for DBG_LEVEL, DBG_PRINTF, DBG_PRINT, ...
+#include "platform.h"  // for atomics
+#include "queue.h"     // for tQueueHandle
+#include "xcp.h"       // for XCP protocol definitions
+#include "xcp_cfg.h"   // for XCP_PROTOCOL_LAYER_VERSION, XCP_ENABLE_...
+#include "xcptl_cfg.h" // for XCPTL_MAX_CTO_SIZE
+
+#ifdef OPTION_CAL_SEGMENTS
+#include "cal.h" // for tXcpCalSegList
+#endif
+
+#ifdef OPTION_SHM_MODE
+#include "shm.h" // for tShmHeader
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,26 +75,6 @@ void XcpBackgroundTasks(void);
 // Disconnect, stop DAQ, flush queue, flush pending calibrations
 void XcpDisconnect(void);
 
-// XCP event identifier type
-typedef uint16_t tXcpEventId;
-
-// Trigger a XCP data acquisition event
-// Absolute base address only
-void XcpEvent(tXcpEventId event);
-void XcpEventAt(tXcpEventId event, uint64_t clock);
-// Single dyn base address
-void XcpEventExt(tXcpEventId event, const uint8_t *base2);
-void XcpEventExtAt(tXcpEventId event, const uint8_t *base2, uint64_t clock);
-// Explicit dyn base address list
-void XcpEventExt_(tXcpEventId event, int count, const uint8_t **bases);
-void XcpEventExtAt_(tXcpEventId event, int count, const uint8_t **bases, uint64_t clock);
-// Variadic dyn base address list
-void XcpEventExt_Var(tXcpEventId event, int count, ...);
-void XcpEventExtAt_Var(tXcpEventId event, uint64_t clock, int count, ...);
-
-// Enable or disable a XCP DAQ event
-void XcpEventEnable(tXcpEventId event, bool enable);
-
 // Send a XCP event message
 void XcpSendEvent(uint8_t evc, const uint8_t *d, uint8_t l);
 
@@ -108,11 +95,6 @@ bool XcpIsDaqEventRunning(uint16_t event);
 uint64_t XcpGetDaqStartTime(void);
 uint32_t XcpGetDaqOverflowCount(void);
 
-// Check DAQ lists (running or selected, all events or given event, via ApplXcpCheckMemory)
-#define DAQ_STATE_SELECTED ((uint8_t)0x01) /* Selected */
-#define DAQ_STATE_RUNNING ((uint8_t)0x02)  /* Running */
-bool XcpCheckDaqLists(uint8_t daq_state, tXcpEventId event_id);
-
 // Time synchronisation
 #ifdef XCP_ENABLE_DAQ_CLOCK_MULTICAST
 #if XCP_PROTOCOL_LAYER_VERSION < 0x0103
@@ -125,10 +107,46 @@ uint16_t XcpGetClusterId(void);
 void XcpSetLogLevel(uint8_t level);
 
 /****************************************************************************/
+/* XCP command transfer protocol layer packet                                              */
+/****************************************************************************/
+
+typedef union {
+    uint8_t b[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC)];
+    uint16_t w[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC) / 2];
+    uint32_t dw[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC) / 4];
+} tXcpCto;
+
+static_assert(sizeof(tXcpCto) == XCPTL_MAX_CTO_SIZE, "tXcpCto size should be XCPTL_MAX_CTO_SIZE, which is aligned to 8 bytes");
+
+/****************************************************************************/
 /* DAQ events                                                               */
 /****************************************************************************/
 
+// XCP event identifier type
+typedef uint16_t tXcpEventId;
 #define XCP_UNDEFINED_EVENT_ID 0xFFFF
+
+// Trigger a XCP data acquisition event
+// Absolute base address only
+void XcpEvent(tXcpEventId event);
+void XcpEventAt(tXcpEventId event, uint64_t clock);
+// Single dyn base address
+void XcpEventExt(tXcpEventId event, const uint8_t *base2);
+void XcpEventExtAt(tXcpEventId event, const uint8_t *base2, uint64_t clock);
+// Explicit dyn base address list
+void XcpEventExt_(tXcpEventId event, int count, const uint8_t **bases);
+void XcpEventExtAt_(tXcpEventId event, int count, const uint8_t **bases, uint64_t clock);
+// Variadic dyn base address list
+void XcpEventExt_Var(tXcpEventId event, int count, ...);
+void XcpEventExtAt_Var(tXcpEventId event, uint64_t clock, int count, ...);
+
+// Enable or disable a XCP DAQ event
+void XcpEventEnable(tXcpEventId event, bool enable);
+
+// Check DAQ lists (running or selected, all events or given event, via ApplXcpCheckMemory)
+#define DAQ_STATE_SELECTED ((uint8_t)0x01) /* Selected */
+#define DAQ_STATE_RUNNING ((uint8_t)0x02)  /* Running */
+bool XcpCheckDaqLists(uint8_t daq_state, tXcpEventId event_id);
 
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
 
@@ -196,16 +214,6 @@ uint8_t XcpGetEventAppId(tXcpEventId event);
 #endif // XCP_ENABLE_DAQ_EVENT_LIST
 
 /****************************************************************************/
-/* XCP packet                                                               */
-/****************************************************************************/
-
-typedef union {
-    uint8_t b[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC)];
-    uint16_t w[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC) / 2];
-    uint32_t dw[((XCPTL_MAX_CTO_SIZE + 3) & 0xFFC) / 4];
-} tXcpCto;
-
-/****************************************************************************/
 /* DAQ tables                                                               */
 /****************************************************************************/
 
@@ -241,6 +249,7 @@ typedef struct {
     uint8_t addr_ext;
 } tXcpDaqList;
 #pragma pack(pop)
+
 static_assert(sizeof(tXcpDaqList) == 12, "Error: size of tXcpDaqList is not equal to 12");
 
 /* Dynamic DAQ list structure in a linear memory block with size XCP_DAQ_MEM_SIZE + 8  */
@@ -299,6 +308,7 @@ typedef struct XcpData {
     tShmHeader shm_header;
 #endif
 
+    // @@@@ STACK buffer tXcpCto instead ???
     tXcpCto crm;     /* response message buffer */
     uint8_t crm_len; /* RES,ERR message length */
 
@@ -339,7 +349,8 @@ typedef struct XcpLocalData {
     // Initialisation mode (XCP_MODE_DEACTIVATE / XCP_MODE_LOCAL / XCP_MODE_SHM / XCP_MODE_SHM_AUTO / XCP_MODE_SHM_SERVER)
     uint8_t init_mode;
 
-#ifdef OPTION_SHM_MODE  // SHM header in tXcpLocalData
+    // SHM state
+#ifdef OPTION_SHM_MODE
     uint8_t shm_app_id; // Index in shm_header.app_list,  SHM_MAX_APP_COUNT = no slot assigned yet
     bool shm_server;    // This process is the XCP server
     bool shm_leader;    // This process created the shared memory segment, responsible for initializing
@@ -364,16 +375,28 @@ typedef struct XcpLocalData {
     MUTEX cal_seg_list_mutex;
     MUTEX event_list_mutex;
 
+    // CAL timeout
+#ifdef XCP_ENABLE_CALSEG_LAZY_WRITE
+    uint64_t last_publish_time;
+#endif
+
     // Per-process identity
     char project_name[XCP_PROJECT_NAME_MAX_LENGTH + 1]; // Project name string, null terminated
     char epk[XCP_EPK_MAX_LENGTH + 1];                   // EPK string, null terminated
 
+    // Static lifetime buffer for event names
+#ifdef XCP_ENABLE_DAQ_EVENT_LIST
+    char event_name_buf[XCP_MAX_EVENT_NAME + 8];
+#endif
+
 #if XCP_PROTOCOL_LAYER_VERSION >= 0x0103
 #ifdef XCP_ENABLE_PROTOCOL_LAYER_ETH
+
 #ifdef XCP_ENABLE_DAQ_CLOCK_MULTICAST
     uint16_t cluster_id;
 #endif
 
+    // Clock information
 #pragma pack(push, 1)
     struct {
         T_CLOCK_INFO server;
@@ -383,8 +406,9 @@ typedef struct XcpLocalData {
 #endif
     } clock_info;
 #pragma pack(pop)
-#endif
+
 #endif // XCP_ENABLE_PROTOCOL_LAYER_ETH
+#endif // XCP_PROTOCOL_LAYER_VERSION >= 0x0103
 
 } tXcpLocalData;
 
@@ -425,7 +449,7 @@ uint8_t ApplXcpUserCommand(uint8_t cmd);
 #endif
 
 // Calibration segment number
-// Is the type (uint8_t) used by XCP commands like GET_SEGMENT_INFO, SET_CAL_PAGE, ...
+// Is the type (uint8_t) used by A2L and XCP commands to identify calibration memoryy segments (GET_SEGMENT_INFO, SET_CAL_PAGE, ...)
 typedef uint8_t tXcpCalSegNumber;
 
 // Calibration page number
@@ -513,6 +537,10 @@ const char *XcpGetElfName(void);
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+/****************************************************************************/
+/* Test                                                                     */
+/****************************************************************************/
 
 // Some metrics collected by the XCP protocol layer for debugging and performance analysis
 #ifdef TEST_ENABLE_DBG_METRICS

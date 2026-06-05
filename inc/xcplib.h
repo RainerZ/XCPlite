@@ -46,12 +46,20 @@ bool XcpEthServerShutdown(void);
 /// @return true if the server is running, otherwise false.
 bool XcpEthServerStatus(void);
 
+/// Get the XCP protocol layer status
+bool XcpIsStarted(void);
+bool XcpIsConnected(void);
+bool XcpIsDaqRunning(void);
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Calibration segments
 
 /// Calibration segment handle
 typedef uint16_t tXcpCalSegIndex;
 #define XCP_UNDEFINED_CALSEG ((tXcpCalSegIndex)0xFFFF)
+/// Calibration segment number (for XCP and A2L)
+typedef uint8_t tXcpCalSegNumber;
+#define XCP_UNDEFINED_CALSEG_NUM 0xFF
 
 /// Create a calibration segment and add it to the list of calibration segments.
 /// This calibration segment has a working page (RAM) and a reference page (FLASH), it creates a MEMORY_SEGMENT in the A2L file
@@ -74,23 +82,28 @@ tXcpCalSegIndex XcpCreateCalSeg(const char *name, const void *default_page, uint
 tXcpCalSegIndex XcpCreateCalBlk(const char *name, const void *default_page, uint16_t size);
 
 /// Get the number of calibration segments
-/// @return the number of calibration segments
+/// @return the number of calibration segments and blocks
 uint16_t XcpGetCalSegCount(void);
 
 /// Find a calibration segment by name
-/// @param name Name of the calibration segment
+/// @param name Name of the calibration segment or block
 /// @return the Handle of the calibration segment or XCP_UNDEFINED_CALSEG if not found
 tXcpCalSegIndex XcpFindCalSeg(const char *name);
 
 /// Get the name of the calibration segment
-/// @param index Handle of the calibration segment
+/// @param index Handle of the calibration segment or block
 /// @return the name of the calibration segment or NULL if the index is invalid.
 const char *XcpGetCalSegName(tXcpCalSegIndex index);
 
 /// Get the size of the calibration segment
-/// @param calseg Handle of the calibration segment
+/// @param calseg Handle of the calibration segment or block
 /// @return the size of the calibration segment in bytes
 uint16_t XcpGetCalSegSize(tXcpCalSegIndex calseg);
+
+/// Get the number of the calibration segment
+/// @param calseg Handle of the calibration segment
+/// @return the number of the calibration segment, calibration blocks don't have a number and return XCP_UNDEFINED_CALSEG_NUM
+tXcpCalSegNumber XcpGetCalSegNumber(tXcpCalSegIndex calseg);
 
 /// Lock a calibration segment.
 /// @param index Calibration segment index.
@@ -114,45 +127,88 @@ bool XcpResetAllCalSegs(void);
 /// @return true on success
 bool XcpFreeze(void);
 
-// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// Calibration segment and value convenience macros
+/// Create the binary persistence file with the current working pages as default pages
+/// @param epk The EPK string for verification
+/// @return true on success
+bool XcpBinWrite(const char *epk);
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// Section-based calibration segment registration
+
+#ifndef __CAL_H__
+
+#define XCP_CALSEG_TYPE_SEGMENT 0x8001
+#define XCP_CALSEG_TYPE_BLOCK 0x8002
+
+// Calibration segment or block descriptor used for section-based pre-registration.
+typedef struct {
+    const char *name;
+    const void *addr;        // pointer to static lifetime default page
+    tXcpCalSegIndex *indexp; // pointer to the index variable initialized at runtime
+    uint16_t size;
+    uint16_t type; // XCP_CALSEG_TYPE_SEGMENT or XCP_CALSEG_TYPE_BLOCK
+#ifdef PLATFORM_32BIT
+    uint8_t res[16];
+#endif
+} tXcpCalDescriptor;
+
+// Platform section attribute for tXcpCalDescriptor static variables created by CalSegCreate() and CalBlkCreate().
+// Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
+// pre-register every calibration segment or block before the first use, without requiring the call site of the creation to execute first.
+#if defined(__ELF__)
+#define XCP_CAL_SECTION_ATTR __attribute__((section("xcp_cals"), used))
+#elif defined(__APPLE__)
+#define XCP_CAL_SECTION_ATTR __attribute__((section("__DATA,xcp_cals"), used))
+#else
+#define XCP_CAL_SECTION_ATTR /* section-based registration not supported on this platform */
+#endif
+
+#endif // __CAL_H__
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// Macros to create and access calibration segments or blocks
 #ifndef __cplusplus
 
-// Convenience macros to create and access calibration segments by identifier without providing explicit handles and the need to pass them around
+/// Global definition of a calibration segment or block
+/// Name given as identifier, type name and segment name must be identical
+/// Macro maybe used outside function scope
+/// @param name given as identifier, &name is expected to be the const static lifetime pointer to the default page, sizeof(name) is used as size of the calibration segment
+// calseg__##name and calblk__##name are the linker map file markers for calibration segments and blocks
+#define CalSegDecl(name)                                                                                                                                                           \
+    static tXcpCalSegIndex calseg_id_##name = XCP_UNDEFINED_CALSEG;                                                                                                                \
+    const static tXcpCalDescriptor calseg__##name XCP_CAL_SECTION_ATTR = {#name, (const void *)&(name), &calseg_id_##name, sizeof(name), XCP_CALSEG_TYPE_SEGMENT};
+#define CalBlkDecl(name)                                                                                                                                                           \
+    static tXcpCalSegIndex calblk_id_##name = XCP_UNDEFINED_CALSEG;                                                                                                                \
+    const static tXcpCalDescriptor calblk__##name XCP_CAL_SECTION_ATTR = {#name, (const void *)&(name), &calblk_id_##name, sizeof(name), XCP_CALSEG_TYPE_BLOCK};
 
-/// Create calibration segment macro
-/// Name given as identifier, type name and segment name are identical
+/// Dynamic creation of a calibration segment or block
+/// Name given as identifier, type name and segment name must be identical
 /// Macro may be used anywhere in the code, even in loops
-// cal__##name is the linker map file marker for calibration segments
-/// @param name given as identifier
+/// @param name given as identifier, &name is expected to be the const static lifetime pointer to the default page, sizeof(name) is used as size of the calibration segment
+// calseg__##name and calblk__##name are the linker map file markers for calibration segments and blocks
 #define CalSegCreate(name)                                                                                                                                                         \
-    static tXcpCalSegIndex cal__##name = XCP_UNDEFINED_CALSEG;                                                                                                                     \
-    static tXcpCalSegIndex __cal__##name = XCP_UNDEFINED_CALSEG;                                                                                                                   \
-    if (cal__##name == XCP_UNDEFINED_CALSEG) {                                                                                                                                     \
-        cal__##name = XcpCreateCalSeg(#name, (uint8_t *)&(name), sizeof(name));                                                                                                    \
-        __cal__##name = cal__##name;                                                                                                                                               \
+    static tXcpCalSegIndex calseg_id_##name = XCP_UNDEFINED_CALSEG;                                                                                                                \
+    const static tXcpCalDescriptor calseg__##name XCP_CAL_SECTION_ATTR = {#name, (void *)&(name), &calseg_id_##name, sizeof(name), XCP_CALSEG_TYPE_SEGMENT};                       \
+    if (calseg_id_##name == XCP_UNDEFINED_CALSEG) {                                                                                                                                \
+        calseg_id_##name = XcpCreateCalSeg(#name, (uint8_t *)&(name), sizeof(name));                                                                                               \
     }
-
-/// Get calibration segment macro
-/// @param name given as identifier
-#define CalSegGet(name)                                                                                                                                                            \
-    static tXcpCalSegIndex __cal__##name = XCP_UNDEFINED_CALSEG;                                                                                                                   \
-    if (__cal__##name == XCP_UNDEFINED_CALSEG) {                                                                                                                                   \
-        __cal__##name = XcpFindCalSeg(#name);                                                                                                                                      \
+#define CalBlkCreate(name)                                                                                                                                                         \
+    static tXcpCalSegIndex calblk_id_##name = XCP_UNDEFINED_CALSEG;                                                                                                                \
+    const static tXcpCalDescriptor calblk__##name XCP_CAL_SECTION_ATTR = {#name, (void *)&(name), &calblk_id_##name, sizeof(name), XCP_CALSEG_TYPE_BLOCK};                         \
+    if (calblk_id_##name == XCP_UNDEFINED_CALSEG) {                                                                                                                                \
+        calblk_id_##name = XcpCreateCalBlk(#name, (uint8_t *)&(name), sizeof(name));                                                                                               \
     }
 
 /// Lock calibration segment macro
-/// Macro may be used anywhere in the code, even in loops
+/// Calibration segment descriptor must be visible in scope
 /// @param name given as identifier
-#define CalSegLock(name) ((const __typeof__(name) *)XcpLockCalSeg(__cal__##name))
+#define CalSegLock(name) ((const __typeof__(name) *)XcpLockCalSeg(calseg_id_##name))
+#define CalBlkLock(name) ((const __typeof__(name) *)XcpLockCalSeg(calblk_id_##name))
 
 /// Unlock calibration segment macro
 /// @param name given as identifier
-#define CalSegUnlock(name) XcpUnlockCalSeg(__cal__##name)
-
-/// Create a calibration value
-#define CalValCreate(val) XcpCreateCalBlk(#val, &(val), sizeof(val));
+#define CalSegUnlock(name) XcpUnlockCalSeg(calseg_id_##name)
+#define CalBlkUnlock(name) XcpUnlockCalSeg(calblk_id_##name)
 
 #endif // __cplusplus
 
@@ -194,12 +250,12 @@ tXcpEventId XcpFindEvent(const char *name);
 uint16_t XcpGetEventIndex(tXcpEventId event);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// Dynamic DAQ event creation convenience macros with once execution patterns
+// Dynamic DAQ event creation convenience macros with once or initialization time execution patterns
 
 // Create XCP events by 'name' given as identifier or string
 // Event cycle time is set to sporadic and priority to normal
 // Setting the cycle time would only have the benefit for the XCP client tool to estimate the expected data rate of a DAQ setup
-// To create an XCP event with increased priority, use XcpCreateEvent
+// To create an XCP event with increased priority or specified expected cycle time, use XcpCreateEventExt
 
 // Note on thread safety of the once patterns using static state instead of thread local state:
 // The XcpCreateEventXxx functions are thread safe by using a mutex for event list access and there are atomic aquire/release operations on event count to handle event visibility
@@ -222,27 +278,48 @@ uint16_t XcpGetEventIndex(tXcpEventId event);
 #endif
 #endif // THREAD_LOCAL
 
+// Event descriptor used by DaqCreateEvent() for section-based pre-registration
+typedef struct {
+    const char *name;
+    uint32_t cycle_time_ns;
+    uint8_t priority;
+    uint8_t res[16 - sizeof(char *) - 4 - 1];
+} tXcpEventDescriptor;
+
+// Platform section attribute for tXcpEventDescriptor const static variables created by DaqCreateEvent().
+// Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
+// pre-register every event before the first trigger, without requiring the call site of the event creation to execute first.
+#if defined(__ELF__)
+#define XCP_EVENT_SECTION_ATTR __attribute__((section("xcp_evts"), used))
+#elif defined(__APPLE__)
+#define XCP_EVENT_SECTION_ATTR __attribute__((section("__DATA,xcp_evts"), used))
+#else
+#define XCP_EVENT_SECTION_ATTR /* section-based registration not supported on this platform */
+#endif
+
 /// Create a global event
 /// Macro may be used anywhere in the code, even in loops
-/// Thread safe global once pattern, the first call creates the event
-/// May be called multiple times in different code locations, ignored if the the event name already exists
 /// @param name Name given as identifier
-#define DaqCreateEvent(name)                                                                                                                                                       \
-    static tXcpEventId evt__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                                       \
+#define DaqCreateEvent(event_name)                                                                                                                                                 \
+    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {#event_name, 0, 0};                                                                               \
+    static tXcpEventId evt_id_##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                               \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        if (evt__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                               \
-            evt__##name = XcpCreateEvent(#name, 0, 0);                                                                                                                             \
+        if (evt_id_##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                       \
+            evt_id_##event_name = XcpCreateEvent(#event_name, 0, 0);                                                                                                               \
         }                                                                                                                                                                          \
     }
 
-/// Create a global event with cycle time
+/// Create a global event with given expected cycle time and priority
+/// Macro may be used anywhere in the code, even in loops
 /// @param name Name given as identifier
-/// @param cycle_time Cycle time in microseconds
-#define DaqCreateCyclicEvent(name, cycle_time)                                                                                                                                     \
-    static tXcpEventId evt__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                                       \
+/// @param cycle_time Cycle time in microseconds (0 = sporadic)
+/// @param priority Priority of the event (0 = normal, >=1 = realtime)
+#define DaqCreateEventExt(event_name, cycle_time, priority)                                                                                                                        \
+    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {#event_name, (cycle_time) * 1000U, (priority)};                                                   \
+    static tXcpEventId evt_id_##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                               \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        if (evt__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                               \
-            evt__##name = XcpCreateEvent(#name, (cycle_time) * 1000, 0);                                                                                                           \
+        if (evt_id_##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                       \
+            evt_id_##event_name = XcpCreateEvent(#event_name, (cycle_time) * 1000U, (priority));                                                                                   \
         }                                                                                                                                                                          \
     }
 
@@ -311,8 +388,13 @@ void XcpEventEnable(tXcpEventId event, bool enable);
 // This defines the maximum stack frame size which can be accessed
 #define XCP_FRAME_ADDR_OFFSET 0x10000
 
+// Xtensa GCC: DWARF locations are relative to CFA, while __builtin_frame_address(0) returns the frame pointer after the entry instruction.
+#if (defined(__GNUC__) || defined(__clang__)) && defined(__XTENSA__)
+
+#define xcp_get_frame_addr() (const uint8_t *)((uint8_t *)__builtin_dwarf_cfa() - XCP_FRAME_ADDR_OFFSET)
+
 // Linux, MACOS gnu and clang compiler
-#if defined(__GNUC__) || defined(__clang__)
+#elif defined(__GNUC__) || defined(__clang__)
 
 #define xcp_get_frame_addr() (const uint8_t *)((uint8_t *)__builtin_frame_address(0) - XCP_FRAME_ADDR_OFFSET)
 
@@ -345,9 +427,9 @@ static __forceinline const uint8_t *xcp_get_frame_addr(void) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Absolute addressing mode
 
-const uint8_t *ApplXcpGetBaseAddr(void);
-void ApplXcpSetBaseAddr(const uint8_t *addr); // Set base address for absolute addressing mode, only needed for special cases where the default base addr is not suitable
-const uint8_t *ApplXcpGetModuleAddr(void);    // Get the module base address, used as default base address for absolute addressing mode
+const uint8_t *ApplXcpGetBaseAddr(void);      // Get base for the XCP address range in absolute addressing mode
+void ApplXcpSetBaseAddr(const uint8_t *addr); // Set base for absolute addressing mode, only needed for special cases where the default base addr is not suitable
+const uint8_t *ApplXcpGetModuleAddr(void);    // Get the default base address, used as default base address for absolute addressing mode
 uint32_t ApplXcpGetAddr(const uint8_t *p);    // Get the absolute XCP/A2L 32 bit address from a pointer
 uint8_t ApplXcpGetAddrExt(const uint8_t *p);  // Get the absolute XCP/A2L 8 bit address extension from a pointer
 extern const uint8_t *gXcpBaseAddr;
@@ -445,15 +527,14 @@ extern const uint8_t *gXcpBaseAddr;
 // Combined create and trigger DAQ event macros
 
 /// Create and trigger the global XCP event 'name' for stack relative or absolute addressing
-/// Cache the event name lookup in global storage, can not be called with different names in its code location
-/// The first call creates the event
+/// The descriptor is placed in the xcp_evts section so XcpInit() pre-registers the event.
+/// trg__AAS__##name is kept as a linker map marker for the trigger location (same role as in DaqTriggerEvent).
 /// @param name Name given as identifier
 #define DaqCreateAndTriggerEvent(name)                                                                                                                                             \
+    static const tXcpEventDescriptor evt__##name XCP_EVENT_SECTION_ATTR = {#name, 0, 0};                                                                                           \
+    static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                                  \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        static tXcpEventId evt__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                                   \
-        static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                              \
         if (trg__AAS__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                          \
-            evt__##name = trg__AAS__##name;                                                                                                                                        \
             trg__AAS__##name = XcpCreateEvent(#name, 0, 0);                                                                                                                        \
         }                                                                                                                                                                          \
         XcpEventExt_Var(trg__AAS__##name, 1, xcp_get_frame_addr());                                                                                                                \
@@ -581,6 +662,21 @@ extern const uint8_t *gXcpBaseAddr;
 /// @param level (0 = no logging, 1 = error, 2 = warning, 3 = info, 4 = debug, 5 = trace)
 void XcpSetLogLevel(uint8_t level);
 
+// Create the memory section for epk software version string, used for compatibility check of A2L and BIN file
+#if defined(__ELF__)
+#define XCP_EPK_SECTION_ATTR __attribute__((section("xcp_epk"), used))
+#elif defined(__APPLE__)
+#define XCP_EPK_SECTION_ATTR __attribute__((section("__DATA,xcp_epk"), used))
+#else
+#define XCP_EPK_SECTION_ATTR /* section-based registration not supported on this platform */
+#endif
+#define XcpCreateEpk(epk)                                                                                                                                                          \
+    do {                                                                                                                                                                           \
+        static char gXcpEpkString[] XCP_EPK_SECTION_ATTR = epk;                                                                                                                    \
+        volatile char xcp_epk_keep = gXcpEpkString[0];                                                                                                                             \
+        (void)xcp_epk_keep;                                                                                                                                                        \
+    } while (0)
+
 /// XcpInit mode flags
 #define XCP_MODE_DEACTIVATE 0     ///< Initialize XCP singleton without activating the protocol layer (passive/off)
 #define XCP_MODE_LOCAL 0x01       ///< Initialize and activate XCP, allocate state in static memory if libxcplite not compiled in SHM mode, otherwise allocate state in heap memory
@@ -611,6 +707,9 @@ bool XcpIsInShmMode(void);
 
 // Project name
 const char *XcpGetProjectName(void);
+
+// EPK software version identifier
+const char *XcpGetEpk(void);
 
 // A2L file name
 // Notify XCPlite there is a valid A2L with this name to be provided for upload via XCP command GET_ID
@@ -689,19 +788,6 @@ uint64_t clockGetMonotonicNs(void);
 uint64_t clockGetMonotonicUs(void);
 void sleepUs(uint32_t us);
 void sleepMs(uint32_t ms);
-
-// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// Compatibility
-
-// Renamed deprecated macros
-#define DaqEvent DaqTriggerEvent
-#define DaqEventRelative DaqTriggerEventExt
-#define DaqEventRelative_s DaqTriggerEventExt_s
-#define DaqEventRelative_i DaqTriggerEventExt_i
-#define DaqCreateEventInstance_s DaqCreateEventInstance
-#define DaqEvent_i DaqTriggerEvent_i
-#define XcpDaqEvent DaqEventVar
-#define XcpDaqEventExt DaqEventExtVar
 
 #ifdef __cplusplus
 } // extern "C"
@@ -828,10 +914,13 @@ void sleepMs(uint32_t ms);
 // Strips the outer parentheses from (var, comment) and passes to macro as two separate arguments
 #define XCPLIB_APPLY_(m, args) m args
 
+// @@@@ REMOVE: Deprecated
+
 // Create the daq event (just for unique naming scheme)
-#define XcpCreateDaqEvent DaqCreateEvent
+// #define XcpCreateDaqEvent DaqCreateEvent
 
 // Register measurements once and trigger an already created event with stack addressing mode
+#if 0
 #define XcpTriggerDaqEvent(event_name, ...)                                                                                                                                        \
     do {                                                                                                                                                                           \
         A2lOnce() {                                                                                                                                                                \
@@ -842,8 +931,10 @@ void sleepMs(uint32_t ms);
         }                                                                                                                                                                          \
         DaqTriggerEvent(event_name);                                                                                                                                               \
     } while (0)
+#endif
 
 // Register measurements once and trigger an already created event with stack or relative addressing mode
+#if 0
 #define XcpTriggerDaqEventExt(event_name, base, ...)                                                                                                                               \
     do {                                                                                                                                                                           \
         A2lOnce() {                                                                                                                                                                \
@@ -854,6 +945,7 @@ void sleepMs(uint32_t ms);
         }                                                                                                                                                                          \
         DaqTriggerEventExt(event_name, base);                                                                                                                                      \
     } while (0)
+#endif
 
 // =============================================================================
 // Variadic DAQ macros which create, register variables and trigger events in one call
@@ -862,10 +954,11 @@ void sleepMs(uint32_t ms);
 /// Supports absolute, stack and relative addressing mode measurements
 #define DaqEventVar(event_name, ...)                                                                                                                                               \
     do {                                                                                                                                                                           \
+        static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {#event_name, 0, 0};                                                                           \
+        static tXcpEventId trg__AAS__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                        \
         if (XcpIsActivated()) {                                                                                                                                                    \
-            static tXcpEventId evt__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                         \
-            if (evt__##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                     \
-                evt__##event_name = XcpCreateEvent(#event_name, 0, 0);                                                                                                             \
+            if (trg__AAS__##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                \
+                trg__AAS__##event_name = XcpCreateEvent(#event_name, 0, 0);                                                                                                        \
                 A2lOnce() {                                                                                                                                                        \
                     A2lLock();                                                                                                                                                     \
                     A2lSetAutoAddrMode__s(#event_name, xcp_get_frame_addr(), NULL);                                                                                                \
@@ -873,29 +966,31 @@ void sleepMs(uint32_t ms);
                     A2lUnlock();                                                                                                                                                   \
                 }                                                                                                                                                                  \
             }                                                                                                                                                                      \
-            static tXcpEventId trg__AAS__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                    \
-            XcpEventExt_Var(evt__##event_name, 1, xcp_get_frame_addr());                                                                                                           \
+            XcpEventExt_Var(trg__AAS__##event_name, 1, xcp_get_frame_addr());                                                                                                      \
         }                                                                                                                                                                          \
     } while (0)
 
 /// Trigger an event, create the event once and register global, local and relative addressing mode measurement variables once
 /// Supports absolute, stack and relative addressing mode measurements
+// @@@@ REMOVE: Not used, replaced by the template-based C++ version
+#if 0
 #define DaqEventExtVar(event_name, base, ...)                                                                                                                                      \
     do {                                                                                                                                                                           \
+        static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {#event_name, 0, 0};                                                                           \
+        static tXcpEventId trg__AASD__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                       \
         if (XcpIsActivated()) {                                                                                                                                                    \
-            static tXcpEventId evt__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                         \
-            if (evt__##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                     \
-                evt__##event_name = XcpCreateEvent(#event_name, 0, 0);                                                                                                             \
+            if (trg__AASD__##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                               \
+                trg__AASD__##event_name = XcpCreateEvent(#event_name, 0, 0);                                                                                                       \
                 A2lOnce() {                                                                                                                                                        \
                     A2lLock();                                                                                                                                                     \
                     A2lSetAutoAddrMode__s(#event_name, xcp_get_frame_addr(), (const uint8_t *)base);                                                                               \
                     XCPLIB_FOR_EACH_MEAS_(A2L_UNPACK_AND_REG_, __VA_ARGS__)                                                                                                        \
                     A2lUnlock();                                                                                                                                                   \
                 }                                                                                                                                                                  \
-                static tXcpEventId trg__AASD__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                               \
-                XcpEventExt_Var(evt__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)base);                                                                                \
+                XcpEventExt_Var(trg__AASD__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)base);                                                                          \
             }                                                                                                                                                                      \
         }                                                                                                                                                                          \
     } while (0)
+#endif
 
 #endif // !__cplusplus

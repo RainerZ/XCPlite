@@ -30,7 +30,7 @@ extern uint8_t ptp_log_level;
 #define DBG_LEVEL ptp_log_level
 #include "dbg_print.h" // for DBG_PRINT_ERROR, DBG_PRINTF_WARNING, ...
 
-#include "filter.h" // for average filter
+#include "util.h" // from libxcplite for average filter
 
 #include "ptpHdr.h" // PTP protocol message structures
 #include "ptp_master.h"

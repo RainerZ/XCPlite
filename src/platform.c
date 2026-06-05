@@ -25,8 +25,14 @@
 
 #endif
 
-#include "dbg_print.h"  // for DBG_LEVEL, DBG_PRINT, ...
 #include "xcplib_cfg.h" // for OPTION_xxx ...
+
+#include "assert.h"    // for assert
+#include "dbg_print.h" // for DBG_LEVEL, DBG_PRINT, ...
+
+#if defined(_LINUX) && defined(_MACOS)
+#error "inconsistent platform defines: both _LINUX and _MACOS defined"
+#endif
 
 /**************************************************************************/
 // Keyboard
@@ -77,37 +83,18 @@ int _kbhit(void) {
 // Sleep
 /**************************************************************************/
 
-#if !defined(_WIN)
+#if defined(_FREE_RTOS) // FreeRTOS sleep
 
-#include <time.h>   // for timespec, nanosleep, CLOCK_MONOTONIC_RAW
-#include <unistd.h> // for sleep
-
+// Minimum granularity is one tick (1 ms at configTICK_RATE_HZ = 1000).
+// Sub-millisecond delays are rounded up to the next tick.
 void sleepUs(uint32_t us) {
-    // DBG_PRINTF3(ANSI_COLOR_RED "Sleep for %u us\n" ANSI_COLOR_RESET, us);
-    if (us == 0) {
-        sleep(0);
-    } else {
-        struct timespec timeout, timerem;
-        assert(us < 1000000UL);
-        timeout.tv_sec = 0;
-        timeout.tv_nsec = (long)us * 1000;
-        nanosleep(&timeout, &timerem);
-    }
+    TickType_t ticks = (us * configTICK_RATE_HZ) / 1000000UL;
+    vTaskDelay(ticks == 0U ? 1U : ticks);
 }
 
-void sleepMs(uint32_t ms) {
-    // DBG_PRINTF3(ANSI_COLOR_RED "Sleep for %u ms\n" ANSI_COLOR_RESET, ms);
-    if (ms == 0) {
-        sleep(0);
-    } else {
-        struct timespec timeout, timerem;
-        timeout.tv_sec = (long)ms / 1000;
-        timeout.tv_nsec = (long)(ms % 1000) * 1000000;
-        nanosleep(&timeout, &timerem);
-    }
-}
+void sleepMs(uint32_t ms) { vTaskDelay(pdMS_TO_TICKS(ms == 0U ? 1U : ms)); }
 
-#else // Windows
+#elif defined(_WIN) // Windows
 
 void sleepUs(uint32_t us) {
 
@@ -140,12 +127,43 @@ void sleepMs(uint32_t ms) {
     }
     Sleep(ms);
 }
+#else               // Other
 
-#endif // Windows
+#include <time.h>   // for timespec, nanosleep, CLOCK_MONOTONIC_RAW
+#include <unistd.h> // for sleep
+
+void sleepUs(uint32_t us) {
+    // DBG_PRINTF3(ANSI_COLOR_RED "Sleep for %u us\n" ANSI_COLOR_RESET, us);
+    if (us == 0) {
+        sleep(0);
+    } else {
+        struct timespec timeout, timerem;
+        assert(us < 1000000UL);
+        timeout.tv_sec = 0;
+        timeout.tv_nsec = (long)us * 1000;
+        nanosleep(&timeout, &timerem);
+    }
+}
+
+void sleepMs(uint32_t ms) {
+    // DBG_PRINTF3(ANSI_COLOR_RED "Sleep for %u ms\n" ANSI_COLOR_RESET, ms);
+    if (ms == 0) {
+        sleep(0);
+    } else {
+        struct timespec timeout, timerem;
+        timeout.tv_sec = (long)ms / 1000;
+        timeout.tv_nsec = (long)(ms % 1000) * 1000000;
+        nanosleep(&timeout, &timerem);
+    }
+}
+
+#endif // Other
 
 /**************************************************************************/
 // Memory mapping
 /**************************************************************************/
+
+#if defined(OPTION_SHM_MODE)
 
 #if !defined(_WIN)
 #include <sys/mman.h>
@@ -345,15 +363,38 @@ void platformShmUnlink(const char *name) {
 
 #endif // !_WIN
 
-/**************************************************************************/
-// Atomics
-/**************************************************************************/
+#endif
 
 /**************************************************************************/
 // Mutex
 /**************************************************************************/
 
-#if !defined(_WIN) // Non-Windows platforms
+#if defined(_FREE_RTOS) // FreeRTOS mutexes
+
+void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
+    (void)spinCount;
+    *m = recursive ? xSemaphoreCreateRecursiveMutex() : xSemaphoreCreateMutex();
+    assert(*m != NULL); // heap exhausted – increase configTOTAL_HEAP_SIZE
+}
+
+void mutexDestroy(MUTEX *m) {
+    if (m != NULL && *m != NULL) {
+        vSemaphoreDelete(*m);
+        *m = NULL;
+    }
+}
+
+#elif defined(_WIN) // Windows
+
+void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
+    (void)recursive;
+    // Window critical sections are always recursive
+    (void)InitializeCriticalSectionAndSpinCount(m, spinCount);
+}
+
+void mutexDestroy(MUTEX *m) { DeleteCriticalSection(m); }
+
+#else // Other
 
 void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
     (void)spinCount;
@@ -368,16 +409,6 @@ void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
 }
 
 void mutexDestroy(MUTEX *m) { pthread_mutex_destroy(m); }
-
-#else // Windows
-
-void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
-    (void)recursive;
-    // Window critical sections are always recursive
-    (void)InitializeCriticalSectionAndSpinCount(m, spinCount);
-}
-
-void mutexDestroy(MUTEX *m) { DeleteCriticalSection(m); }
 
 #endif
 
@@ -415,23 +446,225 @@ const char *socketGetErrorString(int32_t err) {
 }
 
 //--------------------------------------------------------------------------
-#if !defined(_WIN) // Non-Windows platforms
+// FreeRTOS platforms
 
-#include <ifaddrs.h>
+#if defined(_FREE_RTOS) && !defined(FREE_RTOS_POSIX_SIM) // FreeRTOS sockets
+
+#ifdef OPTION_ENABLE_TCP
+#error "FreeRTOS TCP socket functions not implemented yet"
+#endif
+
+#if defined(OPTION_FREERTOS_LWIP)
+#include "lwip/errno.h"   // lwIP errno values mapped to POSIX codes
+#include "lwip/sockets.h" // lwip_socket, lwip_bind, lwip_sendto, lwip_recvfrom, lwip_close, lwip_shutdown, lwip_setsockopt
+#endif
+
+// socketStartup: lwIP networking is initialised by the application (e.g. tcpip_init) — no-op here
+bool socketStartup(void) {
+#if defined(OPTION_FREERTOS_LWIP)
+    return true;
+#else
+    DBG_PRINT_ERROR("FREE_RTOS:socketStartup not implemented\n");
+    return true;
+#endif
+}
+
+// socketCleanup: no teardown required for lwIP
+void socketCleanup(void) {
+#if !defined(OPTION_FREERTOS_LWIP)
+    DBG_PRINT_ERROR("FREE_RTOS:socketCleanup not implemented\n");
+#endif
+}
+
+// Create a UDP socket (TCP not supported: OPTION_ENABLE_TCP must not be defined)
+bool socketOpen(SOCKET_HANDLE *socketp, uint16_t flags) {
+#if defined(OPTION_FREERTOS_LWIP)
+    assert(socketp != NULL);
+    assert(!(flags & SOCKET_MODE_TCP)); // TCP not supported on FreeRTOS/lwIP
+
+    int sock = lwip_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock < 0) {
+        DBG_PRINTF_ERROR("socketOpen: lwip_socket failed (errno=%d,%s)\n", errno, socketGetErrorString(errno));
+        return false;
+    }
+    if (flags & SOCKET_MODE_REUSEADDR) {
+        int yes = 1;
+        if (lwip_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
+            DBG_PRINTF_WARNING("socketOpen: SO_REUSEADDR failed (errno=%d,%s)\n", errno, socketGetErrorString(errno));
+        }
+    }
+    *socketp = sock;
+    DBG_PRINTF5("socketOpen: lwIP UDP socket %d opened\n", sock);
+    return true;
+#else
+    DBG_PRINT_ERROR("FREE_RTOS:socketOpen not implemented\n");
+    return false;
+#endif
+}
+
+// Bind socket to a local address and port
+// addr: network-byte-order IPv4 address; NULL or 0.x.x.x binds to INADDR_ANY
+bool socketBind(SOCKET_HANDLE socket, const uint8_t *addr, uint16_t port) {
+#if defined(OPTION_FREERTOS_LWIP)
+    assert(socket != INVALID_SOCKET_HANDLE);
+    struct sockaddr_in a;
+    memset(&a, 0, sizeof(a));
+    a.sin_family = AF_INET;
+    a.sin_port = htons(port);
+    if (addr != NULL && addr[0] != 0) {
+        a.sin_addr.s_addr = *(uint32_t *)addr;
+    } else {
+        a.sin_addr.s_addr = htonl(INADDR_ANY);
+    }
+    if (lwip_bind(socket, (struct sockaddr *)&a, sizeof(a)) < 0) {
+        DBG_PRINTF_ERROR("socketBind: lwip_bind failed (errno=%d,%s) on port %u\n", errno, socketGetErrorString(errno), port);
+        return false;
+    }
+    DBG_PRINTF5("socketBind: bound to port %u\n", port);
+    return true;
+#else
+    DBG_PRINT_ERROR("FREE_RTOS:socketBind not implemented\n");
+    return false;
+#endif
+}
+
+// Shutdown socket — unblocks a thread blocked in socketRecvFrom
+bool socketShutdown(SOCKET_HANDLE socket) {
+#if defined(OPTION_FREERTOS_LWIP)
+    if (socket != INVALID_SOCKET_HANDLE) {
+        lwip_shutdown(socket, SHUT_RDWR);
+    }
+    return true;
+#else
+    DBG_PRINT_ERROR("FREE_RTOS:socketShutdown not implemented\n");
+    return true;
+#endif
+}
+
+// Close socket and free the handle
+bool socketClose(SOCKET_HANDLE *socketp) {
+#if defined(OPTION_FREERTOS_LWIP)
+    assert(socketp != NULL);
+    if (*socketp != INVALID_SOCKET_HANDLE) {
+        lwip_close(*socketp);
+        *socketp = INVALID_SOCKET_HANDLE;
+    }
+    return true;
+#else
+    DBG_PRINT_ERROR("FREE_RTOS:socketClose not implemented\n");
+    return true;
+#endif
+}
+
+// Receive a UDP datagram (blocking)
+// Returns: > 0 bytes received, 0 on timeout/EAGAIN, -1 on error or socket closed
+int16_t socketRecvFrom(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSize, uint8_t *srcAddr, uint16_t *srcPort, uint64_t *time) {
+#if defined(OPTION_FREERTOS_LWIP)
+    assert(socket != INVALID_SOCKET_HANDLE);
+    struct sockaddr_in src; 
+    socklen_t srclen = sizeof(src);
+    memset(&src, 0, sizeof(src));
+    int16_t n = (int16_t)lwip_recvfrom(socket, buffer, bufferSize, 0, (struct sockaddr *)&src, &srclen);
+    if (n == 0) {
+        return 0; // Zero-length datagram or graceful close
+    }
+    if (n < 0) {
+        int32_t err = errno;
+        if (socketTimeout(err)) {
+            return 0; // Timeout — caller loops and does background work
+        }
+        DBG_PRINTF_ERROR("socketRecvFrom: lwip_recvfrom failed (errno=%d,%s)\n", err, socketGetErrorString(err));
+        return -1;
+    }
+    if (srcAddr != NULL) {
+        memcpy(srcAddr, &src.sin_addr.s_addr, 4);
+    }
+    if (srcPort != NULL) {
+        *srcPort = ntohs(src.sin_port);
+    }
+    if (time != NULL) {
+        *time = clockGet(); // No hardware timestamps on lwIP; use XCP clock
+    }
+    return n;
+#else
+    DBG_PRINT_ERROR("FREE_RTOS:socketRecvFrom not implemented\n");
+    return -1;
+#endif
+}
+
+// Send a UDP datagram to addr:port
+// Returns: bytes sent, 0 on closed socket, -1 on error
+int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t bufferSize, const uint8_t *addr, uint16_t port, uint64_t *time) {
+#if defined(OPTION_FREERTOS_LWIP)
+    assert(socket != INVALID_SOCKET_HANDLE);
+    assert(addr != NULL);
+    struct sockaddr_in dst; 
+    memset(&dst, 0, sizeof(dst));
+    dst.sin_family = AF_INET;
+    dst.sin_port = htons(port);
+    dst.sin_addr.s_addr = *(uint32_t *)addr;
+    if (time != NULL) {
+        *time = clockGet(); // No hardware timestamps on lwIP; use XCP clock at send time
+    }
+    int16_t n = (int16_t)lwip_sendto(socket, buffer, bufferSize, 0, (struct sockaddr *)&dst, sizeof(dst));
+    if (n < 0) {
+        int32_t err = errno;
+        if (socketIsClosed(err)) {
+            return 0; // Socket closed
+        }
+        DBG_PRINTF_ERROR("socketSendTo: lwip_sendto failed (errno=%d,%s)\n", err, socketGetErrorString(err));
+        return -1;
+    }
+    return n;
+#else
+    DBG_PRINT_ERROR("FREE_RTOS:socketSendTo not implemented\n");
+    return -1;
+#endif
+}
+
+// Set receive timeout on a blocking socket
+// timeoutMs == 0 restores infinite blocking
+bool socketSetTimeout(SOCKET_HANDLE socket, uint32_t timeoutMs) {
+#if defined(OPTION_FREERTOS_LWIP)
+    assert(socket != INVALID_SOCKET_HANDLE);
+    struct timeval tv;
+    tv.tv_sec = (long)(timeoutMs / 1000U);
+    tv.tv_usec = (long)(timeoutMs % 1000U) * 1000L;
+    if (lwip_setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+        DBG_PRINTF_WARNING("socketSetTimeout: lwip_setsockopt SO_RCVTIMEO failed (errno=%d,%s)\n", errno, socketGetErrorString(errno));
+        return false;
+    }
+    DBG_PRINTF5("socketSetTimeout: set to %u ms\n", timeoutMs);
+    return true;
+#else
+    DBG_PRINT_ERROR("FREE_RTOS:socketSetTimeout not implemented\n");
+    return true;
+#endif
+}
+
+#else
+
+//--------------------------------------------------------------------------
+// Non-Windows platforms
+#if !defined(_WIN)
+
+#include <ifaddrs.h> // for getifaddrs, struct ifaddrs
 
 #include <arpa/inet.h>  // for htons, htonl
 #include <netinet/in.h> // for sockaddr_in
 #include <sys/socket.h> // for socket functions
 
-#if defined(_LINUX)           // Linux platform hardware timestamping support
+#if defined(_LINUX) // Linux platform
+
 #include <net/if.h>           // for if_nametoindex, struct ifreq, IFNAMSIZ
 #include <netpacket/packet.h> // for struct sockaddr_ll (AF_PACKET, used by socketGetMAC)
-#if defined(OPTION_SOCKET_HW_TIMESTAMPS)
+
+#if defined(OPTION_SOCKET_HW_TIMESTAMPS) // Linux platform hardware time stamping support
 #include <linux/errqueue.h>
 #include <linux/net_tstamp.h>
 #include <linux/sockios.h> // for SIOCSHWTSTAMP
-#include <sys/ioctl.h>     // for ioctl
-#endif                     // OPTION_SOCKET_HW_TIMESTAMPS
+#include <sys/ioctl.h>
+#endif // defined(OPTION_SOCKET_HW_TIMESTAMPS)
 
 #endif // Linux
 
@@ -453,7 +686,6 @@ bool socketOpen(SOCKET_HANDLE *socketp, uint16_t flags) {
 
     bool useTCP = flags & SOCKET_MODE_TCP;
     bool reuseaddr = flags & SOCKET_MODE_REUSEADDR;
-    bool getifinfo = flags & SOCKET_MODE_GET_IF_INFO;
 
     // Create a socket
     sock = socket(AF_INET, useTCP ? SOCK_STREAM : SOCK_DGRAM, 0);
@@ -471,7 +703,8 @@ bool socketOpen(SOCKET_HANDLE *socketp, uint16_t flags) {
         }
     }
 
-    if (getifinfo) {
+#if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
+    if (flags & SOCKET_MODE_GET_IF_INFO) {
         int yes = 1;
         if (setsockopt(sock, IPPROTO_IP, IP_PKTINFO, &yes, sizeof(yes)) < 0) {
             DBG_PRINTF_WARNING("Failed to enable IP_PKTINFO on socket (errno=%d,%s)\n", errno, socketGetErrorString(errno));
@@ -479,6 +712,7 @@ bool socketOpen(SOCKET_HANDLE *socketp, uint16_t flags) {
             DBG_PRINT5("IP_PKTINFO enabled\n");
         }
     }
+#endif
 
 // Enable timestamps if requested
 #if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
@@ -525,20 +759,23 @@ bool socketOpen(SOCKET_HANDLE *socketp, uint16_t flags) {
     }
 #endif
 
+#if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
     SOCKET_HANDLE socket = (struct socket *)malloc(sizeof(struct socket));
     memset(socket, 0, sizeof(struct socket));
     socket->sock = sock;
-    socket->flags = flags;
     *socketp = socket;
+#else
+    *socketp = sock;
+#endif
     return true;
 }
 
 bool socketBind(SOCKET_HANDLE socket, const uint8_t *addr, uint16_t port) {
 
-    assert(socket != NULL);
+    assert(socket != INVALID_SOCKET_HANDLE);
     assert(addr != NULL);
 
-    int sock = socket->sock;
+    SOCKET sock = SOCKET_FD(socket);
 
     // Bind the socket to any address and the specified port
     SOCKADDR_IN a;
@@ -557,21 +794,19 @@ bool socketBind(SOCKET_HANDLE socket, const uint8_t *addr, uint16_t port) {
         }
         return 0;
     }
-
-    socket->port = port;
-    socket->addr = *(uint32_t *)addr;
     return true;
 }
+
+#if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
 
 // Bind socket to a specific network interface by name (Linux only)
 // This is useful for multicast reception on a specific interface while binding to INADDR_ANY
 // Requires root privileges on Linux
 bool socketBindToDevice(SOCKET_HANDLE socket, const char *ifname) {
 
-    assert(socket != NULL);
+    assert(socket != INVALID_SOCKET_HANDLE);
 
-#if defined(_LINUX)
-    int sock = socket->sock;
+    int sock = SOCKET_FD(socket);
     if (ifname != NULL && ifname[0] != '\0') {
         if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname)) < 0) {
             DBG_PRINTF_ERROR("socketBindToDevice failed (errno=%d,%s) - cannot bind to device %s !\n", socketGetLastError(), socketGetErrorString(socketGetLastError()), ifname);
@@ -588,15 +823,7 @@ bool socketBindToDevice(SOCKET_HANDLE socket, const char *ifname) {
         socket->ifindex = ifindex;
     }
     return true;
-#else
-    (void)socket;
-    (void)ifname;
-    DBG_PRINTF_WARNING("socketBindToDevice(%s): SO_BINDTODEVICE not supported on this platform, request ignored!\n", ifname ? ifname : "(null)");
-    return true;
-#endif
 }
-
-#if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
 
 // Enable hardware timestamping and/or software on a network interface
 // This configures the NIC driver to generate timestamps for PTP packets
@@ -685,14 +912,13 @@ bool socketEnableTimestamps(SOCKET_HANDLE socket, bool ptpOnly) {
     return false;
 }
 
-#endif
+#endif // Linux with OPTION_SOCKET_HW_TIMESTAMPS
 
 // Shutdown socket
 // Block rx and tx direction
 bool socketShutdown(SOCKET_HANDLE socket) {
-    if (socket != NULL) {
-        if (socket->sock > 0)
-            shutdown(socket->sock, SHUT_RDWR);
+    if (socket != INVALID_SOCKET_HANDLE) {
+        shutdown(SOCKET_FD(socket), SHUT_RDWR);
     }
     return true;
 }
@@ -701,11 +927,18 @@ bool socketShutdown(SOCKET_HANDLE socket) {
 // Make addr reusable
 bool socketClose(SOCKET_HANDLE *socketp) {
     assert(socketp != NULL);
+#if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
     if (*socketp != NULL) {
         close((*socketp)->sock);
         free(*socketp);
         *socketp = NULL;
     }
+#else
+    if (*socketp != INVALID_SOCKET_HANDLE) {
+        close(*socketp);
+        *socketp = INVALID_SOCKET_HANDLE;
+    }
+#endif
     return true;
 }
 
@@ -745,7 +978,7 @@ bool socketGetLocalAddr(uint8_t *mac, uint8_t *addr) {
     static uint32_t __addr1 = 0;
     static uint8_t __mac1[6] = {0, 0, 0, 0, 0, 0};
 #ifdef DBG_LEVEL
-    char strbuf[64];
+    char strbuf[64]; // @@@@ STACK buffer for IP addr string 
 #endif
     if (__addr1 == 0) {
         struct ifaddrs *ifaddrs, *ifa;
@@ -791,7 +1024,7 @@ bool socketGetLocalAddr(uint8_t *mac, uint8_t *addr) {
 #endif // OPTION_ENABLE_GET_LOCAL_ADDR
 
 //--------------------------------------------------------------------------
-#else // Windows platform
+#else  // Windows platform
 
 // Winsock
 #pragma comment(lib, "ws2_32.lib")
@@ -830,13 +1063,6 @@ bool socketOpen(SOCKET_HANDLE *socketp, uint16_t flags) {
 
     bool useTCP = flags & SOCKET_MODE_TCP;
     bool reuseaddr = flags & SOCKET_MODE_REUSEADDR;
-    bool getifinfo = flags & SOCKET_MODE_GET_IF_INFO;
-    bool hw_timestamps = flags & SOCKET_MODE_HW_TIMESTAMPING;
-    bool sw_timestamps = flags & SOCKET_MODE_SW_TIMESTAMPING;
-
-    assert(!hw_timestamps); // Hardware timestamps not supported on Windows
-    assert(!sw_timestamps); // Software timestamps not supported on Windows
-    assert(!getifinfo);     // IP_PKTINFO not supported on Windows
 
     // Create a socket
     if (!useTCP) {
@@ -866,19 +1092,14 @@ bool socketOpen(SOCKET_HANDLE *socketp, uint16_t flags) {
         }
     }
 
-    SOCKET_HANDLE socket = (struct socket *)malloc(sizeof(struct socket));
-    assert(socket != NULL);
-    memset(socket, 0, sizeof(struct socket));
-    socket->sock = sock;
-    socket->flags = flags;
-    *socketp = socket;
+    *socketp = sock;
     return true;
 }
 
 bool socketBind(SOCKET_HANDLE socket, const uint8_t *addr, uint16_t port) {
 
-    assert(socket != NULL);
-    SOCKET sock = socket->sock;
+    assert(socket != INVALID_SOCKET_HANDLE);
+    SOCKET sock = socket;
 
     // Bind the socket to any address and the specified port
     SOCKADDR_IN a;
@@ -905,10 +1126,10 @@ bool socketBind(SOCKET_HANDLE socket, const uint8_t *addr, uint16_t port) {
 // Block rx and tx direction
 bool socketShutdown(SOCKET_HANDLE socket) {
 
-    assert(socket != NULL);
-    SOCKET sock = socket->sock;
+    assert(socket != INVALID_SOCKET_HANDLE);
+    SOCKET sock = socket;
 
-    if (sock != -1) {
+    if (sock != INVALID_SOCKET) {
         shutdown(sock, SD_BOTH);
     }
     return true;
@@ -919,10 +1140,9 @@ bool socketShutdown(SOCKET_HANDLE socket) {
 bool socketClose(SOCKET_HANDLE *socketp) {
 
     assert(socketp != NULL);
-    if (*socketp != NULL) {
-        closesocket((*socketp)->sock);
-        free(*socketp);
-        *socketp = NULL;
+    if (*socketp != INVALID_SOCKET_HANDLE) {
+        closesocket(*socketp);
+        *socketp = INVALID_SOCKET_HANDLE;
     }
     return true;
 }
@@ -1000,16 +1220,13 @@ bool socketGetLocalAddr(uint8_t *mac, uint8_t *addr) {
 
 #endif // _WIN
 
-//--------------------------------------------------------------------------
-// All platforms
-
 // Set receive timeout on a socket
 // timeoutMs: timeout in milliseconds, 0 = infinite blocking (restore default)
 bool socketSetTimeout(SOCKET_HANDLE socket, uint32_t timeoutMs) {
-    assert(socket != NULL);
+    assert(socket != INVALID_SOCKET_HANDLE);
 #if defined(_WIN)
     DWORD tv = (DWORD)timeoutMs;
-    if (setsockopt(socket->sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv)) < 0) {
+    if (setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv)) < 0) {
         DBG_PRINTF_WARNING("socketSetTimeout: setsockopt SO_RCVTIMEO failed (errno=%d,%s)\n", socketGetLastError(), socketGetErrorString(socketGetLastError()));
         return false;
     }
@@ -1017,7 +1234,7 @@ bool socketSetTimeout(SOCKET_HANDLE socket, uint32_t timeoutMs) {
     struct timeval tv;
     tv.tv_sec = timeoutMs / 1000;
     tv.tv_usec = (int32_t)(timeoutMs % 1000) * 1000;
-    if (setsockopt(socket->sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+    if (setsockopt(SOCKET_FD(socket), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
         DBG_PRINTF_WARNING("socketSetTimeout: setsockopt SO_RCVTIMEO failed (errno=%d,%s)\n", errno, socketGetErrorString(errno));
         return false;
     }
@@ -1026,10 +1243,12 @@ bool socketSetTimeout(SOCKET_HANDLE socket, uint32_t timeoutMs) {
     return true;
 }
 
+#if defined(OPTION_ENABLE_TCP)
+
 // Listen on a TCP socket
 bool socketListen(SOCKET_HANDLE socket) {
-    assert(socket != NULL);
-    if (listen(socket->sock, 5)) {
+    assert(socket != INVALID_SOCKET_HANDLE);
+    if (listen(SOCKET_FD(socket), 5)) {
         DBG_PRINTF_ERROR("socketListen failed (errno=%d,%s)!\n", socketGetLastError(), socketGetErrorString(socketGetLastError()));
         return 0;
     }
@@ -1039,30 +1258,34 @@ bool socketListen(SOCKET_HANDLE socket) {
 // Accept a connection on a listening TCP socket
 // Returns the remote address if addr != NULL
 SOCKET_HANDLE socketAccept(SOCKET_HANDLE listenSocket, uint8_t *addr) {
-    assert(listenSocket != NULL);
-    struct sockaddr_in sa;
+    assert(listenSocket != INVALID_SOCKET_HANDLE);
+    struct sockaddr_in sa; 
     socklen_t sa_size = sizeof(sa);
-    SOCKET sock = accept(listenSocket->sock, (struct sockaddr *)&sa, &sa_size);
+    SOCKET sock = accept(SOCKET_FD(listenSocket), (struct sockaddr *)&sa, &sa_size);
     if (addr)
         *(uint32_t *)addr = sa.sin_addr.s_addr;
-
+#if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
     SOCKET_HANDLE socket = (struct socket *)malloc(sizeof(struct socket));
     memset(socket, 0, sizeof(struct socket));
     socket->sock = sock;
-#ifdef _LINUX
     socket->ifindex = listenSocket->ifindex;
     memcpy(socket->ifname, listenSocket->ifname, sizeof(socket->ifname));
-#endif
-    socket->flags = listenSocket->flags;
     return socket;
+#else
+    return sock;
+#endif
 }
+
+#endif // OPTION_ENABLE_TCP
+
+#if !defined(_FREE_RTOS) || defined(FREE_RTOS_POSIX_SIM)
 
 // Join a multicast group on a UDP socket
 // maddr: Multicast group address (network byte order)
 bool socketJoin(SOCKET_HANDLE socket, const uint8_t *maddr, const uint8_t *ifaddr, const char *ifname) {
 
-    assert(socket != NULL);
-    SOCKET sock = socket->sock;
+    assert(socket != INVALID_SOCKET_HANDLE);
+    SOCKET sock = SOCKET_FD(socket);
 
 #if defined(_LINUX)
     // On Linux, use ip_mreqn which allows specifying interface by name or index
@@ -1078,20 +1301,26 @@ bool socketJoin(SOCKET_HANDLE socket, const uint8_t *maddr, const uint8_t *ifadd
             DBG_PRINTF_ERROR("socketJoin: Interface %s not found!\n", ifname);
             return 0;
         }
+#if defined(OPTION_SOCKET_HW_TIMESTAMPS)
         socket->ifindex = group.imr_ifindex;
         strncpy(socket->ifname, ifname, sizeof(socket->ifname) - 1);
         socket->ifname[sizeof(socket->ifname) - 1] = '\0';
+#endif
         DBG_PRINTF5("Joining multicast group on interface %s (index %d)\n", ifname, group.imr_ifindex);
 
+#if defined(OPTION_SOCKET_HW_TIMESTAMPS)
         // Get MAC address for the interface and save it in the socket structure
         if (!socketGetMAC(socket->ifname, socket->ifmac)) {
             DBG_PRINTF_WARNING("socketJoin: Failed to get MAC address for interface %s!\n", ifname);
         }
+#endif
 
     } else if (ifaddr != NULL && !(ifaddr[0] == 0 && ifaddr[1] == 0 && ifaddr[2] == 0 && ifaddr[3] == 0)) {
         // Use interface address
         group.imr_address.s_addr = *(uint32_t *)ifaddr;
+#if defined(OPTION_SOCKET_HW_TIMESTAMPS)
         socket->ifaddr = *(uint32_t *)ifaddr;
+#endif
 
         DBG_PRINTF5("Joining multicast group on interface address %u.%u.%u.%u\n", ifaddr[0], ifaddr[1], ifaddr[2], ifaddr[3]);
 
@@ -1137,9 +1366,8 @@ bool socketJoin(SOCKET_HANDLE socket, const uint8_t *maddr, const uint8_t *ifadd
 //   n < 0  : socket closed (graceful or reset) or unrecoverable error — caller should exit the receive loop
 int16_t socketRecvFrom(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSize, uint8_t *addr, uint16_t *port, uint64_t *time) {
 
-    assert(socket != NULL);
-    assert(!(socket->flags & SOCKET_MODE_TCP)); // Use socketRecvFrom() for UDP sockets
-    SOCKET sock = socket->sock;
+    assert(socket != INVALID_SOCKET_HANDLE);
+    SOCKET sock = SOCKET_FD(socket);
     assert(sock != INVALID_SOCKET);
 
     SOCKADDR_IN src;
@@ -1153,9 +1381,9 @@ int16_t socketRecvFrom(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSiz
     // Removing the if(time!=NULL) gate here is critical — without it the else clause
     // would dangle onto the port-extraction statement after #endif, causing no receive when time==NULL.
     {
-        struct iovec iov;
-        struct msghdr msg;
-        char control[CMSG_SPACE(sizeof(struct timespec) * 3) + CMSG_SPACE(sizeof(struct in_pktinfo))];
+        struct iovec iov;  
+        struct msghdr msg; 
+        char control[CMSG_SPACE(sizeof(struct timespec) * 3) + CMSG_SPACE(sizeof(struct in_pktinfo))]; 
         iov.iov_base = buffer;
         iov.iov_len = bufferSize;
         memset(&msg, 0, sizeof(msg));
@@ -1294,7 +1522,11 @@ int16_t socketRecvFrom(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSiz
     if (addr)
         memcpy(addr, &src.sin_addr.s_addr, 4);
 
+#if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
     DBG_PRINTF6("socketRecvFrom: sock=%d, ifindex=%d returned n=%u, time=%" PRIu64 "\n", sock, socket->ifindex, n, time ? *time : 0);
+#else
+    DBG_PRINTF6("socketRecvFrom: sock=%d returned n=%u, time=%" PRIu64 "\n", sock, n, time ? *time : 0);
+#endif
 
     return n;
 }
@@ -1306,12 +1538,13 @@ int16_t socketRecvFrom(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSiz
 //   n > 0  : number of bytes received
 //   n == 0 : timeout (set with socketTimeout) expired or would-block — no data yet, caller should loop and do background work
 //   n < 0  : socket closed (graceful or reset) or unrecoverable error — caller should exit the receive loop
+#if defined(OPTION_ENABLE_TCP)
 int16_t socketRecv(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t buffer_size, bool waitAll) {
 
-    assert(socket != NULL);
-    assert(socket->flags & SOCKET_MODE_TCP); // Use socketRecvFrom() for UDP sockets
+    assert(socket != INVALID_SOCKET_HANDLE);
+    // assert(socket->flags & SOCKET_MODE_TCP); // Use socketRecvFrom() for UDP sockets
     assert(buffer_size > 0);
-    SOCKET sock = socket->sock;
+    SOCKET sock = SOCKET_FD(socket);
     assert(sock != INVALID_SOCKET);
 
     if (!waitAll) {
@@ -1382,6 +1615,7 @@ int16_t socketRecv(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t buffer_size, 
     assert(received == buffer_size);
     return (int16_t)received;
 }
+#endif // OPTION_ENABLE_TCP
 
 // Send datagram on UDP socket
 // Returns number of bytes sent or -1 on error
@@ -1392,11 +1626,15 @@ int16_t socketRecv(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t buffer_size, 
 // Returns total number of bytes sent, 0 on socket closed or -1 on error
 int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t size, const uint8_t *addr, uint16_t port, uint64_t *time) {
 
-    assert(socket != NULL);
-    SOCKET sock = socket->sock;
+    assert(socket != INVALID_SOCKET_HANDLE);
+    SOCKET sock = SOCKET_FD(socket);
     assert(sock != INVALID_SOCKET);
 
+#if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
     DBG_PRINTF6("socketSendTo: sock=%d, ifindex=%d\n", sock, socket->ifindex);
+#else
+    DBG_PRINTF6("socketSendTo: sock=%d\n", sock);
+#endif
 
     SOCKADDR_IN sa;
     sa.sin_family = AF_INET;
@@ -1411,9 +1649,9 @@ int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t size,
     if (time != NULL) {
         // On Linux, we need to use sendmsg() with SO_TIMESTAMPING control message
         // to request TX timestamp generation for this specific packet
-        struct iovec iov;
-        struct msghdr msg;
-        char control[CMSG_SPACE(sizeof(uint32_t))];
+        struct iovec iov;                         
+        struct msghdr msg;                        
+        char control[CMSG_SPACE(sizeof(uint32_t))]; 
         struct cmsghdr *cmsg;
 
         iov.iov_base = (void *)buffer;
@@ -1480,10 +1718,11 @@ int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t size,
 // Send buffer on a TCP socket
 // Thread safe
 // Returns total number of bytes sent, 0 on socket closed or -1 on error
+#if defined(OPTION_ENABLE_TCP)
 int16_t socketSend(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t size) {
 
-    assert(socket != NULL);
-    SOCKET sock = socket->sock;
+    assert(socket != INVALID_SOCKET_HANDLE);
+    SOCKET sock = SOCKET_FD(socket);
     assert(sock != INVALID_SOCKET);
 
     ssize_t n = send(sock, (const char *)buffer, size, 0);
@@ -1502,8 +1741,12 @@ int16_t socketSend(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t size) {
     }
     return (int16_t)n;
 }
+#endif // OPTION_ENABLE_TCP
 
-#if !defined(_WIN) && !defined(OPTION_DISABLE_VECTORED_IO)
+#endif // !defined(_FREE_RTOS) || defined(FREE_RTOS_POSIX_SIM)
+
+// Vectored IO send and receive functions using sendmsg/recvmsg with iovec for efficient scatter-gather I/O
+#if !defined(_WIN) && !defined(_FREE_RTOS)
 
 // Send multiple datagrams on a UDP socket
 // Returns number of bytes sent or -1 on error
@@ -1516,8 +1759,8 @@ int16_t socketSend(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t size) {
 // Returns total number of bytes sent, 0 on socket closed or -1 on error
 int16_t socketSendToV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t count, const uint8_t *addr, uint16_t port) {
 
-    assert(socket != NULL);
-    SOCKET sock = socket->sock;
+    assert(socket != INVALID_SOCKET_HANDLE);
+    SOCKET sock = SOCKET_FD(socket);
     assert(sock != INVALID_SOCKET);
 
     SOCKADDR_IN sa;
@@ -1526,7 +1769,7 @@ int16_t socketSendToV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t cou
     sa.sin_port = htons(port);
 
     // Build iovec array on the stack - VLAs are acceptable here as count is usually small
-    struct iovec iov[count];
+    struct iovec iov[count]; 
     uint32_t total = 0;
     for (uint16_t i = 0; i < count; i++) {
         iov[i].iov_base = (void *)buffers[i].buffer;
@@ -1534,7 +1777,7 @@ int16_t socketSendToV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t cou
         total += buffers[i].size;
     }
 
-    struct msghdr msg;
+    struct msghdr msg; 
     memset(&msg, 0, sizeof(msg));
     msg.msg_name = &sa;
     msg.msg_namelen = sizeof(sa);
@@ -1571,18 +1814,18 @@ int16_t socketSendToV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t cou
 // Returns total number of bytes sent, 0 on socket closed or -1 on error
 int16_t socketSendV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t count) {
 
-    assert(socket != NULL);
-    SOCKET sock = socket->sock;
+    assert(socket != INVALID_SOCKET_HANDLE);
+    SOCKET sock = SOCKET_FD(socket);
     assert(sock != INVALID_SOCKET);
 
     // Build iovec array on the stack - VLAs are acceptable here as count is usually small
-    struct iovec iov[count];
+    struct iovec iov[count]; 
     for (uint16_t i = 0; i < count; i++) {
         iov[i].iov_base = (void *)buffers[i].buffer;
         iov[i].iov_len = buffers[i].size;
     }
 
-    struct msghdr msg;
+    struct msghdr msg; 
     memset(&msg, 0, sizeof(msg));
     msg.msg_iov = iov;
     msg.msg_iovlen = count;
@@ -1627,7 +1870,7 @@ int16_t socketSendV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t count
     return (int16_t)total;
 }
 
-#endif // !_WIN
+#endif // !defined(_WIN) && !defined(_FREE_RTOS)
 
 // Get send time of last sent packet
 // Retrieves TX hardware timestamp and kernel software timestamp from socket error queue
@@ -1635,6 +1878,7 @@ int16_t socketSendV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t count
 // On non-Linux platforms, this function always returns false
 // On Linux, requires OPTION_SOCKET_HW_TIMESTAMPS defined and hardware timestamping enabled on the socket
 // hw_time and sw_time are optional, set to NULL if not needed
+#if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
 bool socketGetSendTime(SOCKET_HANDLE socket, uint64_t *hw_time, uint64_t *sw_time) {
 
     assert(socket != NULL);
@@ -1646,11 +1890,10 @@ bool socketGetSendTime(SOCKET_HANDLE socket, uint64_t *hw_time, uint64_t *sw_tim
     if (sw_time)
         *sw_time = 0;
 
-#if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
-    char control[512];
-    char data[1];
-    struct iovec iov;
-    struct msghdr msg;
+    char control[512]; 
+    char data[1];      
+    struct iovec iov;  
+    struct msghdr msg; 
     struct cmsghdr *cmsg;
     struct timespec *ts = NULL;
 
@@ -1727,18 +1970,26 @@ bool socketGetSendTime(SOCKET_HANDLE socket, uint64_t *hw_time, uint64_t *sw_tim
         DBG_PRINT_WARNING("socketGetSendTime: No software TX timestamp found\n");
 
     return false;
-
-#else
-    (void)sock;
-#endif
-    return false;
 }
+#endif // defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
+
+#endif // !_WIN
 
 #endif
 
 /**************************************************************************/
 // Clock
 /**************************************************************************/
+
+/*
+    Clock options (xcplib_cfg.h)
+
+    OPTION_CLOCK_EPOCH_ARB      arbitrary epoch, clock is monotonic, no corrections by NTP, PTP, ...
+    OPTION_CLOCK_EPOCH_PTP      real time clock in ns or us since 1.1.1970
+    OPTION_CLOCK_TICKS_1NS      resolution 1ns or 1us, granularity depends on platform
+    OPTION_CLOCK_TICKS_1US
+*/
+
 
 #ifdef TEST_CLOCK_GET_STATISTIC
 static atomic_uint_fast64_t gClockGetCtr = 0;
@@ -1750,31 +2001,118 @@ void clockGetPrintStatistic(void) {
 }
 #endif
 
-// Not used, might be faster on macOS
-// #ifdef _MACOS
-// #include <mach/mach_time.h>
-// uint64_t getMachineTime(void) {
-//     uint64_t tm = mach_absolute_time();
-//     mach_timebase_info_data_t timebase;
-//     mach_timebase_info(&timebase);
-//     return tm * timebase.numer / timebase.denom;
-// }
-// #endif
+char *clockGetTimeString(char *str, uint32_t l, int64_t t) {
 
-#if !defined(_WIN) // Non-Windows platforms
+#ifdef OPTION_CLOCK_EPOCH_ARB
+    SNPRINTF(str, l, "%gs", (double)t / CLOCK_TICKS_PER_S);
+#else
+    char sign = '+';
+    if (t < 0) {
+        sign = '-';
+        t = -t;
+    }
+    uint64_t s = t / CLOCK_TICKS_PER_S;
+    uint64_t ns = t % CLOCK_TICKS_PER_S;
+    SNPRINTF(str, l, "%c%" PRIu64 "d%" PRIu64 "h%" PRIu64 "m%" PRIu64 "s+%" PRIu64 "ns", sign, s / (3600 * 24), (s % (3600 * 24)) / 3600, ((s % (3600 * 24)) % 3600) / 60,
+             ((s % (3600 * 24)) % 3600) % 60, ns);
+#endif
+    return str;
+}
+
+// ---------------------------------------------------------------------------
+// FreeRTOS clock.
+// On ESP32, use the ESP-IDF high resolution timer (1 us, 64 bit).
+// Otherwise, fall back to xTaskGetTickCount() with granularity =
+// 1/configTICK_RATE_HZ (1 ms at 1 kHz).
+
+#if defined(_FREE_RTOS) // FreeRTOS clock
+
+#if defined(ESP_PLATFORM)
+#include "esp_timer.h"
+#ifdef OPTION_CLOCK_TICKS_1NS
+#error "ESP32 esp_timer_get_time() has 1 us resolution. Use OPTION_CLOCK_TICKS_1US, or remove this error if ns-scaled timestamps are really required."
+#endif
+#endif
+
+static volatile uint64_t gClockLast_ = 0;
+
+#if !defined(ESP_PLATFORM)
+// Convert a FreeRTOS tick count to the configured clock unit (ns or us)
+static inline uint64_t tickToClockUnit_(TickType_t ticks) {
+#ifdef OPTION_CLOCK_TICKS_1NS
+    return (uint64_t)ticks * (1000000000ULL / configTICK_RATE_HZ);
+#else // OPTION_CLOCK_TICKS_1US
+    return (uint64_t)ticks * (1000000ULL / configTICK_RATE_HZ);
+#endif
+}
+#endif
+
+bool clockInit(void) {
+    DBG_PRINT3("Init clock\n");
+#ifdef OPTION_CLOCK_TICKS_1NS
+    DBG_PRINT3("  ticks = OPTION_CLOCK_TICKS_1NS\n");
+    DBG_PRINTF3("  FreeRTOS tick resolution = %u ns\n", (unsigned)(1000000000UL / configTICK_RATE_HZ));
+#else
+    DBG_PRINT3("  ticks = OPTION_CLOCK_TICKS_1US\n");
+#if defined(ESP_PLATFORM)
+    DBG_PRINT3("  backend = esp_timer_get_time(), resolution = 1 us\n");
+#else
+    DBG_PRINTF3("  FreeRTOS tick resolution = %u us\n", (unsigned)(1000000UL / configTICK_RATE_HZ));
+#endif
+#endif
+    gClockLast_ = 0;
+    return true;
+}
+
+uint64_t clockGet(void) {
+#if defined(ESP_PLATFORM)
+    uint64_t t = (uint64_t)esp_timer_get_time();
+#else
+    uint64_t t = tickToClockUnit_(xTaskGetTickCount());
+#endif
+    gClockLast_ = t;
+    return t;
+}
+
+uint64_t clockGetLast(void) { return gClockLast_; }
+
+char *clockGetString(char *s, uint32_t l, uint64_t c) {
+    SNPRINTF(s, l, "%gs", (double)c / CLOCK_TICKS_PER_S);
+    return s;
+}
+
+uint64_t clockGetMonotonicNs(void) {
+#if defined(ESP_PLATFORM)
+    return (uint64_t)esp_timer_get_time() * 1000ULL;
+#else
+    return (uint64_t)xTaskGetTickCount() * (1000000000ULL / configTICK_RATE_HZ);
+#endif
+}
+uint64_t clockGetMonotonicUs(void) {
+#if defined(ESP_PLATFORM)
+    return (uint64_t)esp_timer_get_time();
+#else
+    return (uint64_t)xTaskGetTickCount() * (1000000ULL / configTICK_RATE_HZ);
+#endif
+}
+uint64_t clockGetRealtimeNs(void) { return clockGetMonotonicNs(); }
+uint64_t clockGetRealtimeUs(void) { return clockGetMonotonicUs(); }
+uint64_t clockGetMonotonicNsLast(void) { return gClockLast_; }
+uint64_t clockGetMonotonicUsLast(void) { return gClockLast_; }
+uint64_t clockGetRealtimeNsLast(void) { return gClockLast_; }
+uint64_t clockGetRealtimeUsLast(void) { return gClockLast_; }
+
+#elif !defined(_WIN) // Non-Windows platforms
+
+// ---------------------------------------------------------------------------
+// POSIX clock
 
 #if !defined(OPTION_CLOCK_EPOCH_PTP) && !defined(OPTION_CLOCK_EPOCH_ARB)
 #error "Please define OPTION_CLOCK_EPOCH_ARB or OPTION_CLOCK_EPOCH_PTP"
 #endif
 
+
 /*
-Clock options
-
-    OPTION_CLOCK_EPOCH_ARB      arbitrary epoch, clock is monotonic, no corrections by NTP, PTP, ...
-    OPTION_CLOCK_EPOCH_PTP      real time clock in ns or us since 1.1.1970
-    OPTION_CLOCK_TICKS_1NS      resolution 1ns or 1us, granularity depends on platform
-    OPTION_CLOCK_TICKS_1US
-
 Clock types
     CLOCK_REALTIME
         This clock may be affected by incremental adjustments performed by NTP.
@@ -1854,13 +2192,13 @@ bool clockInit(void) {
     clockGetRealtimeNs();        // Initialize __gClockRealtime
     clockGetMonotonicNs();       // Initialize __gClockMonotonic
     uint64_t clock = clockGet(); // Initialize gClock and ClockGetLast()
-
+    (void)clock;
 #ifdef DBG_LEVEL
     if (DBG_LEVEL >= 3) { // Test
         struct timespec gtr;
         clock_getres(CLOCK_TYPE, &gtr);
         DBG_PRINTF3("  resolution = %ldns!\n", gtr.tv_nsec);
-        char ts[64];
+        char ts[64]; // @@@@ STACK buffer for clock value
         clockGetString(ts, sizeof(ts), clock);
         DBG_PRINTF3("  initial clock = %" PRIu64 " %s\n", clock, ts);
     }
@@ -1877,7 +2215,7 @@ uint64_t clockGet(void) {
     clock_gettime(CLOCK_TYPE, &__gClock);
 #ifdef OPTION_CLOCK_TICKS_1NS // ns
     return (((uint64_t)(__gClock.tv_sec) * 1000000000ULL) + (uint64_t)(__gClock.tv_nsec));
-#else // us
+#else                         // us
     return (((uint64_t)(__gClock.tv_sec) * 1000000ULL) + (uint64_t)(__gClock.tv_nsec / 1000)); // us
 #endif
 }
@@ -1886,7 +2224,7 @@ uint64_t clockGet(void) {
 uint64_t clockGetLast(void) {
 #ifdef OPTION_CLOCK_TICKS_1NS // ns
     return (((uint64_t)(__gClock.tv_sec) * 1000000000ULL) + (uint64_t)(__gClock.tv_nsec));
-#else // us
+#else                         // us
     return (((uint64_t)(__gClock.tv_sec) * 1000000ULL) + (uint64_t)(__gClock.tv_nsec / 1000)); // us
 #endif
 }
@@ -1921,6 +2259,9 @@ uint64_t clockGetRealtimeNsLast(void) { return (((uint64_t)(__gClockRealtime.tv_
 uint64_t clockGetRealtimeUsLast(void) { return (((uint64_t)(__gClockRealtime.tv_sec) * 1000000ULL) + (uint64_t)(__gClockRealtime.tv_nsec / 1000)); }
 
 #else // Windows
+
+// ---------------------------------------------------------------------------
+// Windows clock
 
 static uint64_t __gClock = 0;
 
@@ -2042,7 +2383,7 @@ bool clockInit(void) {
         printf("  System clock resolution = %" PRIu32 "Hz, ARB us conversion = -%" PRIu64 "/%" PRIu64 "\n", (uint32_t)tF.u.LowPart, sOffset, sFactor);
 #endif
         uint64_t t;
-        char ts[64];
+        char ts[64]; // @@@@ STACK buffer for clock value
         t = clockGet();
         clockGetString(ts, sizeof(ts), t);
         printf("  Now = %I64u (%I64u per us) %s\n", t, CLOCK_TICKS_PER_US, ts);
@@ -2072,34 +2413,24 @@ uint64_t clockGet(void) {
     return t;
 }
 
+uint64_t clockGetMonotonicNs() { return clockGet(); }
+uint64_t clockGetMonotonicNsLast() { return clockGetLast(); }
+uint64_t clockGetMonotonicUs() { return clockGet() / 1000; }
+uint64_t clockGetMonotonicUsLast() { return clockGetLast() / 1000; }
+
 #endif // Windows
 
-char *clockGetTimeString(char *str, uint32_t l, int64_t t) {
-
-#ifdef OPTION_CLOCK_EPOCH_ARB
-    SNPRINTF(str, l, "%gs", (double)t / CLOCK_TICKS_PER_S);
-#else
-    char sign = '+';
-    if (t < 0) {
-        sign = '-';
-        t = -t;
-    }
-    uint64_t s = t / CLOCK_TICKS_PER_S;
-    uint64_t ns = t % CLOCK_TICKS_PER_S;
-    SNPRINTF(str, l, "%c%" PRIu64 "d%" PRIu64 "h%" PRIu64 "m%" PRIu64 "s+%" PRIu64 "ns", sign, s / (3600 * 24), (s % (3600 * 24)) / 3600, ((s % (3600 * 24)) % 3600) / 60,
-             ((s % (3600 * 24)) % 3600) % 60, ns);
-#endif
-    return str;
-}
 
 /**************************************************************************/
 // File system utilities
 /**************************************************************************/
 
-#ifdef _WIN
+#if !defined(_FREE_RTOS)
+
+#if defined(_WIN)
 #include <io.h> // for _access
-#else
-#include <unistd.h> // for access
+#elif !defined(_FREE_RTOS)
+#include <unistd.h> // for access (POSIX; not available on bare-metal FreeRTOS)
 #endif
 
 // Check if a file exists
@@ -2108,12 +2439,13 @@ bool fexists(const char *filename) {
     if (filename == NULL) {
         return false;
     }
-
-#ifdef _WIN
+#if defined(_WIN)
     // Windows: use _access from io.h
     return (_access(filename, 0) == 0);
 #else
-    // Linux/macOS: use access from unistd.h
+    // Linux/macOS/QNX: use access from unistd.h
     return (access(filename, F_OK) == 0);
 #endif
 }
+
+#endif // !defined(_FREE_RTOS)

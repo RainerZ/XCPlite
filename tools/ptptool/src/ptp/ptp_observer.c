@@ -26,7 +26,8 @@
 
 #ifdef OPTION_ENABLE_PTP_OBSERVER
 
-#include "filter.h" // for average filter
+#include "util.h" //  from libxcplite for average filter
+
 #include "ptpHdr.h" // PTP protocol message structures
 #include "ptp_observer.h"
 

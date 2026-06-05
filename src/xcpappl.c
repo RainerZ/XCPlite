@@ -9,11 +9,11 @@
 | Licensed under the MIT license. See LICENSE file in the project root for details.
  ----------------------------------------------------------------------------*/
 
-#include <assert.h>  // for assert
-#include <stdbool.h> // for bool
-#include <stdint.h>  // for uintxx_t
-#include <stdio.h>   // for fclose, fopen, fread, fseek, ftell
-#include <string.h>  // for strncpy
+#include <assert.h>   // for assert
+#include <inttypes.h> // for PRIu64
+#include <stdbool.h>  // for bool
+#include <stdint.h>   // for uintxx_t
+#include <string.h>   // for strncpy
 
 #include "dbg_print.h"  // for DBG_PRINTF3, DBG_PRINT4, DBG_PRINTF4, DBG...
 #include "platform.h"   // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex
@@ -22,8 +22,8 @@
 #include "xcplib_cfg.h" // for OPTION_xxx
 #include "xcplite.h"    // for tXcpDaqLists, XcpXxx, ApplXcpXxx, ...
 
-#if !defined(_WIN) && !defined(_LINUX) && !defined(_MACOS) && !defined(_QNX)
-#error "Please define platform _WIN, _MACOS or _LINUX or _QNX"
+#if !defined(_WIN) && !defined(_LINUX) && !defined(_MACOS) && !defined(_QNX) && !defined(_FREE_RTOS)
+#error "Please define platform _WIN, _MACOS or _LINUX, _QNX or _FREE_RTOS"
 #endif
 
 // @@@@ TODO: Improve, __write_delayed is the consistency hold flag parameter for the __callback_write function
@@ -188,9 +188,11 @@ void ApplXcpSetBaseAddr(const uint8_t *addr) {
 // Value is positive offset to ApplXcpGetBaseAddr
 uint32_t ApplXcpGetAddr(const uint8_t *p) {
     const uint8_t *b = ApplXcpGetBaseAddr();
-    int64_t diff = (int64_t)(p) - (int64_t)(b);
-    DBG_PRINTF6("ApplXcpGetAddr: base = %p, addr = %p, diff = %" PRId64 "\n", (void *)b, (void *)p, diff);
-    if (diff < 0 || diff > 0xFFFFFFFF) { // Check XCP address range is sufficient
+    uintptr_t addr = (uintptr_t)p;
+    uintptr_t base = (uintptr_t)b;
+    uint64_t diff = (uint64_t)(addr - base);
+    DBG_PRINTF6("ApplXcpGetAddr: base = %p, addr = %p, diff = %" PRIu64 "\n", (void *)b, (void *)p, diff);
+    if (addr < base || diff > 0xFFFFFFFF) { // Check XCP address range is sufficient
         DBG_PRINTF_ERROR("Address out of range! base = %p, addr = %p\n", (void *)b, (void *)p);
         assert(0);
         return 0;
@@ -217,8 +219,6 @@ uint8_t ApplXcpGetAddrExt(const uint8_t *p) {
 
 const uint8_t *ApplXcpGetModuleAddr(void) { return (uint8_t *)GetModuleHandle(NULL); }
 
-// Get base pointer for the XCP address range
-// This function is time sensitive, as it is called once on every XCP event
 const uint8_t *ApplXcpGetBaseAddr(void) {
 
     if (gXcpBaseAddrValid)
@@ -229,6 +229,16 @@ const uint8_t *ApplXcpGetBaseAddr(void) {
 }
 
 #endif // _WIN
+
+//----------------------------
+// FreeRTOS  32 bit
+#if defined(_FREE_RTOS) && !defined(FREE_RTOS_POSIX_SIM) // FreeRTOS memory base address
+
+const uint8_t *ApplXcpGetModuleAddr(void) { return (uint8_t *)0; }
+
+const uint8_t *ApplXcpGetBaseAddr(void) { return (uint8_t *)0; }
+
+#endif // _FREE_RTOS
 
 //----------------------------
 // Linux 64 bit or QNX 64 bit
@@ -339,8 +349,6 @@ static int dump_so(void) {
 
 const uint8_t *ApplXcpGetModuleAddr(void) { return (uint8_t *)_dyld_get_image_header(0); }
 
-// Get the base address for absolute addressing mode
-// Use default base address, if not explicitly set by ApplXcpSetBaseAddr() before
 const uint8_t *ApplXcpGetBaseAddr(void) {
     if (!gXcpBaseAddrValid) {
         // dump_so();
@@ -360,7 +368,6 @@ const uint8_t *ApplXcpGetBaseAddr(void) {
 
 const uint8_t *ApplXcpGetModuleAddr(void) { return ((uint8_t *)0); }
 
-// On 32 bit Linux platforms, the entire 4GB address space is available for XCP, so the base address is 0 and the address conversion is a simple cast
 const uint8_t *ApplXcpGetBaseAddr(void) { return ApplXcpGetModuleAddr(); }
 
 #endif // defined(_LINUX) && defined(PLATFORM_32BIT)
@@ -512,6 +519,8 @@ const char *XcpGetElfName(void) { return gXcpElfName; }
 
 #if defined(XCP_ENABLE_IDT_A2L_UPLOAD) || defined(XCP_ENABLE_IDT_ELF_UPLOAD) // Enable GET_ID A2L or ELF content upload to host
 
+#include <stdio.h> // for fclose, fopen, fread, fseek, ftell
+
 static FILE *gXcpFile = NULL;       // file content
 static uint32_t gXcpFileLength = 0; // file length
 
@@ -545,9 +554,10 @@ static uint32_t openFile(const char *filename) {
 
 // Called by the protocol layer to read a chunk of a file for upload
 bool ApplXcpReadFile(uint8_t size, uint32_t addr, uint8_t *data) {
-    if (gXcpFile == NULL)
+    if (gXcpFile == NULL) {
+        DBG_PRINT_ERROR("File not open for reading!\n");
         return false;
-    assert(gXcpFile != NULL);
+    }
     if (addr + size > gXcpFileLength || size != fread(data, 1, (uint32_t)size, gXcpFile)) {
         closeFile();
         DBG_PRINTF_ERROR("ApplXcpReadFile addr=%u size=%u exceeds file length=%u\n", addr, size, gXcpFileLength);
@@ -644,7 +654,7 @@ uint32_t ApplXcpGetId(uint8_t id, uint8_t *buf, uint32_t bufLen) {
             return 0; // ELF not available as response buffer
         // Assuming gXcpA2lName is the name of the ELF file without extension
         len = openFile(gXcpElfName);
-        DBG_PRINTF3("ApplXcpGetId GET_ID %02X ELF as upload (len=%u)\n", id, len);
+        DBG_PRINTF3("ApplXcpGetId GET_ID 0x%02X ELF file '%s' as upload (len=%u)\n", id, gXcpElfName, len);
     } break;
 #endif
 

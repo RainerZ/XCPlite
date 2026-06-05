@@ -20,11 +20,11 @@
 // XCP parameters
 
 constexpr const char *OPTION_PROJECT_NAME = "cpp_demo";
-constexpr const char OPTION_PROJECT_VERSION[] = "V1_" __TIME__;
+constexpr const char OPTION_PROJECT_VERSION[] = "V200";
 constexpr bool OPTION_USE_TCP = false;
 constexpr uint16_t OPTION_SERVER_PORT = 5555;
 constexpr size_t OPTION_QUEUE_SIZE = (1024 * 64);
-constexpr int OPTION_LOG_LEVEL = 3;
+constexpr int OPTION_LOG_LEVEL = 4;
 constexpr uint8_t OPTION_SERVER_ADDR[] = {0, 0, 0, 0};
 
 //-----------------------------------------------------------------------------------------------------
@@ -99,7 +99,7 @@ int main() {
 
     // Initialize the XCP singleton, activate XCP, must be called before starting the server
     // If XCP is not activated, the server will not start and all XCP instrumentation will be passive with minimal overhead
-    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION /* EPK version*/, XCP_MODE_LOCAL);
+    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION /* EPK version*/, XCP_MODE_PERSISTENCE | XCP_MODE_LOCAL);
 
     // Initialize the XCP Server
     if (!XcpEthServerInit(OPTION_SERVER_ADDR, OPTION_SERVER_PORT, OPTION_USE_TCP, OPTION_QUEUE_SIZE)) {
@@ -237,7 +237,7 @@ int main() {
 /*
 
  // Make kDelayUs a tunable parameter
-        // auto delay_us = CalValCreate(kDelayUs);
+        // auto delay_us = CalBlkCreate("kDelayUs",&kDelayUs,sizeof(kDelayUs));
         // if (A2lOnce()) { // Create the parameter description in A2L once
         //     A2lCreateParameter(kDelayUs, "Loop delay in microseconds", "", 0, 1000000);
         // }

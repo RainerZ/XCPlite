@@ -15,16 +15,30 @@
   The values for XCP_xxx and XCPTL_xxx define constants (in xcp_cfg.h and xcptl_cfg.h) may depend on options
 */
 
-// XCPlite version, currently V2.0.4
+// XCPlite version, currently V2.1.0
 #define OPTION_VERSION_MAJOR 2
-#define OPTION_VERSION_MINOR 0
-#define OPTION_VERSION_PATCH 3
+#define OPTION_VERSION_MINOR 1
+#define OPTION_VERSION_PATCH 0
 
-#ifdef XCPLIB_FOR_RUST // Set by the Rust build script
+// CANape version compatibility
+// Disable workarounds for CANape versions < 24SP2
+// (Disable COPY_CAL_PAGE bug workaround and enable .this references to shared calibration axis)
+#define OPTION_CANAPE_24
+
+//-------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------
+// Specific build settings of libxcplite
+
+#if defined(XCPLIB_FOR_RUST) // Set by the Rust build script
 
 #include "xcplib_rust_cfg.h" // for Rust xcp-lite specific configuration
 
 #else
+
+//-------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------
+// Default settings
+// For 64 bit targets with on-target A2L generation and file system support
 
 //-------------------------------------------------------------------------------
 // Logging
@@ -36,7 +50,7 @@
 // Default log level: 1 - Error, 2 - Warn, 3 - Info, 4 - Trace (used to print all XCP commands), 5 - Debug, 6 - Very verbose
 #define OPTION_DEFAULT_DBG_LEVEL 3
 // Optimize code size, higher levels than OPTION_MAX_DBG_LEVEL are optimized out
-#define OPTION_MAX_DBG_LEVEL 5
+#define OPTION_MAX_DBG_LEVEL 4
 // Optimize code size, fixed log level, not changeable at runtime
 // #define OPTION_FIXED_DBG_LEVEL 4
 
@@ -53,26 +67,19 @@
 
 //-------------------------------------------------------------------------------
 // Enable atomic emulation for Windows
-// Not designed for non x86 platforms, needs strong memory ordering
 // Used for testing on Windows
 #if defined(_WIN32) || defined(_WIN64)
 #define OPTION_ATOMIC_EMULATION
 #endif
 
 //-------------------------------------------------------------------------------
-// Socket options
-
-// #define OPTION_SOCKET_HW_TIMESTAMPS // Enable hardware timestamps on UDP sockets if available (needed only for ptptool on Linux)
-
-//-------------------------------------------------------------------------------
 // XCP multi application mode
+// Multiple application processes may have shared transmit queue, calibration RCU and XCP state
+// One application is the XCP server, could be the first one running (XCP leader) or a dedicated application (XCP daemon)
+// Requires a POSIX-compliant platform (Linux / macOS / QNX).  Not supported on Windows.
 
 // Experimental, work in progress, not fully tested yet, may change or be removed without major version change, use with caution
 
-// Enable multi application mode:
-// All application processes have shared transmit queue, calibration RCU and XCP state
-// One application is the XCP server, could be the first one running (XCP leader) or a dedicated application (XCP daemon)
-// Requires a POSIX-compliant platform (Linux / macOS / QNX).  Not supported on Windows.
 // #define OPTION_SHM_MODE
 
 //-------------------------------------------------------------------------------
@@ -84,18 +91,18 @@
 #define OPTION_SERVER_FORCEFULL_TERMINATION // Don't wait for the rx and tx thread to finish, just terminate them
 
 //-------------------------------------------------------------------------------
-// CAL setting
+// Calibration segments management
 
-// Enable calibration segment management
-// (otherwise the callbacks in xcpappl.c are used for calibration segment commands and memory read/write)
+// Enable calibration segments management and API for thread-safe calibration
 #define OPTION_CAL_SEGMENTS
+#ifdef OPTION_CAL_SEGMENTS
 
 // Maximum number of calibration segments
-#define OPTION_CAL_SEGMENT_COUNT 32
+#define OPTION_CAL_SEGMENT_COUNT 8
 
 // Total memory pool size for all calibration segments (header + 4 pages each)
 // Must be large enough for all XcpCreateCalSeg() calls combined
-#define OPTION_CAL_MEM_SIZE (1024 * 16) // 16 KB default
+#define OPTION_CAL_MEM_SIZE (1024 * 5) // 5 KB default
 
 // Single page mode
 // #define OPTION_CAL_SEGMENTS_SINGLE_PAGE
@@ -108,10 +115,10 @@
 // If the EPK is included in the HEX/BIN file, the version of the data structure can be checked using the EPK address specified in the A2L file
 #define OPTION_CAL_SEGMENT_EPK
 
-// Enable absolute addressing for calibration segments
+// Enable absolute addressing for calibration segments and calibration blocks
 // Default is segment relative addressing, uses address extension 0 for segment relative and 1 for absolute and encodes the segment number in the address high word
 // As this is not compatible to most well known tools to update, modify and create A2L files, this option switches to absolute addressing on address extension 0
-// Requirement is, that the address of all reference pages must be stable and in address range of 0x0000_0000 to 0xFFFF_FFFF
+// Requirement is, that the address of all default/reference pages must be stable and in address range of 0x0000_0000 to 0xFFFF_FFFF
 // #define OPTION_CAL_SEGMENTS_ABS
 
 // Start on reference/default page instead of on working page
@@ -120,11 +127,13 @@
 // Automatically persist the working page on XCP disconnect
 // #define OPTION_CAL_PERSIST_ON_DISCONNECT
 
+#endif // OPTION_CAL_SEGMENTS
+
 //-------------------------------------------------------------------------------
 // DAQ settings
 
-#define OPTION_DAQ_MEM_SIZE (1024 * 8) // Memory bytes used for XCP DAQ tables - 6 bytes per measurement signal/block needed
-#define OPTION_DAQ_EVENT_COUNT 64      // Maximum number of DAQ events (integer value, must be even)
+#define OPTION_DAQ_MEM_SIZE (512 * 6) // Memory bytes used for XCP DAQ tables - 6 bytes per measurement signal/block needed
+#define OPTION_DAQ_EVENT_COUNT 32     // Maximum number of DAQ events (integer value, must be even)
 // #define OPTION_DAQ_ASYNC_EVENT         // Create an asynchronous, cyclic DAQ event for asynchronous data acquisition
 
 // Transport layer queue, vectored IO, lockless with variable queue entry size
@@ -138,6 +147,10 @@
 // Tune XCPTL_MAX_DTO_SIZE for best compromise between memory efficiency and performance
 // Larger DTO size may not payoff, rely on transport layer message accumulation
 // #define OPTION_QUEUE_64_FIX_SIZE
+// Optional benchmark switch for queue64f.c:
+// If undefined, slot reuse is published by a release-store to the fixed entry_header and tail is relaxed.
+// If defined, slot reuse is published by a release update to tail and producers acquire-load tail.
+// #define OPTION_QUEUE_64_FIX_SIZE_SYNC_TAIL
 
 // Transport layer queue, with variable queue entry size, 32 bit not lockless with mutex synchronization
 // Mandatory for Windows and 32 bit platforms
@@ -147,6 +160,7 @@
 #undef OPTION_QUEUE_64_FIX_SIZE
 #define OPTION_QUEUE_32
 #endif
+
 //-------------------------------------------------------------------------------
 // A2L generation settings
 
@@ -164,13 +178,22 @@
 #if !defined(NDEBUG)
 
 // #define TEST_CLOCK_GET_STATISTIC // Count number of calls to clockGet and clockGetLast, print results with clockPrintStatistic()
+// #define TEST_ACQUIRE_SPIN_COUNT // Get max spin count of the queue acquire operations
 // #define TEST_ACQUIRE_LOCK_TIMING // Create a queue acquire time histogram, prints results on queue deinit, significant performance impact, for testing only !!!!!!!!!!
 // #define TEST_ENABLE_DBG_METRICS // Enable debug metrics for XCP events and transport layer packets
 // #define TEST_ENABLE_BUFFERCOUNT_HISTOGRAM // Enable histogram of the used buffer counts in the transport layer vectored io
 // #define TEST_MUTABLE_ACCESS_OWNERSHIP // Enable tracking of mutable access thread ownership to detect overseen potential memory safety problems
-#define TEST_ENABLE_DBG_CHECKS // Enable additional sanity checks in the XCP server
+// #define TEST_ENABLE_DBG_CHECKS // Enable timing checks in the XCP server
 // #define TEST_STACK_SIZE // Enable stack size measurement for the transmit and receive thread
 
 #endif // !defined(NDEBUG)
 
-#endif // !XCPLIB_FOR_RUST
+// Optional application-specific override — patches any of the above defaults.
+// Pass the filename of your override header via:
+//   cmake: target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"my_xcplib_overrides.h\"")
+// See xcplib_rtos_cfg.h and xcplib_no_a2l_cfg.h for example override files.
+#ifdef XCPLIB_CFG_OVERRIDE
+#include XCPLIB_CFG_OVERRIDE
+#endif
+
+#endif

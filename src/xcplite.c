@@ -4,7 +4,7 @@
 |
 |  Description:
 |    Implementation of the ASAM XCP Protocol Layer V1.4
-|    Version V2.0.4
+|    Version V2.1.x
 |       - Optimized for 64 bit POSIX based platforms (Linux, QNX or MacOS)
 |       - Compatible with 32 bit platforms
 |       - Tested on x86 strong and ARM weak memory model
@@ -59,24 +59,33 @@
 #include <stdarg.h>   // for va_list, va_start, va_arg, va_end
 #include <stdbool.h>  // for bool
 #include <stdint.h>   // for uint8_t, uint16_t,...
-#include <stdio.h>    // for printf
 #include <stdlib.h>   // for size_t, NULL, abort
 #include <string.h>   // for memcpy, memset, strlen, strncpy
+#ifdef DBG_LEVEL
+#include <stdio.h> // for printf
+#endif
 
 #ifdef OPTION_SHM_MODE
 #include <unistd.h> // for getpid()
 #endif
 
-#include "dbg_print.h" // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
-#include "platform.h"  // for atomics
+#ifdef __APPLE__
+#include <mach-o/getsect.h> // for getsectiondata(), used by XcpRegisterSectionEvents()
+#include <mach-o/ldsyms.h>  // for _mh_execute_header
+#endif
 
-#include "cal.h"         // for XcpCalSegXxx
+#include "dbg_print.h"   // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
 #include "persistence.h" // for XcpBinFreezeCalSeg
+#include "platform.h"    // for atomics
 #include "queue.h"       // for QueueXxx transport queue layer interface
 #include "shm.h"         // for shared memory management
 #include "xcp.h"         // XCP protocol definitions
+#include "xcptl.h"       // for transport layer abstraction XcpTlWaitForTransmitQueueEmpty and XcpTlSendCrm
 
-#include "xcptl.h" // for transport layer abstraction XcpTlWaitForTransmitQueueEmpty and XcpTlSendCrm
+#ifdef OPTION_CAL_SEGMENTS
+#include "cal.h" // for XcpCalSegXxx
+#endif
+
 #if defined(XCPTL_ENABLE_MULTICAST)
 #include "xcpethtl.h" // for ethernet specific transport layer functions XcpEthTl
 #endif
@@ -130,6 +139,7 @@
 #error "Please define XCP_DAQ_MEM_SIZE"
 #endif
 
+#ifdef OPTION_CAL_SEGMENTS
 /* Check XCP_CAL_MEM_SIZE */
 #if defined(XCP_CAL_MEM_SIZE)
 #if (XCP_CAL_MEM_SIZE > 0xFFFFFFFF)
@@ -137,6 +147,7 @@
 #endif
 #else
 #error "Please define XCP_CAL_MEM_SIZE"
+#endif
 #endif
 
 /* Check length of of names with null termination must be even*/
@@ -153,8 +164,9 @@
 /****************************************************************************/
 
 // Current supported addressing schemes are:
-// For A2L-Toolset compatibility: Absolute addressing mode - XCP_ADDRESS_MODE_XCPLITE__ACSDD
+// For A2L-Toolset compatibility: Absolute segment addressing mode - XCP_ADDRESS_MODE_XCPLITE__ACSDD
 // For SHM mode: Relative segment addressing mode - XCP_ADDRESS_MODE_XCPLITE__CXSDD
+// No calibration segment management: Absolute addressing mode - XCP_ADDRESS_MODE_XCPLITE__AXSDD
 // Default: Segment relative addressing mode - XCP_ADDRESS_MODE_XCPLITE__CASDD
 #ifndef _WIN
 __attribute__((used))
@@ -165,6 +177,8 @@ const uint16_t XCPLITE__CXSDD = XCP_DRIVER_VERSION;
 const uint16_t XCPLITE__ACSDD = XCP_DRIVER_VERSION;
 #elif defined(XCP_ADDRESS_MODE_XCPLITE__CASDD)
 const uint16_t XCPLITE__CASDD = XCP_DRIVER_VERSION;
+#elif defined(XCP_ADDRESS_MODE_XCPLITE__AXSDD)
+const uint16_t XCPLITE__AXSDD = XCP_DRIVER_VERSION;
 #else
 #error "Please define one of XCP_ADDRESS_MODE_XCPLITE__ACSDD, XCP_ADDRESS_MODE_XCPLITE__CASDD, XCP_ADDRESS_MODE_XCPLITE__CXSDD"
 #endif
@@ -432,7 +446,7 @@ static void XcpSetProjectName(const char *name) {
 // Get the project name
 const char *XcpGetProjectName(void) {
     if (STRNLEN(local.project_name, XCP_PROJECT_NAME_MAX_LENGTH) == 0) {
-        assert(0 && "Project name not set, returning empty string");
+        assert(0 && "Project name not set");
         return "";
     }
     return local.project_name;
@@ -487,7 +501,7 @@ XcpWriteMta is not performance critical, but critical for data consistency.
 It is used to modify calibration variables.
 For size 1, 2, 4, 8 it uses single "atomic" writes assuming valid aligned target memory locations.
 Its responsibility is only to copy memory. Any considerations regarding thread safety must be explicitly managed.
-This is alsoa requirement to the tool, which must ensure that the data is consistent by choosing the right granularity for DOWNLOAD and SHORT_DOWNLOAD operations.
+This is also a requirement to the tool, which must ensure that the data is consistent by choosing the right granularity for DOWNLOAD and SHORT_DOWNLOAD operations.
 */
 
 // Copy of size bytes from data to local.mta_ptr or local.mta_addr depending on the addressing mode
@@ -579,8 +593,8 @@ uint8_t XcpReadMta(uint8_t size, uint8_t *data) {
         return 0; // Ok
     }
 
-#ifdef XCP_ENABLE_IDT_A2L_UPLOAD
-    // Ext == XCP_ADDR_EXT_FILE - A2L file upload address space
+#if defined(XCP_ENABLE_IDT_A2L_UPLOAD) || defined(XCP_ENABLE_IDT_ELF_UPLOAD)
+    // Ext == XCP_ADDR_EXT_FILE - A2L or ELF file upload address space
     if (local.mta_ext == XCP_ADDR_EXT_FILE) {
         if (!ApplXcpReadFile(size, local.mta_addr, data))
             return CRC_ACCESS_DENIED; // Access violation
@@ -612,6 +626,7 @@ uint8_t XcpSetMta(uint8_t ext_, uint32_t addr_) {
     if (local.mta_ext == XCP_ADDR_EXT_EPK && local.mta_addr == XCP_ADDR_EPK) {
         local_mut.mta_ptr = (uint8_t *)XcpGetEpk();
         local_mut.mta_ext = XCP_ADDR_EXT_PTR;
+        DBG_PRINTF6("XcpSetMta: XCP_ADDR_EXT_PTR p=%p\n", local_mut.mta_ptr);
         return CRC_CMD_OK;
     }
 #endif
@@ -619,6 +634,7 @@ uint8_t XcpSetMta(uint8_t ext_, uint32_t addr_) {
 #ifdef XCP_ENABLE_DYN_ADDRESSING
     // Event relative addressing mode
     if (XcpAddrIsDyn(local.mta_ext)) {
+        DBG_PRINTF6("XcpSetMta: XCP_ADDR_EXT_DYN:%08X\n", local_mut.mta_addr);
         return CRC_CMD_OK;
     }
 #endif
@@ -626,6 +642,7 @@ uint8_t XcpSetMta(uint8_t ext_, uint32_t addr_) {
 #ifdef XCP_ENABLE_REL_ADDRESSING
     // Relative addressing mode
     if (XcpAddrIsRel(local.mta_ext)) {
+        DBG_PRINTF6("XcpSetMta: XCP_ADDR_EXT_REL:%08X\n", local_mut.mta_addr);
         return CRC_CMD_OK;
     }
 #endif
@@ -642,6 +659,7 @@ uint8_t XcpSetMta(uint8_t ext_, uint32_t addr_) {
             return CRC_ACCESS_DENIED; // Access violation,
 #endif
         }
+        DBG_PRINTF6("XcpSetMta: XCP_ADDR_EXT_SEG:%08X\n", local_mut.mta_addr);
         return CRC_CMD_OK;
     }
 #endif
@@ -649,6 +667,7 @@ uint8_t XcpSetMta(uint8_t ext_, uint32_t addr_) {
 #ifdef XCP_ENABLE_APP_ADDRESSING
     // Application specific addressing mode
     if (XcpAddrIsApp(local.mta_ext)) {
+        DBG_PRINTF6("XcpSetMta: XCP_ADDR_EXT_APP:%08X\n", local_mut.mta_addr);
         return CRC_CMD_OK;
     }
 #endif
@@ -677,6 +696,9 @@ uint8_t XcpSetMta(uint8_t ext_, uint32_t addr_) {
             const tXcpCalSeg *c = CalSegPtr(calseg_index);
             local_mut.mta_ext = XCP_ADDR_EXT_SEG;
             local_mut.mta_addr = XcpAddrEncodeSegIndex(calseg_index, local.mta_ptr - c->h.default_page_ptr); // Convert to segment relative address
+            DBG_PRINTF6("XcpSetMta: XCP_ADDR_EXT_ABS -> XCP_ADDR_EXT_SEG, addr=%08X\n", local_mut.mta_addr);
+        } else {
+            DBG_PRINTF6("XcpSetMta: XCP_ADDR_EXT_ABS, a=%08X, p=%p\n", local_mut.mta_addr, local_mut.mta_ptr);
         }
 #endif
 
@@ -797,9 +819,8 @@ const char *XcpGetEventName(tXcpEventId event) {
     const tXcpEvent *e = &shared.event_list.event[event];
     if (e->index > 0) {
         // Event instance, append instance index to the name
-        static char nameBuf[XCP_MAX_EVENT_NAME + 8];
-        SNPRINTF(nameBuf, sizeof(nameBuf), "%s_%u", e->name, e->index);
-        return nameBuf;
+        SNPRINTF(local_mut.event_name_buf, sizeof(local.event_name_buf), "%s_%u", e->name, e->index);
+        return local.event_name_buf;
     }
     return (const char *)&shared.event_list.event[event].name;
 }
@@ -932,11 +953,75 @@ tXcpEventId XcpCreateEvent(const char *name, uint32_t cycle_time_ns, uint8_t pri
     return id;
 }
 
-#else  // XCP_ENABLE_DAQ_EVENT_LIST
+// Event descriptor used by DaqCreateEvent() for section-based pre-registration.
+// Also defined in xcplib.h; this guard prevents redefinition when both headers are included.
+#ifndef __XCPLIB_H__
+typedef struct {
+    const char *name;
+    uint32_t cycle_time_ns;
+    uint8_t priority;
+    uint8_t res[16 - sizeof(char *) - 4 - 1];
+    // tXcpEventId id;
+} tXcpEventDescriptor;
+static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
+#endif
+
+// Pre-register all tXcpEventDescriptor variables placed in the xcp_evts section by DaqCreateEvent().
+// Must be called after SS_ACTIVATED is set (XcpCreateEvent requires isActivated()).
+// If a persistence file was loaded before this call, events are matched by name and keep their saved id.
+static uint16_t XcpRegisterSectionEvents(void) {
+
+    uint16_t count = 0;
+
+#if defined(__ELF__)
+    // Declared weak: if no object file contributes to the xcp_evts section the symbols
+    // resolve to NULL rather than causing an undefined-reference linker error.
+    extern const tXcpEventDescriptor __start_xcp_evts[] __attribute__((weak));
+    extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
+    if (__start_xcp_evts != NULL) {
+        for (const tXcpEventDescriptor *e = __start_xcp_evts; e < __stop_xcp_evts; e++) {
+            tXcpEventId id = XcpFindEvent(e->name);
+            if (id == XCP_UNDEFINED_EVENT_ID) {
+                id = XcpCreateEvent(e->name, e->cycle_time_ns, e->priority);
+                assert(id != XCP_UNDEFINED_EVENT_ID);
+                count++;
+            }
+        }
+    } else {
+        DBG_PRINT_WARNING("No xcp_evts section found\n");
+    }
+#elif defined(__APPLE__)
+    unsigned long sz = 0;
+    const tXcpEventDescriptor *begin = (const tXcpEventDescriptor *)getsectiondata(&_mh_execute_header, "__DATA", "xcp_evts", &sz);
+    if (begin != NULL) {
+        const tXcpEventDescriptor *end = begin + (sz / sizeof(tXcpEventDescriptor));
+        for (const tXcpEventDescriptor *e = begin; e < end; e++) {
+            tXcpEventId id = XcpFindEvent(e->name);
+            if (id == XCP_UNDEFINED_EVENT_ID) {
+                id = XcpCreateEvent(e->name, e->cycle_time_ns, e->priority);
+                assert(id != XCP_UNDEFINED_EVENT_ID);
+                count++;
+            }
+        }
+    } else {
+        DBG_PRINT_WARNING("No xcp_evts section found\n");
+    }
+#endif
+
+    if (count > 0)
+        DBG_PRINTF3(ANSI_COLOR_GREEN "Preregistered %u events from event descriptor section\n" ANSI_COLOR_RESET, count);
+    else
+        DBG_PRINT3("No new event descriptors found in section xcp_evts\n");
+    return count;
+}
+
+#else // XCP_ENABLE_DAQ_EVENT_LIST
+
 const char *XcpGetEventName(tXcpEventId event) {
     (void)event;
     return "";
 }
+
 #endif // XCP_ENABLE_DAQ_EVENT_LIST
 
 /****************************************************************************/
@@ -994,10 +1079,10 @@ static uint8_t XcpCheckMemory(void) {
 
     static_assert(sizeof(tXcpDaqList) == 12, "Invalid tXcpDaqList size"); // Check size
     static_assert(sizeof(tXcpOdt) == 8, "Invalid tXcpOdt size");          // Check size
-    assert(((uint64_t)&shared.daq_lists % 4) == 0);                       // Check alignment
-    assert(((uint64_t)&DaqListOdtTable[0] % 4) == 0);                     // Check alignment
-    assert(((uint64_t)&DaqListOdtEntryAddrTable[0] % 4) == 0);            // Check alignment
-    assert(((uint64_t)&DaqListOdtEntrySizeTable[0] % 4) == 0);            // Check alignment
+    assert(((uintptr_t)&shared.daq_lists % 4) == 0);                      // Check alignment
+    assert(((uintptr_t)&DaqListOdtTable[0] % 4) == 0);                    // Check alignment
+    assert(((uintptr_t)&DaqListOdtEntryAddrTable[0] % 4) == 0);           // Check alignment
+    assert(((uintptr_t)&DaqListOdtEntrySizeTable[0] % 4) == 0);           // Check alignment
 
     DBG_PRINTF6("[XcpCheckMemory] %u of %u Bytes used\n", s, XCP_DAQ_MEM_SIZE);
     return 0;
@@ -1341,7 +1426,7 @@ static void XcpStartDaq(void) {
 
 #ifdef DBG_LEVEL
     if (DBG_LEVEL >= 4) {
-        char ts[64];
+        char ts[64]; // @@@@ STACK buffer for clock string
         clockGetString(ts, sizeof(ts), local.daq_start_clock);
         DBG_PRINTF3("DAQ processing start at t=%s\n", ts);
     }
@@ -1504,11 +1589,11 @@ static void XcpTriggerDaqList_(tQueueHandle queue_handle, uint16_t daq, const ui
 #endif
 #ifdef XCP_ENABLE_DAQ_ADDREXT
 #ifdef XCP_ENABLE_TEST_CHECKS
-                assert(*addr_ext_ptr < count && bases[*addr_ext_ptr] != NULL);
+                assert(*addr_ext_ptr < count && (bases[*addr_ext_ptr] != NULL || XcpAddrIsAbs(*addr_ext_ptr)));
 #else
                 (void)count;
 #endif
-                const uint8_t *src = (const uint8_t *)&bases[*addr_ext_ptr++][*addr_ptr++];
+                const uint8_t *src = (const uint8_t *)((uintptr_t)bases[*addr_ext_ptr++] + *addr_ptr++);
 #else
                 const uint8_t *src = (const uint8_t *)&base[*addr_ptr++];
 #endif
@@ -2283,7 +2368,7 @@ static uint8_t XcpAsyncCommand(bool async, const uint32_t *cmdBuf, uint8_t cmdLe
             page = ApplXcpGetCalPage(segment, CRO_GET_CAL_PAGE_MODE);
 #endif
             if (page == 0xFF)
-                error(CRC_MODE_NOT_VALID);
+                error(CRC_SEGMENT_NOT_VALID);
             CRM_GET_CAL_PAGE_PAGE = page;
         } break;
 
@@ -2852,23 +2937,22 @@ void XcpBackgroundTasks(void) {
 
     // DBG_PRINT6("XcpBackgroundTasks\n");
 
-// Publish all modified calibration segments
+    // Publish all modified calibration segments
 #ifdef XCP_ENABLE_CALSEG_LAZY_WRITE
     uint64_t now = clockGetMonotonicNsLast();
-    static uint64_t last_success_time = 0;
     bool res = XcpCalSegPublishAll(false);
     if (res != CRC_CMD_OK && res != CRC_CMD_PENDING) {
         DBG_PRINT_WARNING("XcpBackgroundTasks: Calibration segment publish failed!\n");
     }
     if (res == CRC_CMD_OK) {
         // All segments published
-        last_success_time = now;
+        local_mut.last_publish_time = now;
     } else if (res == CRC_CMD_PENDING) {
         // Warn if delayed by more than 200ms
-        if (now - last_success_time > CLOCK_TICKS_PER_MS * 200) {
-            if (last_success_time != 0)
+        if (now - local.last_publish_time > CLOCK_TICKS_PER_MS * 200) {
+            if (local.last_publish_time != 0)
                 DBG_PRINT_WARNING("XcpBackgroundTasks: Calibration segment publish delayed by more than 200ms!\n");
-            last_success_time = now;
+            local_mut.last_publish_time = now;
         }
     }
 
@@ -2947,7 +3031,7 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     }
 
     DBG_PRINTF3(ANSI_COLOR_GREEN "XcpInit name=%s, epk=%s, mode=%02X\n" ANSI_COLOR_RESET, name, epk, mode);
-    DBG_PRINTF5("  sizeof(tXcpData)=%zu  sizeof(tXcpLocalData)=%zu\n", sizeof(tXcpData), sizeof(tXcpLocalData));
+    DBG_PRINTF5("  sizeof(tXcpData)=%u  sizeof(tXcpLocalData)=%u\n", (uint32_t)sizeof(tXcpData), (uint32_t)sizeof(tXcpLocalData));
 
     // Mode checks and adjustments
     if (mode != XCP_MODE_DEACTIVATE) {
@@ -2964,6 +3048,13 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
         XcpBindOwnerThread();
 #endif
 #else
+#ifndef OPTION_ENABLE_PERSISTENCE
+        // Persistence not enabled
+        if ((mode & XCP_MODE_PERSISTENCE) != 0) {
+            DBG_PRINT_WARNING("XcpInit: Persistence mode requested, but xcplib is compiled without persistence support, ignoring persistence flag\n");
+            mode &= ~XCP_MODE_PERSISTENCE;
+        }
+#endif
         // Not compiled for SHM mode
         if ((mode & (XCP_MODE_SHM | XCP_MODE_SHM_AUTO | XCP_MODE_SHM_SERVER)) != 0) {
             DBG_PRINT_ERROR("XcpInit: SHM mode requested, but xcplib is compiled in non-SHM mode, switch to XCP_MODE_LOCAL\n");
@@ -2973,14 +3064,20 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
 #endif
     }
 
-    // Clear local XCP state
+    // Clear XCP state
     memset((uint8_t *)&gXcpLocalData, 0, sizeof(tXcpLocalData));
+#ifdef OPTION_SHM_MODE
+    assert(gXcpData == NULL);
+    gXcpData = NULL;
+#else
+    assert(gXcpData.session_status == 0);
+    memset((uint8_t *)&gXcpData, 0, sizeof(tXcpData));
+#endif
     local_mut.init_mode = mode;
 
 // Initialize the base address for absolute addressing
 #if defined(XCP_ENABLE_ABS_ADDRESSING) || defined(XCP_ENABLE_APP_ADDRESSING)
     ApplXcpGetBaseAddr();
-    assert(xcp_get_base_addr() != NULL);
 #endif
 
     // Initialize high resolution clock
@@ -3003,11 +3100,6 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     // Now, after minimum initialization deactivate
     if ((mode & (XCP_MODE_LOCAL | XCP_MODE_SHM)) == 0) {
         local_mut.init_mode = XCP_MODE_DEACTIVATE;
-#ifdef OPTION_SHM_MODE
-        gXcpData = NULL;
-#else
-        gXcpData.session_status = 0;
-#endif
         return true;
     }
 
@@ -3065,10 +3157,6 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     } else {
         DBG_PRINT3(ANSI_COLOR_BLUE "Created '/xcpdata', initializing as leader\n" ANSI_COLOR_RESET);
     }
-#else
-    // Using static memory for tXcpData
-    // Clear global XCP state
-    memset((uint8_t *)&gXcpData, 0, sizeof(tXcpData));
 #endif
 
 #ifdef OPTION_SHM_MODE // XcpInit init SHM mode specific data and state
@@ -3132,13 +3220,31 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     // Create the EPK calibration segment with index 0
     // In SHM multiapplication mode, only the leader reaches this point, and creates a EPK segment for the whole system
     // @@@@ TODO: Currently the EPK segment is treated like any other segment, even if it is read-only and should only expose the default page
-    static tXcpCalSegIndex cal__epk = XCP_UNDEFINED_CALSEG; // Create the linker file marker for the EPK segment
-    const char *ecu_epk = XcpGetEcuEpk();
-    DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s', ecu_epk = '%s'\n", XCP_EPK_CALSEG_NAME, ecu_epk);
-    cal__epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, ecu_epk, XCP_EPK_MAX_LENGTH + 1);
-    (void)cal__epk; // Avoid unused variable warning
-    assert(cal__epk == 0);
+    static tXcpCalSegIndex calseg_id_epk = XCP_UNDEFINED_CALSEG;
+    const static tXcpCalDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {XCP_EPK_CALSEG_NAME, &calseg_id_epk, (void *)&calseg_id_epk, XCP_EPK_MAX_LENGTH + 1,
+                                                                       XCP_CALSEG_TYPE_SEGMENT};
+    DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s'\n", XCP_EPK_CALSEG_NAME);
+#ifdef OPTION_SHM_MODE
+    calseg_id_epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, XcpGetEcuEpk(), XCP_EPK_MAX_LENGTH + 1);
+#else
+    calseg_id_epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, local.epk, XCP_EPK_MAX_LENGTH + 1);
 #endif
+    assert(calseg_id_epk == 0);
+#endif
+
+    // Pre-register all segments whose tXcpCalDescriptor lives in the xcp_cals binary section.
+    // This optionally replaces the lazy creation at all CalSegCreate(), CalBlkCreate() macro call sites
+    // This is done after loading the persistence file, to ensure that all segments from the persistence file are already in the segment list, in particular segments from other
+    // applications in SHM mode
+    XcpRegisterSectionCalSegs();
+#endif
+
+#ifdef XCP_ENABLE_DAQ_EVENT_LIST
+    // Pre-register all events whose tXcpEventDescriptor lives in the xcp_evts binary section.
+    // This optionally replaces the lazy creation at all DaqCreateEvent(), DaqCreateEventExt macro call sites
+    // This is done after loading the persistence file, to ensure that all events from the persistence file are already in the event list, in particular events from other
+    // applications in SHM mode
+    XcpRegisterSectionEvents();
 #endif
 
 #ifdef OPTION_SHM_MODE // XcpInit print inital SHM state
@@ -3399,6 +3505,9 @@ static void XcpPrintCmd(const tXcpCto *cmdBuf) {
         break;
     case CC_SET_MTA:
         printf(" SET_MTA addr=%08Xh, addrext=%02Xh\n", CRO_SET_MTA_ADDR, CRO_SET_MTA_EXT);
+        break;
+    case CC_SET_REQUEST:
+        printf(" CC_SET_REQUEST mode=%02Xh\n", CRO_SET_REQUEST_MODE);
         break;
     case CC_SYNCH:
         printf(" SYNCH\n");
@@ -3694,7 +3803,7 @@ static void XcpPrintRes(const tXcpCto *crm) {
                 if (CRM_GET_DAQ_CLOCK_PAYLOAD_FMT == DAQ_CLOCK_PAYLOAD_FMT_SLV_32) {
                     printf(" <- X32 t=0x%" PRIx32 " sync=%u\n", CRM_GET_DAQ_CLOCK_TIME, CRM_GET_DAQ_CLOCK_SYNCH_STATE);
                 } else {
-                    char ts[64];
+                    char ts[64]; // @@@@ STACK buffer for clock string
                     uint64_t t = (((uint64_t)CRM_GET_DAQ_CLOCK_TIME64_HIGH) << 32) | CRM_GET_DAQ_CLOCK_TIME64_LOW;
                     clockGetString(ts, sizeof(ts), t);
                     printf(" <- X64 t=%" PRIu64 " (%s), sync=%u\n", t & 0xFFFFFFFF, ts, CRM_GET_DAQ_CLOCK_SYNCH_STATE64);
@@ -3734,7 +3843,7 @@ static void XcpPrintRes(const tXcpCto *crm) {
                         if (CRM_GET_DAQ_CLOCK_MCAST_PAYLOAD_FMT & DAQ_CLOCK_PAYLOAD_FMT_ID)
                             printf(" counter=%u, cluster=%u", CRM_GET_DAQ_CLOCK_MCAST_COUNTER, CRM_GET_DAQ_CLOCK_MCAST_CLUSTER_IDENTIFIER);
                     } else {
-                        char ts[64];
+                        char ts[64]; // @@@@ STACK buffer for clock string
                         clockGetString(ts, sizeof(ts), (((uint64_t)CRM_GET_DAQ_CLOCK_MCAST_TIME64_HIGH) << 32) | CRM_GET_DAQ_CLOCK_MCAST_TIME64_LOW);
                         printf(" <- X t=%s, sync=%u", ts, CRM_GET_DAQ_CLOCK_MCAST_SYNCH_STATE64);
                         if (CRM_GET_DAQ_CLOCK_MCAST_PAYLOAD_FMT & DAQ_CLOCK_PAYLOAD_FMT_ID)

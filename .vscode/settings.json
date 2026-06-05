@@ -21,4 +21,7 @@
     "cmake.buildDirectory": "${workspaceFolder}/build",
     "cmake.sourceDirectory": "${workspaceFolder}",
     "cmake.configureOnOpen": false,
+    "rust-analyzer.linkedProjects": [
+        "${workspaceFolder}/tools/xcpclient/Cargo.toml"
+    ]
 }

@@ -13,14 +13,15 @@
 |
  ----------------------------------------------------------------------------*/
 
+#include "xcplib_cfg.h" // for OPTION_xxx
+
+#ifdef OPTION_ENABLE_PERSISTENCE
+
 #include <assert.h>  // for assert
 #include <stdbool.h> // for bool
 #include <stdint.h>  // for uintxx_t
 
-#include "xcplib_cfg.h" // for OPTION_xxx
-#include "xcplite.h"    // for tXcpCalSegIndex
-
-#ifdef OPTION_ENABLE_PERSISTENCE
+#include "xcplite.h" // for tXcpCalSegIndex
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,8 +36,10 @@ bool XcpBinLoad(void);
 // Delete the binary file
 void XcpBinDelete(void);
 
+#ifdef OPTION_CAL_SEGMENTS
 // Freeze current working page data of the specified calibration segment in the binary file
 bool XcpBinFreezeCalSeg(tXcpCalSegIndex calseg);
+#endif
 
 /// Get the filename of the binary persistence file
 /// Buffer valid until the next call of this function

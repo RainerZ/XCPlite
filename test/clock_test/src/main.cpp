@@ -1,4 +1,6 @@
 // clock_test
+// For testing time synchronization and clock behavior
+// See README.md for details
 
 #include <cassert>
 #include <chrono>
@@ -13,6 +15,7 @@
 
 #include "dbg_print.h" // for DBG_PRINT_ERROR, DBG_PRINTF_WARNING, ...
 #include "platform.h"  // for clockGetRealtimeNs, clockGetMonotonicNs
+#include "util.h"      // for syncInit, syncUpdate, syncInterpolateT1
 
 //-----------------------------------------------------------------------------------------------------
 // XCP
@@ -22,7 +25,7 @@
 #include <xcplib.hpp> // for application programming interface
 
 constexpr const char XCP_OPTION_PROJECT_NAME[] = "clock_test";
-constexpr const char XCP_OPTION_PROJECT_VERSION[] = "V1.0.3";
+constexpr const char XCP_OPTION_PROJECT_VERSION[] = "V200";
 constexpr bool XCP_OPTION_USE_TCP = false;
 constexpr uint8_t XCP_OPTION_SERVER_ADDR[4] = {0, 0, 0, 0};
 constexpr uint16_t XCP_OPTION_SERVER_PORT = 5555;
@@ -30,6 +33,8 @@ constexpr size_t XCP_OPTION_QUEUE_SIZE = (1024 * 32);
 constexpr int XCP_OPTION_LOG_LEVEL = 3; // Default XCP log level: 0=none, 1=error, 2=warning, 3=info, 4=XCP protocol debug, 5=very verbose
 
 //-----------------------------------------------------------------------------------------------------
+// Optional: Use a PTP4L synchronized real-time clock instead of the system monotonic clock
+
 // #define OPTION_ENABLE_PTP
 #ifdef OPTION_ENABLE_PTP
 
@@ -98,22 +103,115 @@ bool getPtp4lClockInfo(uint8_t *local_uuid, uint8_t *grandmaster_uuid) {
 #endif
 
 //-----------------------------------------------------------------------------------------------------
+// Adjustable clock parameters
+
+// Clock parameter structure
+typedef struct clock_params {
+    int32_t drift;       // time drift in ns/s (ppb)
+    int32_t drift_drift; // time drift drift in ns/s2
+    int32_t offset;      // time offset in ns
+    uint32_t jitter;     // time jitter in ns
+} tClockParams;
+
+// Default clock parameter values
+static tClockParams clock_params = {
+    .drift = 0,       // time drift in ns/s (ppb)
+    .drift_drift = 0, // time drift drift in ns/s2
+    .offset = 0,      // time offset in ns
+    .jitter = 0,      // time jitter in ns
+};
+
+static tXcpCalSegIndex gClockParameters = XCP_UNDEFINED_CALSEG; // clock parameters calibration segment
+
+//-----------------------------------------------------------------------------------------------------
+// Globals
+
+// Test clock synchronizer state
+static tClockSynchronizer gClockSynchronizer; // Global clock synchronizer instance
+
+// Test start clock offset
+static uint64_t gClockStart = 0; // Start time of the test in system clock nanoseconds
+
+// Last system clock value used by xcpClock()
+static uint64_t gXcpSystemClockLast = 0;
+
+// Last raw xcp clock value (without jitter and offset) used by xcpClock()
+static uint64_t gXcpRawClockLast = 0;
+
+// Last xcp clock value (with jitter and offset and clamped to avoid declining time) used by xcpClock()
+static uint64_t gXcpClockLast = 0;
+
+// Last XCP clock values of the XCP events 'loop' and 'pps'
+static uint64_t gXcpClockLastPps = 0; // Last pulse per second event clock value in nanoseconds
+
+// Test clock current drift
+static int32_t gClockDriftCurrent = 0; // Current drift of the test clock in ns/s (adjusted by drift_drift)
+
+// User calibration update detection
+static int32_t gClockDriftLast = 0;      // Last drift parameter
+static int32_t gClockDriftDriftLast = 0; // Last drift drift parameter
+static int32_t gClockOffsetLast = 0;     // Last offset parameter
+static int32_t gClockJitterLast = 0;     // Last jitter parameter
+
+//-----------------------------------------------------------------------------------------------------
+// Reference (original) clock used (maybe system monotonic raw or real-time PTP or NTP disciplined clock)
+
+uint64_t systemClock(void) {
+
+#ifdef OPTION_ENABLE_PTP
+    return clockGetRealtimeNs() - gClockStart;
+#else
+    return clockGetMonotonicNs() - gClockStart;
+#endif
+}
+
+void systemClockInit(void) {
+
+    gClockStart = 0;
+    gClockStart = systemClock();
+}
+
+//-----------------------------------------------------------------------------------------------------
 // Client clock callbacks for XCP
 
-static uint64_t testTimeAdjust(uint64_t originTime);
+// Get current client clock value in nanoseconds
+// Sets
+//   gXcpSystemClockLast to the last system clock value used for interpolation
+//   gXcpClockLast to the last xcp clock value (without jitter and offset) used
+uint64_t xcpClock(void) {
 
-static uint64_t test_start_time = 0; // Start time of the test in nanoseconds
+    tClockParams *params = (tClockParams *)XcpLockCalSeg(gClockParameters);
+    uint64_t jitter = fast_rand(params->jitter);
+    int64_t offset = params->offset;
+    int32_t drift = params->drift;
+    int32_t drift_drift = params->drift_drift;
+    XcpUnlockCalSeg(gClockParameters);
 
-// Get current clock value in nanoseconds
-uint64_t testGetClock(void) {
+    uint64_t system_clock = systemClock();
+    uint64_t xcp_raw_clock;
+    if (gClockSynchronizer.is_sync) {
+        xcp_raw_clock = syncInterpolateT1(&gClockSynchronizer, system_clock);
+    } else {
+        xcp_raw_clock = system_clock + offset;
+    }
 
-    uint64_t t = testTimeAdjust(clockGetMonotonicNs() - test_start_time);
-    return t;
+    gXcpSystemClockLast = system_clock;
+    gXcpRawClockLast = xcp_raw_clock;
+
+    uint64_t xcp_clock = (uint64_t)((int64_t)xcp_raw_clock + offset) + jitter;
+
+    // Avoid declining time (jitter is alway positive or zero)
+    if (xcp_clock < gXcpClockLast) {
+        xcp_clock = gXcpClockLast;
+    }
+
+    gXcpClockLast = xcp_clock;
+    return xcp_clock;
 }
 
 // Get current clock state
 // @return CLOCK_STATE_SYNCH, CLOCK_STATE_SYNCH_IN_PROGRESS, CLOCK_STATE_FREE_RUNNING
-uint8_t testGetClockState(void) { return CLOCK_STATE_FREE_RUNNING; }
+uint8_t xcpClockState(void) { return CLOCK_STATE_FREE_RUNNING; }
 
 // Get client and grandmaster clock uuid, stratum level and epoch
 // @param client_uuid Pointer to 8 byte array to store the client UUID
@@ -121,7 +219,7 @@ uint8_t testGetClockState(void) { return CLOCK_STATE_FREE_RUNNING; }
 // @param epoch Pointer to store the epoch
 // @param stratum Pointer to store the stratum level
 // @return true if PTP is available and grandmaster found, must not be sync yet
-bool testGetClockInfo(uint8_t *client_uuid, uint8_t *grandmaster_uuid, uint8_t *epoch, uint8_t *stratum) {
+bool xcpClockInfo(uint8_t *client_uuid, uint8_t *grandmaster_uuid, uint8_t *epoch, uint8_t *stratum) {
 
 #ifdef OPTION_ENABLE_PTP
 
@@ -142,158 +240,15 @@ bool testGetClockInfo(uint8_t *client_uuid, uint8_t *grandmaster_uuid, uint8_t *
     return true;
 
 #else
-
     return false; // PTP not available
-
 #endif
 }
 
 // Register PTP client clock callbacks for XCP
 void testRegisterClockCallbacks(void) {
-    ApplXcpRegisterGetClockCallback(testGetClock);
-    ApplXcpRegisterGetClockStateCallback(testGetClockState);
-    ApplXcpRegisterGetClockInfoGrandmasterCallback(testGetClockInfo);
-}
-
-//-----------------------------------------------------------------------------------------------------
-// Adjustable clock
-
-// Clock parameter structure
-typedef struct clock_params {
-    bool enable_test_time_adjustment; //
-    int32_t drift;                    // PTP master time drift in ns/s
-    int32_t drift_drift;              // PTP master time drift drift in ns/s2
-    int32_t offset;                   // PTP master time offset in ns
-    int32_t jitter;                   // PTP master time jitter in ns
-} tClockParams;
-
-// Default clock parameter values
-static tClockParams clock_params = {
-    .enable_test_time_adjustment = false,
-    .drift = 0,       // PTP master time drift in ns/s
-    .drift_drift = 0, // PTP master time drift drift in ns/s2
-    .offset = 0,      // PTP master time offset in ns
-    .jitter = 0,      // PTP master time jitter in ns
-};
-
-tXcpCalSegIndex clock_calseg = XCP_UNDEFINED_CALSEG; // clock parameters calibration segment
-
-//-------------------------------------------------------------------------------------------------------
-// Master time drift, drift_drift, jitter and offset calculation
-
-// Test time state
-int32_t testTimeDrift = 0;           // Current drift in ns/s
-int32_t testTimeCurrentDrift = 0;    // Current drift including drift_drift
-int64_t testTimeSyncDriftOffset = 0; // Current offset from drift accumulated on sync: testTime = originTime+testTimeSyncDriftOffset
-uint64_t testTimeLast = 0;           // Current test time
-uint64_t testTimeLastSync = 0;       // Original time of last sync
-MUTEX testTimeMutex;
-
-// Initialize test time parameters
-static void testTimeInit(void) {
-
-    testTimeDrift = 0;           // Current drift in ns/s
-    testTimeCurrentDrift = 0;    // Current drift including drift_drift
-    testTimeSyncDriftOffset = 0; // Current offset: testTime = originTime+testTimeSyncDriftOffset
-    testTimeLast = 0;            // Current test time
-    testTimeLastSync = 0;        // Original time of last sync
-    mutexInit(&testTimeMutex, 0, 1000);
-
-    test_start_time = clockGetMonotonicNs();
-}
-
-// Calculate simulated test time from origin time applying drift, drift_drift, offset and jitter
-static uint64_t testTimeAdjust(uint64_t originTime) {
-
-    uint64_t t = originTime;
-
-    tClockParams *params = (tClockParams *)XcpLockCalSeg(clock_calseg);
-
-    if (params->enable_test_time_adjustment) {
-
-        assert(t >= testTimeLastSync);
-
-        mutexLock(&testTimeMutex);
-
-        // time since last sync
-        uint64_t dt = t - testTimeLastSync;
-
-        //  Apply drift offset
-        int64_t drift_offset = (int64_t)((testTimeCurrentDrift * (int64_t)dt) / 1000000000) + testTimeSyncDriftOffset;
-        t += drift_offset;
-
-        // Apply jitter
-        int64_t jitter_offset = 0;
-        if (params->jitter > 0) {
-            jitter_offset = (int64_t)(((double)rand() / (double)RAND_MAX) * 2.0 * (double)(params->jitter + 1) - (double)(params->jitter + 1));
-            t += jitter_offset;
-        }
-
-        // Apply offset
-        t += params->offset;
-
-        mutexUnlock(&testTimeMutex);
-
-        // warn if time is non monotonic
-        if (t < testTimeLast) {
-            DBG_PRINTF_ERROR("testTimeAdjust: Non monotonic time ! (dt=-%" PRIu64 ")\n", testTimeLast - t);
-        }
-
-        if (originTime != t) {
-            DBG_PRINTF5("testTimeAdjust: originTime=%" PRIu64 " ns, drift_offset=%" PRIi64 " ns, jitter=%" PRIi64 " ns, offset=%d ns => testTime=%" PRIu64 " ns\n", originTime,
-                        drift_offset, jitter_offset, params->offset, t);
-        }
-    }
-
-    XcpUnlockCalSeg(clock_calseg);
-
-    testTimeLast = t;
-    return t;
-}
-
-// Recalculate test time sync offset and zero test time drift offset
-// At drift 100ppm, calculation would overflow after 2,8s
-static void testTimeSync(uint64_t originTime) {
-
-    if (originTime < testTimeLastSync)
-        return; // Ignore non monotonic time
-
-    tClockParams *params = (tClockParams *)XcpLockCalSeg(clock_calseg);
-
-    // Check if drift parameter has changed since last sync
-    assert(params->drift >= -1000000 && params->drift <= +1000000);
-    if (params->drift != testTimeDrift) {
-        testTimeDrift = testTimeCurrentDrift = params->drift;
-
-        DBG_PRINTF3("testTimeSync: New drift=%d ns/s\n", testTimeDrift);
-    }
-
-    mutexLock(&testTimeMutex);
-
-    if (testTimeLastSync > 0) {
-
-        // time since last sync
-        uint64_t dt = originTime - testTimeLastSync;
-        assert(dt < 2000000000); // Be sure integer calculation does not overflow
-
-        int64_t o = (int64_t)((testTimeCurrentDrift * (int64_t)dt) / 1000000000);
-        testTimeSyncDriftOffset += o;
-        // printf("sync dt=%" PRIu64 ", driftOffset=%d, timeOffset=%d\n", dt, testTimeDriftOffset, testTimeSyncDriftOffset);
-
-        // Apply drift drift
-        testTimeCurrentDrift += (int32_t)((params->drift_drift * (int64_t)dt) / 1000000000);
-    }
-
-    testTimeLastSync = originTime;
-
-    if ((testTimeSyncDriftOffset) != 0 || testTimeCurrentDrift != 0) {
-        DBG_PRINTF5("testTimeSync: originTime=%" PRIu64 " ns, testTimeSyncDriftOffset=%" PRIi64 " ns, testTimeCurrentDrift=%d ns/s\n", originTime, testTimeSyncDriftOffset,
-                    testTimeCurrentDrift);
-    }
-
-    XcpUnlockCalSeg(clock_calseg);
-
-    mutexUnlock(&testTimeMutex);
+    ApplXcpRegisterGetClockCallback(xcpClock);
+    ApplXcpRegisterGetClockStateCallback(xcpClockState);
+    ApplXcpRegisterGetClockInfoGrandmasterCallback(xcpClockInfo);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -321,10 +276,24 @@ int main(int argc, char *argv[]) {
 
     // Initialize XCP
     XcpSetLogLevel(XCP_OPTION_LOG_LEVEL);
-    XcpInit(XCP_OPTION_PROJECT_NAME, XCP_OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
+    if (!XcpInit(XCP_OPTION_PROJECT_NAME, XCP_OPTION_PROJECT_VERSION, XCP_MODE_LOCAL)) {
+        return 1;
+    }
 
-    // Register XCP clock callbacks, to provide application defined timestamps and information about clock state and identity
-    testTimeInit();
+    // Initialize the test clock synchronizer, using the system monotonic clock as reference and with no initial offset
+    {
+        systemClockInit();
+        syncInit(&gClockSynchronizer, SYNC_MODE_DEFAULT, 0);
+        uint64_t t = systemClock();
+        syncSet(&gClockSynchronizer, t, t, clock_params.drift); // Initialize, set to sync
+        if (!gClockSynchronizer.is_sync) {
+            DBG_PRINT_ERROR("Clock synchronizer not initialized\n");
+            return 1;
+        }
+        gClockDriftCurrent = clock_params.drift;
+    }
+
+    // Register XCP clock callbacks, to provide the test clock as application defined timestamps and information about clock state and identity
     testRegisterClockCallbacks();
 
     // Create XCP on Ethernet server
@@ -337,35 +306,91 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Create XCP calibration parameter segment, if not already existing
-    clock_calseg = XcpCreateCalSeg("clock_params", &clock_params, sizeof(clock_params));
-    assert(clock_calseg != XCP_UNDEFINED_CALSEG);
-    A2lSetSegmentAddrMode(clock_calseg, clock_params);
-    A2lCreateParameter(clock_params.enable_test_time_adjustment, "Enable test time adjustment", "", 0, 1);
+    // Create XCP calibration parameter segment for the adjustable clock parameters
+    gClockParameters = XcpCreateCalSeg("clock_params", &clock_params, sizeof(clock_params));
+    assert(gClockParameters != XCP_UNDEFINED_CALSEG);
+    A2lSetSegmentAddrMode(gClockParameters, clock_params);
     A2lCreateParameter(clock_params.drift, "Master time drift (ns/s)", "", -100000, +100000);
     A2lCreateParameter(clock_params.drift_drift, "Master time drift drift (ns/s2)", "", -1000, +1000);
     A2lCreateParameter(clock_params.jitter, "Master time jitter (ns)", "", 0, 1000000);
     A2lCreateParameter(clock_params.offset, "Master time offset (ns)", "", -1000000000, +1000000000);
+    gClockDriftDriftLast = clock_params.drift_drift;
+    gClockDriftLast = clock_params.drift;
+    gClockOffsetLast = clock_params.offset;
+    gClockJitterLast = clock_params.jitter;
 
-    std::cout << "Start mainloop ..." << std::endl;
-    uint8_t counter{0};
-    uint64_t system_clock{0};
-    uint64_t xcp_clock{0};
+    uint8_t counter{0};       // Measurement value: loop counter
+    uint64_t system_clock{0}; // Measurement value: current normalized system wall clock
+    uint64_t xcp_clock{0};    // Measurement value: current XCP event timestamp
+    uint8_t xcp_clock_pps{0}; // Measurement value: pulse per second event state
+
+    xcp_clock = xcpClock();
+    printf("Start loop, initial XCP clock = %" PRIu64 " ns", xcp_clock);
+
     while (running) {
 
-        // Measure a counter and the clock values
+        // Measure a counter and the current event clock values from the system clock and the XCP clock
         counter++;
-        system_clock = clockGetMonotonicNs() - test_start_time;
-        xcp_clock = testTimeAdjust(system_clock);
-        DaqEventAtVar(mainloop, xcp_clock,                                                             //
+        xcp_clock = xcpClock();             // Simulate a test clock (drifting and jittery clock) for XCP
+        system_clock = gXcpSystemClockLast; // The system clock used by the last call to xcpClock()
+
+        DaqEventAtVar(loop, xcp_clock,                                                                 //
                       A2L_MEAS(counter, "Main loop counter"),                                          //
                       A2L_MEAS(system_clock, "Current event timestamp value from system clock in ns"), //
                       A2L_MEAS(xcp_clock, "Current event timestamp value from XCP clock in ns"));
 
-        // Every second
-        if (counter % 100 == 0) {
-            testTimeSync(clockGetMonotonicNs() - test_start_time);
+        // PPS event exactly every 1s in test time
+        // Simulate a pulse per second event signal with a pulse width of exactly 100ms in test time scale
+        if ((xcp_clock - gXcpClockLastPps) > 1000000000) { // Every second in simulated time
+
+            xcp_clock_pps = 1;
+            uint64_t t = (xcp_clock / 1000000000) * 1000000000;                      // Round down to last second in XCP time
+            DaqEventAtVar(pps, t, A2L_MEAS(xcp_clock_pps, "100 ms long PPS pulse")); // Start of the pulse
+            xcp_clock_pps = 0;
+            DaqEventAtVar(pps, t + 100000000, A2L_MEAS(xcp_clock_pps, "100 ms long PPS pulse")); // End of the pulse (+100ms)
+
+            printf("PPS event at xcp_clock = %" PRIu64 " ns\n", t);
+            gXcpClockLastPps = xcp_clock;
         }
+
+        // Approximately every 100ms in system time
+        if (counter % 10 == 0) {
+            printf("system_clock = %" PRIu64 " ns, xcp_clock = %" PRIu64 " ns, diff to system_clock = %" PRIi64 " ns\n", system_clock, xcp_clock,
+                   (int64_t)(xcp_clock - system_clock));
+        }
+
+        // Approximately every second in system time
+        if (counter % 100 == 0) {
+
+            tClockParams *params = (tClockParams *)XcpLockCalSeg(gClockParameters);
+
+            // Accumulate drift_drift
+            gClockDriftCurrent += params->drift_drift;
+
+            // Calibration parameter change detection
+            // Parameter change detection
+            if (gClockDriftLast != params->drift                  //
+                || gClockOffsetLast != params->offset             //
+                || gClockJitterLast != params->jitter             //
+                || gClockDriftDriftLast != params->drift_drift) { //
+
+                printf("User update: offset = %d ns, drift = %d ns/s\n", params->offset, params->drift);
+                gClockDriftCurrent = params->drift; // Reset (Thats for integrating the drift_drift into the current drift value)
+
+                gClockDriftLast = params->drift;
+                gClockDriftDriftLast = params->drift_drift;
+                gClockOffsetLast = params->offset;
+                gClockJitterLast = params->jitter;
+            }
+
+            XcpUnlockCalSeg(gClockParameters);
+
+            // Update the clock synchronizers anchor (just use the last pair it generated in this loop)
+            // Must be done regularly to avoid integer overflows in the interpolation function
+            syncSet(&gClockSynchronizer, gXcpRawClockLast /* t1 */, gXcpSystemClockLast /* t2 */, gClockDriftCurrent);
+            printf("Sync update\n");
+
+        } // every 1s
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     } // while running
