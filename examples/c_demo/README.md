@@ -1,44 +1,87 @@
-# XCPlite Example c_demo
+# c_demo — Complex Calibration Objects and Async Access
 
-Shows more complex data objects (structs, arrays) and calibration objects (axis, maps and curves).  
-Measurement variables on stack and in global memory. 
-Asynchronous read (polling) and write to a value on the stack (variable: counter) 
-Consistent atomic changes of multiple calibration parameters.  
-Calibration page switching and EPK version check.  
+Shows more complex data objects (structs, arrays) and calibration objects (axes, maps and curves).
+Demonstrates asynchronous polling access to stack variables, consistent atomic parameter updates,
+and calibration page switching.
 
-Enables log level 4 to observe XCP commands.  
-This shows how asynchronous read/write access to a variable on the stack and how the consistent parameter update and measurement work
+---
 
+## What it demonstrates
 
-## Asynchronous access to stack variable
+| Feature | How it is demonstrated |
+|---|---|
+| Maps, curves, lookup tables | Calibration parameters with fixed and shared axes |
+| Struct and array measurement | Global and stack variables of structured types |
+| Asynchronous stack polling | CANape reads `counter` on the stack via polling (no DAQ event) |
+| Consistent atomic update | `test_byte1` and `test_byte2` updated atomically via indirect calibration mode |
+| Calibration page switching | Switch between default and RAM calibration page at runtime |
+| EPK version check | Version string verified by CANape on connect |
+| Minimum cycle time benchmark | `delay_us` calibration parameter controls main loop sleep |
 
-The example demonstrates asynchronous read and write access to a variable 'counter', which is on the stack.  
-CANape measurement mode for 'counter' is configured to "Polling every second", which means that CANape will actively read the value from stack during his lifetime in a cyclic manner. The 'counter' has write access and can be modified in the calibration window.
+### Files
 
+| File | Purpose |
+|---|---|
+| `src/main.c` | Demo application — calibration objects, async polling, event loop |
+| `CANape/` | CANape project (A2L auto-upload, XCP UDP, port 5555, indirect cal mode) |
 
+---
 
-## Consistent parameter changes
+## Building
 
-Calibration segments support atomic updates, which means that CANape can update multiple parameters at once in a consistent way, while the application will never see an inconsistent state of the parameters during the update.  
+```bash
+./build.sh examples
+./build/c_demo
+```
 
-The demo has 2 calibration parameters 'test_byte1' and 'test_byte2', which are part of a calibration segment.
-The application checks if (test_byte1 == -test_byte2), and if not, it will print a warning message.  
+Or with CMake directly:
 
-The consistent update is triggered by pressing the update button in the calibration window.  
-This "indirect calibration mode" has to be explicitly enabled in the toolbar before.
+```bash
+cmake -B build -S . -DXCPLITE_BUILD_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --target c_demo
+./build/c_demo
+```
 
+> **Note:** This example enables log level 4 (`OPTION_LOG_LEVEL 4`) so XCP commands are
+> visible on the console — useful for understanding how async access and consistent updates work.
 
-## Minimum cycle time
+---
 
-This example application is single threaded with a main loop, which has a sleep time defined by the calibration parameter 'delay_us'.
-If the sleep time is too low, the application will not be able to keep up continuous measurement, which will lead to queue overruns in the XCP driver or to lost packets, if the UDP transmission cannot keep up.   
-The parameter 'delay_us' can be used to evaluate the limit of minimum cycle time.  
-XCPlite uses a very efficient lockless queue, so depending on the systems UDP performance and the maximum MTU set, it should be possible to go down to below 10 microseconds.  
-The other example multi_thread_demo may be used to evaluate the performance in a multi-threaded application, with contention between different measurement threads.  
-On localhost connections on a desktop PC, it should be possible to go down to 1 microsecond measurement cycle time.
+## CANape
 
-For example on a MAC pro M3 running CANape in a VM with 2us sleep time, the DAQ queue producer acquire lock time statistics look like this:
+Open `CANape/CANape.ini` in CANape. The project is pre-configured for XCP on UDP, port 5555,
+with automatic A2L upload and indirect calibration mode enabled.
 
+If CANape cannot connect, verify the IP address in
+*Device Configuration / Devices / XCP / Protocol / Transport Layer*.
+
+---
+
+## Key concepts
+
+### Asynchronous access to stack variable
+
+`counter` lives on the stack. CANape is configured to poll it once per second
+(`Polling every second` measurement mode) — CANape actively reads the value during its lifetime
+rather than waiting for a DAQ trigger event. The variable also has write access and can be
+modified from the calibration window.
+
+### Consistent parameter changes
+
+`test_byte1` and `test_byte2` are in the same calibration segment. The application asserts
+`test_byte1 == -test_byte2` and prints a warning if they are ever inconsistent.
+The *indirect calibration mode* (enabled in the CANape toolbar) ensures both values are applied
+atomically — the application never sees a partial update.
+
+### Minimum cycle time
+
+The `delay_us` calibration parameter controls the main loop sleep time. Reducing it probes the
+minimum measurement cycle time the system can sustain without queue overruns. XCPlite's
+lock-free queue allows sub-10 µs cycles on typical Linux/macOS hardware.
+
+Example lock-time statistics at 2 µs sleep time (MacBook Pro M3):
+
+```
 Producer acquire lock time statistics:
   count=3032642  max_spins=0  max=29250ns  avg=27ns
 
@@ -48,25 +91,8 @@ Lock time histogram (3032642 events):
   0-40ns                   1233151   40.66%  #####################
   40-80ns                  1682263   55.47%  ##############################
   80-120ns                   89802    2.96%  #
-  120-160ns                  16276    0.54%  
-  160-200ns                   3312    0.11%  
-  200-240ns                   3308    0.11%  
-  240-280ns                   2034    0.07%  
-  280-320ns                    921    0.03%  
-  320-360ns                    438    0.01%  
-  360-400ns                    254    0.01%  
-  400-600ns                    575    0.02%  
-  600-800ns                    125    0.00%  
-  800-1000ns                    44    0.00%  
-  1000-1500ns                   33    0.00%  
-  1500-2000ns                    8    0.00%  
-  2000-3000ns                   17    0.00%  
-  3000-4000ns                   11    0.00%  
-  4000-6000ns                   12    0.00%  
-  6000-8000ns                   25    0.00%  
-  8000-10000ns                  17    0.00%  
-  10000-20000ns                 14    0.00%  
-  20000-40000ns                  2    0.00%  
+  ...
+```
 
 
 

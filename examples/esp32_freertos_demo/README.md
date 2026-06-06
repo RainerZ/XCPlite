@@ -15,7 +15,7 @@ The included CANape project and the XCP instrumentation in `main.cpp` show:
 - Display cycle time jitter of the tasks in CANape
 - Counting task deadline overruns when calibrated periods are too aggressive
 - Creating thread-safe calibration parameters accessible in both tasks
-- Calibrating task cycle times and the amplitude of a floating-point sine measurement
+- Calibrating task cycle times and some other demo parameters
 - Observing both task trigger points with a two-channel oscilloscope to evaluate XCP instrumentation cost
 
 
@@ -246,6 +246,7 @@ The upload A2L file error message can be ignored, as the FreeRTOS implementation
 
 Get the ELF file and generate the A2L file with xcpclient (see getting xcpclient below).
 
+
 Recommended command from this example directory:
 
 ```bash
@@ -268,7 +269,11 @@ xcpclient --offline --elf .pio/build/lilygo-t-display-s3/firmware.elf --a2l esp3
 Note that the A2L generator is not considered stable yet. 
 It has been tested with ELF files from Linux gcc and clang tool chains.  
 
-See the documentation of xcpclient and the other examples for more information on working with offline A2L generation.  
+For more information on offline A2L generation see:
+- [tools/xcpclient/README.md](../../tools/xcpclient/README.md) — xcpclient documentation and all command-line options
+- [examples/no_a2l_demo/README.md](../no_a2l_demo/README.md) — dedicated no-A2L / offline A2L workflow example
+- [docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation) — ELF/DWARF internals and design details of the offline A2L generation approach
+- [examples/freertos_demo/README.md](../freertos_demo/README.md) — Linux FreeRTOS demo with offline A2L generation
 
 
 
@@ -303,6 +308,7 @@ Notes on CANape:
 - CANape will read the IP address of the XCP server from the generated A2L file. The xcpclient A2L generator writes the ip address given on its command line or otherwise defaults to 127.0.0.1.  
 - CANape does not support address update for local variables on stack. Don't use local variables when using the build-in address updater!.  
 
+
 ### What to Measure
 
 Good first measurements:
@@ -321,15 +327,93 @@ And calibration parameters to play with:
 The local variables are intentionally marked `volatile` in `main.cpp` so optimized builds keep them visible enough for offline ELF/DWARF based A2L generation.
 
 
+## Calibration parameters — `CalSegDeclRef`
+
+This demo uses `CalSegDeclRef`, the idiomatic C++ macro for static (compile-time registered)
+calibration segments. It combines a linker-section descriptor (for `xcpclient` and `XcpInit`)
+with a typed RAII handle in a single declaration:
+
+```cpp
+
+// 1. Define the parameter struct and its default values (const = reference/FLASH page)
+//    Note that the struct name and the variable name must be identical for xcpclient to find the default value in the ELF ! 
+struct parameters {
+    uint32_t fast_task_period_ms;
+    uint32_t slow_task_period_ms;
+    uint16_t counter_max;
+    float    amplitude;
+};
+const struct parameters parameters = { .fast_task_period_ms = 2, ... };
+
+// 2. Declare the calibration segment and typed C++ handle in one line
+//    XcpInit() xcpclient scan the xcp_cals section and registers the segment automatically.
+CalSegDeclRef(parameters, parameters_calseg);
+// This expands to:
+//   static tXcpCalSegIndex     calseg_id_parameters = XCP_UNDEFINED_CALSEG;
+//   static tXcpCalDescriptor   calseg__parameters   __attribute__((section("xcp_cals"))) = {...};
+//   static CalSegRef<parameters> parameters_calseg(&calseg_id_parameters, &parameters);
+//
+
+// 3. Use the handle anywhere — RAII lock returns a const pointer, auto-unlocks on scope exit
+{
+    auto params = parameters_calseg.lock();
+    uint32_t period = params->fast_task_period_ms;
+} // unlocked here
+```
+
+The lock is **wait-free** — it uses atomics (RCU), not a mutex — so it is safe to call
+from an ISR or a high-priority FreeRTOS task.
+
+
+**`CalSegDeclRef(value, handle)`** vs. the other calibration API macros:
+
+| Macro / Class | Registration | Handle type | Use case |
+|---|---|---|---|
+| `CalSegDeclRef(val, hdl)` | `xcp_cals` section → `XcpInit()` | `CalSegRef<T>` | C++ with section-registered segment |
+| `CalSegDecl(val)` | `xcp_cals` section → `XcpInit()` | `val##_calseg` (same) | C++ shorthand — handle named `<val>_calseg` |
+| `CalSegDecl` (C, `xcplib.h`) | `xcp_cals` section → `XcpInit()` | `calseg_id_<name>` | C with section-registered segment |
+| `xcp::CalSeg<T>(name, ptr)` | Runtime `XcpCreateCalSeg()` | `CalSeg<T>` | C++ with runtime A2L generation |
+
 
 
 ## Code instrumentation for offline A2L generation
 
-The A2L file generator in xcpclient scans the ELF file for measurement event and calibration segment markers and automatically creates calibration and measurement variables with complex types, visible in the instrumented XCP measurement event trace points. This includes local variables in the function calling the event trigger.  
+The xcpclient A2L generator reads two named ELF sections written by the XCPlite macros, plus
+DWARF debug information, to build the A2L file without any runtime A2L calls in the application.
 
-Precondition is, that the code (C and C++) uses the instrumentation macros, not the plain XCPlite C API functions. The macros generate constants in the .rodata sections xcp_evts and xcp_cals. The event trigger macros generate local static variables to identify the location of the XCP trace points. The A2L generator inspects the location expressions in ELF/DWARF and identifies local variables visible in the XCP event trigger scope. Note that local variables may become invisible with compiler optimizations. Mark selected demo measurements with volatile to force the compiler to keep them and spill them to stack.  
+**`xcp_evts` section** — every `DaqCreateEvent(name)` or `DaqCreateAndTriggerEvent(name)`
+emits a `tXcpEventDescriptor` (name, cycle time, priority) into `.xcp_evts`. xcpclient
+iterates this section to discover all events.
 
-How to use the instrumentation macros is shown in the example code in `main.cpp`.  
+**`xcp_cals` section** — every `CalSegDecl(name)` at file scope emits a `tXcpCalDescriptor`
+(name, default page address, size) into `.xcp_cals`. xcpclient iterates this to discover all
+calibration segments.
+
+**DWARF trigger point anchors** — every event trigger macro emits a named static variable
+(e.g. `trg__AAS__name`, `trg__AASD__name`) whose name encodes the active addressing modes.
+xcpclient finds this variable in the DWARF and walks all variables in the same lexical scope
+— those become the local measurements in the A2L.
+
+**Therefore: always use the macros, never the raw C API functions** (`XcpCreateEvent()`,
+`XcpCreateCalSeg()`, etc.). Only the macros emit the section data and anchors that xcpclient
+needs to build the A2L automatically.
+
+**Local variables must be `volatile`** in optimized builds to remain visible in DWARF.
+Without `volatile` the compiler may eliminate them or give them unreliable location expressions:
+
+```cpp
+void fastTask(void *pv) {
+    volatile uint32_t counter = 0;   // XCP: keep on stack for offline A2L
+    DaqCreateAndTriggerEvent(fastTask);
+}
+```
+
+**Build with debug information** (`-g` / `Debug` or `RelWithDebInfo`). Strip builds have no
+DWARF type or location data.
+
+For the complete technical details — ELF section layouts, `trg__` anchor naming convention,
+and `AddrExt` encoding — see
+[docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation--elfdwarf-internals).
 
 ## Getting xcpclient
 

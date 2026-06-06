@@ -9,7 +9,7 @@ see the [Library Configuration Override](#library-configuration-override) sectio
 
 The A2L database is instead generated offline by the `xcpclient` tool (ELF/DWARF → A2L converter),
 which is part of this repository under `tools/xcpclient/`.
-See comments in `main.c`.
+
 
 
 ## The XCPlite Build Time A2L Generation Concept
@@ -83,23 +83,137 @@ Pass the override file to xcplite at compile time:
 target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"xcplib_no_a2l_cfg.h\"")
 ```
 
-This is already set by the `XCPLITE_BUILD_NO_A2L_DEMO=ON` CMake option.
+This is already set when building with `XCPLITE_CONFIGURATION=no_a2l`.
 The same pattern can be used to create any other application-specific configuration override.
 
 > **Note:** The no_a2l_demo must be built in isolation because the override disables the A2L generator that other examples depend on. A dedicated build directory avoids cache conflicts.
 
+---
+
+## How xcpclient finds your events and variables
+
+`xcpclient --create-a2l` discovers events, calibration segments, and local variables
+automatically — **without any runtime A2L calls in your code** — by reading named ELF
+sections and DWARF debug info written by the XCPlite macros.
+
+To make this work correctly, follow these rules:
+
+1. **Always use the macros, never the raw C API** (`XcpCreateEvent`, `XcpCreateCalSeg`, etc.).
+   Only the macros emit the ELF section data and DWARF anchors that xcpclient needs.
+
+2. **Mark local measurement variables `volatile`** in optimized builds.
+   Without `volatile` the compiler may eliminate stack variables or give them unreliable
+   DWARF location expressions:
+   ```c
+   void myTask(void) {
+       volatile uint32_t counter = 0;  // XCP: keep on stack for offline A2L
+       DaqCreateAndTriggerEvent(myTask);
+   }
+   ```
+
+3. **Build with debug information** (`-g` / `CMAKE_BUILD_TYPE=Debug` or `RelWithDebInfo`).
+   xcpclient reads DWARF; stripped builds have no type or location data.
+
+4. **`CalSegDecl` must be at file scope** (outside any function) so the descriptor is
+   allocated for the program lifetime and xcpclient can find it.
+
+For the full ELF/DWARF mechanics — section layouts, the `trg__` anchor naming convention,
+and the `AddrExt` encoding — see
+[docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation--elfdwarf-internals).
+
+---
+
+## API subset for no-A2L workflows
+
+When `XCPLIB_CFG_OVERRIDE="xcplib_no_a2l_cfg.h"` is active, the on-target A2L generator
+is compiled out. The application must **not** call any `A2lCreate*`, `A2lTypedef*`,
+`A2lSetXxxAddrMode`, `A2lFinalize`, or `A2lOnce` macros — they expand to nothing or are
+absent. The A2L file is produced offline from ELF/DWARF by `xcpclient`.
+
+The following API subset remains fully available and is unchanged:
+
+### Server
+
+| Function | Purpose |
+|---|---|
+| `XcpInit(name, epk, mode)` | Initialize the XCP core |
+| `XcpEthServerInit(addr, port, tcp, queue_size)` | Start the XCP/Ethernet server |
+| `XcpEthServerShutdown()` | Stop the server |
+| `XcpSetElfName(path)` | Register ELF file path for `GET_ID` upload (`OPTION_ENABLE_ELF_UPLOAD`) |
+| `XcpSetLogLevel(level)` | Set log verbosity |
+
+### Events and measurement triggers — macros only (`xcplib.h`)
+
+> **These macros are essential for offline A2L generation.** Use only the macros listed here —
+> not the raw `XcpCreateEvent()` / `XcpEvent()` C functions — because only the macros emit
+> the ELF section descriptors and DWARF anchors that xcpclient needs.
+
+| Macro | Emits to ELF | Purpose |
+|---|---|---|
+| `DaqCreateEvent(name)` | `xcp_evts` | Register a named DAQ event; emits `tXcpEventDescriptor` |
+| `DaqCreateEventInstance(name)` | `xcp_evts` | Thread-local event instance; emits descriptor |
+| `DaqCreateAndTriggerEvent(name)` | `xcp_evts` + DWARF anchor | Declare and trigger in one step — ideal for short-lived functions |
+| `DaqTriggerEvent(name)` | DWARF anchor (`trg__AAS__`) | Trigger and anchor local variable scope for xcpclient |
+| `DaqTriggerEventExt(name, base)` | DWARF anchor (`trg__AASD__`) | Trigger with explicit base pointer (heap / relative addressing) |
+| `DaqTriggerEvent_i(event_id)` | DWARF anchor | Trigger by cached event ID (thread-local instances) |
+| `DaqEventEnable(name)` / `DaqEventDisable(name)` | — | Enable/disable individual events at runtime |
+
+### Calibration — macros only (`xcplib.h`)
+
+> **These macros are essential for offline A2L generation.** Only `CalSegDecl` + `CalSegCreate`
+> emit the `xcp_cals` section descriptor that xcpclient reads. `XcpCreateCalSeg()` does not.
+
+| Macro / Function | Emits to ELF | Purpose |
+|---|---|---|
+| `CalSegDecl(name)` | `xcp_cals` (at file scope) | Declare + emit `tXcpCalDescriptor` into `.xcp_cals` |
+| `CalSegCreate(name)` | — | Register segment at runtime (pairs with `CalSegDecl`) |
+| `CalSegLock(name)` | — | Lock segment for read; returns `const T *` to the active page |
+| `CalSegUnlock(name)` | — | Release the lock |
+| `XcpBinWrite(epk)` | — | Write binary calibration file (no A2L required) |
+
+### C++ RAII calibration wrapper (`xcplib.hpp`)
+
+For C++ no-A2L builds, use `CalSegDeclRef` or `CalSegDecl` — these emit the `xcp_cals`
+section descriptor (like the C `CalSegDecl`) and additionally create a typed `CalSegRef<T>`
+RAII handle. Registration is done by `XcpInit()` from the section data; no runtime
+`XcpCreateCalSeg()` call is needed.
+
+| Macro / Class | Emits to ELF | Purpose |
+|---|---|---|
+| `CalSegDeclRef(val, handle)` | `xcp_cals` (at file scope) | Declare section descriptor + create named `CalSegRef<T>` handle |
+| `CalSegDecl(val)` | `xcp_cals` (at file scope) | Shorthand — handle is named `val##_calseg` |
+| `handle.lock()` | — | Lock and return `CalSegGuard` (RAII `const T *`, auto-unlocks) |
+
+> **Note:** `xcp::CalSeg<T>(name, ptr)` registers at runtime via `XcpCreateCalSeg()` and
+> is for builds **with** on-target A2L generation. Do not use it in no-A2L builds.
+
+### What is NOT available without on-target A2L
+
+The following are compiled out when `OPTION_ENABLE_A2L_GENERATOR` is not set:
+
+- `A2lCreateMeasurement*` / `A2lCreateParameter*` / `A2lCreateCurve*` / `A2lCreateMap*`
+- `A2lTypedefBegin` / `A2lTypedefEnd` / `A2lTypedefXxxComponent`
+- `A2lCreateTypedefInstance` / `A2lCreateTypedefReference`
+- `A2lSetAbsoluteAddrMode` / `A2lSetRelativeAddrMode` / `A2lSetStackAddrMode` / `A2lSetSegmentAddrMode`
+- `A2lCreateLinearConversion` / `A2lCreateEnumConversion`
+- `A2lFinalize` / `A2lOnce`
+
+These are replaced by the offline `xcpclient --create-a2l --elf <binary>` workflow.
+
+---
 
 ## Using the xcpclient tool for A2L generation
 
 ```bash
-# Build the no_a2l_demo (isolated build directory build_no_a2l/)
+# Build the no_a2l_demo (isolated build directory build-no_a2l/)
 ./build.sh no_a2l
 
 # Or directly with CMake
-cmake -B build_no_a2l -S . -DCMAKE_BUILD_TYPE=Debug -DXCPLITE_BUILD_NO_A2L_DEMO=ON -DXCPLITE_BUILD_EXAMPLES=OFF
-# or with forcing ARM architecture
-make -B build_no_a2l_arm64 -S . -DCMAKE_BUILD_TYPE=Debug -DXCPLITE_BUILD_NO_A2L_DEMO=ON -DXCPLITE_BUILD_EXAMPLES=OFF -DCMAKE_OSX_ARCHITECTURES=arm64
-cmake --build build_no_a2l
+cmake -B build-no_a2l -S . -DXCPLITE_CONFIGURATION=no_a2l -DCMAKE_BUILD_TYPE=Debug -DXCPLITE_BUILD_EXAMPLES=ON
+cmake --build build-no_a2l
+# or with forcing ARM architecture (macOS)
+cmake -B build-no_a2l -S . -DXCPLITE_CONFIGURATION=no_a2l -DCMAKE_BUILD_TYPE=Debug -DXCPLITE_BUILD_EXAMPLES=ON -DCMAKE_OSX_ARCHITECTURES=arm64
+cmake --build build-no_a2l
 
 # Generate an A2L file for the no_a2l_demo application from its ELF file
 # Add all variables

@@ -4,14 +4,24 @@ This document contains advanced technical information about XCPlite's implementa
 
 ## Resource consumption
 
-libxcplite release build is currently about 160 KB in size, without debug prints enabled.
-Memory consumption depends on the configuration and usage of the library. The following are some examples for a typical configuration with 10 events, 10 calibration segments and 10 DAQ lists with 10 ODTs each:
+The libxcplite release build is currently about 160 KB in size, without debug prints enabled.
+Memory consumption depends on the configuration and usage of the library.  
+The following values are estimated for the hello_xcp example using the libxcplite default configuration:
+
 
 | Resource | Consumption |
 | --- | --- |
-| Static memory | ~100 KB (for DAQ tables, calibration segment pages) |
-| Heap memory | ~100 KB (for for transport layer queue) |
-| Stack memory | ~1 KB per thread (for XCP receive and tranmit threads ) |
+| Static memory | ~10 KB (for DAQ tables, calibration segment pages) |
+| Heap memory | ~32 KB (for for transport layer queue) |
+| Stack memory | ~1 KB per thread (for XCP receive and transmit threads ) |
+
+```
+sizeof(tXcpData)=9672  sizeof(tXcpLocalData)=304
+XcpEthServerInit: queue_size=32768, sizeof(gXcpServer)=48
+sizeof(gXcpTl)=104
+```
+
+The transmit queue is allocated with malloc/alligned_alloc. The size of the queue is a runtime parameter, which should be large enough to cover at least 10ms of expected traffic. There are no other direct heap allocations in libxcplite. The remaining state is statically allocated.
 
 
 
@@ -19,29 +29,31 @@ Memory consumption depends on the configuration and usage of the library. The fo
 
 Keeping code instrumentation side effects as small as possible was one of the major goals, but of course there are effects caused by the code instrumentation.  
 
-### Data Acquisition
+### Data Acquisition Trigger and Data Transfer
 
-The measurement data acquisition trigger and data transfer is a lock-free implementation for the producer. It may be switched to simpler a mutex based implementation, if the platform requirements can not be met. DAQ trigger needs an external call to get the current time.
+The measurement data acquisition trigger and data transfer is a lock-free implementation for the producer. It may be switched to simpler a mutex based implementation, if the platform requirements can not be met. DAQ trigger also needs an external call to get the current time.
 
 Some of the DAQ trigger macros do a lazy event lookup by name at the first time (for the convenience not to care about event handles), and cache the result in static or thread local memory.
 
-The instrumentation to create events uses a mutex lock against other simultaneous event creations.
+The API functions to create events may use a mutex lock against other simultaneous event creations.
 
 ### Measurement of Function Parameters and local Variables
 
 Measurement of function parameters and local variables has the side effect that the compiler will spill the parameters from registers to stack frame and always keeps local variables on the stack frame. This is a side effect of the in scope registration macros, so it will work even with optimization level > -O0. There is no undefined behavior caused by compiler optimizations.
 
+Check the benchmark results in daq_test.  
+
 ### Calibration
 
 The instrumentation to create calibration parameter segments use a mutex lock against other simultaneous segment creations.
 
-During the creation of a calibration segment, a single heap allocation for 4 copies of the initial page is requested.  
-(default page, reference page, working page and a single RCU swap page).  
-
 Calibration segment access is thread safe and lock less.
 
+Check the benchmark results in calseg_test.  
 
-### A2L Generation
+
+
+## On-target A2L File Generation
 
 The A2L generation simply uses the file system. There is no need for memory. It opens 4 different files, which will be merged on A2L finalization.
 
@@ -49,13 +61,14 @@ The A2l generation macros are not thread safe and don't have an underlying once 
 
 ### One-Time Execution Patterns
 
-The overall concepts often relies on one time execution patterns. If this is not acceptable, the application has to take care for creating events and calibration segments in a controlled way. The A2l address generation for measurement variables on stack needs to be done once in local scope, there is no other option yet. Also the different options to create thread local instances of measurement data.
+The overall concept often relies on one time execution patterns. If this is not acceptable, the application has to take care for creating events and calibration segments in a controlled way or define them globally.  
+The A2l address generation for measurement variables on stack needs to be done once in local scope, there is no other option yet. Also the different options to create thread local instances of measurement data.
 
-## A2L File Generation and Address Update Options
 
 ### Option 1: Runtime Generation (Volatile)
 
-The A2L file is always created during application runtime. The A2L may be volatile, which means it may change on each restart of the application. This happens when there are race conditions in registering segments and events. The A2L file is just uploaded again by the XCP client.
+The A2L file is always created during application runtime. The A2L may be volatile, which means it may change on each restart of the application. This happens when there are race conditions in registering segments and events. The A2L file is just downloaded again by the XCP client.  
+Note: XCP used the term 'upload' in the sense of upload to the client, which is a bit confusing, because the file is created on the target and then downloaded by the client.
 
 To avoid A2L changes on each restart, the creation order of events and segments just has to be deterministic.
 
@@ -67,43 +80,162 @@ The A2l file is created only once during the first run of a new build of the app
 
 A copy of all calibration parameter segments and events definitions and of the parameter data is stored in a binary .bin file to achieve the same ordering in the next application start. BIN and A2L file get a unique name based on the software version string. The EPK software version string is used to check validity of the A2l and BIN file.
 
-The existing A2L file is provided for upload to the XCP client or may be provided to the tool by copying it.
+The existing A2L file is provided for download to the XCP client or may be provided to the tool by copying it.
 
 As a side effect, calibration segment persistence (freeze command) is supported.
 
-### Option 3: External A2L Update Tools
+---
 
-Create the A2L file once and update it with an A2L update tool such as the CANape integrated A2L Updater or Open Source a2ltool.
+## Offline A2L Generation 
 
-**Note:** Currently, the usual A2L tools will only update absolute addresses for variables and instances in global memory and offsets of structure fields.
+Use the XCPlite specific A2L creator tool (xcpclient), which is aware of the different addressing schemes and static markers created by the code instrumentation macros.
+See `no_a2l_demo` and in particular  `esp32_freertos_demo` for examples and instructions.
 
-Data acquisition of variables on stack and relative addressing is not possible today. This might change in a future version of the A2L Updater.
+### xcpclient — ELF/DWARF Internals
 
-### Option 4: No Runtime A2L Generation (Absolute Addressing)
+This section documents how `xcpclient --create-a2l` discovers events, calibration segments,
+and local variables from the firmware ELF/DWARF. It is intended for contributors to xcpclient
+or developers who need to understand why a particular variable does or does not appear in the
+generated A2L file. For the user-facing rules (what you need to do in your application code),
+see `examples/no_a2l_demo/README.md`.
 
-Disable A2L generation or don't use the A2L generation functions at all.
+#### `xcp_evts` section — event descriptors
 
-Enable absolute addressing for calibration segments (`#define OPTION_CAL_SEGMENTS_ABS` in `xcplib_cfg.h`).
+Every call to `DaqCreateEvent(name)` or `DaqCreateAndTriggerEvent(name)` emits a
+`tXcpEventDescriptor` constant into the `.xcp_evts` section (`.rodata` on ELF targets,
+`__DATA,xcp_evts` on macOS):
 
-Use only absolute addressing mode, which is in this mode associated to address extension 0.
+```c
+// What DaqCreateEvent(task) expands to (simplified):
+static const tXcpEventDescriptor evt__task
+    __attribute__((section("xcp_evts"), used)) = { "task", 0, 0 };
+```
 
-The A2l file may then be created and updated with any usual method of your choice, using CANape, A2L-Studio, A2L-Creator, a2ltool, ...
+`tXcpEventDescriptor` contains the event name string, cycle time, and priority.
+xcpclient iterates all entries in `xcp_evts` to discover **every event** defined in the
+firmware, regardless of whether that code path has executed at the time of A2L generation.
+
+#### `xcp_cals` section — calibration segment descriptors
+
+Every `CalSegDecl(name)` + `CalSegCreate(name)` pair (or `CalSegDecl(name)` at file scope)
+emits a `tXcpCalDescriptor` constant into the `.xcp_cals` section:
+
+```c
+// What CalSegDecl(params) + CalSegCreate(params) expands to (simplified):
+static const tXcpCalDescriptor calseg__params
+    __attribute__((section("xcp_cals"), used)) = {
+        "params",           // name
+        &params,            // pointer to the default/reference page
+        &calseg_id_params,  // pointer to the runtime index variable
+        sizeof(params),     // size in bytes
+        XCP_CALSEG_TYPE_SEGMENT
+    };
+```
+
+`tXcpCalDescriptor` contains the segment name, the address of the default page, its size, and
+the type (segment vs. block). xcpclient reads these to discover all calibration segments and
+their exact layout in memory — without any A2L registration calls in the application code.
+
+#### Trigger point DWARF scope anchors — `trg__` naming convention
+
+Every event trigger macro emits a **named static local variable** whose name encodes
+the set of addressing modes active at that trigger point. xcpclient reads this name from
+the DWARF to know how to decode the XCP address for each measurement variable.
+
+#### Naming convention
+
+The letters between `trg__` and the trailing `__name` form a sequence where
+**each letter's position equals the XCP address extension (`AddrExt`) value** it represents:
+
+| Letter | AddrExt position | Addressing mode |
+|--------|------------------|-----------------|
+| `A` | 0 or 1 | **Absolute** — address offset from `ApplXcpGetBaseAddr()` |
+| `C` | any | **Calibration-segment relative** — offset within a named `CalSeg` |
+| `S` | 2 | **Stack frame relative** — offset from `xcp_get_frame_addr()` |
+| `D` | 3+ | **Dynamic** — offset from an individually supplied base pointer; supports both synchronous and asynchronous access |
+
+The trailing `__name` (double underscore) identifies the event and separates it from the
+mode sequence so xcpclient can split them unambiguously.
+
+#### Anchor variants in the codebase
+
+| Anchor name | Emitted by | AddrExt layout |
+|-------------|-----------|----------------|
+| `trg__AAS__name` | `DaqTriggerEvent`, `DaqCreateAndTriggerEvent`, `DaqEventVar` (C) | ext=0,1: Absolute — ext=2: Stack |
+| `trg__AASD__name` | `DaqTriggerEventExt` | ext=0,1: Absolute — ext=2: Stack — ext=3: Dynamic base pointer |
+| `trg__AASDD__name` | `DaqEventVar`, `DaqEventAtVar` (C++) | ext=0,1: Absolute — ext=2: Stack — ext=3+: Dynamic (one slot per measurement variable) |
+
+---
+
+**`trg__AAS__name`** — global/stack measurements only; `DaqTriggerEvent` and `DaqCreateAndTriggerEvent`:
+
+```c
+// DaqTriggerEvent(task) expands to (simplified):
+static tXcpEventId trg__AAS__task = XCP_UNDEFINED_EVENT_ID;
+XcpEventExt_Var(trg__AAS__task, 1 /*base count*/, xcp_get_frame_addr());
+// AddrExt=0,1: global/static variables (absolute)
+// AddrExt=2:   local variables on the stack at this trigger point
+```
+
+`trg__AAS__task` is a **named static local variable**. The DWARF debug info records its
+address and the lexical scope it lives in — which is the same scope as the local variables
+on the stack. xcpclient finds `trg__AAS__name` in the DWARF, walks all variables whose live
+range covers that location, and creates A2L entries for them with the correct addressing mode.
+
+`DaqCreateAndTriggerEvent(name)` does the same in one macro — it writes the
+`tXcpEventDescriptor` into `xcp_evts` **and** emits the `trg__AAS__name` anchor:
+
+```c
+// DaqCreateAndTriggerEvent(foo) in function foo():
+static const tXcpEventDescriptor evt__foo XCP_EVENT_SECTION_ATTR = {"foo", 0, 0};
+static tXcpEventId trg__AAS__foo = XCP_UNDEFINED_EVENT_ID;
+// ... trigger ...
+```
+
+---
+
+**`trg__AASD__name`** — adds heap/instance data via an explicit base pointer;
+`DaqTriggerEventExt(name, base_addr)`:
+
+```c
+// DaqTriggerEventExt(my_event, obj_ptr) expands to (simplified):
+static tXcpEventId trg__AASD__my_event = XCP_UNDEFINED_EVENT_ID;
+XcpEventExt_Var(trg__AASD__my_event, 2 /*base count*/, xcp_get_frame_addr(), (const uint8_t *)obj_ptr);
+// AddrExt=0,1: absolute  — AddrExt=2: stack  — AddrExt=3: dynamic (obj_ptr)
+```
+
+Use this variant to measure member variables of a heap-allocated struct or class instance
+alongside any stack-local and global variables of the same event.
+
+---
+
+**`trg__AASDD__name`** — C++ variadic `DaqEventVar` / `DaqEventAtVar`; each measurement
+variable gets its own dynamic extension slot:
+
+```cpp
+// DaqEventVar(calc, A2L_MEAS_PHYS(x, ...), A2L_MEAS_PHYS(y, ...)) — simplified:
+static tXcpEventId trg__AASDD__calc = XCP_UNDEFINED_EVENT_ID;
+// bases = { base_addr, base_addr, frame_addr, &x, &y }
+// AddrExt=0,1: absolute — AddrExt=2: stack — AddrExt=3: addr(&x) — AddrExt=4: addr(&y)
+```
+
+The number of `D` letters in the anchor name equals the number of dynamic slots in use;
+xcpclient counts them to know how many individual base addresses to expect.
+
+#### What xcpclient reads from the ELF
+
+| ELF / DWARF source | Populated by | xcpclient use |
+|---|---|---|
+| `.xcp_evts` section | `DaqCreateEvent`, `DaqCreateEventInstance`, `DaqCreateAndTriggerEvent` | Discover all events, names, cycle times |
+| `.xcp_cals` section | `CalSegDecl` + `CalSegCreate` | Discover all calibration segments, default page addresses and sizes |
+| DWARF scope of `trg__AAS__name` | `DaqTriggerEvent`, `DaqCreateAndTriggerEvent`, `DaqEventVar` (C) | Find stack-local and absolute variables — ext=0,1: Absolute, ext=2: Stack |
+| DWARF scope of `trg__AASD__name` | `DaqTriggerEventExt` | Same plus a dynamic base pointer slot — ext=3: Dynamic |
+| DWARF scope of `trg__AASDD__name` | `DaqEventVar` / `DaqEventAtVar` (C++) | Per-variable dynamic slots — ext=3+: one per measurement |
+| DWARF global/static symbols | Linker output | Resolve absolute addresses of global measurement and calibration variables |
+| DWARF type info (`DW_TAG_structure_type` etc.) | Compiler | Generate `TYPEDEF_STRUCTURE` / `RECORD_LAYOUT` entries in A2L |
 
 See no_a2l_demo or free_rtos_demo.  
 
-
-**Limitations:**
-- Measurement of heap and stack is not possible anymore
-- You are now limited to 32 bit address range starting at the module load address (`ApplXcpGetBaseAddr()`/`xcp_get_base_addr()`)
-
-**Advantages:**
-- Thread safe parameter modification using calibration segments is still assured
-- Thread safety of measurement data acquisition is now in your responsibility, by using a safe fixed event for each individual measurement variable
-
-### Option 5: XCPlite-Specific A2L Creator 
-
-Use the XCPlite specific A2L creator tool (xcpclient), which is aware of the different addressing schemes and static markers created by the code instrumentation macros.
-See `no_a2l_demo`.
 
 ## Addressing Modes
 
@@ -121,7 +253,7 @@ XCPlite absolute addressing: XCPLITE__CASDD (default)
 0x03.       - Pointer relative (Event based relative addressing mode with asynchronous access)
 ...
 0x0F
-0xFD        - File upload memory space (XCP_ADDR_EXT_FILE)
+0xFD        - File download memory space (XCP_ADDR_EXT_FILE)
 0xFE        - MTA pointer address space (XCP_ADDR_EXT_PTR)
 0xFF        - Undefined address extension (XCP_UNDEFINED_ADDR_EXT)
 
@@ -146,7 +278,6 @@ This is important, because CANape does not support address extensions >0 for par
 Parameters in calibration segments may be accessed by their segment relative address or by their absolute address, using the corresponding address extension.  
 Note that this requires that the default page address given to the `XcpCreateCalSeg` function is in the 32 bit address range and has static lifetime.
 
-### Absolute Addressing Mode (XCP_ENABLE_ABS_ADDRESSING)
 
 
 ### User specific addressing mode (XCP_ENABLE_APP_ADDRESSING)
@@ -239,7 +370,7 @@ In XCPlite, the EPK may be specified with an API function or is generated from b
 
 - **COPY_CAL_PAGE:** CANape initialize RAM is executed only on the first memory segment. **Workaround:** always copy all segments
 - CANape ignores segment numbers in A2L, if segment numbering starts with 1, SET_CAL_PAGE is executed on segment 0 and 1
-- **GET_ID 5 (EPK)** mode = 0x01 is ignored by CANape. **Workaround:** always provide EPK via upload
+- **GET_ID 5 (EPK)** mode = 0x01 is ignored by CANape. **Workaround:** always provide EPK via download by 
 - CANape executes GET_SEGMENT_MODE multiple times on the last memory segment before freeze request
 - Address extension of memory segment is ignored by CANape. **Workaround:** using 0 for segment relative addressing
 - Request for unique address extension per DAQ list is ignored by CANape (DAQ_KEY_BYTE == DAQ_EXT_DAQ). **Workaround:** Store the address extension per ODT entry

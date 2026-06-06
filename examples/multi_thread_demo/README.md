@@ -1,20 +1,62 @@
-# XCPlite Example multi_thread_demo
+# multi_thread_demo — Multi-Thread Measurement
 
+Demonstrates XCP measurement and calibration across multiple concurrent threads.
+Shows thread-local event instances, shared calibration segments with safe atomic access,
+and experimental context/span instrumentation for duration measurement.
 
-Shows measurement in multiple threads.  
-Create thread local instances of events and measurements.  
-Share a parameter segment among multiple threads.  
-Thread safe and consistent access to parameters.  
-Experimental code to demonstrate how to create context and spans using the XCP instrumentation API.  
+---
 
+## What it demonstrates
 
+| Feature | How it is demonstrated |
+|---|---|
+| Thread-local event instances | Each thread creates its own `DaqCreateEvent` instance |
+| Thread-local measurement | Local variables registered per-thread, measured independently |
+| Shared calibration segment | Single `CalSeg` accessed safely from all threads via lock/unlock |
+| Consistent atomic update | Multiple parameters updated atomically across all threads |
+| Context and span API | Experimental instrumentation to measure code block durations |
+| Multi-thread queue contention | Performance benchmark with configurable thread count and sleep time |
 
+### Files
+
+| File | Purpose |
+|---|---|
+| `src/main.c` | Demo application — thread creation, per-thread events, shared calibration |
+| `CANape/` | CANape project (A2L auto-upload, XCP UDP, port 5555) |
+
+---
+
+## Building
+
+```bash
+./build.sh examples
+./build/multi_thread_demo
+```
+
+Or with CMake directly:
+
+```bash
+cmake -B build -S . -DXCPLITE_BUILD_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --target multi_thread_demo
+./build/multi_thread_demo
+```
+
+---
+
+## CANape
+
+Open `CANape/CANape.ini` in CANape. The project is pre-configured for XCP on UDP, port 5555,
+with automatic A2L upload. If CANape cannot connect, verify the IP address in
+*Device Configuration / Devices / XCP / Protocol / Transport Layer*.
+
+---
 
 ## Performance
 
-With 50us sleep time and 8 threads, the producer acquire lock time statistics look like this (MACbook Pro M3):
+The lock-free queue in XCPlite is designed for minimal contention under multi-thread load.
+Example statistics with 8 threads at 50 µs sleep time (MacBook Pro M3):
 
-
+```
 Producer acquire lock time statistics:
   count=1404480  max_spins=4  max=67583ns  avg=76ns
 
@@ -25,22 +67,7 @@ Lock time histogram (1404480 events):
   40-80ns                   627770   44.70%  ##############################
   80-120ns                  528258   37.61%  #########################
   120-160ns                  64571    4.60%  ###
-  160-200ns                  15220    1.08%  
-  200-240ns                  18220    1.30%  
-  240-280ns                  12839    0.91%  
-  280-320ns                   4883    0.35%  
-  320-360ns                   2487    0.18%  
-  360-400ns                   2632    0.19%  
-  400-600ns                   3774    0.27%  
-  600-800ns                    726    0.05%  
-  800-1000ns                   301    0.02%  
-  1000-1500ns                  508    0.04%  
-  1500-2000ns                  257    0.02%  
-  2000-3000ns                  235    0.02%  
-  3000-4000ns                  154    0.01%  
-  4000-6000ns                  139    0.01%  
-  6000-8000ns                  310    0.02%  
-  8000-10000ns                 334    0.02%  
-  10000-20000ns                315    0.02%  
-  20000-40000ns                 67    0.00%  
-  40000-80000ns                 10    0.00%  
+  ...
+```
+
+See [c_demo](../c_demo/README.md) for single-thread minimum cycle time benchmarks.

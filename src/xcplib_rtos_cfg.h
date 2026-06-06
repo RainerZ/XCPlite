@@ -9,17 +9,36 @@
 |   Applied AFTER the defaults in xcplib_cfg.h via:
 |     cmake: target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"xcplib_rtos_cfg.h\"")
 |
-|   Only settings that DIFFER from the POSIX defaults are listed here.
-|   Key differences:
+|   Key differences in overrides from the defaults in xcplib_cfg.h:
 |     - Absolute memory addressing
+|     - No jumbo frames, standard Ethernet MTU of 1504 bytes (1472 bytes UDP payload)
+|     - No TCP support (not implemented yet for FreeRTOS)
+|     - Reduced memory footprint
 |     - 32 bit DAQ queue
-|     - Clock resolution
+|     - Clock resolution 1us
 |     - No file system
 |     - No on-target A2L generation
 |     - No persistence, no A2L/ELF upload (no filesystem)
 |     - No forceful thread termination (use vTaskDelete instead)
 |     - Reduced queue size, and max event number and calibration segment counts to fit in embedded SRAM
 |
+|   Optional:
+|     OPTION_ENABLE_TCP not implemented yet for FreeRTOS
+|     OPTION_ENABLE_PTP not implemented yet for FreeRTOS
+|   Addressing scheme:
+|     Absolute memory addressing with A2L segments as absolute memory regions with static lifetime default page, no segment relative addressing
+|   Platform requirements:
+|    No filesystem required, 32 bit platform, currently only FreeRTOS, ThreadX planned to be supported in the future
+|   Examples:
+|    freertos_demo     - FreeRTOS POSIX simulator (Linux only), for testing FreeRTOS xcplite support on the host
+|                        cmake: XCPLITE_CONFIGURATION=rtos, XCPLITE_BUILD_EXAMPLES=ON
+|    esp32_freertos_demo - ESP32 target, uses the same xcplib_rtos_cfg.h override,
+|                        built externally via PlatformIO (not a CMake project)
+|   Tools:
+|     xcpclient for A2L generation from ELF and testing
+|   Tests:
+|     -
+
  ----------------------------------------------------------------------------*/
 
 // FreeRTOS rx and tx task stack depth (in bytes) and priority

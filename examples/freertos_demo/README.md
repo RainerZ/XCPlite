@@ -61,9 +61,16 @@ Uses Linux sockets and `clock_gettime` for the POSIX simulator
 
 
 ```bash
-cmake -B build_freertos -S . -DXCPLITE_BUILD_FREERTOS_DEMO=ON -DCMAKE_BUILD_TYPE=Debug --fresh
-cmake --build build_freertos --target freertos_demo
-./build_freertos/examples/freertos_demo/freertos_demo
+./build.sh rtos examples
+./build-rtos/freertos_demo
+```
+
+Or using CMake directly:
+
+```bash
+cmake -B build-rtos -S . -DXCPLITE_CONFIGURATION=rtos -DXCPLITE_BUILD_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-rtos --target freertos_demo
+./build-rtos/freertos_demo
 ```
 
 
@@ -71,7 +78,7 @@ cmake --build build_freertos --target freertos_demo
 
 
 ```bash
-xcpclient --offline   --elf ./examples/freertos_demo/CANape_Project/freertos_demo --create-a2l  --a2l ./examples/freertos_demo/CANape_Project/freertos_demo.a2l
+xcpclient --offline --elf ./build-rtos/freertos_demo --create-a2l --a2l ./examples/freertos_demo/CANape_Project/freertos_demo.a2l
 ```
 
 For more details and options on the A2L file generation, see no_a2l_demo and the xcpclient documentation.  

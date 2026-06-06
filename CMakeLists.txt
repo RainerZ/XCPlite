@@ -3,37 +3,92 @@ cmake_minimum_required(VERSION 3.14)
 
 project(xcplite VERSION 2.1.0 LANGUAGES C CXX)
 
-# Conditional building of examples based on project context
-# When xcplite is the top-level project (standalone build), examples are built by default,
-# UNLESS a dedicated demo option (e.g. XCPLITE_BUILD_FREERTOS_DEMO) is passed explicitly —
-# in that case the default flips to OFF so only the requested demo is configured.
-# When xcplite is included as a subproject (add_subdirectory / FetchContent),
-# examples are always disabled by default.
-#if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-#    # If the user passed -DXCPLITE_BUILD_FREERTOS_DEMO=ON on the command line, default
-#    # the general examples flag to OFF so no other examples are configured.
-#    if(DEFINED XCPLITE_BUILD_FREERTOS_DEMO AND XCPLITE_BUILD_FREERTOS_DEMO)
-#        set(XCPLITE_BUILD_EXAMPLES_DEFAULT OFF)
-#    else()
-#        set(XCPLITE_BUILD_EXAMPLES_DEFAULT ON)
-#    endif()
-#else()
-#    set(XCPLITE_BUILD_EXAMPLES_DEFAULT OFF)
-# endif()
+
+
+# =============================================================================
+# Build configuration
+# Selects which xcplib configuration override is compiled into the library.
+# Configurations are mutually exclusive — use a separate build directory per configuration.
+#
+# Usage:
+#   cmake -B build        -S . -DXCPLITE_CONFIGURATION=default   (or omit for default)
+#   cmake -B build-no_a2l -S . -DXCPLITE_CONFIGURATION=no_a2l
+#   cmake -B build-ptp    -S . -DXCPLITE_CONFIGURATION=ptp
+#   cmake -B build-shm    -S . -DXCPLITE_CONFIGURATION=shm
+#   cmake -B build-rtos   -S . -DXCPLITE_CONFIGURATION=rtos
+#
+# Configuration descriptions (see src/xcplib_<name>_cfg.h for details):
+#   default  - 64-bit, on-target A2L generation, filesystem, Ethernet UDP/TCP
+#   no_a2l   - Like default without on-target A2L; A2L generated from ELF by xcpclient
+#   ptp      - Like default with socket hardware timestamps (ptptool, Linux only)
+#   shm      - Shared-memory multi-application mode (shmtool, xcpdaemon)
+#   rtos     - Embedded RTOS targets (FreeRTOS), reduced footprint, no filesystem
+# =============================================================================
+set(XCPLITE_CONFIGURATION "default" CACHE STRING
+    "Library build configuration: default | no_a2l | ptp | shm | rtos")
+set_property(CACHE XCPLITE_CONFIGURATION PROPERTY STRINGS default no_a2l ptp shm rtos)
+
+if(NOT XCPLITE_CONFIGURATION MATCHES "^(default|no_a2l|ptp|shm|rtos)$")
+    message(FATAL_ERROR
+        "Invalid XCPLITE_CONFIGURATION='${XCPLITE_CONFIGURATION}'. "
+        "Must be one of: default, no_a2l, ptp, shm, rtos")
+endif()
+
+# Resolve configuration override header (empty = use default xcplib_cfg.h)
+if(XCPLITE_CONFIGURATION STREQUAL "no_a2l")
+    set(_xcplib_cfg_override "xcplib_no_a2l_cfg.h")
+elseif(XCPLITE_CONFIGURATION STREQUAL "ptp")
+    set(_xcplib_cfg_override "xcplib_ptp_cfg.h")
+elseif(XCPLITE_CONFIGURATION STREQUAL "shm")
+    set(_xcplib_cfg_override "xcplib_shm_cfg.h")
+elseif(XCPLITE_CONFIGURATION STREQUAL "rtos")
+    set(_xcplib_cfg_override "xcplib_rtos_cfg.h")
+else()
+    set(_xcplib_cfg_override "")
+endif()
+
+if(_xcplib_cfg_override)
+    message(STATUS "xcplite configuration: ${XCPLITE_CONFIGURATION}  (XCPLIB_CFG_OVERRIDE=\"${_xcplib_cfg_override}\")")
+else()
+    message(STATUS "xcplite configuration: ${XCPLITE_CONFIGURATION}  (using default xcplib_cfg.h)")
+endif()
+
 
 # =============================================================================
 # Build options
-# All XCPLITE_* options can be passed on the cmake command line:
+# Control what to build within the selected configuration.
+# All XCPLITE_BUILD_* options can be passed on the cmake command line:
 #   cmake -B build -S . -D<OPTION>=ON|OFF
+#
+# Available targets depend on the active XCPLITE_CONFIGURATION:
+#   XCPLITE_BUILD_EXAMPLES
+#     default  -> hello_xcp, hello_xcp_cpp, c_demo, cpp_demo, point_cloud_demo,
+#                 struct_demo, multi_thread_demo, ptp4l_demo (Linux)
+#     no_a2l   -> no_a2l_demo
+#     ptp      -> ptp4l_demo (Linux)
+#     shm      -> hello_xcp (SHM mode), hello_xcp_cpp (SHM mode)
+#                Note: silkit_demo is a standalone project (requires SilKit + installed xcplite);
+#                build it separately from examples/silkit_demo/ after installing xcplite.
+#                external_example is also a standalone project; see examples/external_example/
+#     rtos     -> freertos_demo (downloads FreeRTOS-Kernel via FetchContent)
+#   XCPLITE_BUILD_TESTS
+#     default  -> a2l_test, cal_test, daq_test, clock_test, queue_test, type_detection_test_*
+#     ptp      -> clock_test
+#     others   -> (none)
+#   XCPLITE_BUILD_TOOLS
+#     ptp      -> ptptool (Linux only)
+#     shm      -> shmtool, xcpdaemon
+#     others   -> (none)
+#   XCPLITE_BUILD_RUST_TOOLS  (any configuration)
+#                -> xcpclient, bintool  (requires cargo)
+#   XCPLITE_BUILD_BPF_DEMO  (default configuration, Linux only)
+#                -> bpf_demo  (requires libbpf; set OFF to skip the slow find_library probe)
 # =============================================================================
-option(XCPLITE_BUILD_EXAMPLES      "Build xcplite example targets" OFF) # ${XCPLITE_BUILD_EXAMPLES_DEFAULT}
-option(XCPLITE_BUILD_BPF_DEMO      "Build bpf_demo (requires libbpf; Linux only)" OFF)
-option(XCPLITE_BUILD_TESTS         "Build xcplite test targets" OFF)
-option(XCPLITE_BUILD_SHM_TOOLS     "Build tool targets: shmtool, xcpdaemon" OFF)
-option(XCPLITE_BUILD_PTP_TOOLS     "Build tool targets: ptptool" OFF)
-option(XCPLITE_BUILD_RUST_TOOLS    "Build Rust tool targets: xcpclient, bintool (requires cargo)" OFF)
-option(XCPLITE_BUILD_NO_A2L_DEMO   "Build no_a2l_demo with no-A2L config xcplib_(no_a2l_cfg.h), use an isolated build directory" OFF)
-option(XCPLITE_BUILD_FREERTOS_DEMO "Build freertos_demo with RTOS config xcplib_rtos_cfg.h (downloads FreeRTOS-Kernel via FetchContent)" OFF)
+option(XCPLITE_BUILD_EXAMPLES   "Build example targets for the selected configuration" OFF)
+option(XCPLITE_BUILD_TESTS      "Build test targets for the selected configuration" OFF)
+option(XCPLITE_BUILD_TOOLS      "Build tool targets for the selected configuration" OFF)
+option(XCPLITE_BUILD_RUST_TOOLS "Build Rust tool targets: xcpclient, bintool (requires cargo)" OFF)
+option(XCPLITE_BUILD_BPF_DEMO   "Build bpf_demo (default configuration, Linux only; requires libbpf)" OFF)
 
 # Find required packages
 find_package(Threads REQUIRED)
@@ -126,6 +181,11 @@ set(xcplite_SOURCES src/xcpappl.c src/xcplite.c src/xcpethserver.c src/xcpethtl.
 # Create xcplite library
 add_library(xcplite ${xcplite_SOURCES})
 
+# Apply configuration override (empty = use default xcplib_cfg.h)
+if(_xcplib_cfg_override)
+    target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"${_xcplib_cfg_override}\"")
+endif()
+
 # Set include directories using generator expressions for proper installation
 # BUILD_INTERFACE: Used when building within this project
 # INSTALL_INTERFACE: Used when installed and consumed by external projects
@@ -166,142 +226,197 @@ if(HAVE_LIBATOMIC)
 endif()
 
 
+# =============================================================================
+# Examples
+# Available examples depend on the active XCPLITE_CONFIGURATION.
+# =============================================================================
 if(XCPLITE_BUILD_EXAMPLES)
-    # Example hello_xcp
-    add_executable(hello_xcp examples/hello_xcp/src/main.c)
-    target_link_libraries(hello_xcp PRIVATE xcplite)
 
-    # Example no_a2l_demo (built without config override — A2L generator still compiled in)
-    # To build with proper no-A2L configuration use: cmake -DXCPLITE_BUILD_NO_A2L_DEMO=ON
-    add_executable(no_a2l_demo examples/no_a2l_demo/src/main.c)
-    target_link_libraries(no_a2l_demo PRIVATE xcplite)
+    if(XCPLITE_CONFIGURATION STREQUAL "default")
 
-    # Example hello_xcp_cpp
-    add_executable(hello_xcp_cpp examples/hello_xcp_cpp/src/main.cpp)
-    target_link_libraries(hello_xcp_cpp PRIVATE xcplite)
+        add_executable(hello_xcp examples/hello_xcp/src/main.c)
+        target_link_libraries(hello_xcp PRIVATE xcplite)
 
-    # Example point_cloud_demo
-    add_executable(point_cloud_demo examples/point_cloud_demo/src/main.cpp)
-    target_link_libraries(point_cloud_demo PRIVATE xcplite)
+        add_executable(hello_xcp_cpp examples/hello_xcp_cpp/src/main.cpp)
+        target_link_libraries(hello_xcp_cpp PRIVATE xcplite)
 
-    # Example c_demo
-    add_executable(c_demo examples/c_demo/src/main.c)
-    target_link_libraries(c_demo PRIVATE xcplite)
+        add_executable(point_cloud_demo examples/point_cloud_demo/src/main.cpp)
+        target_link_libraries(point_cloud_demo PRIVATE xcplite)
 
-    # Example cpp_demo
-    add_executable(cpp_demo examples/cpp_demo/src/main.cpp examples/cpp_demo/src/sig_gen.cpp examples/cpp_demo/src/lookup.cpp)
-    target_link_libraries(cpp_demo PRIVATE xcplite)
+        add_executable(c_demo examples/c_demo/src/main.c)
+        target_link_libraries(c_demo PRIVATE xcplite)
 
-    # Example struct_demo
-    add_executable(struct_demo examples/struct_demo/src/main.c)
-    target_link_libraries(struct_demo PRIVATE xcplite)
+        add_executable(cpp_demo examples/cpp_demo/src/main.cpp examples/cpp_demo/src/sig_gen.cpp examples/cpp_demo/src/lookup.cpp)
+        target_link_libraries(cpp_demo PRIVATE xcplite)
 
-    # Example multi_thread_demo
-    add_executable(multi_thread_demo examples/multi_thread_demo/src/main.c)
-    target_link_libraries(multi_thread_demo PRIVATE xcplite)
+        add_executable(struct_demo examples/struct_demo/src/main.c)
+        target_link_libraries(struct_demo PRIVATE xcplite)
 
-    # Example ptp4l_demo (Linux only)
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        add_executable(ptp4l_demo examples/ptp4l_demo/src/main.cpp)
-        target_link_libraries(ptp4l_demo PRIVATE xcplite)
-    endif()
+        add_executable(multi_thread_demo examples/multi_thread_demo/src/main.c)
+        target_link_libraries(multi_thread_demo PRIVATE xcplite)
 
-
-    # Example bpf_demo (only build on Linux with libbpf available)
-    # Pass -DXCPLITE_BUILD_BPF_DEMO=OFF to skip 
-    if(XCPLITE_BUILD_BPF_DEMO AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        find_library(LIBBPF_LIBRARY bpf)
-        if(LIBBPF_LIBRARY)
-            add_executable(bpf_demo examples/bpf_demo/src/main.c)
-            target_link_libraries(bpf_demo PRIVATE xcplite ${LIBBPF_LIBRARY})
-            message(STATUS "Found libbpf: ${LIBBPF_LIBRARY} - building bpf_demo")
-        else()
-            message(STATUS "libbpf not found - skipping bpf_demo")
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            add_executable(ptp4l_demo examples/ptp4l_demo/src/main.cpp)
+            target_link_libraries(ptp4l_demo PRIVATE xcplite)
         endif()
-    else()
-        message(STATUS "bpf_demo: skipped (XCPLITE_BUILD_BPF_DEMO=OFF)")
+
+        if(XCPLITE_BUILD_BPF_DEMO AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            find_library(LIBBPF_LIBRARY bpf)
+            if(LIBBPF_LIBRARY)
+                add_executable(bpf_demo examples/bpf_demo/src/main.c)
+                target_link_libraries(bpf_demo PRIVATE xcplite ${LIBBPF_LIBRARY})
+                message(STATUS "Found libbpf: ${LIBBPF_LIBRARY} - building bpf_demo")
+            else()
+                message(STATUS "libbpf not found - skipping bpf_demo")
+            endif()
+        else()
+            message(STATUS "bpf_demo: skipped (XCPLITE_BUILD_BPF_DEMO=OFF or not Linux)")
+        endif()
+
+    elseif(XCPLITE_CONFIGURATION STREQUAL "no_a2l")
+
+        # A2L is generated externally from ELF by xcpclient; no on-target A2L generation
+        add_executable(no_a2l_demo examples/no_a2l_demo/src/main.c)
+        target_link_libraries(no_a2l_demo PRIVATE xcplite)
+        message(STATUS "no_a2l_demo: building with XCPLIB_CFG_OVERRIDE=\"xcplib_no_a2l_cfg.h\"")
+
+    elseif(XCPLITE_CONFIGURATION STREQUAL "ptp")
+
+        # Requires Linux with a PTP-capable network interface and ptp4l running
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            add_executable(ptp4l_demo examples/ptp4l_demo/src/main.cpp)
+            target_link_libraries(ptp4l_demo PRIVATE xcplite)
+            message(STATUS "ptp4l_demo: building for ptp configuration (Linux)")
+        else()
+            message(STATUS "ptp4l_demo: skipped (Linux only)")
+        endif()
+
+    elseif(XCPLITE_CONFIGURATION STREQUAL "shm")
+
+        # Shared-memory multi-application mode
+        add_executable(hello_xcp examples/hello_xcp/src/main.c)
+        target_link_libraries(hello_xcp PRIVATE xcplite)
+        target_compile_definitions(hello_xcp PRIVATE "OPTION_SHM_MODE")
+
+        add_executable(hello_xcp_cpp examples/hello_xcp_cpp/src/main.cpp)
+        target_link_libraries(hello_xcp_cpp PRIVATE xcplite)
+        target_compile_definitions(hello_xcp_cpp PRIVATE "OPTION_SHM_MODE")
+
+        # silkit_demo is a standalone project requiring SilKit + an installed xcplite.
+        # Build it separately: cd examples/silkit_demo && cmake -B build -DSilKit_DIR=... -Dxcplite_DIR=...
+        message(STATUS "silkit_demo: not built from root (standalone project, see examples/silkit_demo/)")
+
+    elseif(XCPLITE_CONFIGURATION STREQUAL "rtos")
+
+        # freertos_demo: FreeRTOS POSIX simulator for testing FreeRTOS xcplite support on the host.
+        # Linux only. Downloads FreeRTOS-Kernel via FetchContent (requires network access at configure time).
+        # Note: esp32_freertos_demo uses the same xcplib_rtos_cfg.h override but is an ESP32 target
+        # built externally via PlatformIO (see examples/esp32_freertos_demo/).
+        if(NOT WIN32)
+            add_subdirectory(examples/freertos_demo)
+            message(STATUS "freertos_demo: building with FreeRTOS-Kernel (FetchContent)")
+        else()
+            message(STATUS "freertos_demo: skipped (not supported on Windows)")
+        endif()
+
     endif()
 
-endif()
+endif() # XCPLITE_BUILD_EXAMPLES
 
+
+# =============================================================================
 # Tests
+# Available tests depend on the active XCPLITE_CONFIGURATION.
+# =============================================================================
 if(XCPLITE_BUILD_TESTS)
 
-    # Type detection test (C version)
-    add_executable(type_detection_test_c test/type_detection_test/src/main.c test/type_detection_test/src/c_version_test.c)
-    target_include_directories(type_detection_test_c PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inc")
-    # target_link_libraries(type_detection_test_c PRIVATE xcplite)
+    if(XCPLITE_CONFIGURATION STREQUAL "default")
 
-    # Type detection test (C++ version)
-    add_executable(type_detection_test_cpp test/type_detection_test/src/main.cpp test/type_detection_test/src/cpp_version_test.cpp)
-    target_include_directories(type_detection_test_cpp PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inc")
-    # target_link_libraries(type_detection_test_cpp PRIVATE xcplite)
+        # Type detection tests (no xcplite link needed)
+        add_executable(type_detection_test_c test/type_detection_test/src/main.c test/type_detection_test/src/c_version_test.c)
+        target_include_directories(type_detection_test_c PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inc")
 
-    # A2L generation test (C version)
-    add_executable(a2l_test test/a2l_test/src/main.c)
-    target_link_libraries(a2l_test PRIVATE xcplite)
+        add_executable(type_detection_test_cpp test/type_detection_test/src/main.cpp test/type_detection_test/src/cpp_version_test.cpp)
+        target_include_directories(type_detection_test_cpp PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inc")
 
-    # Calibration segment multi-threading test (C++ version)
-    add_executable(cal_test test/cal_test/src/main.cpp)
-    target_link_libraries(cal_test PRIVATE xcplite)
+        add_executable(a2l_test test/a2l_test/src/main.c)
+        target_link_libraries(a2l_test PRIVATE xcplite)
 
-    # Data acquisition multi-threading test (C version)
-    add_executable(daq_test test/daq_test/src/main.c)
-    target_link_libraries(daq_test PRIVATE xcplite)
+        add_executable(cal_test test/cal_test/src/main.cpp)
+        target_link_libraries(cal_test PRIVATE xcplite)
 
-    # Clock synchronisation test
-    add_executable(clock_test test/clock_test/src/main.cpp)
-    target_link_libraries(clock_test PRIVATE xcplite)
+        add_executable(daq_test test/daq_test/src/main.c)
+        target_link_libraries(daq_test PRIVATE xcplite)
 
-    # Queue test (C version)   
-    add_executable(queue_test test/queue_test/src/main.c)
-    target_link_libraries(queue_test PRIVATE xcplite)
-endif()
+        add_executable(clock_test test/clock_test/src/main.cpp)
+        target_link_libraries(clock_test PRIVATE xcplite)
 
-# PTP tools
-if(XCPLITE_BUILD_PTP_TOOLS)
+        add_executable(queue_test test/queue_test/src/main.c)
+        target_link_libraries(queue_test PRIVATE xcplite)
 
-    # PTP tools (Linux only)
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        set(ptptool_CPP_SOURCES tools/ptptool/src/main.cpp)
-        set(ptptool_C_SOURCES tools/ptptool/src/ptp/ptp.c tools/ptptool/src/ptp/ptp_client.c tools/ptptool/src/ptp/ptp_observer.c tools/ptptool/src/ptp/ptp_master.c tools/ptptool/src/ptp/phc.c)
-        set_source_files_properties(${ptptool_C_SOURCES} PROPERTIES LANGUAGE C)
-        add_executable(ptptool ${ptptool_CPP_SOURCES} ${ptptool_C_SOURCES})
-        target_link_libraries(ptptool PRIVATE xcplite)
-        target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"xcplib_ptptool_cfg.h\"")
-        target_compile_definitions(ptptool PRIVATE "XCPLIB_CFG_OVERRIDE=\"xcplib_ptptool_cfg.h\"")
-        message(STATUS "Building ptptool with XCPLIB_CFG_OVERRIDE=\"xcplib_ptptool_cfg.h\" for hardware timestamping support (Linux only)")
+    elseif(XCPLITE_CONFIGURATION STREQUAL "ptp")
+
+        # Clock synchronization test with hardware timestamps
+        add_executable(clock_test test/clock_test/src/main.cpp)
+        target_link_libraries(clock_test PRIVATE xcplite)
+        message(STATUS "clock_test: building for ptp configuration")
+
     else()
-        message(STATUS "Non Linux platform - skipping ptptool build")
+        message(STATUS "XCPLITE_BUILD_TESTS=ON: no test targets defined for configuration '${XCPLITE_CONFIGURATION}'")
     endif()
 
-endif()
+endif() # XCPLITE_BUILD_TESTS
 
-# SHM tools
-if(XCPLITE_BUILD_SHM_TOOLS)
 
-    # SHM tools (macOS + Linux only)
-    if(NOT WIN32)
+# =============================================================================
+# Tools
+# Available tools depend on the active XCPLITE_CONFIGURATION.
+# =============================================================================
+if(XCPLITE_BUILD_TOOLS)
 
-        # Tool shmtool
-        add_executable(shmtool tools/shmtool/src/main.cpp)
-        target_link_libraries(shmtool PRIVATE xcplite)
+    if(XCPLITE_CONFIGURATION STREQUAL "ptp")
+
+        # ptptool: hardware timestamping tool for PTP synchronization (Linux only)
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-            target_link_libraries(shmtool PRIVATE rt)
+            set(ptptool_CPP_SOURCES tools/ptptool/src/main.cpp)
+            set(ptptool_C_SOURCES tools/ptptool/src/ptp/ptp.c tools/ptptool/src/ptp/ptp_client.c tools/ptptool/src/ptp/ptp_observer.c tools/ptptool/src/ptp/ptp_master.c tools/ptptool/src/ptp/phc.c)
+            set_source_files_properties(${ptptool_C_SOURCES} PROPERTIES LANGUAGE C)
+            add_executable(ptptool ${ptptool_CPP_SOURCES} ${ptptool_C_SOURCES})
+            target_link_libraries(ptptool PRIVATE xcplite)
+            # ptptool's own C sources include platform.h and need OPTION_SOCKET_HW_TIMESTAMPS
+            # (defined by xcplib_ptp_cfg.h) to see socketGetSendTime, socketBindToDevice, etc.
+            target_compile_definitions(ptptool PRIVATE
+                "XCPLIB_CFG_OVERRIDE=\"xcplib_ptp_cfg.h\""
+                "OPTION_ENABLE_PTP"
+            )
+            message(STATUS "ptptool: building for ptp configuration (Linux)")
+        else()
+            message(STATUS "ptptool: skipped (Linux only)")
         endif()
-        message(STATUS "Building shmtool")
 
-        # Tool xcpdaemon
-        add_executable(xcpdaemon tools/xcpdaemon/src/main.c)
-        target_link_libraries(xcpdaemon PRIVATE xcplite)
-        message(STATUS "Building xcpdaemon")
+    elseif(XCPLITE_CONFIGURATION STREQUAL "shm")
+
+        # shmtool, xcpdaemon: shared-memory tools (macOS + Linux only)
+        if(NOT WIN32)
+            add_executable(shmtool tools/shmtool/src/main.cpp)
+            target_link_libraries(shmtool PRIVATE xcplite)
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                target_link_libraries(shmtool PRIVATE rt)
+            endif()
+            message(STATUS "Building shmtool")
+
+            add_executable(xcpdaemon tools/xcpdaemon/src/main.c)
+            target_link_libraries(xcpdaemon PRIVATE xcplite)
+            message(STATUS "Building xcpdaemon")
+        else()
+            message(STATUS "shmtool, xcpdaemon: skipped (Windows not supported)")
+        endif()
 
     else()
-        message(STATUS "Windows platform - skipping shmtool build")
+        message(STATUS "XCPLITE_BUILD_TOOLS=ON: no tool targets defined for configuration '${XCPLITE_CONFIGURATION}' (use ptp or shm)")
     endif()
 
-
-endif()
+endif() # XCPLITE_BUILD_TOOLS
 
 # Rust tools: xcpclient, bintool (built with cargo)
 if(XCPLITE_BUILD_RUST_TOOLS)
@@ -330,46 +445,11 @@ if(XCPLITE_BUILD_RUST_TOOLS)
             VERBATIM
         )
         message(STATUS "Building bintool (Rust, cargo)")
-
-        # Install Rust tools system-wide via cargo install (to ~/.cargo/bin / $CARGO_HOME/bin)
-        install(CODE "
-            message(STATUS \"Installing xcpclient (cargo install)\")
-            execute_process(
-                COMMAND ${CARGO_EXECUTABLE} install --path \"${CMAKE_CURRENT_SOURCE_DIR}/tools/xcpclient\" --force
-                RESULT_VARIABLE _cargo_result
-            )
-            if(NOT _cargo_result EQUAL 0)
-                message(WARNING \"cargo install xcpclient failed\")
-            endif()
-            message(STATUS \"Installing bintool (cargo install)\")
-            execute_process(
-                COMMAND ${CARGO_EXECUTABLE} install --path \"${CMAKE_CURRENT_SOURCE_DIR}/tools/bintool\" --force
-                RESULT_VARIABLE _cargo_result
-            )
-            if(NOT _cargo_result EQUAL 0)
-                message(WARNING \"cargo install bintool failed\")
-            endif()
-        ")
+        # Note: 'cmake --install' does NOT run 'cargo install' for these tools.
+        # Use 'build.sh rust_tools cargo_install' or run 'cargo install --path tools/xcpclient'
+        # and 'cargo install --path tools/bintool' manually to install to ~/.cargo/bin.
     endif()
-endif()
-
-# no_a2l_demo: opt-in, independent of XCPLITE_BUILD_EXAMPLES.
-# Applies XCPLIB_CFG_OVERRIDE=xcplib_no_a2l_cfg.h — disables A2L generator/upload.
-# Incompatible with other examples that use A2L. Use an isolated build directory.
-if(XCPLITE_BUILD_NO_A2L_DEMO)
-    target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"xcplib_no_a2l_cfg.h\"")
-    if(NOT TARGET no_a2l_demo)
-        add_executable(no_a2l_demo examples/no_a2l_demo/src/main.c)
-        target_link_libraries(no_a2l_demo PRIVATE xcplite)
-    endif()
-    message(STATUS "no_a2l_demo: enabled (XCPLIB_CFG_OVERRIDE=xcplib_no_a2l_cfg.h)")
-endif()
-
-# freertos_demo: opt-in, independent of XCPLITE_BUILD_EXAMPLES.
-# Downloads FreeRTOS-Kernel via FetchContent. Requires macOS or Linux.
-if(XCPLITE_BUILD_FREERTOS_DEMO)
-    add_subdirectory(examples/freertos_demo)
-endif()
+endif() # XCPLITE_BUILD_RUST_TOOLS
 
 # ============================================================================
 # Installation Configuration
@@ -388,11 +468,16 @@ install(TARGETS xcplite
 # Install public headers
 install(DIRECTORY inc/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" )
 
-# Install xcplib_cfg.h for configuration options 
+# Install xcplib_cfg.h (default configuration) and platform.h
 install(FILES src/xcplib_cfg.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
-# Install platform.h for platform abstraction usage by consumers
 install(FILES src/platform.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+# Install the active configuration override header (if not default)
+# This documents which configuration was compiled into the installed library.
+if(_xcplib_cfg_override)
+    install(FILES "src/${_xcplib_cfg_override}" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    message(STATUS "Installing configuration override header: ${_xcplib_cfg_override}")
+endif()
 
 # Install CMake package configuration files
 install(EXPORT xcpliteTargets

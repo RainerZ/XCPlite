@@ -51,6 +51,12 @@ FetchContent_MakeAvailable(freertos_kernel)
 
 add_executable(freertos_demo src/main.c)
 
+# Place the binary at the build root (consistent with all other examples/tests
+# which are built directly from the root CMakeLists via add_executable)
+set_target_properties(freertos_demo PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
 target_link_libraries(freertos_demo PRIVATE
     xcplite          # XCPlite measurement/calibration library (POSIX build)
     freertos_kernel  # FreeRTOS kernel + POSIX simulator port

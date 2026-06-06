@@ -13,7 +13,8 @@ Designed exclusively for the **XCP on Ethernet Transport Layer** (TCP or UDP wit
 - **Thread-safe & lock-free** - Consistent data acquisition and parameter modification across multiple cores, free of blocking and inter-thread contention
 - **Memory-safe** - Measure and calibrate variables in any storage location: stack, heap, thread-local, and global
 - **Deterministic runtime and resource consumption** - No heap allocations, static memory usage, zero copy and predictable execution times for real-time applications
-- **Runtime A2L generation** - Define events, measurements and parameters, with metadata as code; the description file (A2L format) is generated at runtime and uploaded automatically
+- **Runtime A2L generation and download** - Define events, measurements and parameters, with metadata as code; the description file (A2L format) is generated on target runtime and downloaded from target automatically
+- **Buildtime A2L generation** - Define events and calibration parameters as code and use an code instrumentation aware ELF->A2L generator during buildtime
 - **Complex type support** - Handles basic types, structs, arrays, and nested structures
 - **Calibration segments** - Page switching, consistent atomic modification, and parameter persistence
 - **PTP timestamps** - Prepared for high-precision PTP synchronized timestamps
@@ -44,32 +45,33 @@ See the [detailed XCP introduction](docs/XCP_INTRODUCTION.md) or visit:
 
 ### Examples
 
-Multiple examples demonstrating different features are available in the [examples](examples/) folder.
+Multiple examples demonstrating different features are available in the [examples](examples/README.md) folder.
 
 **Start here:**
-- `hello_xcp` - Basic XCP server setup and instrumentation in C
-- `hello_xcp_cpp` - Basic XCP server setup and instrumentation in C++
+- [hello_xcp](examples/hello_xcp/README.md) - Basic XCP server setup and instrumentation in C
+- [hello_xcp_cpp](examples/hello_xcp_cpp/README.md) - Basic XCP server setup and instrumentation in C++
 
 **Advanced examples:**
-- `no_a2l_demo` - Linux workflow without runtime A2L generation (offline A2L generation by xcpclient tool)
-- `esp32_freertos_demo` - FreeRTOS application with XCP instrumentation running on an ESP32 board with lwip
-- `freertos_demo` - FreeRTOS application with XCP instrumentation running in the POSIX simulator (Linux)
-- `ptp4l_demo` - Using a PTP synchronized clock as XCP timestamp source
-- `multi_thread_demo` - Multi-threaded measurement and parameter sharing among threads
-- `bpf_demo` - eBPF based syscall tracing
-- `point_cloud_demo` - Visualizing dynamic data structures in CANape 3D scene window
-- `c_demo` - More detailed complex data objects, calibration objects, and page switching
-- `cpp_demo` - More detailed C++ class instrumentation and RAII wrappers
-- `struct_demo` - More detailed nested structs and multidimensional arrays
+- [no_a2l_demo](examples/no_a2l_demo/README.md) - Linux workflow without runtime A2L generation (offline A2L generation by xcpclient tool)
+- [esp32_freertos_demo](examples/esp32_freertos_demo/README.md) - FreeRTOS application with XCP instrumentation running on an ESP32 board with lwip
+- [freertos_demo](examples/freertos_demo/README.md) - FreeRTOS application with XCP instrumentation running in the POSIX simulator (Linux)
+- [ptp4l_demo](examples/ptp4l_demo/README.md) - Using a PTP synchronized clock as XCP timestamp source
+- [multi_thread_demo](examples/multi_thread_demo/README.md) - Multi-threaded measurement and parameter sharing among threads
+- [bpf_demo](examples/bpf_demo/README.md) - eBPF based syscall tracing
+- [point_cloud_demo](examples/point_cloud_demo/README.md) - Visualizing dynamic data structures in CANape 3D scene window
+- [c_demo](examples/c_demo/README.md) - More detailed complex data objects, calibration objects, and page switching
+- [cpp_demo](examples/cpp_demo/README.md) - More detailed C++ class instrumentation and RAII wrappers
+- [struct_demo](examples/struct_demo/README.md) - More detailed nested structs and multidimensional arrays
+- [silkit_demo](examples/silkit_demo/README.md) - SIL Kit based multi-process XCP via shared memory
 
-For detailed information about each example and how to set up CANape projects, see the [examples documentation](examples/README.md).
+For detailed information about each example and how to set up CANape projects, see the [examples overview](examples/README.md).
 
 **Requirements:**
 
 XCPlite examples are designed to showcase advanced XCP capabilities and are tested with **CANape 23+** (free demo version available).  
 The examples leverage:
 
-- **Runtime A2L upload** - No manual A2L file management required
+- **Runtime A2L download** - No manual A2L file management required
 - **A2L TYPEDEFs** - Complex data structures with reusable type definitions
 - **Address extensions** - Support for relative addressing and multiple memory spaces
 - **Shared axis in typedefs** - Advanced calibration structures (CANape 24+, see `cpp_demo`)

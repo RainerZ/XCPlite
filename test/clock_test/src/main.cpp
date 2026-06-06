@@ -35,7 +35,6 @@ constexpr int XCP_OPTION_LOG_LEVEL = 3; // Default XCP log level: 0=none, 1=erro
 //-----------------------------------------------------------------------------------------------------
 // Optional: Use a PTP4L synchronized real-time clock instead of the system monotonic clock
 
-// #define OPTION_ENABLE_PTP
 #ifdef OPTION_ENABLE_PTP
 
 uint8_t XCP_GRANDMASTER_UUID[] = {0x68, 0xB9, 0x83, 0xFF, 0xFE, 0x00, 0x8E, 0x9F}; // Grandmaster UUID

@@ -9,13 +9,24 @@
 |   Applied AFTER the defaults in xcplib_cfg.h via:
 |     cmake: target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"xcplib_no_a2l_cfg.h\"")
 |
-|   Use case: The A2L database is generated externally by the xcpclient tool from the application ELF file.
-|   No runtime A2L generation
-|   No on-target A2L upload
-|   Persistence is optional, disabling persistence and ELF upload completely removes the file system dependency
-|   See free_rtos_demo for an example with persistence disabled
+|   The A2L database is generated externally by the xcpclient tool from the application ELF file.
+|   No runtime A2L generation and A2L upload from the target
+|   On-target calibration persistency with .BIN files is supported
+|   ELF upload is optional
 |
-|   Only settings that DIFFER from the POSIX defaults are listed here.
+|   Key differences in overrides from the defaults in xcplib_cfg.h:
+|       #undef OPTION_ENABLE_A2L_GENERATOR
+|       #undef OPTION_ENABLE_A2L_UPLOAD
+|   Addressing scheme:
+|     Default
+|   Platform requirements:
+|    File system for ELF optional ELF upload and .BIN files
+|   Examples:
+|    no_a2l_demo
+|   Tools:
+|     Use xcpclient A2L generation from ELF
+|   Tests:
+|     -
  ----------------------------------------------------------------------------*/
 
 //-------------------------------------------------------------------------------
@@ -24,18 +35,16 @@
 // No persistence — not supported in OPTION_CAL_SEGMENTS_ABS
 #undef OPTION_ENABLE_PERSISTENCE
 
-// Absolute addressing mode (address extension 0 is absolute addressing)
 // Default: Relative addressing mode (address extension 0 is segment relative addressing)
-#define OPTION_CAL_SEGMENTS_ABS
 
-// @@@@ TODO: Fix new offline ELF section based A2L generation in segment relative mode with persistence enabled, does not work yet
+// Option: Absolute addressing mode (address extension 0 is absolute addressing)
+// #define OPTION_CAL_SEGMENTS_ABS
 
-
-#undef OPTION_ENABLE_PERSISTENCE
-
+// Persistence is currently not fully supported
+// #undef OPTION_ENABLE_PERSISTENCE
 
 //-------------------------------------------------------------------------------
 // A2L / ELF — generated externally from ELF by xcpclient; disable on-target features
 #undef OPTION_ENABLE_A2L_GENERATOR
 #undef OPTION_ENABLE_A2L_UPLOAD
-// #undef OPTION_ENABLE_ELF_UPLOAD
+#define OPTION_ENABLE_ELF_UPLOAD

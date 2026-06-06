@@ -73,16 +73,6 @@
 #endif
 
 //-------------------------------------------------------------------------------
-// XCP multi application mode
-// Multiple application processes may have shared transmit queue, calibration RCU and XCP state
-// One application is the XCP server, could be the first one running (XCP leader) or a dedicated application (XCP daemon)
-// Requires a POSIX-compliant platform (Linux / macOS / QNX).  Not supported on Windows.
-
-// Experimental, work in progress, not fully tested yet, may change or be removed without major version change, use with caution
-
-// #define OPTION_SHM_MODE
-
-//-------------------------------------------------------------------------------
 // XCP server options
 
 #define OPTION_ENABLE_TCP

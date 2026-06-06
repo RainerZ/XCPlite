@@ -9,9 +9,9 @@ To get started, take a first look at the C example `hello_xcp` or at `hello_xcp_
 
 ### Example CANape Projects
 
-There is a CANape project for each example in a directory folder `examples/<ExampleName>/CANape`.  
-To load a project into CANape, select load project and navigate to the CANape.ini file in this folder.  
-All CANape project examples are configured to upload the A2L file via XCP. The IP address of the XCP server is stored in the A2L file uploaded last time. If CANape can not connect, check that the correct IP address is configured in "Device Configuration/Devices/<DeviceName>/Protocol/Transport Layer".  
+There is a CANape project for each example in a directory folder `<ExampleFolder>/CANape` or `<ExampleFolder>/CANape_Project`.  
+To load a project into CANape, select load project and navigate to the file 'CANape.ini' in this "project" folder.  
+All CANape project examples (execpt no_a2l and free_rtos demos) are configured to provide downloading the A2L file from target ECU via XCP upload commands (XCP has unusual naming conventions, the target ECU technically is the UDP/TCP server, but the commands to read data from target it are called upload). The IP address of the XCP server is stored in the A2L file "uploaded" last time. If CANape can not connect, check that the correct IP address is configured in "Device Configuration/Devices/<DeviceName>/Protocol/Transport Layer".  
 
 The examples should run with a CANape demo version, which can be downloaded from <https://www.vector.com/de/de/support-downloads/download-center>.
 The demo installation must be explicitly enabled in the installer and has some limitations:  
@@ -21,8 +21,9 @@ It will store only the first seconds of measurement data and the number of measu
 
 ## Examples
 
+Note that examples may need different library build configurations. There are different build directories for each library configuration used. Default is build/.  
 
-### hello_xcp
+### [hello_xcp](hello_xcp/README.md)
 
 An example in pure C. Compiles a C or C++. Demonstrates the basic C API.  
 - Start the XCP on Ethernet server and use the runtime A2L generator.  
@@ -32,7 +33,7 @@ An example in pure C. Compiles a C or C++. Demonstrates the basic C API.
 - Instrument a function, register local variables and function parameters and create and trigger a measurement event in the function.  
 
 
-### hello_xcp_cpp
+### [hello_xcp_cpp](hello_xcp_cpp/README.md)
 
 An example in C++ using more idiomatic C++ to demonstrate the capabilities of the additional C++ API.  
 - Start the XCP on Ethernet server and use the runtime A2L generator.  
@@ -42,48 +43,47 @@ An example in C++ using more idiomatic C++ to demonstrate the capabilities of th
 - Instrument a member function: Register and measure local function variables and parameters.  
 
 
-### no_a2l_demo
+### [no_a2l_demo](no_a2l_demo/README.md)
 
 Demonstrates XCPlite without on-target runtime A2L generation.  
-Offline A2L generation is performed using the XCPlite specific A2L creator tool (xcpclient) during the build process and ELF/DWARF linker informations.  
+Offline A2L generation is performed using the XCPlite specific A2L generator/creator tool (xcpclient) during the build process and ELF/DWARF linker file informations.  
 Does no need file system support on the target and A2L upload.  
 
 
-### esp32_freertos_demo
+### [esp32_freertos_demo](esp32_freertos_demo/README.md)
 
 Demonstrates XCPlite running inside FreeRTOS tasks on a 32 bit microcontroller.  
 Uses the FreeRTOS POSIX simulator port so the demo builds and runs on macOS / Linux.  
 before switching to the real embedded target.  
 
 
-### freertos_demo
+### [freertos_demo](freertos_demo/README.md)
 
 Demonstrates XCPlite running inside FreeRTOS tasks.  
 Uses the FreeRTOS POSIX simulator port so the demo builds and runs on macOS / Linux.   
 
 
-### external_example
+### [external_example](external_example/README.md)
 
 **Demonstrates using libxcplite as a pre-built external library** - independent from the main build system.  
 - Shows how to build against an installed libxcplite binary (system-wide or local staging).  
 - Independent CMakeLists.txt using `find_package(libxcplite)`.  
 - Typical workflow for production deployments where libxcplite is distributed as a library package.  
 - No system installation required for development - uses local staging directory.  
-- See [external_example/README.md](external_example/README.md) for detailed instructions.  
 
 
-### silkit_demo
+### [silkit_demo](silkit_demo/README.md)
 
 Demonstrates the use of XCPlite in a SILKIT simulation with multiple participants.
 Builds against a pre-built libxcplite and silkit library
 
 
-### ptp4l_demo
+### [ptp4l_demo](ptp4l_demo/README.md)
 
 Demonstrates how to use a PTP (Precision Time Protocol) synchronized clock as XCP data acquisition timestamp source.  
 
 
-### c_demo
+### [c_demo](c_demo/README.md)
 
 Shows more complex data objects (structs, arrays) and calibration objects (axis, maps and curves).  
 Measurement variables on stack and in global memory. 
@@ -92,7 +92,7 @@ Consistent atomic changes of multiple calibration parameters.
 Calibration page switching and EPK version check.  
 
 
-### cpp_demo
+### [cpp_demo](cpp_demo/README.md)
 
 Demonstrates the calibration parameter segment RAII wrapper.  
 Demonstrates measurement of member variables and stack variables in class instance member functions.  
@@ -100,13 +100,13 @@ Shows how to create a class with a calibration parameter segment as a member var
 Note: If CANAPE_24 is defined in sig_gen.hpp, the lookup table is a nested typedef, it uses a THIS. references to its shared axis contained in the typedef.
 
 
-### struct_demo
+### [struct_demo](struct_demo/README.md)
 
 Shows how to define measurement variables in nested structs, multidimensional fields and arrays of structs.
 Pure measurement demo, does not have any calibration parameters.
 
 
-### multi_thread_demo
+### [multi_thread_demo](multi_thread_demo/README.md)
 
 Shows measurement in multiple threads.  
 Create thread local instances of events and measurements.  
@@ -115,13 +115,13 @@ Thread safe and consistent access to parameters.
 Experimental code to demonstrate how to create context and spans using the XCP instrumentation API.  
 
 
-### point_cloud_demo
+### [point_cloud_demo](point_cloud_demo/README.md)
 
 Demonstrates how to visualize dynamic data structures in the CANape 3D scene window.  
 Creates and measures an array of structures representing 3D points with additional information.
 
 
-### bpf_demo
+### [bpf_demo](bpf_demo/README.md)
 
 Experimental.  
 Demonstrates tracing of process creations and selected syscalls.  
@@ -162,6 +162,72 @@ The easiest way to create a new CANape project for XCPlite is:
     In 'Device/DeviceConfiguration/Devices/MyDevice/Database', enable automatic detection of database content and select 'Check identifier and content'.
 - To use the consistent calibration mode (indirect calibrationmode), the user defined XCP command for start and end calibration sequence have to be configured. This setting is not default in CANape. Refer to one of the example projects for details.
  
-The automatic A2L upload then happens every time a new version of A2L file has been generated.  
+The automatic A2L upload from target happens every time a new version of A2L file has been generated on target.  
 Depending on the settings in XCPlite, this happens after the first run of a new software build, or each time the application is restarted.  
 Of course, the A2L file may also be copied manually into the CANape project folder.
+
+
+
+## API usage overview
+
+The XCPlite public API is spread across four headers: `xcplib.h` (C), `xcplib.hpp` (C++),
+`a2l.h` (C/C++ A2L generation), and `a2l.hpp` (C++ A2L helpers). The table below shows which
+API areas each example exercises.
+
+**Legend:** ✅ used  —  — not used  *(blank = not applicable)*
+
+| API area | hello_xcp | hello_xcp_cpp | c_demo | cpp_demo | struct_demo | multi_thread_demo | no_a2l_demo | freertos_demo |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Language** | C | C++ | C | C++ | C | C | C | C |
+| **Server** | | | | | | | | |
+| `XcpInit` / `XcpEthServerInit` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `XcpSetElfName` (ELF upload) | ✅ | ✅ | — | — | — | — | ✅ | ✅ |
+| **Calibration — C macros** | | | | | | | | |
+| `CalSegDecl` / `CalSegCreate` | ✅ | — | ✅ | — | — | ✅ | ✅ | ✅ |
+| `CalSegLock` / `CalSegUnlock` | ✅ | — | ✅ | — | — | ✅ | ✅ | ✅ |
+| `XcpFreeze` / `XcpBinWrite` | — | — | ✅ | — | — | — | — | — |
+| **Calibration — C++ RAII** | | | | | | | | |
+| `CalSegDeclRef` / `CalSegRef<T>` (section-registered) | — | — | — | — | — | — | ✅ | ✅ |
+| `xcp::CalSeg<T>` (runtime-created, with A2L) | — | ✅ | — | ✅ | — | — | — | — |
+| `CalSeg::lock()` / `CalSegRef::lock()` / auto unlock | — | ✅ | — | ✅ | — | — | ✅ | ✅ |
+| **Events & measurement triggers** | | | | | | | | |
+| `DaqCreateEvent` | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ |
+| `DaqCreateEventInstance` (thread-local) | — | — | — | — | — | ✅ | — | — |
+| `DaqCreateAndTriggerEvent` (inline) | — | — | — | — | — | — | ✅ | — |
+| `DaqTriggerEvent` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `DaqTriggerEventExt` (relative base addr) | — | — | — | — | ✅ | — | ✅ | — |
+| `DaqEventVar` (C+A2L / C++ combined create+trigger) | — | — | — | ✅ | — | — | — | — |
+| `DaqEventExtVar` / `DaqTriggerEventVar` (C++ variadic) | — | ✅ | — | ✅ | — | — | — | — |
+| **A2L — measurement registration** | | | | | | | | |
+| `A2lCreateMeasurement` (scalar) | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | — |
+| `A2lCreateMeasurementArray` / `Matrix` | — | — | ✅ | ✅ | — | ✅ | — | — |
+| `A2lCreateMeasurementInstance` (named) | ✅ | — | — | ✅ | — | ✅ | — | — |
+| `A2lCreatePhysMeasurement` (with unit/conv) | ✅ | — | — | ✅ | — | ✅ | — | — |
+| **A2L — calibration parameter registration** | | | | | | | | |
+| `A2lCreateParameter` (scalar) | ✅ | — | ✅ | — | — | ✅ | — | — |
+| `A2lCreateCurve` / `A2lCreateMap` | — | — | ✅ | — | — | — | — | — |
+| `A2lCreateCurveWithSharedAxis` / `MapWithSharedAxis` | — | — | — | ✅ | — | — | — | — |
+| `A2lCreateAxis` | — | — | ✅ | — | — | — | — | — |
+| **A2L — typedef type system** | | | | | | | | |
+| `A2lTypedefBegin` / `A2lTypedefEnd` | — | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
+| `A2lTypedefMeasurementComponent` | — | — | — | — | ✅ | ✅ | — | — |
+| `A2lTypedefParameterComponent` | — | — | — | ✅ | — | — | — | — |
+| `A2lTypedefCurveComponent` / `AxisComponent` | — | — | — | ✅ | — | — | — | — |
+| `A2lCreateTypedefInstance` / `InstanceArray` | — | — | ✅ | ✅ | ✅ | ✅ | — | — |
+| `A2lCreateTypedefReference` (pointer/heap) | — | — | — | — | ✅ | — | — | — |
+| **A2L — conversions and metadata** | | | | | | | | |
+| `A2lCreateLinearConversion` | ✅ | — | — | ✅ | — | — | — | — |
+| `A2lCreateEnumConversion` | — | — | — | ✅ | — | — | — | — |
+| **A2L — addressing modes** | | | | | | | | |
+| `A2lSetAbsoluteAddrMode` | ✅ | — | ✅ | ✅ | ✅ | — | — | — |
+| `A2lSetRelativeAddrMode` (heap/instance base) | — | ✅ | — | ✅ | ✅ | ✅ | — | — |
+| `A2lSetStackAddrMode` (stack variables) | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | — |
+| `A2lSetSegmentAddrMode` (CalSeg base) | ✅ | — | ✅ | — | — | ✅ | — | — |
+| **On-target A2L generation** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **—** | — |
+| **Offline A2L via xcpclient + ELF** | — | — | — | — | — | — | **✅** | ✅ |
+
+> **no_a2l_demo** and **freertos_demo** use only the XCP measurement/calibration core
+> (`DaqCreateEvent`, `DaqTriggerEvent`, `CalSegDecl`, `CalSegLock`/`Unlock`) — no `a2l.h`
+> calls. The A2L file is generated offline from the ELF/DWARF debug info by `xcpclient`.
+> See [no_a2l_demo/README.md](no_a2l_demo/README.md) for the full offline workflow.
+

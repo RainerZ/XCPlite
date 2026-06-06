@@ -1,9 +1,16 @@
 @PACKAGE_INIT@
 
 # xcplite CMake package configuration file
-# 
+#
 # This file allows other CMake projects to find and use xcplite
-# via find_package(xcplite)
+# via find_package(xcplite).
+#
+# The installed library was compiled with XCPLITE_CONFIGURATION=@XCPLITE_CONFIGURATION@.
+# This configuration is baked into the compiled library; consumers do not need to
+# repeat XCPLIB_CFG_OVERRIDE. Check XCPLITE_CONFIGURATION_INSTALLED to verify
+# compatibility with the expected configuration.
+
+set(XCPLITE_CONFIGURATION_INSTALLED "@XCPLITE_CONFIGURATION@")
 
 include(CMakeFindDependencyMacro)
 

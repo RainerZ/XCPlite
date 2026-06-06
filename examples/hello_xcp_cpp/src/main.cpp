@@ -23,9 +23,11 @@ constexpr uint16_t OPTION_QUEUE_SIZE = (1024 * 32);           // Size of the que
 constexpr int OPTION_LOG_LEVEL = 3;                           // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 // XCP mode:
-// constexpr uint8_t OPTION_XCP_MODE = (XCP_MODE_PERSISTENCE | XCP_MODE_SHM_AUTO); // XCP multi application mode, leader becomes XCP server
+#ifdef OPTION_SHM_MODE
+constexpr uint8_t OPTION_XCP_MODE = (XCP_MODE_PERSISTENCE | XCP_MODE_SHM_AUTO); // XCP multi application mode, leader becomes XCP server
+#else
 constexpr uint8_t OPTION_XCP_MODE = (XCP_MODE_PERSISTENCE | XCP_MODE_LOCAL); // XCP single application server mode
-// constexpr uint8_t OPTION_XCP_MODE = (XCP_MODE_DEACTIVATE); // XCP deactivated, passive mode
+#endif
 
 // A2L generation mode:
 constexpr uint8_t OPTION_A2L_MODE = (A2L_MODE_WRITE_ONCE | A2L_MODE_FINALIZE_ON_CONNECT | A2L_MODE_AUTO_GROUPS);

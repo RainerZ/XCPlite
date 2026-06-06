@@ -69,13 +69,13 @@ In xcplib_cfg.h:
 
 C and C++ Examples:
 ```c
-   XcpSetLogLevel(3); // (1=error, 2=warning, 3=info, 4=debug (prints all XCP commands), 5=trace)
+   XcpSetLogLevel(3); // (1=error, 2=warning, 3=info, 4=commands, 5=trace)
 ```
 
 3. **Initialise the XCP core** *once*:
 
 ```c
-   XcpInit("MyProject" /* Project name*/, "V1.0.1" /* EPK version string*/, true /* activate XCP */);
+   XcpInit("MyProject" /* Project name*/, "V1.0.1" /* EPK version string*/, mode /* XCP mode */);
 ```
 
 4. **Start the Ethernet server**  *once*:
@@ -136,23 +136,23 @@ C++ Example:
    // Default parameter values
    const ParametersT kParameters = {.min = 2.0, .max = 3.0};
 
-   // A calibration segment wrapper for the parameters
+   // Option A: runtime-created segment (with on-target A2L generation)
    std::optional<xcp::CalSeg<ParametersT>> gCalSeg;
+   gCalSeg.emplace("Parameters", &kParameters);
 
-    // Create a global calibration segment wrapper for the struct 'ParametersT' and use its default values in constant 'kParameters'
-    // This calibration segment has a working page (RAM) and a reference page (FLASH), it creates a MEMORY_SEGMENT in the A2L file
-    // It provides safe (thread safe against XCP modifications), lock-free and consistent access to the calibration parameters
-    // It supports XCP/ECU independent page switching, checksum calculation and reinitialization (copy reference page to working page)
-    gCalSeg.emplace("Parameters", &kParameters);
+   // Option B: section-registered segment (no-A2L / RTOS targets — preferred)
+   // At file scope:
+   CalSegDeclRef(kParameters, kParameters_calseg);
+   // XcpInit() registers the segment automatically from the xcp_cals ELF section.
 
-    // Register the calibration segment description as a typedef and an instance in the A2L file
-    {
-        A2lTypedefBegin(ParametersT, &kParameters, "Typedef for ParametersT");
-        A2lTypedefParameterComponent(min, "Minimum random number value", "", -100.0, 100.0);
-        A2lTypedefParameterComponent(max, "Maximum random number value", "", -100.0, 100.0);
-        A2lTypedefEnd();
-    }
-    gCalSeg->CreateA2lTypedefInstance("ParametersT", "Random number generator parameters");
+   // Register as typedef instance in A2L (Option A only):
+   {
+       A2lTypedefBegin(ParametersT, &kParameters, "Typedef for ParametersT");
+       A2lTypedefParameterComponent(min, "Minimum random number value", "", -100.0, 100.0);
+       A2lTypedefParameterComponent(max, "Maximum random number value", "", -100.0, 100.0);
+       A2lTypedefEnd();
+   }
+   gCalSeg->CreateA2lTypedefInstance("ParametersT", "Random number generator parameters");
 
 ```
 6. **Access calibration parameters** via the calibration segment.
@@ -271,7 +271,7 @@ Measure an instance of a class on heap
 
 ### Initialization
 
-#### void XcpInit(const char *project_name, const char*epk, bool activate)
+#### bool XcpInit(const char *name, const char *epk, uint8_t mode)
 
 *Initialize XCP*
 
@@ -282,13 +282,20 @@ In inactive mode, all XCP and A2L code instrumentation remains passive, disabled
 - **Parameters**
   - `name` – Project name, used as A2L file name and to identify the XCP server
   - `epk` – EPK version string, used for version compatibility check of A2L and BIN file
-  - `mode` – XCP_MODE_DEACTIVATE, XCP_MODE_LOCAL (XCP_MODE_SHM, XCP_MODE_SHM_AUTO or XCP_MODE_SHM_SERVER for libxcplite builds with SHM mode)
+  - `mode` – Bitwise combination of:
+    - `XCP_MODE_DEACTIVATE` (0) — initialize without activating the protocol layer
+    - `XCP_MODE_LOCAL` (0x01) — initialize and activate XCP
+    - `XCP_MODE_PERSISTENCE` (0x02) — load the binary persistence file to keep deterministic event/calseg ordering and restore persisted calibration data
+    - `XCP_MODE_SHM` (0x80) — allocate state in POSIX shared memory (SHM builds)
+    - `XCP_MODE_SHM_AUTO` (0x04) — automatically elect this process as XCP server leader (SHM builds)
+    - `XCP_MODE_SHM_SERVER` (0x08) — force this process to be the XCP server (SHM builds)
+- **Returns**: `true` on success, otherwise `false`.
 
 
 
 ### 3.1 · XCP on Ethernet Server
 
-#### bool XcpEthServerInit(uint8_t *address, uint16_t port, bool use_tcp, uint32_t measurement\_queue_size)
+#### bool XcpEthServerInit(uint8_t *address, uint16_t port, bool use_tcp, uint32_t measurement_queue_size)
 
 *Initialise the XCP server.*
 
@@ -316,7 +323,80 @@ Query whether the server instance is currently running.
 
 ### 3.2 Calibration Segments
 
-See function and macro documentation in xcplib.h
+A **calibration segment** wraps a struct of tunable parameters. It maintains a reference page
+("FLASH" — read-only defaults) and a working page ("RAM" — XCP-modifiable copy). Access via
+`XcpLockCalSeg` / `XcpUnlockCalSeg` (C) or `.lock()` (C++) is wait-free and thread-safe.
+
+#### C API — runtime creation
+
+```c
+tXcpCalSegIndex XcpCreateCalSeg(const char *name, const void *default_page, uint32_t size);
+const void *XcpLockCalSeg(tXcpCalSegIndex index);
+void XcpUnlockCalSeg(tXcpCalSegIndex index);
+```
+
+#### C macros — section-registered (required for offline A2L generation)
+
+These macros emit a `tXcpCalDescriptor` into the `.xcp_cals` ELF section so `XcpInit()`
+registers the segment automatically and `xcpclient` can discover it without runtime A2L calls.
+
+```c
+// At file scope:
+CalSegDecl(my_params);           // emits xcp_cals descriptor + creates calseg_id_my_params
+
+// Anywhere after XcpInit():
+CalSegCreate(my_params);         // registers the segment (pairs with CalSegDecl)
+CalSegLock(my_params);           // locks; returns const pointer to working page
+CalSegUnlock(my_params);         // releases the lock
+```
+
+#### C++ RAII — runtime creation (`xcp::CalSeg<T>`, `xcplib.hpp`)
+
+Used with on-target A2L generation. Registers via `XcpCreateCalSeg()` at construction time.
+
+```cpp
+// Global or member variable:
+std::optional<xcp::CalSeg<ParametersT>> gCalSeg;
+
+// After XcpInit():
+gCalSeg.emplace("Parameters", &kParameters);
+
+// In any function:
+{
+    auto p = gCalSeg->lock();   // RAII guard — unlocks when p goes out of scope
+    use(p->my_field);
+}
+```
+
+#### C++ RAII — section-registered (`CalSegDeclRef` / `CalSegDecl`, `xcplib.hpp`)
+
+The idiomatic C++ pattern for **no-A2L / RTOS** targets. A single macro at file scope emits
+the `xcp_cals` section descriptor **and** creates a typed `CalSegRef<T>` RAII handle.
+Registration is done by `XcpInit()` from the section data — no `XcpCreateCalSeg()` call needed.
+
+```cpp
+// At file scope (outside any function):
+const struct parameters parameters = { .period_ms = 2, .amplitude = 1.0f };
+
+CalSegDeclRef(parameters, parameters_calseg);
+// Expands to:
+//   static tXcpCalSegIndex calseg_id_parameters = XCP_UNDEFINED_CALSEG;
+//   static tXcpCalDescriptor calseg__parameters __attribute__((section("xcp_cals"))) = {...};
+//   static CalSegRef<parameters> parameters_calseg(&calseg_id_parameters, &parameters);
+
+// Shorthand — handle named <value>_calseg:
+CalSegDecl(parameters);  // same as CalSegDeclRef(parameters, parameters_calseg)
+
+// Anywhere after XcpInit():
+{
+    auto p = parameters_calseg.lock();  // RAII guard — unlocks when p goes out of scope
+    uint32_t period = p->period_ms;
+}
+```
+
+The lock is **wait-free** (RCU atomics, no mutex) — safe to call from ISRs and high-priority RTOS tasks.
+
+See `examples/esp32_freertos_demo/` for a complete working example.
 
 ---
 
@@ -404,57 +484,58 @@ DaqEventDisable(event_name)
 ```
 
 
-Combined variadic macros to trigger events and register measurements in one call.  
-Available for c and c++:
+Combined variadic macros to create, register measurements, and trigger events in one call.
+
+**C** (`xcplib.h`, requires `OPTION_ENABLE_A2L_GENERATOR`):
 ```c
-/// Trigger an event, create the event once and register global and local measurement variables once
-/// Supports absolute, stack and relative addressing mode measurements
-DaqEventVar(event_name, ...) 
-
-/// Trigger an event, create the event once and register global, local and relative addressing mode measurement variables once
-/// Supports absolute, stack and relative addressing mode measurements
-DaqEventExtVar(event_name, ...) 
-
-/// Helper macros for creating measurement meta data, variable name stringification and address capture
-A2L_MEAS(var, comment)
-A2L_MEAS_PHYS(var, comment, unit, min, max)
-
-// Example:
-DaqEventVar(event_name,                                                                                                 
-                    A2L_MEAS(variable1, "Comment", "Unit", -20, 50), //
-                    A2L_MEAS(variable2, "Comment", "Unit", 0, 40));
-
+/// Create event once, register measurements once (stack/absolute addressing), trigger every call.
+DaqEventVar(event_name, (var1, comment1), (var2, comment, unit, min, max), ...)
 ```
 
+**C++** (`xcplib.hpp`):
+```cpp
+/// Create event once, register measurements once (absolute/stack addressing), trigger every call.
+DaqEventVar(event_name, A2L_MEAS(var, comment), A2L_MEAS_PHYS(var, comment, unit, min, max), ...)
 
+/// Create event once, register measurements once (absolute/stack/relative addressing), trigger every call.
+/// base: pointer used as relative base for member/heap variables
+DaqEventExtVar(event_name, base, A2L_MEAS(var, comment), ...)
 
-Note:
-For workflows without runtime A2L generation, the event creation macros have to be used.  
-They create static markers in the code to identify events and event trigger code locations by reading the ELF/DWARF debug information.  
+/// C++-only: trigger an already-created event and register variables (no event creation).
+DaqTriggerEventVar(event_name, A2L_MEAS(var, comment), ...)
+```
+
+Helper macros for measurement metadata (C++ only — `A2L_MEAS` / `A2L_MEAS_PHYS` are no-ops in C):
+```cpp
+A2L_MEAS(var, comment)                         // basic measurement
+A2L_MEAS_PHYS(var, comment, unit, min, max)    // measurement with unit and physical limits
+```
+
+> **Note for offline A2L workflows:** `DaqEventVar` / `DaqEventExtVar` require runtime A2L generation
+> (`OPTION_ENABLE_A2L_GENERATOR`). For no-A2L builds use `DaqCreateEvent` + `DaqTriggerEvent` instead —
+> those macros emit the `xcp_evts` / `xcp_cals` section descriptors and DWARF anchors that `xcpclient`
+> reads to build the A2L offline.
 
 
 ---
 
 ### 3.4 A2L Generation
 
-#### bool A2lInit(const uint8_t *address, uint16_t port, bool use_tcp, uint32_t mode_flags)
+#### bool A2lInit(const uint8_t *addr, uint16_t port, bool useTCP, uint8_t mode)
 
-Initializes the A2L generation system of XCPlite. This function must be called once before any A2L-related macros or API functions are used. It performs the following actions:
+Initializes the A2L generation system of XCPlite. Must be called once, after `XcpInit()`, before any A2L-related macros or API functions are used.
 
-- Allocates and initializes all internal data structures and files required for A2L file creation.
-- Enables runtime definition of parameters, measurements, type definitions, groups and conversion rules.
+> **Note:** Project name and EPK version are taken from the prior `XcpInit()` call, not from `A2lInit()`.
 
 **Parameters:**
 
-- `project_name`: Name of the project, used for the A2L and BIN file names.
-- `epk`: Unique software version string (EPK) for version checking of A2L and parameter files.
-- `address`: Default IPv4 address of the XCP server.
+- `addr`: Default IPv4 address of the XCP server, written into the A2L `IF_DATA` block.
 - `port`: Port number of the XCP server.
-- `use_tcp`: If `true`, TCP transport is used; if `false`, UDP transport.
-- `mode_flags`: Bitwise combination of A2L generation mode flags controlling file creation and runtime behavior:
+- `useTCP`: If `true`, TCP transport; if `false`, UDP transport.
+- `mode`: Bitwise combination of A2L generation mode flags:
   - `A2L_MODE_WRITE_ALWAYS` (0x01): Always write the A2L file, overwriting any existing file.
-  - `A2L_MODE_WRITE_ONCE` (0x02): Write the A2L file (.a2l) once after a rebuild; Uses the binary persistence file (.bin) to keep calibration segment and event numbers stable, even if the registration order changes.
-  - `A2L_MODE_FINALIZE_ON_CONNECT` (0x04): Finalize the A2L file when an XCP client connects, later registrations are not visible to the tool. If not set, the A2L file must be finalized manually.
+  - `A2L_MODE_WRITE_ONCE` (0x02): Write the A2L file (.a2l) once after a rebuild; uses the binary persistence file (.bin) to keep calibration segment and event numbers stable even if registration order changes.
+  - `A2L_MODE_FINALIZE_ON_CONNECT` (0x04): Finalize the A2L file when an XCP client connects; later registrations are not visible to the tool. If not set, finalize manually via `A2lFinalize()`.
   - `A2L_MODE_AUTO_GROUPS` (0x08): Automatically create groups for measurement events and parameter segments in the A2L file.
 
 #### void A2lFinalize(void)
@@ -475,7 +556,25 @@ XCPlite uses relative memory addressing. There are 4 different addressing modes.
 #### void A2lCreateXxxx(...)
 
 All A2L generation macros and functions are not thread safe. It is up to the user to ensure thread safety and to use once-patterns when definitions are called multiple times in nested functions or from different threads.
-The functions `A2lLock()` and `A2lUnlock()` may be used to lock sequences of A2L definitions. The macro `A2lOnce` may be used to create a once execution pattern for a block of A2L definitions.
+The functions `A2lLock()` and `A2lUnlock()` may be used to lock sequences of A2L definitions.
+The macro `A2lOnce(name)` (C) or `A2lOnce()` / `A2lOnceLock()` (C++) may be used to create a once-execution pattern for a block of A2L definitions:
+
+```c
+// C: 'name' must be a unique identifier within the enclosing scope
+A2lOnce(my_typedef_registration) {
+    A2lLock();
+    A2lTypedefBegin(...);
+    // ...
+    A2lUnlock();
+}
+```
+```cpp
+// C++: no name argument required
+if (A2lOnce()) {
+    A2lTypedefBegin(...);
+    // ...
+}
+```
 
 Also note that A2L definitions may be lazy, but the A2L file is finalized when an XCP tool connects (or when `A2lFinalize()` is called). All definitions after that point are ignored and not visible to the tool.
 
@@ -488,7 +587,7 @@ All definitions of instances follow the same principle: Set the addressing mode 
 | Function                                                         | Purpose                                                         |
 | ---------------------------------------------------------------- | --------------------------------------------------------------- |
 | `void XcpSetLogLevel(uint8_t level);`                            | 1 = error, 2 = warn, 3 = info, 4 = commands, 5 = trace.         |
-| `void XcpInit(const char *name, const char *epk, bool activate);`| Initialize core singleton; must precede all other API usage.    |
+| `bool XcpInit(const char *name, const char *epk, uint8_t mode);` | Initialize core singleton; must precede other API usage.        |
 | `void XcpDisconnect(void);`                                      | Force client disconnect, stop DAQ, flush pending operations.    |
 | `void XcpSendTerminateSessionEvent(void);`                       | Notify client of a terminated session.                          |
 | `void XcpPrint(const char *str);`                                | Send arbitrary text to the client (channel 0xFF).               |

@@ -6,12 +6,14 @@ This demo shows how to integrate eBPF (Extended Berkeley Packet Filter) with XCP
 
 The BPF demo captures process creation events using eBPF and exposes the process IDs through XCP for real-time monitoring. When a new process is created on the system, the BPF program captures the event and triggers an XCP measurement event.
 
-## Features
+## What it demonstrates
 
-- **Process Monitoring**: Uses eBPF to capture `sched_process_fork` tracepoint events
-- **Real-time Data**: Process IDs are stored in a global variable accessible via XCP
-- **Cross-platform**: Compiles on both Linux (with BPF support) and other platforms (without BPF)
-- **XCP Integration**: Triggers dedicated XCP events when new processes are detected
+| Feature | How it is demonstrated |
+|---|---|
+| Process monitoring via eBPF | Attaches to `sched/sched_process_fork` tracepoint; captures PID/PPID/comm |
+| Real-time XCP measurement | New process PID stored in `new_process_pid`, DAQ event triggered on each fork |
+| BPF ring buffer | Kernel → userspace data transfer via BPF ring buffer |
+| Graceful non-BPF fallback | Compiles and runs on non-Linux platforms without BPF support |
 
 ## Prerequisites
 
@@ -37,22 +39,18 @@ sudo pacman -S clang llvm libbpf linux-headers
    ./build_bpf.sh
    ```
 
-2. **Build the main application**:
+2. **Build and run the main application**:
 
    ```bash
-   # From project root
-   cmake -B build -S .
+   # Using build.sh (from project root)
+   ./build.sh examples
+   sudo ./build/bpf_demo
+
+   # Or directly with CMake
+   cmake -B build -S . -DXCPLITE_BUILD_EXAMPLES=ON
    cmake --build build --target bpf_demo
+   sudo ./build/bpf_demo
    ```
-
-## Running
-
-### On Linux with BPF support
-
-```bash
-# Root privileges required for BPF programs
-sudo ./build/bpf_demo
-```
 
 ## Troubleshooting
 
