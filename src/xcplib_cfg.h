@@ -15,10 +15,10 @@
   The values for XCP_xxx and XCPTL_xxx define constants (in xcp_cfg.h and xcptl_cfg.h) may depend on options
 */
 
-// XCPlite version, currently V2.1.0
+// XCPlite version, currently V2.1.x
 #define OPTION_VERSION_MAJOR 2
 #define OPTION_VERSION_MINOR 1
-#define OPTION_VERSION_PATCH 0
+#define OPTION_VERSION_PATCH 2
 
 // CANape version compatibility
 // Disable workarounds for CANape versions < 24SP2

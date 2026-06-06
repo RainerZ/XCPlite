@@ -315,7 +315,7 @@ case "$CONFIGURATION" in
 esac
 
 [[ "$CMAKE_BUILD_RUST" == "ON" ]] && echo "  Rust tools    : xcpclient, bintool" \
-    || echo "  Rust tools    : (not built — use rust_tools target to enable)"
+    || echo "  Rust tools    : (not built)"
 
 if [[ "$CMAKE_BUILD_RUST" == "ON" ]]; then
     CARGO_SUBDIR="debug"

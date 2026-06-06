@@ -422,11 +422,9 @@ and `AddrExt` encoding — see
 - generating an A2L file from the firmware ELF
 - running simple command-line XCP connection and measurement tests
 
-### Recommended: Prebuilt Binary
+### Prebuilt Binary
 
 For normal demo users, the recommended distribution model is a prebuilt binary matching the XCPlite release version. The binary should be taken from the matching XCPlite/xcp-lite release and put somewhere in your shell `PATH`.
-
-Recommended release artifact naming:
 
 ```text
 xcpclient-v2.1.0-macos-aarch64
@@ -438,9 +436,9 @@ The important rule is version matching: the `xcpclient` version, the Rust `xcp-l
 
 ### Developer Path: Build from Rust Sources
 
-If no matching binary is available, build `xcpclient` from source. This is more complex because the Rust `xcp-lite` repository contains the A2L database/generator code and includes the C/C++ XCPlite repository as a submodule.
+If no matching binary is available, build `xcpclient` from source. This is more complex because the Rust `xcp-lite` library contains the A2L registry, reader and writer for the xcpclient database generator and includes the C/C++ XCPlite repository as a submodule.
 
-For the current development state, use matching branches of both repositories, for example `V2.1.0` on your XCPlite fork and the corresponding `V2.1.0` branch of your `xcp-lite` fork.
+For the current development state, use matching branches of both repositories, for example `V2.1.0` on your XCPlite fork and the corresponding `V2.1.0` branch of your `xcp-lite` fork or dependency in Cargo.toml of xcpclient.
 
 Typical example workflow:
 

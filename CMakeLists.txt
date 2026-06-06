@@ -1,7 +1,7 @@
 
 cmake_minimum_required(VERSION 3.14)
 
-project(xcplite VERSION 2.1.0 LANGUAGES C CXX)
+project(xcplite VERSION 2.1.2 LANGUAGES C CXX)
 
 
 

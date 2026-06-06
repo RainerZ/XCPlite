@@ -12,7 +12,7 @@ Designed exclusively for the **XCP on Ethernet Transport Layer** (TCP or UDP wit
 
 - **Thread-safe & lock-free** - Consistent data acquisition and parameter modification across multiple cores, free of blocking and inter-thread contention
 - **Memory-safe** - Measure and calibrate variables in any storage location: stack, heap, thread-local, and global
-- **Deterministic runtime and resource consumption** - No heap allocations, static memory usage, zero copy and predictable execution times for real-time applications
+- **Deterministic runtime and low resource consumption** - No heap allocations, static memory usage, zero copy and predictable execution times for real-time applications
 - **Runtime A2L generation and download** - Define events, measurements and parameters, with metadata as code; the description file (A2L format) is generated on target runtime and downloaded from target automatically
 - **Buildtime A2L generation** - Define events and calibration parameters as code and use an code instrumentation aware ELF->A2L generator during buildtime
 - **Complex type support** - Handles basic types, structs, arrays, and nested structures
@@ -55,6 +55,7 @@ Multiple examples demonstrating different features are available in the [example
 - [no_a2l_demo](examples/no_a2l_demo/README.md) - Linux workflow without runtime A2L generation (offline A2L generation by xcpclient tool)
 - [esp32_freertos_demo](examples/esp32_freertos_demo/README.md) - FreeRTOS application with XCP instrumentation running on an ESP32 board with lwip
 - [freertos_demo](examples/freertos_demo/README.md) - FreeRTOS application with XCP instrumentation running in the POSIX simulator (Linux)
+- [silkit_demo](examples/silkit_demo/README.md) - SIL-Kit multi-participant measurement and calibration (via shared memory)
 - [ptp4l_demo](examples/ptp4l_demo/README.md) - Using a PTP synchronized clock as XCP timestamp source
 - [multi_thread_demo](examples/multi_thread_demo/README.md) - Multi-threaded measurement and parameter sharing among threads
 - [bpf_demo](examples/bpf_demo/README.md) - eBPF based syscall tracing
@@ -62,7 +63,6 @@ Multiple examples demonstrating different features are available in the [example
 - [c_demo](examples/c_demo/README.md) - More detailed complex data objects, calibration objects, and page switching
 - [cpp_demo](examples/cpp_demo/README.md) - More detailed C++ class instrumentation and RAII wrappers
 - [struct_demo](examples/struct_demo/README.md) - More detailed nested structs and multidimensional arrays
-- [silkit_demo](examples/silkit_demo/README.md) - SIL Kit based multi-process XCP via shared memory
 
 For detailed information about each example and how to set up CANape projects, see the [examples overview](examples/README.md).
 
@@ -71,9 +71,9 @@ For detailed information about each example and how to set up CANape projects, s
 XCPlite examples are designed to showcase advanced XCP capabilities and are tested with **CANape 23+** (free demo version available).  
 The examples leverage:
 
-- **Runtime A2L download** - No manual A2L file management required
+- **Runtime A2L creation** - No manual A2L file management required
 - **A2L TYPEDEFs** - Complex data structures with reusable type definitions
-- **Address extensions** - Support for relative addressing and multiple memory spaces
+- **Address extensions** - Support for relative addressing (stack,heap) and multiple memory spaces
 - **Shared axis in typedefs** - Advanced calibration structures (CANape 24+, see `cpp_demo`)
 
 These features enable efficient workflows for modern multicore HPC applications. While XCPlite is XCP-compliant and works with any XCP tool, the examples take full advantage of CANape's support for dynamic systems and advanced A2L features.
