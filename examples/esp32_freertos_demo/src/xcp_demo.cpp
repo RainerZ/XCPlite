@@ -128,23 +128,6 @@ CalSegDeclRef(parameters, parameters_calseg);
 TaskHandle_t fastTaskHandle = nullptr;
 TaskHandle_t slowTaskHandle = nullptr;
 
-#ifndef OPTION_DISPLAY
-void __attribute__((weak)) xcpDemoDisplayUpdate(uint32_t slowTaskPeriodMs, uint16_t slowCounter, uint32_t fastTaskPeriodMs, uint16_t fastCounter) {
-    (void)slowTaskPeriodMs;
-    (void)slowCounter;
-    (void)fastTaskPeriodMs;
-    (void)fastCounter;
-}
-#endif
-
-static int xcpDemoCoreId() {
-#ifdef ARDUINO_ARCH_ESP32
-    return xPortGetCoreID();
-#else
-    return 0;
-#endif
-}
-
 static BaseType_t createDemoTask(TaskFunction_t taskCode, const char *name, const uint32_t stackDepth, UBaseType_t priority, TaskHandle_t *taskHandle) {
 #ifdef ARDUINO_ARCH_ESP32
     return xTaskCreatePinnedToCore(taskCode, name, stackDepth, nullptr, priority, taskHandle, DEMO_TASK_CORE);
@@ -261,7 +244,7 @@ void slowTask(void *parameter) {
         DaqTriggerEvent(slowTask);
 
 #ifdef OPTION_SERIAL_PRINTF
-        Serial.printf("slowTask: core %d - %u, period = %u ms, sine = %.3f\n", xcpDemoCoreId(), counter, static_cast<unsigned>(slow_task_period_ms),
+        Serial.printf("slowTask: core %d - %u, period = %u ms, sine = %.3f\n", xPortGetCoreID(), counter, static_cast<unsigned>(slow_task_period_ms),
                       static_cast<double>(sineValue));
 #endif
 

@@ -166,11 +166,11 @@ It is important to check these values, not to waste unnecessary memory.
 
 Example:
 ```
-#define OPTION_FREERTOS_STACK_BYTES (8U * 1024U)
+#define OPTION_FREERTOS_STACK_BYTES (4U * 1024U)
 #define OPTION_FREERTOS_PRIORITY (tskIDLE_PRIORITY + 2U)
 ```
 
-For further optimization, the stack size for the receive and transmit task should be tuned differently, because the rx path has higher stack usage than the tx path.  
+For further optimization, the stack size for the receive and transmit task should be tuned differently, because the rx path has higher stack usage than the tx path. Typical values seen are below rx 4 Kbyte and tx 2KByte.   
 The stack usage of the XCP code parts has been optimized, but lwip sockets stack usage might depend on configuration.  
 Both XCP tasks currently use one tXcpCtoMessage (roughly MAX_CTO_SIZE+4 = 252 bytes) on stack, which may be optimized further.  
 
@@ -250,10 +250,10 @@ Get the ELF file and generate the A2L file with xcpclient (see getting xcpclient
 Recommended command from this example directory:
 
 ```bash
-xcpclient --offline --elf .pio/build/lilygo-t-display-s3/firmware.elf --a2l esp32_freertos_demo.a2l --elf-unit-filter main_cpp
+xcpclient --offline --elf .pio/build/lilygo-t-display-s3/firmware.elf --a2l esp32_freertos_demo.a2l --elf-unit-filter xcp_demo
 ```
 
-`--elf-unit-filter main_cpp` keeps the generated A2L focused on this demo application instead of adding all symbols from all linked code.
+`--elf-unit-filter xcp_demo` keeps the generated A2L focused on this demo application instead of adding all symbols from all linked code.
 
 Advanced examples:
 
@@ -262,7 +262,7 @@ Advanced examples:
 xcpclient --offline --elf .pio/build/lilygo-t-display-s3/firmware.elf --a2l esp32_freertos_demo.a2l
 
 # Get verbose output with --verbose 1 or 2 and --log-level 4 or 5:
-xcpclient --offline --elf .pio/build/lilygo-t-display-s3/firmware.elf --a2l esp32_freertos_demo.a2l --elf-unit-filter main_cpp --verbose 2 --log-level 4 > esp32_freerto_demo.log
+xcpclient --offline --elf .pio/build/lilygo-t-display-s3/firmware.elf --a2l esp32_freertos_demo.a2l --elf-unit-filter xcp_demo --verbose 2 --log-level 4 > esp32_freerto_demo.log
 
 ```
 

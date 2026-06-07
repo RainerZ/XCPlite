@@ -51,6 +51,10 @@ bool XcpIsStarted(void);
 bool XcpIsConnected(void);
 bool XcpIsDaqRunning(void);
 
+// Internal
+void XcpEthServerDebugInfo( size_t *rxStackSize, size_t *txStackSize );
+
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Calibration segments
 

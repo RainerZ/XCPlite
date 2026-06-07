@@ -124,22 +124,26 @@ void displayUpdate(uint32_t slowTaskPeriodMs, uint16_t slowCounter, uint32_t fas
         snprintf(line, sizeof(line), "XCP Offline");
     }
     displayLine(displayLineCount() - 7, line, TFT_WHITE);
+    
     snprintf(line, sizeof(line), "slowTask: %ums %u", slowTaskPeriodMs, slowCounter);
     displayLine(displayLineCount() - 4, line, TFT_YELLOW);
+    
     snprintf(line, sizeof(line), "fastTask: %ums %u", fastTaskPeriodMs, fastCounter);
     displayLine(displayLineCount() - 3, line, TFT_RED);
+    
+    size_t rxStackSize,txStackSize;
+    XcpEthServerDebugInfo(&rxStackSize,&txStackSize);
+    snprintf(line, sizeof(line), "Stack: rx=%zu, tx=%zu", rxStackSize, txStackSize);
+    displayLine(displayLineCount() - 2, line, TFT_BLUE);
+    
     snprintf(line, sizeof(line), "XCP clock %" PRIu64 "", ApplXcpGetClock64());
     displayLine(displayLineCount() - 1, line, TFT_GREEN);
 }
-
-
-
 
 #endif
 
 //----------------------------------------------------------------------------------------------------
 // WiFi
-
 
 #if !defined(WIFI_SSID) || !defined(WIFI_PASSWORD)
 #include "wlan.h"
