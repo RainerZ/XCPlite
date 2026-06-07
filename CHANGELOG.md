@@ -3,12 +3,12 @@
 All notable changes to XCPlite are documented in this file.
 
 
-## [V2.1.2]
+## [V2.1.3]
 
 - cmake build system revisited, build configurations and build options
 - Improved convenience build script
 - README files for all example applications
-
+- xcpclient only uses the registry (xcp-lite xcp_registry crate), not the full Rust xcp-lite stack
 
 ## [V2.1.0]
 
