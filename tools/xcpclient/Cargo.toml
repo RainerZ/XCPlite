@@ -39,7 +39,7 @@ cpp_demangle = "0.4"  # 0.5 removed DemangleOptions, would require code changes
 
 
 # xcp_registry from xcp-lite on Github
-# xcp_registry = { git = "https://github.com/RainerZ/xcp-lite.git", branch = "V2.1.2", features = ["a2l_reader"] }
+# xcp_registry = { git = "https://github.com/RainerZ/xcp-lite.git", branch = "V2.1.0", features = ["a2l_reader"] }
 
 # xcp_registry local
 xcp_registry = { path = "../../../xcp-lite-RainerZ/xcp_registry", features = ["a2l_reader"] } # temporary local path
