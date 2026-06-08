@@ -309,6 +309,7 @@ void platformShmUnlink(const char *name);
 #if defined(_WIN) // Windows
 
 #define MUTEX CRITICAL_SECTION
+#define MUTEX_INTIALIZER {0}
 #define mutexLock EnterCriticalSection
 #define mutexUnlock LeaveCriticalSection
 
