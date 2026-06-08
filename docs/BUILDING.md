@@ -206,7 +206,7 @@ XCPlite is optimized for Posix based systems.
 On Windows, atomic operations are emulated and the transmit queue always uses a mutex on the producer side.
 
 ```bash
-cmake -DCMAKE_BUILD_TYPE=Debug -S . -B build-msvc
+cmake -DCMAKE_BUILD_TYPE=Debug -S . -B build-msvc -DXCPLITE_BUILD_EXAMPLES=ON
 cmake --build build-msvc --target hello_xcp
 build-msvc/debug/hello_xcp.exe
 ```

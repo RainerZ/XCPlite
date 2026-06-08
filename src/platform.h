@@ -735,6 +735,7 @@ bool fexists(const char *filename);
 #define atomic_uintptr_t uintptr_t
 #define atomic_uint_fast8_t uint8_t
 #define atomic_uint_fast16_t uint16_t
+#define atomic_uint_least8_t uint8_t
 #define atomic_uint_least16_t uint16_t
 #define atomic_uint_fast32_t uint32_t
 #define atomic_uint_least32_t uint32_t
