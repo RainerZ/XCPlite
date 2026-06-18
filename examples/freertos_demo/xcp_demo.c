@@ -46,10 +46,11 @@ bool startXcpServer() {
         return false;
     }
 
-// Register the high resolution 64-bit clock function implemented by Clock64_Get() in clock64.c as XCP DAQ clock
+    // Register the high resolution 64-bit clock function implemented by Clock64_Get() in clock64.c as XCP DAQ clock
 #if !defined(FREE_RTOS_POSIX_SIM)
     Clock64_Init();
     ApplXcpRegisterGetClockCallback(Clock64_Get);
+    ApplXcpRegisterIdleCallback(Clock64_Update);
 #endif
 
     // Initialize XCP Ethernet server

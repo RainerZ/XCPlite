@@ -62,18 +62,18 @@
 //-------------------------------------------------------------------------------
 // Clock
 
-#undef OPTION_CLOCK_TICKS_1NS // Custom tick resolution
-#undef OPTION_CLOCK_TICKS_1US
+// FreeRTOS clock is assumed to have 1us ticks by default
+// Adjust below if your clock has a different resolution, but be aware of the consequences regarding rounding errors and representation problems
+#undef OPTION_CLOCK_TICKS_1NS
+#define OPTION_CLOCK_TICKS_1US // Default for FreeRTOS
 
-#if defined(ESP_PLATFORM)
-#define CLOCK_TICKS_PER_S 1000000ULL
-#elif defined(FREE_RTOS_POSIX_SIM)
-#define CLOCK_TICKS_PER_S 1000000ULL
-#else
-#define CLOCK_TICKS_PER_S 480000000ULL
+// Custom clock configuration for FreeRTOS targets, adjust CLOCK_TICKS_PER_S to the resolution of your DAQ clock, e.g. 1 MHz for microsecond resolution
+#if !defined(OPTION_CLOCK_TICKS_1NS) && !defined(OPTION_CLOCK_TICKS_1US)
+// #define CLOCK_TICKS_PER_S 480000000ULL // 480 MHz clock tick rate for 2.08 ns resolution
+#error "Please define CLOCK_TICKS_PER_S to the number of clock ticks per second for the DAQ clock"
 #endif
 
-#undef OPTION_CLOCK_EPOCH_PTP
+#undef OPTION_CLOCK_EPOCH_PTP  // Clock has PTP epoch (0 = January 1st, 1970)
 #define OPTION_CLOCK_EPOCH_ARB // Arbitrary clock zero
 
 //-------------------------------------------------------------------------------

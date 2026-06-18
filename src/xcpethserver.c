@@ -492,12 +492,8 @@ THREAD_FUNC_RETURN XcpServerReceiveThread(void *par) {
         // Handle background tasks, e.g. pending calibration updates
         XcpBackgroundTasks();
 
-        // Handle clock overflows
-        // @@@@ TODO find a better solution
-#if defined(_FREE_RTOS) && !defined(FREE_RTOS_POSIX_SIM)
-        void Clock64_Update(void);
-        Clock64_Update();
-#endif
+        // Handle user defined background tasks, e.g. clock overflows
+        ApplXcpBackgroundTasks();
 
         // SHM mode
 #ifdef OPTION_SHM_MODE // increment alive counter and check A2L finalize request

@@ -52,8 +52,10 @@ bool XcpIsStarted(void);
 bool XcpIsConnected(void);
 bool XcpIsDaqRunning(void);
 
-// Internal
+// Debug metrics
 void XcpEthServerDebugInfo(size_t *rxStackSize, size_t *txStackSize);
+void XcpEthTlPrintStatistics();
+void clockGetPrintStatistic();
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Calibration segments
@@ -788,12 +790,17 @@ void ApplXcpRegisterCheckCallback(uint8_t (*cb_check)(uint8_t ext, uint32_t addr
 void ApplXcpRegisterReadCallback(uint8_t (*cb_read)(uint32_t src, uint8_t size, uint8_t *dst));
 void ApplXcpRegisterWriteCallback(uint8_t (*cb_write)(uint32_t dst, uint8_t size, const uint8_t *src, uint8_t delay));
 void ApplXcpRegisterFlushCallback(uint8_t (*cb_flush)(void));
+void ApplXcpRegisterIdleCallback(void (*cb_idle)(void));
 
 // Utility functions (from platform.c) used for the demos to keep them clean and platform-independent
 uint64_t clockGetMonotonicNs(void);
 uint64_t clockGetMonotonicUs(void);
 void sleepUs(uint32_t us);
 void sleepMs(uint32_t ms);
+
+// Test metrics
+void XcpEthTlPrintStatistics(void);
+void clockPrintStatistics(void);
 
 #ifdef __cplusplus
 } // extern "C"

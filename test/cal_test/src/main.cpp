@@ -55,15 +55,6 @@ uint8_t XcpSetMta(uint8_t ext, uint32_t addr);
 void XcpCalSegBeginAtomicTransaction(void);
 uint8_t XcpCalSegEndAtomicTransaction(void);
 uint8_t XcpCalSegSetCalPage(uint8_t segment, uint8_t page, uint8_t mode);
-
-#ifdef TEST_ENABLE_DBG_METRICS
-extern uint32_t gXcpWritePendingCount;
-extern uint32_t gXcpCalSegPublishAllCount;
-extern uint32_t gXcpDaqEventCount;
-extern uint32_t gXcpTxPacketCount;
-extern uint32_t gXcpTxMessageCount;
-extern uint32_t gXcpRxPacketCount;
-#endif
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -687,8 +678,7 @@ int main(int argc, char *argv[]) {
     printf("  Total changes observed: %llu (%.1f%%)\n", (unsigned long long)total_change_count,
            total_read_count > 0 ? (double)total_change_count * 100.0 / (double)total_read_count : 0.0);
 #ifdef TEST_ENABLE_DBG_METRICS
-    printf("  Total writes pending: %u\n", gXcpWritePendingCount);
-    printf("  Total publish all count: %u\n", gXcpCalSegPublishAllCount);
+    XcpEthTlPrintStatistics();
 #endif
     printf("  Total errors: %llu\n", (unsigned long long)error_count.load());
     printf("  Average lock time: %.2f us\n", total_read_count > 0 ? (double)total_read_time_ns / total_read_count / 1000.0 : 0.0);

@@ -36,6 +36,14 @@
 
 #include "clock64.h"
 
+// XCPlite headers
+#ifdef __cplusplus
+#include "xcplib.hpp" // for libxcplite C++ application programming interface
+#else
+#include "xcplib.h" // for libxcplite C application programming interface
+#endif
+
+// LWIP headers
 #include "lwip/pbuf.h"
 #include "lwip/netif.h"
 #include "netif/ethernet.h"
@@ -251,10 +259,21 @@ void tskFctDefault(void *argument)
    
     // Blink Green LED
     setGreenLed();
-    osDelay(500);
+    osDelay(100);
     rstGreenLed();
-    osDelay(500);
+    osDelay(4900);
    
+    // Metric printout every 5 seconds
+    {
+      // XcpEthTlPrintStatistics();
+      // clockGetPrintStatistic();
+      /*
+      size_t rxStackSize, txStackSize;
+      XcpEthServerDebugInfo(&rxStackSize, &txStackSize);
+      printf("transmit thread stack high-water mark: %zu bytes \n", txStackSize);
+      printf("receive thread stack high-water mark: %zu bytes )\n", rxStackSize);
+      */
+    }
   }
 
   /* USER CODE END tskFctDefault */

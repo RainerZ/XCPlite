@@ -1989,12 +1989,12 @@ bool socketGetSendTime(SOCKET_HANDLE socket, uint64_t *hw_time, uint64_t *sw_tim
 */
 
 #ifdef TEST_CLOCK_GET_STATISTIC
-static atomic_uint_fast64_t gClockGetCtr = 0;
-static atomic_uint_fast64_t gClockGetLastCtr = 0;
+static atomic_uint_fast32_t gClockGetCtr = 0;
+static atomic_uint_fast32_t gClockGetLastCtr = 0;
 void clockGetPrintStatistic(void) {
-    uint64_t getCtr = atomic_load_explicit(&gClockGetCtr, memory_order_relaxed);
-    uint64_t getLastCtr = atomic_load_explicit(&gClockGetLastCtr, memory_order_relaxed);
-    DBG_PRINTF3("clockGet calls: %" PRIu64 ", clockGetLast calls: %" PRIu64 "\n", getCtr, getLastCtr);
+    uint32_t getCtr = atomic_load_explicit(&gClockGetCtr, memory_order_relaxed);
+    uint32_t getLastCtr = atomic_load_explicit(&gClockGetLastCtr, memory_order_relaxed);
+    DBG_PRINTF3("clockGet calls: %" PRIu32 ", clockGetLast calls: %" PRIu32 "\n", getCtr, getLastCtr);
 }
 #endif
 
@@ -2018,12 +2018,24 @@ bool clockInit(void) {
 }
 
 uint64_t clockGet(void) {
+
+#ifdef TEST_CLOCK_GET_STATISTIC
+    atomic_fetch_add_explicit(&gClockGetCtr, 1, memory_order_relaxed);
+#endif
+
     uint64_t t = tickToClockUnit_(xTaskGetTickCount());
     gClockLast_ = t;
     return t;
 }
 
-uint64_t clockGetLast(void) { return gClockLast_; }
+uint64_t clockGetLast(void) {
+
+#ifdef TEST_CLOCK_GET_STATISTIC
+    atomic_fetch_add_explicit(&gClockGetLastCtr, 1, memory_order_relaxed);
+#endif
+
+    return gClockLast_;
+}
 
 char *clockGetString(char *s, uint32_t l, uint64_t c) {
     SNPRINTF(s, l, "%" PRIu64, c);
@@ -2336,10 +2348,18 @@ uint64_t clockGet(void) {
     return t;
 }
 
+#if (CLOCK_TICKS_PER_S == 1000000000ULL)
 uint64_t clockGetMonotonicNs() { return clockGet(); }
 uint64_t clockGetMonotonicNsLast() { return clockGetLast(); }
 uint64_t clockGetMonotonicUs() { return clockGet() / 1000; }
 uint64_t clockGetMonotonicUsLast() { return clockGetLast() / 1000; }
+#endif
+#if (CLOCK_TICKS_PER_S == 1000000ULL)
+uint64_t clockGetMonotonicNs() { return clockGet() * 1000; }
+uint64_t clockGetMonotonicNsLast() { return clockGetLast() * 1000; }
+uint64_t clockGetMonotonicUs() { return clockGet(); }
+uint64_t clockGetMonotonicUsLast() { return clockGetLast(); }
+#endif
 
 #endif // Windows
 

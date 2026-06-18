@@ -414,10 +414,13 @@ typedef struct XcpLocalData {
 } tXcpLocalData;
 
 /****************************************************************************/
-/* Protocol layer external dependencies                                     */
+/* Protocol and transport layer external dependencies (in xcpappl.c)        */
 /****************************************************************************/
 
-/* Callbacks on connect, disconnect, measurement prepare, start and stop */
+// Transport layer callbacks
+void ApplXcpBackgroundTasks(void);
+
+// Protocol layer callbacks
 bool ApplXcpConnect(uint8_t mode);
 void ApplXcpDisconnect(void);
 #if XCP_PROTOCOL_LAYER_VERSION >= 0x0104
@@ -426,7 +429,7 @@ bool ApplXcpPrepareDaq(void);
 void ApplXcpStartDaq(void);
 void ApplXcpStopDaq(void);
 
-/* Address conversions from A2L address to pointer and vice versa in absolute addressing mode */
+// Protocol layer callbacks for adddress conversions from A2L address to pointer and vice versa in absolute addressing mode
 const uint8_t *ApplXcpGetBaseAddr(void);      // Get the base address for absolute addressing mode */
 void ApplXcpSetBaseAddr(const uint8_t *addr); // Set base address for absolute addressing mode, only needed for special cases where the default base addr is not suitable
 extern const uint8_t *gXcpBaseAddr;
@@ -435,16 +438,16 @@ uint32_t ApplXcpGetAddr(const uint8_t *p);   // Calculate the absolute XCP/A2L 3
 uint8_t ApplXcpGetAddrExt(const uint8_t *p); // Get the absolute XCP/A2L 8 bit address extension from a pointer
 const uint8_t *ApplXcpGetModuleAddr(void);   // Get the module base address, used as default base address for absolute addressing mode
 
-// Check memory access permissions
+// Protocol layer callbacks for check memory access permissions
 uint8_t ApplXcpCheckMemory(uint8_t ext, uint32_t addr, uint8_t size);
 
-/* Read and write memory for application addressing mode XCP_ADDR_EXT_APP */
+// Protocol layer callbacks for read and write memory for application addressing mode XCP_ADDR_EXT_APP */
 #ifdef XCP_ENABLE_APP_ADDRESSING
 uint8_t ApplXcpReadMemory(uint32_t src, uint8_t size, uint8_t *dst);
 uint8_t ApplXcpWriteMemory(uint32_t dst, uint8_t size, const uint8_t *src);
 #endif
 
-/* User command */
+// Protocol layer callbacks for user commands
 #ifdef XCP_ENABLE_USER_COMMAND
 uint8_t ApplXcpUserCommand(uint8_t cmd);
 #endif
@@ -471,17 +474,17 @@ uint8_t ApplXcpCalFreeze(void);
 #endif
 #endif
 
-// Clock (optionally provided by application via callback)
+// Clock
 uint64_t ApplXcpGetClock64(void);
 
-// DAQ clock state (optionally provided by application via callback)
+// DAQ clock state
 #define CLOCK_STATE_SYNCH_IN_PROGRESS (0)
 #define CLOCK_STATE_SYNCH (1)
 #define CLOCK_STATE_FREE_RUNNING (7)
 #define CLOCK_STATE_GRANDMASTER_STATE_SYNCH (1 << 3) // not used yet
 uint8_t ApplXcpGetClockState(void);
 
-// PTP grandmaster clock info (optionally provided by application via callback)
+// PTP grandmaster clock info
 #ifdef XCP_ENABLE_PTP
 #define CLOCK_STRATUM_LEVEL_UNKNOWN 255
 #define CLOCK_STRATUM_LEVEL_ARB 16
@@ -491,11 +494,6 @@ uint8_t ApplXcpGetClockState(void);
 #define CLOCK_EPOCH_ARB 2         // Arbitrary (epoch unknown)
 bool ApplXcpGetClockInfoGrandmaster(uint8_t *client_uuid, uint8_t *grandmaster_uuid, uint8_t *epoch, uint8_t *stratum);
 #endif
-
-// Register clock callbacks
-void ApplXcpRegisterGetClockCallback(uint64_t (*cb_get_clock)(void));
-void ApplXcpRegisterGetClockStateCallback(uint8_t (*cb_get_clock_state)(void));
-void ApplXcpRegisterGetClockInfoGrandmasterCallback(bool (*cb_get_clock_info_grandmaster)(uint8_t *client_uuid, uint8_t *grandmaster_uuid, uint8_t *epoch, uint8_t *stratum));
 
 /* DAQ resume */
 #ifdef XCP_ENABLE_DAQ_RESUME
@@ -514,7 +512,20 @@ uint32_t ApplXcpGetId(uint8_t id, uint8_t *buf, uint32_t bufLen);
 bool ApplXcpReadFile(uint8_t size, uint32_t offset, uint8_t *data);
 #endif
 
-// Register XCP callbacks
+// Set/get the ELF and A2L file name (for GET_ID)
+void XcpSetA2lName(const char *name);
+const char *XcpGetA2lName(void);
+void XcpSetElfName(const char *name);
+const char *XcpGetElfName(void);
+
+/****************************************************************************/
+/* Register user defined callback functions                                 */
+/****************************************************************************/
+
+// Register XCP transport layer callbacks
+void ApplXcpRegisterIdleCallback(void (*cb_idle)(void));
+
+// Register XCP protocol layer callbacks
 void ApplXcpRegisterConnectCallback(bool (*cb_connect)(uint8_t mode));
 void ApplXcpRegisterPrepareDaqCallback(uint8_t (*cb_prepare_daq)(void));
 void ApplXcpRegisterStartDaqCallback(uint8_t (*cb_start_daq)(void));
@@ -529,11 +540,10 @@ void ApplXcpRegisterReadCallback(uint8_t (*cb_read)(uint32_t src, uint8_t size, 
 void ApplXcpRegisterWriteCallback(uint8_t (*cb_write)(uint32_t dst, uint8_t size, const uint8_t *src, uint8_t delay));
 void ApplXcpRegisterFlushCallback(uint8_t (*cb_flush)(void));
 
-// Set/get the ELF and A2L file name (for GET_ID)
-void XcpSetA2lName(const char *name);
-const char *XcpGetA2lName(void);
-void XcpSetElfName(const char *name);
-const char *XcpGetElfName(void);
+// Register clock callbacks
+void ApplXcpRegisterGetClockCallback(uint64_t (*cb_get_clock)(void));
+void ApplXcpRegisterGetClockStateCallback(uint8_t (*cb_get_clock_state)(void));
+void ApplXcpRegisterGetClockInfoGrandmasterCallback(bool (*cb_get_clock_info_grandmaster)(uint8_t *client_uuid, uint8_t *grandmaster_uuid, uint8_t *epoch, uint8_t *stratum));
 
 #ifdef __cplusplus
 } // extern "C"

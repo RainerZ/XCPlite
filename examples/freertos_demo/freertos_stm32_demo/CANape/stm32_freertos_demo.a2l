@@ -1,5 +1,5 @@
 
-/* Created by xcp_client with ELF/DWARF information only,  offline mode - 2026-06-18 04:16:14 */
+/* Created by xcp_client with ELF/DWARF information only,  offline mode - 2026-06-18 14:17:52 */
 ASAP2_VERSION 1 71
 /begin PROJECT project_name ""
 /begin HEADER "" VERSION "1.0" PROJECT_NO XCPLITE__ACSDD /end HEADER
@@ -92,7 +92,7 @@ EPK "V102" ADDR_EPK 0x24000714
     /end SEGMENT
 /end IF_DATA
 /end MEMORY_SEGMENT
-/begin MEMORY_SEGMENT parameters "" DATA FLASH INTERN 0x803B1BC 16 -1 -1 -1 -1 -1
+/begin MEMORY_SEGMENT parameters "" DATA FLASH INTERN 0x803B204 16 -1 -1 -1 -1 -1
 /begin IF_DATA XCP
     /begin SEGMENT 1 /*number*/ 2 /*pages*/ 0 /* addr_ext*/ 0 0
     /begin CHECKSUM XCP_ADD_44 MAX_BLOCK_SIZE 0xFFFF EXTERNAL_FUNCTION "" /end CHECKSUM
@@ -192,7 +192,7 @@ EPK "V102" ADDR_EPK 0x24000714
 /* Axis */
 
 /* Characteristics */
-/begin INSTANCE parameters "" parameters 0x803B1BC /end INSTANCE
+/begin INSTANCE parameters "" parameters 0x803B204 /end INSTANCE
 
 /* Characteristic and Axis Groups */
 /begin GROUP Characteristics "" ROOT /begin SUB_GROUP parameters /end SUB_GROUP /end GROUP

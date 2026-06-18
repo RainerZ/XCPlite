@@ -406,12 +406,21 @@ XCPlite multi application absolute addressing: XCP_ADDRESS_MODE_XCPLITE__CXSDD (
 #if ((1000000000ULL / CLOCK_TICKS_PER_S) > 0xFFFF) // clock ticks per us must fit into a 16 bit value !
 #error "CLOCK_TICKS_PER_S is out of range"
 #endif
-#if ((1000000000ULL % CLOCK_TICKS_PER_S) != 0) // don't accept rounding errors
-// #error "CLOCK_TICKS_PER_S can not be represented without rounding errors"
+#if ((1000000000ULL % CLOCK_TICKS_PER_S) != 0) // warn on rounding errors and switch to divide mode (CANape specific option)
+#warning "CLOCK_TICKS_PER_S can not be represented without rounding errors, switched to divide mode"
+#if 0                                       // @@@@ TODO Does not work yet, unclear
+#if ((CLOCK_TICKS_PER_S % 1000000ULL) != 0) // error if can not be represented without rounding errors even in divide mode
+#error "CLOCK_TICKS_PER_S is out of range for both normal and divide mode"
 #endif
-
+#define XCP_TIMESTAMP_UNIT DAQ_TIMESTAMP_UNIT_1US            // timestamp unit
+#define XCP_TIMESTAMP_TICKS (CLOCK_TICKS_PER_S / 1000000ULL) // timestamp tick resolution given in ticks per unit
+#endif
 #define XCP_TIMESTAMP_UNIT DAQ_TIMESTAMP_UNIT_1NS               // timestamp unit
 #define XCP_TIMESTAMP_TICKS (1000000000ULL / CLOCK_TICKS_PER_S) // timestamp tick duration given in timestamp unit
+#else
+#define XCP_TIMESTAMP_UNIT DAQ_TIMESTAMP_UNIT_1NS               // timestamp unit
+#define XCP_TIMESTAMP_TICKS (1000000000ULL / CLOCK_TICKS_PER_S) // timestamp tick duration given in timestamp unit
+#endif
 
 // Enable PTP support in XCP
 // Register the necessary callbacks to provide clock, synchronization state and clock info

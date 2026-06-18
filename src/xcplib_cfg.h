@@ -170,13 +170,16 @@
 // #define TEST_CLOCK_GET_STATISTIC // Count number of calls to clockGet and clockGetLast, print results with clockPrintStatistic()
 // #define TEST_ACQUIRE_SPIN_COUNT // Get max spin count of the queue acquire operations
 // #define TEST_ACQUIRE_LOCK_TIMING // Create a queue acquire time histogram, prints results on queue deinit, significant performance impact, for testing only !!!!!!!!!!
-// #define TEST_ENABLE_DBG_METRICS // Enable debug metrics for XCP events and transport layer packets
+// #define TEST_ENABLE_DBG_METRICS  // Enable debug metrics for XCP events and transport layer packets
 // #define TEST_ENABLE_BUFFERCOUNT_HISTOGRAM // Enable histogram of the used buffer counts in the transport layer vectored io
 // #define TEST_MUTABLE_ACCESS_OWNERSHIP // Enable tracking of mutable access thread ownership to detect overseen potential memory safety problems
 // #define TEST_ENABLE_DBG_CHECKS // Enable timing checks in the XCP server
 // #define TEST_STACK_SIZE // Enable stack size measurement for the transmit and receive thread
 
 #endif // !defined(NDEBUG)
+
+//-------------------------------------------------------------------------------
+// Overrides
 
 // Optional application-specific override — patches any of the above defaults.
 // Pass the filename of your override header via:

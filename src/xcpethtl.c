@@ -990,3 +990,17 @@ bool XcpTlWaitForTransmitQueueEmpty(uint16_t timeout_ms) {
 // Get the next transmit message counter
 // For queue32.c
 uint16_t XcpTlGetCtr(void) { return gXcpTl.ctr++; }
+
+//-------------------------------------------------------------------------------------------------------
+
+#ifdef TEST_ENABLE_DBG_METRICS
+void XcpEthTlPrintStatistics(void) {
+    printf("  Total write pending: %u\n", gXcpWritePendingCount);
+    printf("  Total publish all:   %u\n", gXcpCalSegPublishAllCount);
+    printf("  Total DAQ events:    %u\n", gXcpDaqEventCount);
+    printf("  Total TX packets:    %u\n", gXcpTxPacketCount);
+    printf("  Total TX messages:   %u\n", gXcpTxMessageCount);
+    printf("  Total TX iovecs:     %u\n", gXcpTxIoVectorCount);
+    printf("  Total RX packets:    %u\n", gXcpRxPacketCount);
+}
+#endif

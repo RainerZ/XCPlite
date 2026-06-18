@@ -2952,7 +2952,7 @@ void XcpBackgroundTasks(void) {
         local_mut.last_publish_time = now;
     } else if (res == CRC_CMD_PENDING) {
         // Warn if delayed by more than 200ms
-        if (now - local.last_publish_time > (CLOCK_TICKS_PER_S / 5)) {
+        if (now - local.last_publish_time > (200 * 1000000ULL)) {
             if (local.last_publish_time != 0)
                 DBG_PRINT_WARNING("XcpBackgroundTasks: Calibration segment publish delayed by more than 200ms!\n");
             local_mut.last_publish_time = now;
