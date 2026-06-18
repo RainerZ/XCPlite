@@ -54,8 +54,8 @@ bool XcpIsDaqRunning(void);
 
 // Debug metrics
 void XcpEthServerDebugInfo(size_t *rxStackSize, size_t *txStackSize);
-void XcpEthTlPrintStatistics();
-void clockGetPrintStatistic();
+void XcpEthTlPrintStatistics(void);
+void clockGetPrintStatistic(void);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Calibration segments

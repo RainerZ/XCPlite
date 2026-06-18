@@ -2108,7 +2108,7 @@ char *clockGetString(char *s, uint32_t l, uint64_t c) {
         struct tm tm;
         gmtime_r(&t, &tm);
         uint64_t fns = c % CLOCK_TICKS_PER_S;
-#if CLOCK_TICKS_PER_S == 1000000 // us
+#if CLOCK_TICKS_PER_S == 1000000UL // us
         fns *= 1000;
 #endif
         SNPRINTF(s, l, "%u.%u.%u %02u:%02u:%02u +%" PRIu64 "ns", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, tm.tm_hour % 24, tm.tm_min, tm.tm_sec, fns);
@@ -2124,7 +2124,7 @@ bool clockInit(void) {
 #ifdef OPTION_CLOCK_EPOCH_ARB
     DBG_PRINT3("  OPTION_CLOCK_EPOCH_ARB\n");
 #endif
-    DBG_PRINTF3("  CLOCK_TICKS_PER_S = %" PRIu64 "\n", CLOCK_TICKS_PER_S);
+    DBG_PRINTF3("  CLOCK_TICKS_PER_S = %" PRIu32 "\n", (uint32_t)(CLOCK_TICKS_PER_S));
 
     clockGetRealtimeNs();        // Initialize __gClockRealtime
     clockGetMonotonicNs();       // Initialize __gClockMonotonic
@@ -2150,9 +2150,9 @@ uint64_t clockGet(void) {
     atomic_fetch_add_explicit(&gClockGetCtr, 1, memory_order_relaxed);
 #endif
     clock_gettime(CLOCK_TYPE, &__gClock);
-#if CLOCK_TICKS_PER_S == 1000000000 // ns
+#if CLOCK_TICKS_PER_S == 1000000000UL // ns
     return (((uint64_t)(__gClock.tv_sec) * 1000000000ULL) + (uint64_t)(__gClock.tv_nsec));
-#elif CLOCK_TICKS_PER_S == 1000000  // us
+#elif CLOCK_TICKS_PER_S == 1000000UL  // us
     return (((uint64_t)(__gClock.tv_sec) * 1000000ULL) + (uint64_t)(__gClock.tv_nsec / 1000)); // us
 #else
 #error "Please define clock resolution CLOCK_TICKS_PER_S to 1ns or 1us"
@@ -2161,9 +2161,9 @@ uint64_t clockGet(void) {
 
 // Get the last known clock value
 uint64_t clockGetLast(void) {
-#if CLOCK_TICKS_PER_S == 1000000000 // ns
+#if CLOCK_TICKS_PER_S == 1000000000UL // ns
     return (((uint64_t)(__gClock.tv_sec) * 1000000000ULL) + (uint64_t)(__gClock.tv_nsec));
-#elif CLOCK_TICKS_PER_S == 1000000  // us
+#elif CLOCK_TICKS_PER_S == 1000000UL  // us
     return (((uint64_t)(__gClock.tv_sec) * 1000000ULL) + (uint64_t)(__gClock.tv_nsec / 1000)); // us
 #else
 #error "Please define clock resolution CLOCK_TICKS_PER_S to 1ns or 1us"
@@ -2245,7 +2245,7 @@ bool clockInit(void) {
 #ifdef OPTION_CLOCK_EPOCH_ARB
     DBG_PRINT4("OPTION_CLOCK_EPOCH_ARB,");
 #endif
-    DBG_PRINTF4("  CLOCK_TICKS_PER_S = %I64u\n\n", CLOCK_TICKS_PER_S);
+    DBG_PRINTF4("  CLOCK_TICKS_PER_S = %" PRIu32 "\n\n", (uint32_t)(CLOCK_TICKS_PER_S));
 
     __gClock = 0;
 
@@ -2348,13 +2348,13 @@ uint64_t clockGet(void) {
     return t;
 }
 
-#if (CLOCK_TICKS_PER_S == 1000000000ULL)
+#if (CLOCK_TICKS_PER_S == 1000000000UL)
 uint64_t clockGetMonotonicNs() { return clockGet(); }
 uint64_t clockGetMonotonicNsLast() { return clockGetLast(); }
 uint64_t clockGetMonotonicUs() { return clockGet() / 1000; }
 uint64_t clockGetMonotonicUsLast() { return clockGetLast() / 1000; }
 #endif
-#if (CLOCK_TICKS_PER_S == 1000000ULL)
+#if (CLOCK_TICKS_PER_S == 1000000UL)
 uint64_t clockGetMonotonicNs() { return clockGet() * 1000; }
 uint64_t clockGetMonotonicNsLast() { return clockGetLast() * 1000; }
 uint64_t clockGetMonotonicUs() { return clockGet(); }

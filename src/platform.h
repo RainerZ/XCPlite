@@ -669,11 +669,11 @@ bool socketGetLocalAddr(uint8_t *mac, uint8_t *addr);
 
 #if defined(OPTION_CLOCK_TICKS_1NS)
 
-#define CLOCK_TICKS_PER_S 1000000000ULL
+#define CLOCK_TICKS_PER_S 1000000000UL
 
 #elif defined(OPTION_CLOCK_TICKS_1US)
 
-#define CLOCK_TICKS_PER_S 1000000
+#define CLOCK_TICKS_PER_S 1000000UL
 
 #else
 

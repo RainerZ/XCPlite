@@ -69,7 +69,7 @@
 
 // Custom clock configuration for FreeRTOS targets, adjust CLOCK_TICKS_PER_S to the resolution of your DAQ clock, e.g. 1 MHz for microsecond resolution
 #if !defined(OPTION_CLOCK_TICKS_1NS) && !defined(OPTION_CLOCK_TICKS_1US)
-// #define CLOCK_TICKS_PER_S 480000000ULL // 480 MHz clock tick rate for 2.08 ns resolution
+// #define CLOCK_TICKS_PER_S 480000000UL // 480 MHz clock tick rate for 2.08 ns resolution
 #error "Please define CLOCK_TICKS_PER_S to the number of clock ticks per second for the DAQ clock"
 #endif
 
