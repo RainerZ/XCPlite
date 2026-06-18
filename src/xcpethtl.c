@@ -906,7 +906,7 @@ int32_t XcpTlHandleTransmitQueue(void) {
 #if defined(OPTION_DAQ_ASYNC_EVENT) && defined(XCP_ENABLE_DAQ_EVENT_LIST)
     static tXcpEventId gXcpAsyncEvent = XCP_UNDEFINED_EVENT_ID;
     if (gXcpAsyncEvent == XCP_UNDEFINED_EVENT_ID) {
-        gXcpAsyncEvent = XcpCreateEvent("async", outer_loop_sleep_ms * CLOCK_TICKS_PER_MS, 0);
+        gXcpAsyncEvent = XcpCreateEvent("async", outer_loop_sleep_ms * (CLOCK_TICKS_PER_S / 1000), 0);
     }
 #endif
 

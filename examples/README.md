@@ -50,17 +50,12 @@ Offline A2L generation is performed using the XCPlite specific A2L generator/cre
 Does no need file system support on the target and A2L upload.  
 
 
-### [esp32_freertos_demo](esp32_freertos_demo/README.md)
-
-Demonstrates XCPlite running inside FreeRTOS tasks on a 32 bit microcontroller.  
-Uses the FreeRTOS POSIX simulator port so the demo builds and runs on macOS / Linux.  
-before switching to the real embedded target.  
-
-
 ### [freertos_demo](freertos_demo/README.md)
 
-Demonstrates XCPlite running inside FreeRTOS tasks.  
-Uses the FreeRTOS POSIX simulator port so the demo builds and runs on macOS / Linux.   
+Demonstrates XCPlite running inside FreeRTOS tasks on 32 bit microcontrollers.  
+Examples for STM32 and ESP32 microcontrollers, and the FreeRTOS POSIX simulator on Linux.  
+Shows how to use XCPlite in a real-time operating system with multiple tasks, and how to share parameters among tasks.  
+Uses the offline A2L generator.    
 
 
 ### [external_example](external_example/README.md)

@@ -19,9 +19,10 @@
 |
  ----------------------------------------------------------------------------*/
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <assert.h>  // for static_assert
+#include <stdbool.h> // for bool
+#include <stddef.h>  // for size_t
+#include <stdint.h>  // for uintxx_t
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,8 +53,7 @@ bool XcpIsConnected(void);
 bool XcpIsDaqRunning(void);
 
 // Internal
-void XcpEthServerDebugInfo( size_t *rxStackSize, size_t *txStackSize );
-
+void XcpEthServerDebugInfo(size_t *rxStackSize, size_t *txStackSize);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Calibration segments
@@ -151,10 +151,10 @@ typedef struct {
     tXcpCalSegIndex *indexp; // pointer to the index variable initialized at runtime
     uint16_t size;
     uint16_t type; // XCP_CALSEG_TYPE_SEGMENT or XCP_CALSEG_TYPE_BLOCK
-#ifdef PLATFORM_32BIT
-    uint8_t res[16];
-#endif
+    uint8_t res[32 - sizeof(char *) - sizeof(void *) - sizeof(tXcpCalSegIndex *) - 2 - 2];
 } tXcpCalDescriptor;
+
+static_assert(sizeof(tXcpCalDescriptor) == 32, "sizeof(XcpCalDescriptor) must be 32");
 
 // Platform section attribute for tXcpCalDescriptor static variables created by CalSegCreate() and CalBlkCreate().
 // Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
@@ -289,6 +289,8 @@ typedef struct {
     uint8_t priority;
     uint8_t res[16 - sizeof(char *) - 4 - 1];
 } tXcpEventDescriptor;
+
+static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
 
 // Platform section attribute for tXcpEventDescriptor const static variables created by DaqCreateEvent().
 // Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
@@ -738,7 +740,7 @@ void XcpSendTerminateSessionEvent(void);
 void XcpPrint(const char *str);
 
 /// Get the current DAQ clock value
-/// @return time in CLOCK_TICKS_PER_S units
+/// @return time in 1/CLOCK_TICKS_PER_S ticks
 /// Resolution and epoch is defined in xcplib_cfg.h
 /// Epoch may be PTP or arbitrary
 /// Resolution is 1ns or 1us

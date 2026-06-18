@@ -667,32 +667,27 @@ bool socketGetLocalAddr(uint8_t *mac, uint8_t *addr);
 //-------------------------------------------------------------------------------
 // High resolution clock
 
-#ifdef OPTION_CLOCK_TICKS_1NS
+#if defined(OPTION_CLOCK_TICKS_1NS)
 
-#define CLOCK_TICKS_PER_M (1000000000ULL * 60)
 #define CLOCK_TICKS_PER_S 1000000000ULL
-#define CLOCK_TICKS_PER_MS 1000000ULL
-#define CLOCK_TICKS_PER_US 1000ULL
-#define CLOCK_TICKS_PER_NS 1ULL
+
+#elif defined(OPTION_CLOCK_TICKS_1US)
+
+#define CLOCK_TICKS_PER_S 1000000
 
 #else
 
-#ifndef OPTION_CLOCK_TICKS_1US
-#error "Please define OPTION_CLOCK_TICKS_1NS or OPTION_CLOCK_TICKS_1US"
+#if !defined(CLOCK_TICKS_PER_S)
+#error "Please define CLOCK_TICKS_PER_S and use ApplXcpRegisterClockCallback"
 #endif
-
-#define CLOCK_TICKS_PER_S 1000000
-#define CLOCK_TICKS_PER_MS 1000
-#define CLOCK_TICKS_PER_US 1
 
 #endif
 
-// Clock (epoch and resolution configured by OPTION_CLOCK_EPOCH_ARB and OPTION_CLOCK_TICKS_1NS)
+// Clock (epoch and resolution as configured)
 bool clockInit(void);
 uint64_t clockGet(void);     // Clock value in ticks, epoch and resolution depend on configuration
 uint64_t clockGetLast(void); // Last known clock value, updated by all clockGet calls, used to save syscall overhead when the last known clock value is sufficient
 char *clockGetString(char *s, uint32_t l, uint64_t c);
-char *clockGetTimeString(char *s, uint32_t l, int64_t c);
 
 // Monotonic system clock
 uint64_t clockGetMonotonicNs(void);

@@ -313,8 +313,8 @@ void masterInit(tPtp *ptp, tPtpMaster *master, uint8_t domain, const uint8_t *uu
 #endif
 
     uint64_t t = clockGet();
-    master->announceCycleTimer = 0;                                                                                // Send announce immediately
-    master->syncCycleTimer = t + 100 * CLOCK_TICKS_PER_MS - master->params->sync_interval_ms * CLOCK_TICKS_PER_MS; // First SYNC after 100ms
+    master->announceCycleTimer = 0;                                                                                                // Send announce immediately
+    master->syncCycleTimer = t + 100 * (CLOCK_TICKS_PER_S / 1000) - master->params->sync_interval_ms * (CLOCK_TICKS_PER_S / 1000); // First SYNC after 100ms
     master->syncTxTimestamp = 0;
     master->sequenceIdAnnounce = 0;
     master->sequenceIdSync = 0;
@@ -352,7 +352,7 @@ void masterTask(tPtp *ptp) {
         uint32_t sync_interval_ms = master->params->sync_interval_ms;         // SYNC message cycle time in ms
 
         // Announce cycle
-        if (announce_interval_ms > 0 && t - master->announceCycleTimer > announce_interval_ms * CLOCK_TICKS_PER_MS) {
+        if (announce_interval_ms > 0 && t - master->announceCycleTimer > announce_interval_ms * (CLOCK_TICKS_PER_S / 1000)) {
             master->announceCycleTimer = t;
             if (!ptpSendAnnounce(ptp, master->domain, master->uuid, ++master->sequenceIdAnnounce)) {
                 printf("ERROR: Failed to send ANNOUNCE\n");
@@ -360,7 +360,7 @@ void masterTask(tPtp *ptp) {
         }
 
         // Sync cycle
-        if (sync_interval_ms > 0 && t - master->syncCycleTimer > sync_interval_ms * CLOCK_TICKS_PER_MS) {
+        if (sync_interval_ms > 0 && t - master->syncCycleTimer > sync_interval_ms * (CLOCK_TICKS_PER_S / 1000)) {
             master->syncCycleTimer = t;
 
             mutexLock(&ptp->mutex);

@@ -54,7 +54,7 @@
 static THREAD_FUNC_RETURN XcpServerReceiveThread(void *par);
 static THREAD_FUNC_RETURN XcpServerTransmitThread(void *par);
 
-void XcpEthServerDebugInfo( size_t *rxStackSize, size_t *txStackSize );
+void XcpEthServerDebugInfo(size_t *rxStackSize, size_t *txStackSize);
 
 //-------------------------------------------------------------------------------------------------------
 
@@ -449,8 +449,8 @@ bool XcpEthServerShutdown(void) {
 #endif
 
 #ifdef TEST_STACK_SIZE
-    size_t rxStackSize,txStackSize;
-    XcpEthServerDebugInfo(&rxStackSize,&txStackSize);
+    size_t rxStackSize, txStackSize;
+    XcpEthServerDebugInfo(&rxStackSize, &txStackSize);
     DBG_PRINTF3("transmit thread stack high-water mark: %zu bytes \n", txStackSize);
     DBG_PRINTF3("receive thread stack high-water mark: %zu bytes )\n", rxStackSize);
 #ifndef _FREE_RTOS
@@ -491,6 +491,13 @@ THREAD_FUNC_RETURN XcpServerReceiveThread(void *par) {
 
         // Handle background tasks, e.g. pending calibration updates
         XcpBackgroundTasks();
+
+        // Handle clock overflows
+        // @@@@ TODO find a better solution
+#if defined(_FREE_RTOS) && !defined(FREE_RTOS_POSIX_SIM)
+        void Clock64_Update(void);
+        Clock64_Update();
+#endif
 
         // SHM mode
 #ifdef OPTION_SHM_MODE // increment alive counter and check A2L finalize request
@@ -581,14 +588,15 @@ THREAD_FUNC_RETURN XcpServerTransmitThread(void *par) {
     THREAD_FUNC_END;
 }
 
-
-void XcpEthServerDebugInfo( size_t *rxStackSize, size_t *txStackSize ) {
-    #ifdef TEST_STACK_SIZE
+void XcpEthServerDebugInfo(size_t *rxStackSize, size_t *txStackSize) {
+#ifdef TEST_STACK_SIZE
 #ifdef _FREE_RTOS
     UBaseType_t txHighWaterMark = uxTaskGetStackHighWaterMark(gXcpServer.transmit_thread_handle);
-    if (txStackSize!=NULL)  *txStackSize = OPTION_FREERTOS_STACK_BYTES - txHighWaterMark*sizeof(StackType_t);
+    if (txStackSize != NULL)
+        *txStackSize = OPTION_FREERTOS_STACK_BYTES - txHighWaterMark * sizeof(StackType_t);
     UBaseType_t rxHighWaterMark = uxTaskGetStackHighWaterMark(gXcpServer.receive_thread_handle);
-    if (rxStackSize!=NULL)  *rxStackSize = OPTION_FREERTOS_STACK_BYTES - rxHighWaterMark*sizeof(StackType_t);
+    if (rxStackSize != NULL)
+        *rxStackSize = OPTION_FREERTOS_STACK_BYTES - rxHighWaterMark * sizeof(StackType_t);
 #else
     // Stack grows downward: unused canary bytes are at the LOW end (index 0..N), used bytes at the HIGH end
     size_t transmit_unused = 0;
@@ -607,8 +615,10 @@ void XcpEthServerDebugInfo( size_t *rxStackSize, size_t *txStackSize ) {
             break;
         }
     }
-    if (rxStackSize!=NULL) *rxStackSize = gXcpServer.actual_receive_stack_size - receive_unused;
-    if (txStackSize!=NULL) *txStackSize = gXcpServer.actual_transmit_stack_size - transmit_unused;
+    if (rxStackSize != NULL)
+        *rxStackSize = gXcpServer.actual_receive_stack_size - receive_unused;
+    if (txStackSize != NULL)
+        *txStackSize = gXcpServer.actual_transmit_stack_size - transmit_unused;
 #endif
 #endif
 }

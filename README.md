@@ -53,8 +53,7 @@ Multiple examples demonstrating different features are available in the [example
 
 **Advanced examples:**
 - [no_a2l_demo](examples/no_a2l_demo/README.md) - Linux workflow without runtime A2L generation (offline A2L generation by xcpclient tool)
-- [esp32_freertos_demo](examples/esp32_freertos_demo/README.md) - FreeRTOS application with XCP instrumentation running on an ESP32 board with lwip
-- [freertos_demo](examples/freertos_demo/README.md) - FreeRTOS application with XCP instrumentation running in the POSIX simulator (Linux)
+- [freertos_demo](examples/freertos_demo/README.md) - FreeRTOS/lwip applications with XCP instrumentation for STM32, ESP32 and the FreeRTOS POSIX simulator (Linux)
 - [silkit_demo](examples/silkit_demo/README.md) - SIL-Kit multi-participant measurement and calibration (via shared memory)
 - [ptp4l_demo](examples/ptp4l_demo/README.md) - Using a PTP synchronized clock as XCP timestamp source
 - [multi_thread_demo](examples/multi_thread_demo/README.md) - Multi-threaded measurement and parameter sharing among threads

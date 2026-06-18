@@ -1,0 +1,38 @@
+// XCP FreeRTOS demo application header
+
+#include <stdbool.h>
+#include <stdint.h>
+
+// Options
+// #define OPTION_DISPLAY
+// #define OPTION_CMSIS
+// #define OPTION_IO
+
+// #define DEMO_TASK_CORE 1 // If defined, pin both tasks to this core
+
+#define FASTTASK_PRIORITY (configMAX_PRIORITIES - 1)
+#define FASTTASK_STACKSIZE 4096
+#define FASTTASK_PERIOD_MIN_MS 1
+#define FASTTASK_PERIOD_MAX_MS 100
+
+#define SLOWTASK_PRIORITY 3
+#define SLOWTASK_STACKSIZE 4096
+#define SLOWTASK_PERIOD_MIN_MS 1
+#define SLOWTASK_PERIOD_MAX_MS 1000
+
+// Initialize XCP demo (start XCP server and demo tasks)
+bool xcp_demo_init(void);
+
+#ifdef OPTION_DISPLAY
+void displayUpdate(uint32_t slowTaskPeriodMs, uint16_t slowCounter, uint32_t fastTaskPeriodMs, uint16_t fastCounter);
+#endif
+
+#ifdef OPTION_IO
+void setPin1(void);
+void rstPin1(void);
+void setPin2(void);
+void rstPin2(void);
+void toggleOrangeLed(void);
+void toggleRedLed(void);
+void toggleGreenLed(void);
+#endif

@@ -310,13 +310,12 @@ if(XCPLITE_BUILD_EXAMPLES)
 
         # freertos_demo: FreeRTOS POSIX simulator for testing FreeRTOS xcplite support on the host.
         # Linux only. Downloads FreeRTOS-Kernel via FetchContent (requires network access at configure time).
-        # Note: esp32_freertos_demo uses the same xcplib_rtos_cfg.h override but is an ESP32 target
-        # built externally via PlatformIO (see examples/esp32_freertos_demo/).
+        # Note: The embedded FreeRTOS examples for eps32 and stm32 are build externally
         if(NOT WIN32)
-            add_subdirectory(examples/freertos_demo)
-            message(STATUS "freertos_demo: building with FreeRTOS-Kernel (FetchContent)")
+            add_subdirectory(examples/freertos_demo/freertos_emu_demo)
+            message(STATUS "freertos_emu_demo: building with FreeRTOS-Kernel (FetchContent)")
         else()
-            message(STATUS "freertos_demo: skipped (not supported on Windows)")
+            message(STATUS "freertos_emu_demo: skipped (not supported on Windows)")
         endif()
 
     endif()
@@ -353,6 +352,11 @@ if(XCPLITE_BUILD_TESTS)
 
         add_executable(queue_test test/queue_test/src/main.c)
         target_link_libraries(queue_test PRIVATE xcplite)
+
+        add_executable(xcp_test test/xcp_test/src/main.cpp)
+        if(WIN32)
+            target_link_libraries(xcp_test PRIVATE ws2_32)
+        endif()
 
     elseif(XCPLITE_CONFIGURATION STREQUAL "ptp")
 

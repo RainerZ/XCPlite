@@ -42,10 +42,10 @@
             "preLaunchTask": "XCPlite: build"
         },
         {
-            "name": "Debug freertos_demo",
+            "name": "Debug freertos_emu_demo",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build-freertos/examples/freertos_demo/freertos_demo",
+            "program": "${workspaceFolder}/build-rtos/freertos_emu_demo",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

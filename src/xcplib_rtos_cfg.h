@@ -44,7 +44,7 @@
 // FreeRTOS rx and tx task stack depth (in bytes) and priority
 // On the POSIX simulator the size must be considerably larger than usual
 // Tune these values to the actual needs of the XCP server tasks on your target
-#if defined(FREE_RTOS_POSIX_SIM) 
+#if defined(FREE_RTOS_POSIX_SIM)
 #define OPTION_FREERTOS_STACK_BYTES (16U * 1024U)
 #else
 #define OPTION_FREERTOS_STACK_BYTES (4U * 1024U)
@@ -61,8 +61,18 @@
 
 //-------------------------------------------------------------------------------
 // Clock
-#undef OPTION_CLOCK_TICKS_1NS
-#define OPTION_CLOCK_TICKS_1US // 1 us ticks
+
+#undef OPTION_CLOCK_TICKS_1NS // Custom tick resolution
+#undef OPTION_CLOCK_TICKS_1US
+
+#if defined(ESP_PLATFORM)
+#define CLOCK_TICKS_PER_S 1000000ULL
+#elif defined(FREE_RTOS_POSIX_SIM)
+#define CLOCK_TICKS_PER_S 1000000ULL
+#else
+#define CLOCK_TICKS_PER_S 480000000ULL
+#endif
+
 #undef OPTION_CLOCK_EPOCH_PTP
 #define OPTION_CLOCK_EPOCH_ARB // Arbitrary clock zero
 

@@ -398,16 +398,20 @@ XCPlite multi application absolute addressing: XCP_ADDRESS_MODE_XCPLITE__CXSDD (
 /* Clock */
 
 // Clock resolution
-#define XCP_DAQ_CLOCK_64BIT                       // Use 64 Bit time stamps for XCP V1.3
-#if CLOCK_TICKS_PER_S == 1000000                  // us
-#define XCP_TIMESTAMP_UNIT DAQ_TIMESTAMP_UNIT_1US // unit
-#define XCP_TIMESTAMP_TICKS 1                     // ticks per unit
-#elif CLOCK_TICKS_PER_S == 1000000000             // ns
-#define XCP_TIMESTAMP_UNIT DAQ_TIMESTAMP_UNIT_1NS // unit
-#define XCP_TIMESTAMP_TICKS 1                     // ticks per unit
-#else
-#error "Please define clock resolution"
+#define XCP_DAQ_CLOCK_64BIT // Use 64 Bit time stamps for XCP V1.3
+
+#if !defined(CLOCK_TICKS_PER_S)
+#error "Please define CLOCK_TICKS_PER_S in platform.h to the number of clock ticks per second for the DAQ clock, e.g. 1000000 for a microsecond resolution clock"
 #endif
+#if ((1000000000ULL / CLOCK_TICKS_PER_S) > 0xFFFF) // clock ticks per us must fit into a 16 bit value !
+#error "CLOCK_TICKS_PER_S is out of range"
+#endif
+#if ((1000000000ULL % CLOCK_TICKS_PER_S) != 0) // don't accept rounding errors
+// #error "CLOCK_TICKS_PER_S can not be represented without rounding errors"
+#endif
+
+#define XCP_TIMESTAMP_UNIT DAQ_TIMESTAMP_UNIT_1NS               // timestamp unit
+#define XCP_TIMESTAMP_TICKS (1000000000ULL / CLOCK_TICKS_PER_S) // timestamp tick duration given in timestamp unit
 
 // Enable PTP support in XCP
 // Register the necessary callbacks to provide clock, synchronization state and clock info

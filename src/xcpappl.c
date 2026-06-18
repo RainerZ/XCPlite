@@ -115,12 +115,12 @@ void ApplXcpRegisterGetClockCallback(uint64_t (*cb_get_clock)(void)) { __callbac
 
 uint64_t ApplXcpGetClock64(void) {
 
-    /* Return value is clock with
-        Clock timestamp resolution defined in xcp_cfg.h
-        Clock must be monotonic !!!
-    */
+    // Return value is a 64 bit high resolution free running monotonic clock
+    // Resolution defined in xcp_cfg.h
     if (__callback_get_clock != NULL)
         return __callback_get_clock();
+
+    // Default to the implementation of clockGet() in platform.c
     return clockGet();
 }
 
