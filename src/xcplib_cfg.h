@@ -15,10 +15,10 @@
   The values for XCP_xxx and XCPTL_xxx define constants (in xcp_cfg.h and xcptl_cfg.h) may depend on options
 */
 
-// XCPlite version, currently V2.1.0
+// XCPlite version, currently V2.1.x
 #define OPTION_VERSION_MAJOR 2
 #define OPTION_VERSION_MINOR 1
-#define OPTION_VERSION_PATCH 0
+#define OPTION_VERSION_PATCH 2
 
 // CANape version compatibility
 // Disable workarounds for CANape versions < 24SP2
@@ -71,16 +71,6 @@
 #if defined(_WIN32) || defined(_WIN64)
 #define OPTION_ATOMIC_EMULATION
 #endif
-
-//-------------------------------------------------------------------------------
-// XCP multi application mode
-// Multiple application processes may have shared transmit queue, calibration RCU and XCP state
-// One application is the XCP server, could be the first one running (XCP leader) or a dedicated application (XCP daemon)
-// Requires a POSIX-compliant platform (Linux / macOS / QNX).  Not supported on Windows.
-
-// Experimental, work in progress, not fully tested yet, may change or be removed without major version change, use with caution
-
-// #define OPTION_SHM_MODE
 
 //-------------------------------------------------------------------------------
 // XCP server options
@@ -180,13 +170,16 @@
 // #define TEST_CLOCK_GET_STATISTIC // Count number of calls to clockGet and clockGetLast, print results with clockPrintStatistic()
 // #define TEST_ACQUIRE_SPIN_COUNT // Get max spin count of the queue acquire operations
 // #define TEST_ACQUIRE_LOCK_TIMING // Create a queue acquire time histogram, prints results on queue deinit, significant performance impact, for testing only !!!!!!!!!!
-// #define TEST_ENABLE_DBG_METRICS // Enable debug metrics for XCP events and transport layer packets
+// #define TEST_ENABLE_DBG_METRICS  // Enable debug metrics for XCP events and transport layer packets
 // #define TEST_ENABLE_BUFFERCOUNT_HISTOGRAM // Enable histogram of the used buffer counts in the transport layer vectored io
 // #define TEST_MUTABLE_ACCESS_OWNERSHIP // Enable tracking of mutable access thread ownership to detect overseen potential memory safety problems
 // #define TEST_ENABLE_DBG_CHECKS // Enable timing checks in the XCP server
 // #define TEST_STACK_SIZE // Enable stack size measurement for the transmit and receive thread
 
 #endif // !defined(NDEBUG)
+
+//-------------------------------------------------------------------------------
+// Overrides
 
 // Optional application-specific override — patches any of the above defaults.
 // Pass the filename of your override header via:

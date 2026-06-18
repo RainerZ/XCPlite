@@ -32,7 +32,4 @@ test_bintool
 /docs/CPP_TYPE_TRAITS_GUIDE.md
 /docs/SUBMODULE_GUIDE.md
 /shm_*.sh
-
-
-/examples/esp32_freertos_demo/src/wlan.h
-/tools/xcpclient/esp32_freertos_demo.a2l
+wlan.h

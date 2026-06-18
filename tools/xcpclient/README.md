@@ -5,8 +5,42 @@ XCP test client implementation in Rust
 Used for integration testing and for uploading or generating A2L files.  
 Partial XCP implementation with hard-coded protocol settings for XCPlite.  
 
+## How offline A2L generation works
 
-XCP client v2.1.0 for testing XCP servers and managing A2L and HEX files.
+xcpclient generates A2L files from ELF/DWARF debug information written into the firmware by
+the XCPlite instrumentation macros — no runtime A2L code is needed in the application.
+
+**Three sources of information** are combined:
+
+1. **`.xcp_evts` ELF section** — the XCPlite macros (`DaqCreateEvent`, `DaqCreateAndTriggerEvent`)
+   emit a `tXcpEventDescriptor` constant per event into this named section. xcpclient iterates
+   it to discover every event defined in the firmware, including name, cycle time, and priority.
+
+2. **`.xcp_cals` ELF section** — `CalSegDecl` emits a `tXcpCalDescriptor` constant per
+   calibration segment into this section, containing the segment name, address of the default
+   page, and its size. xcpclient uses this to discover all calibration segments.
+
+3. **DWARF debug info** — every trigger macro also emits a named static variable (e.g.
+   `trg__AAS__eventname`) whose DWARF lexical scope covers the same local variables as the
+   trigger point. xcpclient walks the DWARF to find these anchor variables, reads the
+   addressing mode from their name, and associates all in-scope local variables with the
+   corresponding event as measurements.
+
+**Preconditions in the application code:**
+- Use the XCPlite macros (`DaqCreateEvent`, `DaqTriggerEvent`, `CalSegDecl`, …),
+  never the raw C API — only macros emit the ELF markers.
+- Build with debug info (`-g` / `Debug` or `RelWithDebInfo`).
+- Mark local measurement variables `volatile` so the compiler keeps them on the stack frame
+  and DWARF location expressions remain valid in optimized builds.
+
+For the full technical specification — ELF section layouts, the `trg__` anchor naming
+convention, and the `AddrExt` encoding — see
+[docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation--elfdwarf-internals).
+
+
+
+
+XCP client v2.1.x for testing XCP servers and managing A2L and HEX files.
 
 This tool can:
 - Connect to XCP on Ethernet servers via TCP or UDP and show information about the XCP protocol and the target ECU

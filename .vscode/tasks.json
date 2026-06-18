@@ -142,7 +142,7 @@
             "command": "cmake",
             "args": [
                 "-B",
-                "build-freertos",
+                "build-rtos",
                 "-S",
                 ".",
                 "-DXCPLITE_BUILD_FREERTOS_DEMO=ON",
@@ -163,7 +163,7 @@
             "command": "cmake",
             "args": [
                 "--build",
-                "build-freertos",
+                "build-rtos",
                 "--target",
                 "freertos_demo"
             ],
@@ -191,7 +191,7 @@
                 "--exclude=\"*.json\"",
                 "--exclude=\"*.a\"",
                 "--exclude=\"*.o\"",
-                "rainer@192.168.0.206:~/XCPlite-RainerZ/build-freertos/",
+                "rainer@192.168.0.206:~/XCPlite-RainerZ/build-rtos/",
                 "./"
             ],
             "options": {

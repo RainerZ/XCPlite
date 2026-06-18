@@ -1,36 +1,64 @@
-# hello_xcp Demo
+# hello_xcp — Basic C API Example
 
-## Overview
+The simplest XCPlite example in pure C. The recommended starting point.
+For C++ usage see [hello_xcp_cpp](../hello_xcp_cpp/README.md).
 
-Basic XCPlite example in pure C.  For C++ usage see the [hello_xcp_cpp](../hello_xcp_cpp/README.md) example.  
-  
-Demonstrates how to start the XCP on Ethernet server and use the runtime A2L generator.  
+---
 
-Shows how to create a calibration parameter segment structure, register the parameters in the segment and access them safely.  
-Defines events for measurement of global and local variables.  
-Demonstrates the different addressing modes for variables and parameters.  
-Defines a function, registers local variables and function parameters and creates and triggers a measurement event in the function.  
+## What it demonstrates
 
-More advanced topics are covered by the other examples:  
+| Feature | How it is demonstrated |
+|---|---|
+| XCP server startup | `XcpInit` + `XcpEthServerInit` with runtime A2L generation |
+| Calibration segment | `CalSegDecl` / `CalSegCreate`, safe read via `CalSegLock` / `CalSegUnlock` |
+| Global variable measurement | `DaqRegisterVar` on global variables |
+| Stack variable measurement | `DaqRegisterVar` on local variables inside a function |
+| Addressing modes | Direct address, relative-to-base, and pointer-based registration |
+| Function instrumentation | Register function parameters and local variables; trigger event inside function |
 
-- Create a C++ application, use the C++ RAII calibration segment wrapper.  
-- Safely share calibration parameters among different threads.  
-- Measure instances of complex types, such a structs, arrays, nested structs and arrays of structs by using typedefs.  
-- Create complex parameters, like maps, curves and lookup tables with fixed or shared axis.  
-- Measure thread local instances of variables, create event instances.  
-- Create physical conversion rules and enumerations.  
-- Create additional groups.  
-- Use consistent atomic calibration.  
-- Make calibration changes persistent (freeze).  
-- Create context and span, measure durations.  
+### Files
 
+| File | Purpose |
+|---|---|
+| `src/main.c` | Demo application — server setup, calibration segment, events, measurement |
+| `CANape/` | CANape project (A2L auto-upload, XCP UDP, port 5555) |
 
+---
 
-## CANape Screenshot
+## Building
+
+```bash
+./build.sh examples
+./build/hello_xcp
+```
+
+Or with CMake directly:
+
+```bash
+cmake -B build -S . -DXCPLITE_BUILD_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --target hello_xcp
+./build/hello_xcp
+```
+
+---
+
+## CANape
+
+Open `CANape/CANape.ini` in CANape. The project is pre-configured for XCP on UDP, port 5555,
+with automatic A2L upload. If CANape cannot connect, verify the IP address in
+*Device Configuration / Devices / XCP / Protocol / Transport Layer*.
 
 ![CANape Screenshot](CANape.png)
 
-## A2L File
+---
 
-The generated A2L file can be found in the CANape project folder.  
+## Next steps
+
+More advanced topics are covered by the other examples:
+
+- **hello_xcp_cpp** — C++ RAII calibration segment wrapper, variadic macro API
+- **c_demo** — complex calibration objects (maps, curves), consistent atomic updates, polling
+- **multi_thread_demo** — thread-local events, shared calibration, context/span instrumentation
+- **cpp_demo** — signal generators, lookup tables, class instance measurement
+- **struct_demo** — nested structs, arrays of structs, typedef-based measurement types
 

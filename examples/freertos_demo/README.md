@@ -1,118 +1,197 @@
-# freertos_demo — XCPlite on FreeRTOS
+# freertos_demo — Examples how to use XCPlite on microcontroller platforms with FreeRTOS
 
-This example demonstrates XCPlite (XCP measurement and calibration) running inside FreeRTOS tasks.
-It uses the **FreeRTOS POSIX simulator** port so the demo builds and runs on macOS or Linux before
-switching to a real embedded target such as an STM32.
+There are 3 different demos:  
 
----
+- freertos_emu_demo using the POSIX FreeRTOS emulator
+- freertos_esp32_demo for ESP32 with PlatformIO
+- freertos_stm32_demo for STM32 with QubeMx
 
-## Overview
+All examples are based on the same demo application code in 'xcp_demo.c' and 'xcp_demo.h'.  
 
-### What it shows
+Refer to the README.md files in the demo folders for more specific details.  
 
-| Feature | How it is demonstrated |
+
+## What is shown
+
+The examples demonstrate XCPlite measurement and calibration running inside FreeRTOS tasks.
+
+The included CANape projects and the XCP instrumentation in `xcp_demo.c` show:
+
+- Create a high priority FreeRTOS task (fastTask) with precise cyclic execution timing
+- Create a lower priority FreeRTOS task (slowTask) for background work
+- Pin the tasks to the same core to watch scheduling in action
+- Trigger XCP events tracepoints in both tasks and acquiring global and local measurement variables
+- Provide high resolution XCP measurement event timestamps
+- Display cycle time jitter of the tasks in CANape
+- Count task deadline overruns when calibrated periods are too aggressive
+- Create thread-safe calibration parameters accessible in both tasks
+- Calibrate task cycle times and some other demo parameters
+- Observe both task trigger points with a two-channel oscilloscope to evaluate XCP instrumentation cost
+- Create an A2L file or A2L file template for the user application code
+
+| Feature | API functions |
 |---|---|
-| XCP DAQ measurement | `DaqCreateEvent` / `DaqTriggerEvent` inside tasks |
-| XCP calibration | `CalSegDecl` / `CalSegCreate`, `CalSegLock` / `CalSegUnlock` |
-| XCP server initialization | `XcpInit` `XcpEthServerInit` called before the FreeRTOS scheduler starts |
+| XCP DAQ measurement | `DaqCreateEvent` / `DaqTriggerEvent` |
+| XCP calibration | `CalSegDecl` / `CalSegDeclRef` / `CalSegCreate`, `CalSegLock` / `CalSegUnlock` |
+| XCP server initialization | `XcpInit` `XcpEthServerInit` |
 
-### Architecture
+The example application code in xcp_demo.c compiles as C or as C++.  
+
+
+
+## Build
+
+Refer to the README.md files in the example folders.  
+
+To build XCPlite library code for FreeRTOS, define `_FREE_RTOS` and `XCPLIB_CFG_OVERRIDE="xcplib_rtos_cfg.h"` to enable the the FreeRTOS specific code paths and configuration options overrides.  
+
+The following files are required:
 
 ```
-main()
-├── XcpInit()
-├── XcpEthServerInit()                ← two FreeRTOS threads for XCP TX/RX created here
-├── xTaskCreate(measurementTask1)     ← 1 ms DAQ task
-├── xTaskCreate(measurementTask2)     ← 10 ms DAQ task
-└── vTaskStartScheduler()             ← blocks; each task runs as a pthread
-    ...
-    vTaskEndScheduler()               ← called by watchdog on SIGINT/SIGTERM
-    XcpDisconnect() + XcpEthServerShutdown()
+xcplite_sources = [
+    "cal.c",
+    "platform.c",
+    "queue32.c",
+    "xcpappl.c",
+    "xcpethserver.c",
+    "xcpethtl.c",
+    "xcplite.c",
+]
 ```
 
-The FreeRTOS POSIX simulator maps each task to a pthread and uses `SIGUSR1`/`SIGUSR2` for task
-switching.  Normal POSIX APIs (BSD sockets, `clock_gettime`) work transparently alongside FreeRTOS
-tasks, which is why the unmodified xcplite library works without any changes to its internal
-networking code.
+The FreeRTOS build of XCPlite:
+- Uses the FreeRTOS/lwIP socket, thread, mutex and clock platform abstractions in `src/platform.c`.
+- Uses the mutex based 32-bit queue implementation `src/queue32.c`.
 
-### Files
 
-| File | Purpose |
+### Key files in the xcplite source tree
+
+| File | Role |
 |---|---|
-| `src/main.c` | Demo application — tasks, events, calibration segments, XCP server setup |
-| `FreeRTOSConfig.h` | FreeRTOS kernel configuration (features, tick rate, heap, priorities) |
-| `CMakeLists.txt` | Build system: FetchContent for FreeRTOS-Kernel V11, portability-test option |
-
----
-
-## Building the FreeRTOS demo
-
-### Prerequisites
-
-- CMake ≥ 3.14
-- GCC or Clang (macOS or Linux)
-- Internet access for the first configure (FreeRTOS-Kernel is downloaded via FetchContent)
-
-### Build
-
-Compiles xcplite with the FreeRTOS platform code paths active (_FREE_RTOS) using the POSIX simulator (FREE_RTOS_POSIX_SIM) so that the demo can be built and run on a development machine before porting to a microcontroller.
-Uses Linux sockets and `clock_gettime` for the POSIX simulator
+| `src/xcplib_rtos_cfg.h` | XCPlite feature configuration for FreeRTOS targets |
+| `src/xcplib_cfg.h` | Default feature configuration for POSIX / Windows targets |
+| `src/xcp_cfg.h` | Default configuration for the XCP protocol layer |
+| `src/xcptl_cfg.h` | Default configuration for the XCP ethernet transport layer |
 
 
+
+## Generate A2L file
+
+The xcpclient tool can be used to generate an A2L file or an A2L file template for further processing with other tools or CANape.  
+
+Examples:
 
 ```bash
-cmake -B build_freertos -S . -DXCPLITE_BUILD_FREERTOS_DEMO=ON -DCMAKE_BUILD_TYPE=Debug --fresh
-cmake --build build_freertos --target freertos_demo
-./build_freertos/examples/freertos_demo/freertos_demo
+# Create am A2L file template with events, memory_segments, epk, and all required communication settings 
+# The given IP address is written to the A2L XCP IF_DATA  
+xcpclient --offline --udp --dest-addr <ip-addr> --elf <elf-file>  --elf-unit-filter xcp_demo --a2l <a2l-file> --create-a2l-template
+
+
+# Automatically add all possible measurement variables and calibration parameters in calibration parameter segments from compilation unit 'xcp_demo'
+xcpclient --offline --udp --dest-addr 192.168.0.207 --elf build/Debug/STM32H753EthDemo.elf --a2l CANape/stm32_freertos_demo.a2l --elf-unit-filter xcp_demo
+
 ```
 
+See below how to obtain the xcpclient tool.  
 
-### Create an A2L file
 
+## Test XCP Measurement and Calibration
+
+Using xcpclient:  
+
+Watch the global_counter counter
 
 ```bash
-xcpclient --offline   --elf ./examples/freertos_demo/CANape_Project/freertos_demo --create-a2l  --a2l ./examples/freertos_demo/CANape_Project/freertos_demo.a2l
+xcpclient --udp --dest-addr <esp32-ip-address> --a2l esp32_freertos_demo.a2l --mea global_counter --verbose 2
 ```
 
-For more details and options on the A2L file generation, see no_a2l_demo and the xcpclient documentation.  
-
----
-
-
-### Connection test
-
-Do a test measurment.  
-Visualize the counter variables in task1 and task2 with the generated A2L file.  
+Watch scheduler pressure:
 
 ```bash
-xcpclient --udp --dest-addr 192.168.0.206:5555   --a2l ./examples/freertos_demo/CANape_Project/freertos_demo.a2l  --mea counter --verbose 2
+xcpclient --udp --dest-addr <esp32-ip-address> --a2l esp32_freertos_demo.a2l --mea fastTaskOverruns --verbose 2
 ```
----
+
+Calibrate
+
+```bash
+xcpclient --udp --dest-addr <esp32-ip-address> --a2l esp32_freertos_demo.a2l --cal parameters.counter_max 500
+```
+
+Or use the CANape project in folder `CANape`.
+
+![CANape Screenshot](CANape.png)
+
+Notes on CANape:
+- To enable the CANape internal ELF/DWARF reader and address updater, select the Map file reader: 'C# version with extended C++ support'.  
+- CANape will read the IP address of the XCP server from the generated A2L file. The xcpclient A2L generator writes the ip address given on its command line or otherwise defaults to 127.0.0.1.  
+
+
+### What to Measure
+
+Good first measurements:
+- `global_counter`: global fast task activity counter
+- `fastTaskOverruns`: high-priority task missed deadlines
+- `slowTaskOverruns`: lower-priority task missed deadlines
+- `counter` in `fastTask`: local stack measurement in scope the fast task DAQ trigger tracepoint
+- `counter` and `channel` in `slowTask`: local stack measurements in scope of the slow task DAQ trigger tracepoint
+
+And calibration parameters to play with:
+- `parameters.fast_task_period_ms`: calibratable fast task period
+- `parameters.slow_task_period_ms`: calibratable slow task period
+- `parameters.amplitude`: calibratable sine amplitude
+- `parameters.counter_max`: the maximum value of the fast task counter, global_counter variables
+
+The local variables are intentionally marked `volatile` in `main.cpp` so optimized builds keep them visible (spilled to stack) for offline ELF/DWARF based A2L generation.  
+Depending on the compiler and its optimization level, simple demo test measurement variable may be optimized away completely.
 
 
 
 
 
+## Code instrumentation for offline A2L generation
 
-## Configuration
+The xcpclient A2L generator reads two named ELF sections written by the XCPlite macros, plus
+DWARF debug information, to build the A2L file without any runtime A2L calls in the application.
 
-### `FreeRTOSConfig.h`
+**`xcp_evts` section** — every `DaqCreateEvent(name)` or `DaqCreateAndTriggerEvent(name)`
+emits a `tXcpEventDescriptor` (name, cycle time, priority) into `.xcp_evts`. xcpclient
+iterates this section to discover all events.
 
-Key settings for the POSIX simulator:
+**`xcp_cals` section** — every `CalSegDecl(name)` at file scope emits a `tXcpCalDescriptor`
+(name, default page address, size) into `.xcp_cals`. xcpclient iterates this to discover all
+calibration segments.
 
-| Setting | Value | Notes |
-|---|---|---|
-| `configTICK_RATE_HZ` | 1000 | 1 ms tick |
-| `configMINIMAL_STACK_SIZE` | 4096 words | Generous for POSIX; reduce on target |
-| `configTOTAL_HEAP_SIZE` | 1 MB | Heap_3 delegates to `malloc`; unlimited on POSIX |
-| `configMAX_PRIORITIES` | 7 | |
-| `configUSE_TIMERS` | 1 | Software timer task created by kernel |
+**DWARF trigger point anchors** — every event trigger macro emits a named static variable
+(e.g. `trg__AAS__name`, `trg__AASD__name`) whose name encodes the active addressing modes.
+xcpclient finds this variable in the DWARF and walks all variables in the same lexical scope
+— those become the local measurements in the A2L.
 
-These values are deliberately large for comfortable POSIX development. When porting to a
-microcontroller, reduce `configMINIMAL_STACK_SIZE` and `configTOTAL_HEAP_SIZE` to match
-available SRAM (see [Porting to a target](#porting-to-a-target)).
+**Therefore: always use the macros, never the raw C API functions** (`XcpCreateEvent()`,
+`XcpCreateCalSeg()`, etc.). Only the macros emit the section data and anchors that xcpclient
+needs to build the A2L automatically.
 
-### `xcplib_rtos_cfg.h` 
+**Local variables must be `volatile`** in optimized builds to remain visible in DWARF.
+Without `volatile` the compiler may eliminate them or give them unreliable location expressions:
+
+```cpp
+void fastTask(void *pv) {
+    volatile uint32_t counter = 0;   // XCP: keep on stack for offline A2L
+    DaqCreateAndTriggerEvent(fastTask);
+}
+```
+
+**Build with debug information** (`-g` / `Debug` or `RelWithDebInfo`). Strip builds have no
+DWARF type or location data.
+
+For the complete technical details — ELF section layouts, `trg__` anchor naming convention,
+and `AddrExt` encoding — see
+[docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation--elfdwarf-internals).
+
+
+
+## Configuration and Memory Consumption
+
+FreeRTOS configuration overrides are in `xcplib_rtos_cfg.h`:  
 
 | Option | Value | Reason |
 |---|---|---|
@@ -123,7 +202,92 @@ available SRAM (see [Porting to a target](#porting-to-a-target)).
 | `OPTION_DAQ_MEM_SIZE` | 4 KB | Tune to available SRAM |
 | `OPTION_CAL_SEGMENT_COUNT` | 8 | Tune to number of calibration segments needed |
 
----
+
+Stack size settings, DAQ list size, DAQ queue size, maximum number of events and calibration segments influence memory consumption and may be tuned. 
+
+Check log-level 5 for information about memory usage:
+
+Example:
+```
+XcpInit name=stm32_freertos_demo, epk=V100, mode=01
+  sizeof(tXcpData)=8200  sizeof(tXcpLocalData)=176
+XcpEthServerInit
+  sizeof(gXcpServer)=24
+Init transport layer queue (queue32)
+  buffer_size=8896, queue_size=6 (8896 Bytes)
+```
+
+The 32 bit transmit queue (queue_size given in bytes) is allocated with 2 mallocs for header and data. The given queue size in bytes is rounded down to match multiples of the transport layer segment size. There are no other mallocs in the 32 bit FreeRTOS build.  
+If using malloc is not acceptable, XcpEthServerInit could be changed to accept a static memory buffer given as a parameter.  
+
+The memory size of static tXcpData is depending on the configuration in xcplib_cfg. and xcplib_rtos_cfg.h:  
+- OPTION_CAL_SEGMENT_COUNT: Max number of calibration segments or blocks
+- OPTION_CAL_MEM_SIZE: Space reserved for calibration data swapping and working pages (needs: 3 * page size * segment count)
+- OPTION_DAQ_MEM_SIZE: Memory size for DAQ tables (needs: 6 bytes per measurement with full fragmentation)
+- OPTION_DAQ_EVENT_COUNT: Maximum number of DAQ events
+
+The stack size of the XCP rx and tx task may be defined in xcplib_rtos_cfg.h.  
+It is important to check these values, not to waste unnecessary memory. Search for TEST_STACK_SIZE.  
+
+Example:
+```
+#define OPTION_FREERTOS_STACK_BYTES (4U * 1024U)
+#define OPTION_FREERTOS_PRIORITY (tskIDLE_PRIORITY + 2U)
+```
+
+For further optimization, the stack size for the receive and transmit task should be tuned differently, because the rx path has higher stack usage than the tx path. Typical values seen are below rx 4 Kbyte and tx 2KByte.   
+The stack usage of the XCP code parts has been optimized, but lwip sockets stack usage might depend on configuration.  
+Both XCP tasks currently use one tXcpCtoMessage (roughly MAX_CTO_SIZE+4 = 252 bytes) on stack, which may be optimized further.  
+
+
+
+
+## Getting xcpclient
+
+`xcpclient` is used for two jobs in this demo:
+
+- generating an A2L file from the firmware ELF
+- running simple command-line XCP connection, calibration and measurement tests
+
+### Build xcpclient
+
+Build `xcpclient` from source.  
+The Rust `xcp-lite` library contains is an external dependency. It contains the A2L registry, reader and writer for the xcpclient database generator.
+
+For the current development state, use matching branches of both repositories, for example `V2.1.x` on your XCPlite fork and the corresponding `V2.1.x` branch of your `xcp-lite` fork or dependency in Cargo.toml of xcpclient.
+
+Typical workflow:
+
+```bash
+cd git
+git clone --recursive <xcp-lite-repository-url>
+git clone  <XCPlite-repository-url>
+cd git xcp-lite
+git checkout V2.1.0
+git submodule update --init --recursive
+cd git/XCPlite
+git checkout V2.1.0
+cd tools/xcpclient
+cargo build --release
+cargo install --path .
+```
+
+After installation, confirm that the tool is reachable:
+
+```bash
+xcpclient --help
+```
+
+Note that the A2L generator is not considered stable yet. 
+It has been tested with ELF files from Linux gcc and clang tool chains.  
+
+For more information on offline A2L generation see:
+- [tools/xcpclient/README.md](../../tools/xcpclient/README.md) — xcpclient documentation and all command-line options
+- [examples/no_a2l_demo/README.md](../no_a2l_demo/README.md) — dedicated no-A2L / offline A2L workflow example
+- [docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation) — ELF/DWARF internals and design details of the offline A2L generation approach
+- [examples/freertos_demo/README.md](../freertos_demo/README.md) — Linux FreeRTOS demo with offline A2L generation
+
+
 
 ## Integrating XCPlite into a FreeRTOS application
 
@@ -177,54 +341,29 @@ target_compile_definitions(freertos_config INTERFACE projCOVERAGE_TEST=0)
 ### Step 3 — Implement the socket layer
 
 When `_FREE_RTOS` is defined **without** `FREE_RTOS_POSIX_SIM`, the socket functions in
-`platform.c` are stubs that return `true` without doing anything.  Replace them with a real
-network stack implementation (e.g. **lwIP** or **FreeRTOS+TCP**) by filling in the
-`#if defined(_FREE_RTOS) && !defined(FREE_RTOS_POSIX_SIM)` section in `platform.c`:
-
+`platform.c` use the lwip socket API.  
+Replace them with other implementeations if required.  
 The required interface is documented in `src/platform.h` (search for `SOCKET_HANDLE`).
 
 
 ### Step 4 — Implement the clock (bare-metal)
 
-The FreeRTOS clock in `platform.c` uses `xTaskGetTickCount()` which gives 1 ms granularity at
-1 kHz.  
-For 1us high-resolution timestamps, replace `clockGet()` in the `#if defined(_FREE_RTOS)` section with a hardware free-running counter.  
-
-Other clock resultions than 1us or 1ns are possible, but this requires to adapt the XCP protocol layer settings in xcp_cfg.h.  
-
-
-For example DWT on Cortex-M4:
-
-```c
-// platform.c – high-resolution clock for Cortex-M4
-uint64_t clockGet(void) {
-    // DWT->CYCCNT counts CPU cycles; scale to microseconds
-    uint64_t cycles = DWT->CYCCNT;
-    uint64_t us = cycles / (SystemCoreClock / 1000000UL);
-    gClockLast_ = us;
-    return us;
-}
-```
-
-Remember to enable the DWT counter in your startup code:
-```c
-CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-DWT->CYCCNT = 0;
-DWT->CTRL  |= DWT_CTRL_CYCCNTENA_Msk;
-```
+The FreeRTOS clock in `platform.c` uses `xTaskGetTickCount()` which gives 1 ms granularity at 1 kHz.  
+For high-resolution timestamps, register an alternative clock function as shown in the examples.  
+For example DWT on STM32.  
 
 
 
 ### Step 5 — Initialise XCPlite and start tasks
 
 ```c
-// Call XcpInit() and XcpEthServerInit() BEFORE vTaskStartScheduler().
-// XcpEthServerInit creates two internal tasks for RX and TX.
 
+// Initialize XCP
 XcpSetLogLevel(3);
 XcpInit("my_project", "V1.0", XCP_MODE_LOCAL);
 XcpCreateEpk("V1.0");
 
+// XcpEthServerInit creates two internal tasks for RX and TX.
 uint8_t addr[4] = {192, 168, 0, 10};
 XcpEthServerInit(addr, 5555, false /*UDP*/, 8192 /*queue bytes*/);
 
@@ -270,44 +409,75 @@ void myMeasurementTask(void *pv) {
 }
 ```
 
+## Calibration parameters in C++ — `CalSegDeclRef`
+
+The C++ demo uses `CalSegDeclRef`, the idiomatic C++ macro for static (compile-time registered)
+calibration segments. It combines a linker-section descriptor (for `xcpclient` and `XcpInit`)
+with a typed RAII handle in a single declaration:
+
+```cpp
+
+// 1. Define the parameter struct and its default values (const = reference/FLASH page)
+//    Note that the struct name and the variable name must be identical for xcpclient to find the default value in the ELF ! 
+struct parameters {
+    uint32_t fast_task_period_ms;
+    uint32_t slow_task_period_ms;
+    uint16_t counter_max;
+    float    amplitude;
+};
+const struct parameters parameters = { .fast_task_period_ms = 2, ... };
+
+// 2. Declare the calibration segment and typed C++ handle in one line
+//    XcpInit() xcpclient scan the xcp_cals section and registers the segment automatically.
+CalSegDeclRef(parameters, parameters_calseg);
+// This expands to:
+//   static tXcpCalSegIndex     calseg_id_parameters = XCP_UNDEFINED_CALSEG;
+//   static tXcpCalDescriptor   calseg__parameters   __attribute__((section("xcp_cals"))) = {...};
+//   static CalSegRef<parameters> parameters_calseg(&calseg_id_parameters, &parameters);
+//
+
+// 3. Use the handle anywhere — RAII lock returns a const pointer, auto-unlocks on scope exit
+{
+    auto params = parameters_calseg.lock();
+    uint32_t period = params->fast_task_period_ms;
+} // unlocked here
+```
+
+The lock is **wait-free** — it uses atomics (RCU), not a mutex — so it is safe to call
+from an ISR or from a high-priority FreeRTOS task.
 
 
----
+**`CalSegDeclRef(value, handle)`** vs. the other calibration API macros:
 
-## Porting freertos_demo to a different target
-
-Checklist when moving from the POSIX simulator to a microcontroller:
-
-- [ ] Replace `GCC_POSIX` FreeRTOS port with the correct port
-- [ ] Write `FreeRTOSConfig.h` for the target clock frequency and available SRAM
-- [ ] Implement the socket stub section in `platform.c` (lwIP or FreeRTOS+TCP)
-- [ ] Optionally replace `clockGet()` with a hardware counter for 1us or 1ns resolution
-- [ ] Tune `OPTION_CAL_MEM_SIZE` and `OPTION_DAQ_MEM_SIZE` in `xcplib_rtos_cfg.h` to your needs and available SRAM
-- [ ] Remove or redirect `DBG_PRINT` output to a UART / ITM/SWO trace port
-- [ ] Remove `FREE_RTOS_POSIX_SIM` from compile definitions (no POSIX socket bridge needed)
-- [ ] Remove the `vTaskEndScheduler()` watchdog task (not available on bare-metal ports)
-- [ ] Check required stack size for the XCP rx and tx task.  
-- [ ] Check atomics and mutex implementation for performance on your target.  
-
-Note:
-Calibration is lockfree based on atomics.  
-The data acquisition queue is protected by a mutex.
-XCP creates 2 tasks/threads for RX and TX via .  
+| Macro / Class | Registration | Handle type | Use case |
+|---|---|---|---|
+| `CalSegDeclRef(val, hdl)` | `xcp_cals` section → `XcpInit()` | `CalSegRef<T>` | C++ with section-registered segment |
+| `CalSegDecl(val)` | `xcp_cals` section → `XcpInit()` | `val##_calseg` (same) | C++ shorthand — handle named `<val>_calseg` |
+| `CalSegDecl` (C, `xcplib.h`) | `xcp_cals` section → `XcpInit()` | `calseg_id_<name>` | C with section-registered segment |
+| `xcp::CalSeg<T>(name, ptr)` | Runtime `XcpCreateCalSeg()` | `CalSeg<T>` | C++ with runtime A2L generation |
 
 
----
+## Notes
 
-## Key files in the xcplite source tree
-
-| File | Role |
-|---|---|
-| `src/xcplib_rtos_cfg.h` | XCPlite feature configuration for FreeRTOS targets |
-| `src/xcplib_cfg.h` | Default feature configuration for POSIX / Windows targets |
-| `src/xcp_cfg.h` | Default configuration for the XCP protocol layer |
-| `src/xcptl_cfg.h` | Default configuration for the XCP ethernet transport layer |
+- Calibration is lockfree based on atomics.  
+- The data acquisition queue is protected by a mutex.
+- XCP creates 2 tasks/threads for RX and TX via .  
 
 
 
-### TODO List and open issues
 
-- Improve and complete C++ support 
+## TODO
+
+- Don't generate fixed events for global variables
+- Calibration parameter segment address update, fix segment addresses ?
+  Implement IF_DATA description to enable CANape Linker-Map update for MEMORY_SEGMENTS 
+- xcpclient error message when .aml not found
+- Support for A2L generation of arrays
+- Disable the automatic GET_ID and try A2L upload in xcpclient
+- Check if the mutex based queue is acceptable or if we should port one of the lockless queue implementations based on 64Bit atomic head and tail
+- Add TCP support
+- Do some benchmarking on CPU load, event trigger and calibration RCU latency
+- Avoid copying the transmit buffers
+- CANape does not support address update for local variables on stack and address update of calibration memory segments.  
+
+

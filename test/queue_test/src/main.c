@@ -57,7 +57,7 @@ void XcpSetLogLevel(uint8_t level);
 // Min size of the payload produced by the threads
 #define THREAD_PAYLOAD_MIN_SIZE 64
 // Max size of the payload produced by the threads (random)
-//#define THREAD_PAYLOAD_MAX_SIZE 64 // Small payload test
+// #define THREAD_PAYLOAD_MAX_SIZE 64 // Small payload test
 #define THREAD_PAYLOAD_MAX_SIZE QUEUE_ENTRY_USER_PAYLOAD_SIZE // Big payload test
 
 // The queue implementations in queue62v.c and queue64f.c support peeking ahead
@@ -76,7 +76,7 @@ void XcpSetLogLevel(uint8_t level);
 // Define the clock type used for lock time measurement
 // Use CLOCK_THREAD_CPUTIME_ID to measure the CPU time consumed by the producer thread, which is more accurate for short lock times and not affected by OS scheduling and preemption
 // (which causes the long tail in the lock time histogram on POSIX systems)
-//#define TEST_CLOCK_TYPE CLOCK_THREAD_CPUTIME_ID 
+// #define TEST_CLOCK_TYPE CLOCK_THREAD_CPUTIME_ID
 #define TEST_CLOCK_TYPE CLOCK_MONOTONIC_RAW
 
 // Be aware, that the 2 clocks may have significantly different runtime and jitter depending on the platform
@@ -107,6 +107,11 @@ The tradeoff is that it is affected by OS preemption (long tail in the histogram
 
 #ifdef TEST_ACQUIRE_LOCK_TIMING
 
+#ifdef _WIN
+
+#define get_lock_test_timestamp clockGetMonotonicNs
+#else
+
 // Get the clock used for lock time measurement
 static uint64_t get_lock_test_timestamp(void) {
     static const uint64_t kNanosecondsPerSecond = 1000000000ULL;
@@ -114,6 +119,8 @@ static uint64_t get_lock_test_timestamp(void) {
     clock_gettime(TEST_CLOCK_TYPE, &ts); // NOLINT(missing-includes) // do **not** include internal "bits" headers directly.
     return ((uint64_t)ts.tv_sec) * kNanosecondsPerSecond + ((uint64_t)ts.tv_nsec);
 }
+
+#endif
 
 static MUTEX lock_mutex = MUTEX_INTIALIZER;
 static uint64_t lock_time_max = 0;
@@ -475,10 +482,12 @@ static void print_test_parameters(void) {
         DBG_PRINTF3("Testing with " ANSI_COLOR_YELLOW "big payload (max %u bytes)\n" ANSI_COLOR_RESET, THREAD_PAYLOAD_MAX_SIZE);
     else
         DBG_PRINTF3("Testing with " ANSI_COLOR_YELLOW "small payload (max %u bytes)\n" ANSI_COLOR_RESET, THREAD_PAYLOAD_MAX_SIZE);
+#ifndef _WIN
     if (TEST_CLOCK_TYPE == CLOCK_THREAD_CPUTIME_ID)
         DBG_PRINT3("Using " ANSI_COLOR_YELLOW "CLOCK_THREAD_CPUTIME_ID" ANSI_COLOR_RESET " for lock time measurement\n");
     else
         DBG_PRINT3("Using " ANSI_COLOR_YELLOW "CLOCK_MONOTONIC_RAW" ANSI_COLOR_RESET " for lock time measurement\n");
+#endif
     DBG_PRINTF3("THREAD_COUNT=%d\n", THREAD_COUNT);
     DBG_PRINTF3("THREAD_BURST_SIZE=%d\n", THREAD_BURST_SIZE);
     DBG_PRINTF3("THREAD_DELAY_US=%d\n", THREAD_DELAY_US);

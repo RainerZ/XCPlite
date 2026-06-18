@@ -48,20 +48,6 @@
 
 //-----------------------------------------------------------------------------------------------------
 
-#ifdef TEST_ENABLE_DBG_METRICS
-
-extern uint32_t gXcpWritePendingCount;
-extern uint32_t gXcpCalSegPublishAllCount;
-extern uint32_t gXcpDaqEventCount;
-extern uint32_t gXcpTxPacketCount;
-extern uint32_t gXcpTxMessageCount;
-extern uint32_t gXcpTxIoVectorCount;
-extern uint32_t gXcpRxPacketCount;
-
-#endif
-
-//-----------------------------------------------------------------------------------------------------
-
 #ifdef TEST_DAQ_EVENT_TIMING
 
 #define TIMING_HISTOGRAM_SIZE 24
@@ -349,16 +335,6 @@ int main(void) {
     A2lSetAbsoluteAddrMode(mainloop);
     A2lCreateMeasurement(counter, "Main loop counter");
 
-#ifdef TEST_ENABLE_DBG_METRICS
-    A2lCreateMeasurement(gXcpWritePendingCount, "XCP write pending count");
-    A2lCreateMeasurement(gXcpCalSegPublishAllCount, "XCP calibration segment publish all count");
-    A2lCreateMeasurement(gXcpDaqEventCount, "XCP DAQ event count");
-    A2lCreateMeasurement(gXcpTxPacketCount, "XCP TX packet count");
-    A2lCreateMeasurement(gXcpTxMessageCount, "XCP TX message count");
-    A2lCreateMeasurement(gXcpTxIoVectorCount, "XCP TX IO vector count");
-    A2lCreateMeasurement(gXcpRxPacketCount, "XCP RX packet count");
-#endif
-
     // Init event timing test
 #ifdef TEST_DAQ_EVENT_TIMING
     timing_sample_test_init();
@@ -415,11 +391,7 @@ int main(void) {
     }
 
 #ifdef TEST_ENABLE_DBG_METRICS
-    printf("  Total DAQ events:  %u\n", gXcpDaqEventCount);
-    printf("  Total TX packets:  %u\n", gXcpTxPacketCount);
-    printf("  Total TX messages: %u\n", gXcpTxMessageCount);
-    printf("  Total TX iovecs:   %u\n", gXcpTxIoVectorCount);
-    printf("  Total RX packets:  %u\n", gXcpRxPacketCount);
+    XcpEthTlPrintStatistics();
 #endif
 #ifdef TEST_DAQ_EVENT_TIMING
     timing_sample_test_print_results();

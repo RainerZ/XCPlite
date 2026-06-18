@@ -12,7 +12,7 @@ use std::ffi::OsStr;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 
-use xcp_lite::registry::{McAddress, McDimType, McEvent, McObjectType, McSupportData, McValueType, Registry};
+use xcp_registry::{McAddress, McDimType, McEvent, McObjectType, McSupportData, McValueType, Registry};
 
 /*
 Which information can be detected from ELF/DWARF:
@@ -308,16 +308,12 @@ impl ElfReader {
             // Not epk segment
             else {
                 // Lookup the reference page variable (by naming convention: same as segment name!) information
-                // This may be ambigous, so we use some heuristics to select the right variable 
+                // This may be ambigous, so we use some heuristics to select the right variable
                 // @@@@ TODO use the commandline compilation unit filter here
                 let seg_var_info = if let Some(x) = self.debug_data.variables.get(seg_name) {
                     let mut valid_candidates: Vec<_> = x.iter().filter(|var_info| var_info.address.0 == 0 && var_info.address.1 != 0).collect();
                     if valid_candidates.len() > 1 {
-                        let same_unit_candidates: Vec<_> = valid_candidates
-                            .iter()
-                            .copied()
-                            .filter(|candidate| candidate.unit_idx == var_info.unit_idx)
-                            .collect();
+                        let same_unit_candidates: Vec<_> = valid_candidates.iter().copied().filter(|candidate| candidate.unit_idx == var_info.unit_idx).collect();
                         if same_unit_candidates.len() == 1 {
                             valid_candidates = same_unit_candidates;
                         }
@@ -680,7 +676,7 @@ impl ElfReader {
                 // Find the event in the registry
                 if let Some(id) = reg.event_list.find_event(event_name, 0) {
                     xcp_event_id = id.id;
-                    if event_name.len()>0 {
+                    if event_name.len() > 0 {
                         a2l_name = format!("{}.{}", event_name, var_name);
                     } else {
                         a2l_name = var_name.to_string();
@@ -734,7 +730,7 @@ impl ElfReader {
                         }
                         // multiple variables with this name, prefix with function name
                         if count > 1 {
-                            if var_function.len()>0 {
+                            if var_function.len() > 0 {
                                 a2l_name = format!("{}.{}", var_function, var_name);
                             } else {
                                 a2l_name = var_name.to_string();
@@ -751,11 +747,11 @@ impl ElfReader {
                         // Prefix the variable with the function name
                         xcp_event_id = event.id;
                         let cfa: i64 = event.cfa as i64;
-                        if var_function.len()>0 {
-                                a2l_name = format!("{}.{}", var_function, var_name);
-                            } else {
-                                a2l_name = var_name.to_string();
-                            }
+                        if var_function.len() > 0 {
+                            a2l_name = format!("{}.{}", var_function, var_name);
+                        } else {
+                            a2l_name = var_name.to_string();
+                        }
                         debug!(
                             "Variable '{}' is local to function '{}', using event id = {}, dwarf_offset = {} cfa = {}",
                             var_name,

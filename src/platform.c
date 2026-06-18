@@ -109,7 +109,7 @@ void sleepUs(uint32_t us) {
     else if (us > 0) {
 
         t1 = t2 = clockGet();
-        uint64_t te = t1 + us * (uint64_t)CLOCK_TICKS_PER_US;
+        uint64_t te = t1 + us * (uint64_t)(CLOCK_TICKS_PER_S / 1000000);
         for (;;) {
             t2 = clockGet();
             if (t2 >= te)
@@ -561,7 +561,7 @@ bool socketClose(SOCKET_HANDLE *socketp) {
 int16_t socketRecvFrom(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSize, uint8_t *srcAddr, uint16_t *srcPort, uint64_t *time) {
 #if defined(OPTION_FREERTOS_LWIP)
     assert(socket != INVALID_SOCKET_HANDLE);
-    struct sockaddr_in src; 
+    struct sockaddr_in src;
     socklen_t srclen = sizeof(src);
     memset(&src, 0, sizeof(src));
     int16_t n = (int16_t)lwip_recvfrom(socket, buffer, bufferSize, 0, (struct sockaddr *)&src, &srclen);
@@ -598,7 +598,7 @@ int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t buffe
 #if defined(OPTION_FREERTOS_LWIP)
     assert(socket != INVALID_SOCKET_HANDLE);
     assert(addr != NULL);
-    struct sockaddr_in dst; 
+    struct sockaddr_in dst;
     memset(&dst, 0, sizeof(dst));
     dst.sin_family = AF_INET;
     dst.sin_port = htons(port);
@@ -978,7 +978,7 @@ bool socketGetLocalAddr(uint8_t *mac, uint8_t *addr) {
     static uint32_t __addr1 = 0;
     static uint8_t __mac1[6] = {0, 0, 0, 0, 0, 0};
 #ifdef DBG_LEVEL
-    char strbuf[64]; // @@@@ STACK buffer for IP addr string 
+    char strbuf[64]; // @@@@ STACK buffer for IP addr string
 #endif
     if (__addr1 == 0) {
         struct ifaddrs *ifaddrs, *ifa;
@@ -1259,7 +1259,7 @@ bool socketListen(SOCKET_HANDLE socket) {
 // Returns the remote address if addr != NULL
 SOCKET_HANDLE socketAccept(SOCKET_HANDLE listenSocket, uint8_t *addr) {
     assert(listenSocket != INVALID_SOCKET_HANDLE);
-    struct sockaddr_in sa; 
+    struct sockaddr_in sa;
     socklen_t sa_size = sizeof(sa);
     SOCKET sock = accept(SOCKET_FD(listenSocket), (struct sockaddr *)&sa, &sa_size);
     if (addr)
@@ -1381,9 +1381,9 @@ int16_t socketRecvFrom(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSiz
     // Removing the if(time!=NULL) gate here is critical — without it the else clause
     // would dangle onto the port-extraction statement after #endif, causing no receive when time==NULL.
     {
-        struct iovec iov;  
-        struct msghdr msg; 
-        char control[CMSG_SPACE(sizeof(struct timespec) * 3) + CMSG_SPACE(sizeof(struct in_pktinfo))]; 
+        struct iovec iov;
+        struct msghdr msg;
+        char control[CMSG_SPACE(sizeof(struct timespec) * 3) + CMSG_SPACE(sizeof(struct in_pktinfo))];
         iov.iov_base = buffer;
         iov.iov_len = bufferSize;
         memset(&msg, 0, sizeof(msg));
@@ -1649,9 +1649,9 @@ int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t size,
     if (time != NULL) {
         // On Linux, we need to use sendmsg() with SO_TIMESTAMPING control message
         // to request TX timestamp generation for this specific packet
-        struct iovec iov;                         
-        struct msghdr msg;                        
-        char control[CMSG_SPACE(sizeof(uint32_t))]; 
+        struct iovec iov;
+        struct msghdr msg;
+        char control[CMSG_SPACE(sizeof(uint32_t))];
         struct cmsghdr *cmsg;
 
         iov.iov_base = (void *)buffer;
@@ -1769,7 +1769,7 @@ int16_t socketSendToV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t cou
     sa.sin_port = htons(port);
 
     // Build iovec array on the stack - VLAs are acceptable here as count is usually small
-    struct iovec iov[count]; 
+    struct iovec iov[count];
     uint32_t total = 0;
     for (uint16_t i = 0; i < count; i++) {
         iov[i].iov_base = (void *)buffers[i].buffer;
@@ -1777,7 +1777,7 @@ int16_t socketSendToV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t cou
         total += buffers[i].size;
     }
 
-    struct msghdr msg; 
+    struct msghdr msg;
     memset(&msg, 0, sizeof(msg));
     msg.msg_name = &sa;
     msg.msg_namelen = sizeof(sa);
@@ -1819,13 +1819,13 @@ int16_t socketSendV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t count
     assert(sock != INVALID_SOCKET);
 
     // Build iovec array on the stack - VLAs are acceptable here as count is usually small
-    struct iovec iov[count]; 
+    struct iovec iov[count];
     for (uint16_t i = 0; i < count; i++) {
         iov[i].iov_base = (void *)buffers[i].buffer;
         iov[i].iov_len = buffers[i].size;
     }
 
-    struct msghdr msg; 
+    struct msghdr msg;
     memset(&msg, 0, sizeof(msg));
     msg.msg_iov = iov;
     msg.msg_iovlen = count;
@@ -1890,10 +1890,10 @@ bool socketGetSendTime(SOCKET_HANDLE socket, uint64_t *hw_time, uint64_t *sw_tim
     if (sw_time)
         *sw_time = 0;
 
-    char control[512]; 
-    char data[1];      
-    struct iovec iov;  
-    struct msghdr msg; 
+    char control[512];
+    char data[1];
+    struct iovec iov;
+    struct msghdr msg;
     struct cmsghdr *cmsg;
     struct timespec *ts = NULL;
 
@@ -1982,135 +1982,77 @@ bool socketGetSendTime(SOCKET_HANDLE socket, uint64_t *hw_time, uint64_t *sw_tim
 /**************************************************************************/
 
 /*
-    Clock options (xcplib_cfg.h)
-
+    Clock options
     OPTION_CLOCK_EPOCH_ARB      arbitrary epoch, clock is monotonic, no corrections by NTP, PTP, ...
     OPTION_CLOCK_EPOCH_PTP      real time clock in ns or us since 1.1.1970
-    OPTION_CLOCK_TICKS_1NS      resolution 1ns or 1us, granularity depends on platform
-    OPTION_CLOCK_TICKS_1US
+    CLOCK_TICKS_PER_S           number of clock ticks per second (e.g. 1000000 for 1us resolution, 1000000000 for 1ns resolution)
 */
 
-
 #ifdef TEST_CLOCK_GET_STATISTIC
-static atomic_uint_fast64_t gClockGetCtr = 0;
-static atomic_uint_fast64_t gClockGetLastCtr = 0;
+static atomic_uint_fast32_t gClockGetCtr = 0;
+static atomic_uint_fast32_t gClockGetLastCtr = 0;
 void clockGetPrintStatistic(void) {
-    uint64_t getCtr = atomic_load_explicit(&gClockGetCtr, memory_order_relaxed);
-    uint64_t getLastCtr = atomic_load_explicit(&gClockGetLastCtr, memory_order_relaxed);
-    DBG_PRINTF3("clockGet calls: %" PRIu64 ", clockGetLast calls: %" PRIu64 "\n", getCtr, getLastCtr);
+    uint32_t getCtr = atomic_load_explicit(&gClockGetCtr, memory_order_relaxed);
+    uint32_t getLastCtr = atomic_load_explicit(&gClockGetLastCtr, memory_order_relaxed);
+    DBG_PRINTF3("clockGet calls: %" PRIu32 ", clockGetLast calls: %" PRIu32 "\n", getCtr, getLastCtr);
 }
 #endif
-
-char *clockGetTimeString(char *str, uint32_t l, int64_t t) {
-
-#ifdef OPTION_CLOCK_EPOCH_ARB
-    SNPRINTF(str, l, "%gs", (double)t / CLOCK_TICKS_PER_S);
-#else
-    char sign = '+';
-    if (t < 0) {
-        sign = '-';
-        t = -t;
-    }
-    uint64_t s = t / CLOCK_TICKS_PER_S;
-    uint64_t ns = t % CLOCK_TICKS_PER_S;
-    SNPRINTF(str, l, "%c%" PRIu64 "d%" PRIu64 "h%" PRIu64 "m%" PRIu64 "s+%" PRIu64 "ns", sign, s / (3600 * 24), (s % (3600 * 24)) / 3600, ((s % (3600 * 24)) % 3600) / 60,
-             ((s % (3600 * 24)) % 3600) % 60, ns);
-#endif
-    return str;
-}
 
 // ---------------------------------------------------------------------------
-// FreeRTOS clock.
-// On ESP32, use the ESP-IDF high resolution timer (1 us, 64 bit).
-// Otherwise, fall back to xTaskGetTickCount() with granularity =
-// 1/configTICK_RATE_HZ (1 ms at 1 kHz).
+// FreeRTOS clock
+
+// Uses xTaskGetTickCount() with granularity = 1/configTICK_RATE_HZ as XCP clock
+// It is recommended to register a higher precision clock for CLOCK_TICKS_PER_S with ApplXcpRegisterGetClockCallback() !
 
 #if defined(_FREE_RTOS) // FreeRTOS clock
 
-#if defined(ESP_PLATFORM)
-#include "esp_timer.h"
-#ifdef OPTION_CLOCK_TICKS_1NS
-#error "ESP32 esp_timer_get_time() has 1 us resolution. Use OPTION_CLOCK_TICKS_1US, or remove this error if ns-scaled timestamps are really required."
-#endif
-#endif
-
 static volatile uint64_t gClockLast_ = 0;
 
-#if !defined(ESP_PLATFORM)
-// Convert a FreeRTOS tick count to the configured clock unit (ns or us)
-static inline uint64_t tickToClockUnit_(TickType_t ticks) {
-#ifdef OPTION_CLOCK_TICKS_1NS
-    return (uint64_t)ticks * (1000000000ULL / configTICK_RATE_HZ);
-#else // OPTION_CLOCK_TICKS_1US
-    return (uint64_t)ticks * (1000000ULL / configTICK_RATE_HZ);
-#endif
-}
-#endif
+// Convert a FreeRTOS tick count to the configured clock resolution CLOCK_TICKS_PER_S
+static inline uint64_t tickToClockUnit_(TickType_t ticks) { return (uint64_t)ticks * (CLOCK_TICKS_PER_S / configTICK_RATE_HZ); }
 
 bool clockInit(void) {
-    DBG_PRINT3("Init clock\n");
-#ifdef OPTION_CLOCK_TICKS_1NS
-    DBG_PRINT3("  ticks = OPTION_CLOCK_TICKS_1NS\n");
-    DBG_PRINTF3("  FreeRTOS tick resolution = %u ns\n", (unsigned)(1000000000UL / configTICK_RATE_HZ));
-#else
-    DBG_PRINT3("  ticks = OPTION_CLOCK_TICKS_1US\n");
-#if defined(ESP_PLATFORM)
-    DBG_PRINT3("  backend = esp_timer_get_time(), resolution = 1 us\n");
-#else
-    DBG_PRINTF3("  FreeRTOS tick resolution = %u us\n", (unsigned)(1000000UL / configTICK_RATE_HZ));
-#endif
-#endif
-    gClockLast_ = 0;
+    DBG_PRINT3("Init FreeRtos clock\n");
+    clockGet(); // Initialize gClockLast_
     return true;
 }
 
 uint64_t clockGet(void) {
-#if defined(ESP_PLATFORM)
-    uint64_t t = (uint64_t)esp_timer_get_time();
-#else
-    uint64_t t = tickToClockUnit_(xTaskGetTickCount());
+
+#ifdef TEST_CLOCK_GET_STATISTIC
+    atomic_fetch_add_explicit(&gClockGetCtr, 1, memory_order_relaxed);
 #endif
+
+    uint64_t t = tickToClockUnit_(xTaskGetTickCount());
     gClockLast_ = t;
     return t;
 }
 
-uint64_t clockGetLast(void) { return gClockLast_; }
+uint64_t clockGetLast(void) {
+
+#ifdef TEST_CLOCK_GET_STATISTIC
+    atomic_fetch_add_explicit(&gClockGetLastCtr, 1, memory_order_relaxed);
+#endif
+
+    return gClockLast_;
+}
 
 char *clockGetString(char *s, uint32_t l, uint64_t c) {
-    SNPRINTF(s, l, "%gs", (double)c / CLOCK_TICKS_PER_S);
+    SNPRINTF(s, l, "%" PRIu64, c);
     return s;
 }
 
-uint64_t clockGetMonotonicNs(void) {
-#if defined(ESP_PLATFORM)
-    return (uint64_t)esp_timer_get_time() * 1000ULL;
-#else
-    return (uint64_t)xTaskGetTickCount() * (1000000000ULL / configTICK_RATE_HZ);
-#endif
-}
-uint64_t clockGetMonotonicUs(void) {
-#if defined(ESP_PLATFORM)
-    return (uint64_t)esp_timer_get_time();
-#else
-    return (uint64_t)xTaskGetTickCount() * (1000000ULL / configTICK_RATE_HZ);
-#endif
-}
-uint64_t clockGetRealtimeNs(void) { return clockGetMonotonicNs(); }
-uint64_t clockGetRealtimeUs(void) { return clockGetMonotonicUs(); }
-uint64_t clockGetMonotonicNsLast(void) { return gClockLast_; }
-uint64_t clockGetMonotonicUsLast(void) { return gClockLast_; }
-uint64_t clockGetRealtimeNsLast(void) { return gClockLast_; }
-uint64_t clockGetRealtimeUsLast(void) { return gClockLast_; }
-
-#elif !defined(_WIN) // Non-Windows platforms
+uint64_t clockGetMonotonicNs(void) { return clockGet() * (1000000000ULL / CLOCK_TICKS_PER_S); }
+uint64_t clockGetMonotonicNsLast(void) { return clockGetLast() * (1000000000ULL / CLOCK_TICKS_PER_S); }
 
 // ---------------------------------------------------------------------------
 // POSIX clock
 
+#elif !defined(_WIN) // Non-Windows platform clock
+
 #if !defined(OPTION_CLOCK_EPOCH_PTP) && !defined(OPTION_CLOCK_EPOCH_ARB)
 #error "Please define OPTION_CLOCK_EPOCH_ARB or OPTION_CLOCK_EPOCH_PTP"
 #endif
-
 
 /*
 Clock types
@@ -2166,7 +2108,7 @@ char *clockGetString(char *s, uint32_t l, uint64_t c) {
         struct tm tm;
         gmtime_r(&t, &tm);
         uint64_t fns = c % CLOCK_TICKS_PER_S;
-#ifdef OPTION_CLOCK_TICKS_1US
+#if CLOCK_TICKS_PER_S == 1000000UL // us
         fns *= 1000;
 #endif
         SNPRINTF(s, l, "%u.%u.%u %02u:%02u:%02u +%" PRIu64 "ns", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, tm.tm_hour % 24, tm.tm_min, tm.tm_sec, fns);
@@ -2175,19 +2117,14 @@ char *clockGetString(char *s, uint32_t l, uint64_t c) {
 }
 
 bool clockInit(void) {
-    DBG_PRINT3("Init clock\n");
+    DBG_PRINT3("Init POSIX clock\n");
 #ifdef OPTION_CLOCK_EPOCH_PTP
-    DBG_PRINT3("  epoch = OPTION_CLOCK_EPOCH_PTP\n");
+    DBG_PRINT3("  OPTION_CLOCK_EPOCH_PTP\n");
 #endif
 #ifdef OPTION_CLOCK_EPOCH_ARB
-    DBG_PRINT3("  epoch = OPTION_CLOCK_EPOCH_ARB\n");
+    DBG_PRINT3("  OPTION_CLOCK_EPOCH_ARB\n");
 #endif
-#ifdef OPTION_CLOCK_TICKS_1US
-    DBG_PRINT3("  ticks = OPTION_CLOCK_TICKS_1US\n");
-#endif
-#ifdef OPTION_CLOCK_TICKS_1NS
-    DBG_PRINT3("  ticks = OPTION_CLOCK_TICKS_1NS\n");
-#endif
+    DBG_PRINTF3("  CLOCK_TICKS_PER_S = %" PRIu32 "\n", (uint32_t)(CLOCK_TICKS_PER_S));
 
     clockGetRealtimeNs();        // Initialize __gClockRealtime
     clockGetMonotonicNs();       // Initialize __gClockMonotonic
@@ -2213,19 +2150,23 @@ uint64_t clockGet(void) {
     atomic_fetch_add_explicit(&gClockGetCtr, 1, memory_order_relaxed);
 #endif
     clock_gettime(CLOCK_TYPE, &__gClock);
-#ifdef OPTION_CLOCK_TICKS_1NS // ns
+#if CLOCK_TICKS_PER_S == 1000000000UL // ns
     return (((uint64_t)(__gClock.tv_sec) * 1000000000ULL) + (uint64_t)(__gClock.tv_nsec));
-#else                         // us
+#elif CLOCK_TICKS_PER_S == 1000000UL  // us
     return (((uint64_t)(__gClock.tv_sec) * 1000000ULL) + (uint64_t)(__gClock.tv_nsec / 1000)); // us
+#else
+#error "Please define clock resolution CLOCK_TICKS_PER_S to 1ns or 1us"
 #endif
 }
 
 // Get the last known clock value
 uint64_t clockGetLast(void) {
-#ifdef OPTION_CLOCK_TICKS_1NS // ns
+#if CLOCK_TICKS_PER_S == 1000000000UL // ns
     return (((uint64_t)(__gClock.tv_sec) * 1000000000ULL) + (uint64_t)(__gClock.tv_nsec));
-#else                         // us
+#elif CLOCK_TICKS_PER_S == 1000000UL  // us
     return (((uint64_t)(__gClock.tv_sec) * 1000000ULL) + (uint64_t)(__gClock.tv_nsec / 1000)); // us
+#else
+#error "Please define clock resolution CLOCK_TICKS_PER_S to 1ns or 1us"
 #endif
 }
 
@@ -2258,10 +2199,10 @@ uint64_t clockGetMonotonicUsLast(void) { return (((uint64_t)(__gClockMonotonic.t
 uint64_t clockGetRealtimeNsLast(void) { return (((uint64_t)(__gClockRealtime.tv_sec) * 1000000000ULL) + (uint64_t)(__gClockRealtime.tv_nsec)); }
 uint64_t clockGetRealtimeUsLast(void) { return (((uint64_t)(__gClockRealtime.tv_sec) * 1000000ULL) + (uint64_t)(__gClockRealtime.tv_nsec / 1000)); }
 
-#else // Windows
-
 // ---------------------------------------------------------------------------
 // Windows clock
+
+#else // Windows platform clock
 
 static uint64_t __gClock = 0;
 
@@ -2297,20 +2238,14 @@ char *clockGetString(char *str, uint32_t l, uint64_t c) {
 
 bool clockInit(void) {
 
-    DBG_PRINT4("Init clock\n  ");
+    DBG_PRINT4("Init WINDOWS clock\n  ");
 #ifdef OPTION_CLOCK_EPOCH_PTP
     DBG_PRINT4("OPTION_CLOCK_EPOCH_PTP,");
 #endif
 #ifdef OPTION_CLOCK_EPOCH_ARB
     DBG_PRINT4("OPTION_CLOCK_EPOCH_ARB,");
 #endif
-#ifdef OPTION_CLOCK_TICKS_1US
-    DBG_PRINT4("OPTION_CLOCK_TICKS_1US\n");
-#endif
-#ifdef OPTION_CLOCK_TICKS_1NS
-    DBG_PRINT4("OPTION_CLOCK_TICKS_1NS\n");
-#endif
-    DBG_PRINTF4("  CLOCK_TICKS_PER_S = %I64u\n\n", CLOCK_TICKS_PER_S);
+    DBG_PRINTF4("  CLOCK_TICKS_PER_S = %" PRIu32 "\n\n", (uint32_t)(CLOCK_TICKS_PER_S));
 
     __gClock = 0;
 
@@ -2357,7 +2292,7 @@ bool clockInit(void) {
 #ifndef OPTION_CLOCK_EPOCH_ARB
     // set offset from local clock UTC value t
     // this is inaccurate up to 1 s, but irrelevant because system clock UTC offset is also not accurate
-    sOffset = time_s * CLOCK_TICKS_PER_S + (uint64_t)time_ms * CLOCK_TICKS_PER_MS - tp * sFactor;
+    sOffset = time_s * CLOCK_TICKS_PER_S + (uint64_t)time_ms * (CLOCK_TICKS_PER_S / 1000) - tp * sFactor;
 #else
     // Reset clock now
     sOffset = tp;
@@ -2386,7 +2321,7 @@ bool clockInit(void) {
         char ts[64]; // @@@@ STACK buffer for clock value
         t = clockGet();
         clockGetString(ts, sizeof(ts), t);
-        printf("  Now = %I64u (%I64u per us) %s\n", t, CLOCK_TICKS_PER_US, ts);
+        printf("  Now = %I64u (%I64u per us) %s\n", t, (CLOCK_TICKS_PER_S / 1000000), ts);
     }
 #endif
 
@@ -2413,13 +2348,20 @@ uint64_t clockGet(void) {
     return t;
 }
 
+#if (CLOCK_TICKS_PER_S == 1000000000UL)
 uint64_t clockGetMonotonicNs() { return clockGet(); }
 uint64_t clockGetMonotonicNsLast() { return clockGetLast(); }
 uint64_t clockGetMonotonicUs() { return clockGet() / 1000; }
 uint64_t clockGetMonotonicUsLast() { return clockGetLast() / 1000; }
+#endif
+#if (CLOCK_TICKS_PER_S == 1000000UL)
+uint64_t clockGetMonotonicNs() { return clockGet() * 1000; }
+uint64_t clockGetMonotonicNsLast() { return clockGetLast() * 1000; }
+uint64_t clockGetMonotonicUs() { return clockGet(); }
+uint64_t clockGetMonotonicUsLast() { return clockGetLast(); }
+#endif
 
 #endif // Windows
-
 
 /**************************************************************************/
 // File system utilities

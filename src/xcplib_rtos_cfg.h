@@ -9,23 +9,46 @@
 |   Applied AFTER the defaults in xcplib_cfg.h via:
 |     cmake: target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"xcplib_rtos_cfg.h\"")
 |
-|   Only settings that DIFFER from the POSIX defaults are listed here.
-|   Key differences:
+|   Key differences in overrides from the defaults in xcplib_cfg.h:
 |     - Absolute memory addressing
+|     - No jumbo frames, standard Ethernet MTU of 1504 bytes (1472 bytes UDP payload)
+|     - No TCP support (not implemented yet for FreeRTOS)
+|     - Reduced memory footprint
 |     - 32 bit DAQ queue
-|     - Clock resolution
+|     - Clock resolution 1us
 |     - No file system
 |     - No on-target A2L generation
 |     - No persistence, no A2L/ELF upload (no filesystem)
 |     - No forceful thread termination (use vTaskDelete instead)
 |     - Reduced queue size, and max event number and calibration segment counts to fit in embedded SRAM
 |
+|   Optional:
+|     OPTION_ENABLE_TCP not implemented yet for FreeRTOS
+|     OPTION_ENABLE_PTP not implemented yet for FreeRTOS
+|   Addressing scheme:
+|     Absolute memory addressing with A2L segments as absolute memory regions with static lifetime default page, no segment relative addressing
+|   Platform requirements:
+|    No filesystem required, 32 bit platform, currently only FreeRTOS, ThreadX planned to be supported in the future
+|   Examples:
+|    freertos_demo     - FreeRTOS POSIX simulator (Linux only), for testing FreeRTOS xcplite support on the host
+|                        cmake: XCPLITE_CONFIGURATION=rtos, XCPLITE_BUILD_EXAMPLES=ON
+|    esp32_freertos_demo - ESP32 target, uses the same xcplib_rtos_cfg.h override,
+|                        built externally via PlatformIO (not a CMake project)
+|   Tools:
+|     xcpclient for A2L generation from ELF and testing
+|   Tests:
+|     -
+
  ----------------------------------------------------------------------------*/
 
 // FreeRTOS rx and tx task stack depth (in bytes) and priority
 // On the POSIX simulator the size must be considerably larger than usual
 // Tune these values to the actual needs of the XCP server tasks on your target
-#define OPTION_FREERTOS_STACK_BYTES (8U * 1024U)
+#if defined(FREE_RTOS_POSIX_SIM)
+#define OPTION_FREERTOS_STACK_BYTES (16U * 1024U)
+#else
+#define OPTION_FREERTOS_STACK_BYTES (4U * 1024U)
+#endif
 #define OPTION_FREERTOS_PRIORITY (tskIDLE_PRIORITY + 2U)
 
 // FreeRTOS IP stack configuration
@@ -38,9 +61,19 @@
 
 //-------------------------------------------------------------------------------
 // Clock
+
+// FreeRTOS clock is assumed to have 1us ticks by default
+// Adjust below if your clock has a different resolution, but be aware of the consequences regarding rounding errors and representation problems
 #undef OPTION_CLOCK_TICKS_1NS
-#define OPTION_CLOCK_TICKS_1US // 1 us ticks
-#undef OPTION_CLOCK_EPOCH_PTP
+#define OPTION_CLOCK_TICKS_1US // Default for FreeRTOS
+
+// Custom clock configuration for FreeRTOS targets, adjust CLOCK_TICKS_PER_S to the resolution of your DAQ clock, e.g. 1 MHz for microsecond resolution
+#if !defined(OPTION_CLOCK_TICKS_1NS) && !defined(OPTION_CLOCK_TICKS_1US)
+// #define CLOCK_TICKS_PER_S 480000000UL // 480 MHz clock tick rate for 2.08 ns resolution
+#error "Please define CLOCK_TICKS_PER_S to the number of clock ticks per second for the DAQ clock"
+#endif
+
+#undef OPTION_CLOCK_EPOCH_PTP  // Clock has PTP epoch (0 = January 1st, 1970)
 #define OPTION_CLOCK_EPOCH_ARB // Arbitrary clock zero
 
 //-------------------------------------------------------------------------------

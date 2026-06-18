@@ -2,86 +2,83 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Parse command line arguments
-BUILD_TYPE="Debug"  # Default to Debug build
-CLEAN_BUILD=false   # Whether to clean before building
-BUILD_TARGET="examples"  # Default to building library + standard examples
-INSTALL_LIBRARY=false   # Whether to install library after building
-INSTALL_PREFIX=""       # Custom install prefix (empty = use CMake default)
-RUN_CLANG_TIDY=false    # Whether to run clang-tidy on library sources
-BUILD_FREERTOS_DEMO=false  # Whether to build the FreeRTOS POSIX simulator demo
-BUILD_NO_A2L_DEMO=false    # Whether to build no_a2l_demo with XCPLIB_NO_A2L configuration
-BUILD_SHM_TOOLS=false          # Whether to build SHM mode tool targets (shmtool,xcpdaemon)
-BUILD_PTP_TOOLS=false          # Whether to build PTP tool targets (ptptool)
-BUILD_RUST_TOOLS=false     # Whether to build Rust tool targets (xcpclient, bintool) via cargo
+# Defaults
+BUILD_TYPE="Debug"
+CONFIGURATION="default"
+BUILD_EXAMPLES=false
+BUILD_TESTS=false
+BUILD_TOOLS=false
+BUILD_RUST=false
+_ANY_TARGET=false  # set to true when any target keyword is given
+CLEAN_BUILD=false
+INSTALL_LIBRARY=false
+INSTALL_PREFIX=""
+CARGO_INSTALL=false
+RUN_CLANG_TIDY=false
 
-# Function to show usage
 show_usage() {
-    echo "Usage: $0 [build_type] [target] [options]"
+    echo "Usage: $0 [build_type] [configuration] [target] [options]"
     echo ""
-    echo "Parameters:"
-    echo "  build_type:    debug|release|relwithdebinfo (default: debug)"
-    echo "  target:        lib|examples|tests|tools|rust|all (default: examples)"
+    echo "Build type (default: debug):"
+    echo "  debug | release | relwithdebinfo"
     echo ""
-    echo "Build Targets:"
-    echo "  lib:            Build only the xcplite library"
-    echo "  examples:       Build library + standard examples [DEFAULT]"
-    echo "  tests:          Build library + test targets (a2l_test, cal_test, daq_test, queue_test, clock_test, ...)"
-    echo "  shm_tools:      Build SHM mode tool targets (shmtool,xcpdaemon)"
-    echo "  ptp_tools:      Build PTP tool targets (ptptool)"
-    echo "  rust_tools:     Build Rust tool targets (xcpclient, bintool) via CMake/cargo"
+    echo "Configuration (default: default) — selects xcplib_cfg override and build directory:"
+    echo "  default   build/           Standard 64-bit, A2L generation, filesystem, UDP/TCP"
+    echo "  no_a2l    build-no_a2l/    No on-target A2L; generate A2L from ELF via xcpclient"
+    echo "  ptp       build-ptp/       Hardware socket timestamps for PTP (Linux, PTP-capable NIC)"
+    echo "  shm       build-shm/       Shared-memory multi-application mode"
+    echo "  rtos      build-rtos/      FreeRTOS POSIX simulator (Linux/macOS only)"
+    echo ""
+    echo "Target (default: examples) — what to build within the configuration:"
+    echo "  lib          Library only"
+    echo "  examples     Library + examples  [DEFAULT]"
+    echo "  tests        Library + tests"
+    echo "  tools        Library + tools  (ptp: ptptool | shm: shmtool, xcpdaemon)"
+    echo "  rust_tools   Library + Rust tools: xcpclient, bintool  (requires cargo)"
+    echo "  all          Library + examples + tests + tools + rust_tools"
+    echo ""
+    echo "Note: which examples, tests and tools are actually built depends on the"
+    echo "      selected configuration — see 'docs/BUILDING.md' for the full matrix."
     echo ""
     echo "Options:"
-    echo "  clean:          Clean build directory before building"
-    echo "  cleanall:       Clean all build directories and artifacts"
-    echo "  install:        Install library to staging directory after building (default location: build/install)"
-    echo "  install=<path>: Install library to custom path (e.g., install=/usr/local)"
-    echo "  tidy:           Run clang-tidy on library sources after building"
+    echo "  clean              Clean build directory before building"
+    echo "  cleanall           Clean all build directories and exit"
+    echo "  install            Install xcplite library to <build_dir>/install"
+    echo "  install=<path>     Install xcplite library to custom path"
+    echo "  cargo_install      Run 'cargo install' for xcpclient and bintool to ~/.cargo/bin"
+    echo "                     (only meaningful with rust_tools or all target)"
+    echo "  tidy               Run clang-tidy on library sources"
     echo ""
-    echo "Compiler Selection:"
-    echo "  Use standard CMake environment variables to select compiler:"
-    echo "    CC=gcc CXX=g++ $0 [options]        # Use GCC"
-    echo "    CC=clang CXX=clang++ $0 [options]  # Use Clang"
+    echo "Note: 'install' and 'cargo_install' are independent:"
+    echo "  install         -> cmake --install  (library headers/cmake config to prefix)"
+    echo "  cargo_install   -> cargo install    (xcpclient/bintool binaries to ~/.cargo/bin)"
+    echo ""
+    echo "Compiler selection (standard CMake environment variables):"
+    echo "  CC=gcc CXX=g++ $0 ..."
+    echo "  CC=clang CXX=clang++ $0 ..."
     echo ""
     echo "Examples:"
-    echo "  $0                               # Default: Build library + examples"
-    echo "  $0 clean                         # Clean build and rebuild library + examples"
-    echo "  $0 cleanall                      # Clean all artifacts and exit"
-    echo "  $0 lib                           # Build only the library"
-    echo "  $0 lib install                   # Build library and install to staging directory"
-    echo "  $0 release install=/usr/local    # Release build and install to /usr/local"
-    echo "  $0 tests                         # Build library + test targets"
-    echo "  CC=gcc CXX=g++ $0 release all    # Release build with GCC, all targets"
-    echo "  CC=clang CXX=clang++ $0 tests    # Build with Clang, tests only"
-    echo "  $0 lib tidy                      # Build library and run clang-tidy"
-    echo "  $0 freertos                      # Build freertos_demo (POSIX xcplite internals)"
-    echo "  $0 no_a2l_demo                   # Build no_a2l_demo with XCPLIB_NO_A2L (no A2L generator)"
-    echo "  $0 shm_tools                     # Build SHM mode tool targets (shmtool,xcpdaemon)"
-    echo "  $0 ptp_tools                     # Build PTP tool targets (ptptool)"
-    echo "  $0 rust_tools                    # Build Rust tool targets (xcpclient, bintool) via CMake/cargo"
-    echo "  $0 rust_tools install             # Build and install Rust tools to build/install/bin"
-    echo ""
-    echo "Platform-specific targets:"
-    echo "  bpf_demo:             Only built on Linux when libbpf is available (automatic detection)"
-    echo "  freertos_demo:        FreeRTOS POSIX simulator demo (macOS/Linux only, downloads FreeRTOS-Kernel)"
-    echo "  no_a2l_demo:          Build without A2L generator (XCPLIB_NO_A2L), uses dedicated build_no_a2l/ directory"
-    echo "  xcpclient, bintool:   Rust tools, built via CMake custom targets (requires cargo)"
-    echo "  shmtool, xcpdaemon:   SHM mode tools (macOS/Linux only)"
-    echo "  ptptool:              PTP tool (Linux only, requires hardware timestamping support)"
-    echo ""
-    echo "Installation:"
-    echo "  By default, CMAKE_INSTALL_PREFIX is set to build/install (local staging)."
-    echo "  Use 'install' to install to this default location after building."
-    echo "  Use 'install=<path>' to override the install prefix and install to a custom location."
-    echo "  The installed library can be used by external projects via CMAKE_PREFIX_PATH."
+    echo "  $0                                  # Library + examples, default config, debug"
+    echo "  $0 release                          # Release build, default config, examples"
+    echo "  $0 tests                            # Tests, default config, debug"
+    echo "  $0 shm tools                        # shm config: shmtool + xcpdaemon"
+    echo "  $0 ptp tools                        # ptp config: ptptool (Linux only)"
+    echo "  $0 no_a2l examples                  # no_a2l config: no_a2l_demo"
+    echo "  $0 rtos examples                    # rtos config: freertos_demo (Linux/macOS only)"
+    echo "  $0 lib install                      # Library only, install to build/install"
+    echo "  $0 release lib install=/usr/local   # Release build, install to /usr/local"
+    echo "  $0 rust_tools cargo_install         # Build + install xcpclient/bintool to ~/.cargo/bin"
+    echo "  $0 clean examples                   # Clean rebuild"
+    echo "  $0 cleanall                         # Clean all build directories"
+    echo "  $0 lib tidy                         # Build library and run clang-tidy"
+    echo "  CC=gcc CXX=g++ $0 release all       # Release build with GCC, all targets (requires cargo for rust_tools)"
 }
 
-# Parse arguments and set correct case for CMake
+# Argument parsing
 for arg in "$@"; do
-    # Convert to lowercase for comparison
     arg_lower=$(echo "$arg" | tr '[:upper:]' '[:lower:]')
-    
-    # Check if argument is install with optional path
+
+    # install[=path] handled before the case statement
     if [[ "$arg" == "install" ]]; then
         INSTALL_LIBRARY=true
         continue
@@ -89,86 +86,38 @@ for arg in "$@"; do
         INSTALL_LIBRARY=true
         INSTALL_PREFIX="${arg#install=}"
         continue
-    fi
-    
-    # Check if argument is tidy
-    if [[ "$arg" == "tidy" ]]; then
-        RUN_CLANG_TIDY=true
+    elif [[ "$arg_lower" == "cargo_install" ]]; then
+        CARGO_INSTALL=true
         continue
     fi
 
-    # freertos: build freertos_demo with standard POSIX xcplite internals
-    if [[ "$arg_lower" == "freertos" ]]; then
-        BUILD_FREERTOS_DEMO=true
-        continue
-    fi
-
-    # no_a2l_demo: build no_a2l_demo with XCPLIB_NO_A2L (disables A2L generator in xcplite)
-    # Uses a dedicated build directory since XCPLIB_NO_A2L breaks other examples.
-    if [[ "$arg_lower" == "no_a2l_demo" ]]; then
-        BUILD_NO_A2L_DEMO=true
-        continue
-    fi
-
-    # shm: build SHM mode tool targets (shmtool,xcpdaemon) via cargo
-    if [[ "$arg_lower" == "shm_tools" ]]; then
-        BUILD_SHM_TOOLS=true
-        continue
-    fi
-
-    # ptp: build PTP tool targets (ptptool) via cargo
-    if [[ "$arg_lower" == "ptp_tools" ]]; then
-        BUILD_PTP_TOOLS=true
-        continue
-    fi  
-
-    # rust: build Rust tool targets (xcpclient, bintool) via cargo
-    if [[ "$arg_lower" == "rust_tools" ]]; then
-        BUILD_RUST_TOOLS=true
-        continue
-    fi
-    
     case "$arg_lower" in
-        debug)
-            BUILD_TYPE="Debug"
-            ;;
-        release)
-            BUILD_TYPE="Release"
-            ;;
-        relwithdebinfo)
-            BUILD_TYPE="RelWithDebInfo"
-            ;;
-        lib|library)
-            BUILD_TARGET="lib"
-            ;;
-        examples)
-            BUILD_TARGET="examples"
-            ;;
-        tests)
-            BUILD_TARGET="tests"
-            ;;
-        shm_tools)
-            BUILD_TARGET="shm_tools"
-            ;;
-        ptp_tools)
-            BUILD_TARGET="ptp_tools"
-            ;;
-        rust_tools)
-            BUILD_TARGET="rust_tools"
-            ;;
-        clean)
-            CLEAN_BUILD=true
-            ;;
+        # Build type
+        debug)          BUILD_TYPE="Debug" ;;
+        release)        BUILD_TYPE="Release" ;;
+        relwithdebinfo) BUILD_TYPE="RelWithDebInfo" ;;
+
+        # Configuration
+        default|no_a2l|ptp|shm|rtos) CONFIGURATION="$arg_lower" ;;
+
+        # Target (multiple targets may be combined, e.g. "tools examples")
+        lib)        _ANY_TARGET=true ;;  # library only: all extras remain false
+        examples)   BUILD_EXAMPLES=true; _ANY_TARGET=true ;;
+        tests)      BUILD_TESTS=true;    _ANY_TARGET=true ;;
+        tools)      BUILD_TOOLS=true;    _ANY_TARGET=true ;;
+        rust_tools) BUILD_RUST=true;     _ANY_TARGET=true ;;
+        all)        BUILD_EXAMPLES=true; BUILD_TESTS=true; BUILD_TOOLS=true; BUILD_RUST=true; _ANY_TARGET=true ;;
+
+        # Options
+        tidy)    RUN_CLANG_TIDY=true ;;
+        clean)   CLEAN_BUILD=true ;;
         cleanall)
-            echo "Cleaning all build and test artefacts ..."
-            rm -rf build build_no_a2l_demo build_freertos build_ptptool
-            echo "Build directories cleaned"
-            rm -f *.bin
-            rm -f *.hex
-            rm -f *.log
-            rm -f *.mf4
-            rm -f *.a2l
-            echo "Artifact files cleaned"
+            echo "Cleaning all build directories..."
+            rm -rf build build-no_a2l build-ptp build-shm build-rtos
+            # Also clean legacy directory names from older builds
+            rm -rf build_no_a2l_demo build_freertos build_ptptool build_shm
+            rm -f ./*.bin ./*.hex ./*.log ./*.mf4 ./*.a2l
+            echo "Done"
             exit 0
             ;;
         -h|--help|help)
@@ -176,7 +125,7 @@ for arg in "$@"; do
             exit 0
             ;;
         *)
-            echo "Error: Unknown parameter '$arg'"
+            echo "Error: Unknown argument '$arg'"
             echo ""
             show_usage
             exit 1
@@ -184,272 +133,213 @@ for arg in "$@"; do
     esac
 done
 
-# Standard build directory
-BUILD_DIR="build"
-
-
-# Determine CMake options based on BUILD_TARGET
-CMAKE_EXAMPLES_FLAG=""
-CMAKE_TESTS_FLAG=""
-CMAKE_SHM_TOOLS_FLAG=""
-CMAKE_PTP_TOOLS_FLAG=""
-
-case "$BUILD_TARGET" in
-    "lib")
-        # Only build the library, disable examples, tests and tools
-        CMAKE_EXAMPLES_FLAG="-DXCPLITE_BUILD_EXAMPLES=OFF"
-        CMAKE_TESTS_FLAG="-DXCPLITE_BUILD_TESTS=OFF"
-        CMAKE_SHM_TOOLS_FLAG="-DXCPLITE_BUILD_SHM_TOOLS=OFF"
-        CMAKE_PTP_TOOLS_FLAG="-DXCPLITE_BUILD_PTP_TOOLS=OFF"
-        ;;
-    "examples")
-        # Build library + examples (CMake will handle bpf_demo based on platform and libbpf availability)
-        CMAKE_EXAMPLES_FLAG="-DXCPLITE_BUILD_EXAMPLES=ON"
-        CMAKE_TESTS_FLAG="-DXCPLITE_BUILD_TESTS=OFF"
-        CMAKE_SHM_TOOLS_FLAG="-DXCPLITE_BUILD_SHM_TOOLS=OFF"
-        CMAKE_PTP_TOOLS_FLAG="-DXCPLITE_BUILD_PTP_TOOLS=OFF"
-        ;;
-    "tests")
-        # Build library + tests, no examples or tools
-        CMAKE_EXAMPLES_FLAG="-DXCPLITE_BUILD_EXAMPLES=OFF"
-        CMAKE_TESTS_FLAG="-DXCPLITE_BUILD_TESTS=ON"
-        CMAKE_SHM_TOOLS_FLAG="-DXCPLITE_BUILD_SHM_TOOLS=OFF"
-        CMAKE_PTP_TOOLS_FLAG="-DXCPLITE_BUILD_PTP_TOOLS=OFF"
-        ;;
-    "shm_tools")
-        # Build library + tools, no examples or tests
-        CMAKE_EXAMPLES_FLAG="-DXCPLITE_BUILD_EXAMPLES=OFF"
-        CMAKE_TESTS_FLAG="-DXCPLITE_BUILD_TESTS=OFF"
-        CMAKE_SHM_TOOLS_FLAG="-DXCPLITE_BUILD_SHM_TOOLS=ON"
-        CMAKE_PTP_TOOLS_FLAG="-DXCPLITE_BUILD_PTP_TOOLS=OFF"
-        ;;
-    "ptp_tools")
-        # Build library + tools, no examples or tests
-        CMAKE_EXAMPLES_FLAG="-DXCPLITE_BUILD_EXAMPLES=OFF"
-        CMAKE_TESTS_FLAG="-DXCPLITE_BUILD_TESTS=OFF"
-        CMAKE_SHM_TOOLS_FLAG="-DXCPLITE_BUILD_SHM_TOOLS=OFF"
-        CMAKE_PTP_TOOLS_FLAG="-DXCPLITE_BUILD_PTP_TOOLS=ON"
-        ;;
-    *)
-        echo "Error: Unknown build target '$BUILD_TARGET'"
-        show_usage
-        exit 1
-        ;;
-esac
-
-
-
-echo ""
-echo "==================================================================="
-echo "Configuring CMake build system..."
-echo "==================================================================="
-
-echo "Building in $BUILD_TYPE mode"
-echo "Build target: $BUILD_TARGET"
-
-
-# Add custom install prefix if specified
-CMAKE_INSTALL_ARGS=""
-if [ -n "$INSTALL_PREFIX" ]; then
-    CMAKE_INSTALL_ARGS="-DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX"
-    echo "Custom install prefix: $INSTALL_PREFIX"
-fi
-echo "Install args: $CMAKE_INSTALL_ARGS"
-
-
-CMAKE_RUST_TOOLS_FLAG="-DXCPLITE_BUILD_RUST_TOOLS=OFF"
-if [ "$BUILD_RUST_TOOLS" = true ]; then
-    CMAKE_RUST_TOOLS_FLAG="-DXCPLITE_BUILD_RUST_TOOLS=ON"
-    echo "Rust tools build enabled: xcpclient, bintool (built via CMake custom targets, requires cargo)"
-    echo "Flags: -DXCPLITE_BUILD_RUST_TOOLS=ON"
-fi
-
-CMAKE_SHM_TOOLS_FLAG="-DXCPLITE_BUILD_SHM_TOOLS=OFF"
-if [ "$BUILD_SHM_TOOLS" = true ]; then
-    CMAKE_SHM_TOOLS_FLAG="-DXCPLITE_BUILD_SHM_TOOLS=ON"
-    echo "SHM tools build enabled"
-    echo "Flags: -DXCPLITE_BUILD_SHM_TOOLS=ON"
-fi
-
-CMAKE_NO_A2L_FLAGS="-DXCPLITE_BUILD_NO_A2L_DEMO=OFF"
-if [ "$BUILD_NO_A2L_DEMO" = true ]; then
-    # Rrecompiles xcplite without the A2L generator, which breaks other examples. Use a dedicated build directory.
-    BUILD_DIR="build_no_a2l_demo"
-    CMAKE_EXAMPLES_FLAG="-DXCPLITE_BUILD_EXAMPLES=OFF"
-    CMAKE_TESTS_FLAG="-DXCPLITE_BUILD_TESTS=OFF"
-    CMAKE_PTP_TOOLS_FLAG="-DXCPLITE_BUILD_PTP_TOOLS=OFF"
-    CMAKE_SHM_TOOLS_FLAG="-DXCPLITE_BUILD_SHM_TOOLS=OFF"
-    CMAKE_RUST_TOOLS_FLAG="-DXCPLITE_BUILD_RUST_TOOLS=OFF"
-    CMAKE_NO_A2L_FLAGS="-DXCPLITE_BUILD_NO_A2L_DEMO=ON"
-    echo "no_a2l_demo build: Build directory: $BUILD_DIR  (isolated from regular build)"
-    echo "Flags: -DXCPLITE_BUILD_NO_A2L_DEMO=ON"
-fi
-
-CMAKE_FREERTOS_FLAGS="-DXCPLITE_BUILD_FREERTOS_DEMO=OFF"
-if [ "$BUILD_FREERTOS_DEMO" = true ]; then
-    # Rrecompiles xcplite without the A2L generator, which breaks other examples. Use a dedicated build directory.
-    BUILD_DIR="build_freertos"
-    CMAKE_EXAMPLES_FLAG="-DXCPLITE_BUILD_EXAMPLES=OFF"
-    CMAKE_TESTS_FLAG="-DXCPLITE_BUILD_TESTS=OFF"
-    CMAKE_PTP_TOOLS_FLAG="-DXCPLITE_BUILD_PTP_TOOLS=OFF"
-    CMAKE_SHM_TOOLS_FLAG="-DXCPLITE_BUILD_SHM_TOOLS=OFF"
-    CMAKE_RUST_TOOLS_FLAG="-DXCPLITE_BUILD_RUST_TOOLS=OFF"
-    CMAKE_FREERTOS_FLAGS="-DXCPLITE_BUILD_FREERTOS_DEMO=ON"
-    echo "freertos_demo build: Build directory: $BUILD_DIR  (isolated from regular build)"
-    echo "Flags: -DXCPLITE_BUILD_FREERTOS_DEMO=ON"
-fi
-
-CMAKE_PTP_TOOLS_FLAGS="-DXCPLITE_BUILD_PTP_TOOLS=OFF"
-if [ "$BUILD_PTP_TOOLS" = true ]; then
-    # Rrecompiles xcplite with hardware time stamping enabled, which breaks other examples. Use a dedicated build directory.
-    BUILD_DIR="build_ptptool"
-    CMAKE_EXAMPLES_FLAG="-DXCPLITE_BUILD_EXAMPLES=OFF"
-    CMAKE_TESTS_FLAG="-DXCPLITE_BUILD_TESTS=OFF"
-    CMAKE_PTP_TOOLS_FLAG="-DXCPLITE_BUILD_PTP_TOOLS=OFF"
-    CMAKE_SHM_TOOLS_FLAG="-DXCPLITE_BUILD_SHM_TOOLS=OFF"
-    CMAKE_RUST_TOOLS_FLAG="-DXCPLITE_BUILD_RUST_TOOLS=OFF"
-    CMAKE_FREERTOS_FLAGS="-DXCPLITE_BUILD_FREERTOS_DEMO=OFF"
-    CMAKE_PTP_TOOLS_FLAGS="-DXCPLITE_BUILD_PTP_TOOLS=ON"
-    echo "Flags: -DXCPLITE_BUILD_PTP_TOOLS=ON"
-fi
-
-echo "Build directory: $BUILD_DIR"
-echo ""
-
-# Clean build directory if requested
-if [ "$CLEAN_BUILD" = true ]; then
-    echo "Cleaning build directory: $BUILD_DIR"
-    rm -rf "$BUILD_DIR"
-fi
-
-
-cmake -DCMAKE_BUILD_TYPE=$BUILD_TYPE $CMAKE_EXAMPLES_FLAG $CMAKE_TESTS_FLAG $CMAKE_PTP_TOOLS_FLAGS $CMAKE_SHM_TOOLS_FLAG $CMAKE_RUST_TOOLS_FLAG $CMAKE_FREERTOS_FLAGS $CMAKE_NO_A2L_FLAGS -S . -B $BUILD_DIR $CMAKE_INSTALL_ARGS
-
-echo ""
-echo "==================================================================="
-echo "Building targets..."
-echo "==================================================================="
-
-echo ""
-
-# Build all targets configured 
-BUILD_SUCCESS=true
-if cmake --build $BUILD_DIR; then
-    BUILD_SUCCESS=true
+# Build directory follows configuration
+if [[ "$CONFIGURATION" == "default" ]]; then
+    BUILD_DIR="build"
 else
+    BUILD_DIR="build-${CONFIGURATION}"
+fi
+
+# Default to examples if no target was specified
+if [[ "$_ANY_TARGET" == false ]]; then
+    BUILD_EXAMPLES=true
+fi
+
+# Translate to CMake flags
+CMAKE_BUILD_EXAMPLES=$([[ "$BUILD_EXAMPLES" == true ]] && echo "ON" || echo "OFF")
+CMAKE_BUILD_TESTS=$([[ "$BUILD_TESTS" == true ]] && echo "ON" || echo "OFF")
+CMAKE_BUILD_TOOLS=$([[ "$BUILD_TOOLS" == true ]] && echo "ON" || echo "OFF")
+CMAKE_BUILD_RUST=$([[ "$BUILD_RUST" == true ]] && echo "ON" || echo "OFF")
+
+# Optional install prefix
+CMAKE_INSTALL_ARGS=""
+if [[ -n "$INSTALL_PREFIX" ]]; then
+    CMAKE_INSTALL_ARGS="-DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX"
+fi
+
+# Build display target list
+_TARGET_LIST=()
+[[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && _TARGET_LIST+=("examples")
+[[ "$CMAKE_BUILD_TESTS" == "ON" ]]    && _TARGET_LIST+=("tests")
+[[ "$CMAKE_BUILD_TOOLS" == "ON" ]]    && _TARGET_LIST+=("tools")
+[[ "$CMAKE_BUILD_RUST" == "ON" ]]     && _TARGET_LIST+=("rust_tools")
+[[ ${#_TARGET_LIST[@]} -eq 0 ]]       && _TARGET_LIST+=("lib")
+echo "Configuration : $CONFIGURATION  ($BUILD_DIR)"
+echo "Build type    : $BUILD_TYPE"
+echo "Target        : ${_TARGET_LIST[*]}"
+echo ""
+
+# Clean if requested
+if [[ "$CLEAN_BUILD" == true ]]; then
+    echo "Cleaning $BUILD_DIR ..."
+    rm -rf "$BUILD_DIR"
+    echo ""
+fi
+
+# Configure
+cmake \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+    -DXCPLITE_CONFIGURATION="$CONFIGURATION" \
+    -DXCPLITE_BUILD_EXAMPLES="$CMAKE_BUILD_EXAMPLES" \
+    -DXCPLITE_BUILD_TESTS="$CMAKE_BUILD_TESTS" \
+    -DXCPLITE_BUILD_TOOLS="$CMAKE_BUILD_TOOLS" \
+    -DXCPLITE_BUILD_RUST_TOOLS="$CMAKE_BUILD_RUST" \
+    $CMAKE_INSTALL_ARGS \
+    -S . -B "$BUILD_DIR"
+
+echo ""
+echo "Building..."
+
+BUILD_SUCCESS=true
+if ! cmake --build "$BUILD_DIR" --parallel; then
     echo "Build encountered errors"
     BUILD_SUCCESS=false
 fi
 
-# Install library if requested and build succeeded
-if [ "$INSTALL_LIBRARY" = true ] && [ "$BUILD_SUCCESS" = true ]; then
+# Install library (cmake --install — library headers/cmake config only, never Rust tools)
+if [[ "$INSTALL_LIBRARY" == true && "$BUILD_SUCCESS" == true ]]; then
     echo ""
     echo "Installing xcplite library..."
-    echo "Install args: $CMAKE_INSTALL_ARGS"
-    if cmake --install $BUILD_DIR > /dev/null 2>&1; then
-        # Determine the actual install directory
-        if [ -n "$INSTALL_PREFIX" ]; then
-            ACTUAL_INSTALL_DIR="$INSTALL_PREFIX"
-        else
-            ACTUAL_INSTALL_DIR="$BUILD_DIR/install"
-        fi
-        
-        echo "Library installed to $ACTUAL_INSTALL_DIR"
-        echo "  - Library:  $ACTUAL_INSTALL_DIR/lib/"
-        echo "  - Headers:  $ACTUAL_INSTALL_DIR/include/"
-        echo "  - CMake:    $ACTUAL_INSTALL_DIR/lib/cmake/xcplite/"
-        if [ "$BUILD_RUST_TOOLS" = true ]; then
-            echo "  - Tools:    ${CARGO_HOME:-$HOME/.cargo}/bin/  (xcpclient, bintool, via cargo install)"
-        fi
+    if cmake --install "$BUILD_DIR" > /dev/null 2>&1; then
+        ACTUAL_INSTALL_DIR="${INSTALL_PREFIX:-$BUILD_DIR/install}"
+        echo "Installed to: $ACTUAL_INSTALL_DIR"
+        echo "  Headers : $ACTUAL_INSTALL_DIR/include/"
+        echo "  Library : $ACTUAL_INSTALL_DIR/lib/"
+        echo "  CMake   : $ACTUAL_INSTALL_DIR/lib/cmake/xcplite/"
     else
-        echo "Library installation failed"
-        cmake --install $BUILD_DIR 2>&1 | sed 's/^/  /'
+        echo "Installation failed:"
+        cmake --install "$BUILD_DIR" 2>&1 | sed 's/^/  /'
         BUILD_SUCCESS=false
     fi
 fi
 
-# Run clang-tidy if requested and build succeeded
-if [ "$RUN_CLANG_TIDY" = true ] && [ "$BUILD_SUCCESS" = true ]; then
-    echo ""
-    echo "==================================================================="
-    echo "Running clang-tidy on library sources..."
-    
-    # Check if clang-tidy is available
-    CLANG_TIDY="clang-tidy"
-    if ! command -v ${CLANG_TIDY} &> /dev/null; then
-        echo "Error: clang-tidy not found. Please install it first."
-        echo "On macOS: brew install llvm"
-        BUILD_SUCCESS=false
+# cargo install — explicit opt-in only; installs xcpclient/bintool to ~/.cargo/bin
+if [[ "$CARGO_INSTALL" == true && "$BUILD_SUCCESS" == true ]]; then
+    if [[ "$CMAKE_BUILD_RUST" != "ON" ]]; then
+        echo "Warning: cargo_install requested but rust_tools target was not built — skipping"
     else
-        # Ensure compile_commands.json exists
-        if [ ! -f "${BUILD_DIR}/compile_commands.json" ]; then
-            echo "compile_commands.json not found. Regenerating..."
-            cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -S . -B ${BUILD_DIR}
-        fi
-        
-        # XCPlite library source files for clang tidy analysis
-        XCPLITE_SOURCES=(
-            "src/xcpappl.c"
-            "src/xcplite.c"
-            "src/xcpethserver.c"
-            "src/xcpethtl.c"
-            "src/queue32.c"
-            "src/queue64v.c"
-            "src/queue64f.c"
-            "src/shm.c" 
-            "src/cal.c" 
-            "src/a2l.c"
-            "src/persistence.c"
-            "src/platform.c"
-            "src/util.c"
-        )
-        
-        echo "Build directory: ${BUILD_DIR}"
-        
-        TOTAL_FILES=0
-        
-        for src in "${XCPLITE_SOURCES[@]}"; do
-            if [ ! -f "${SCRIPT_DIR}/${src}" ]; then
-                echo "Warning: Source file not found: ${src}"
-                continue
-            fi
-            
-            TOTAL_FILES=$((TOTAL_FILES + 1))
-            echo "Analyzing: ${src}"
-            
-            # Run clang-tidy and filter out the suppressed warnings message
-            ${CLANG_TIDY} -p=${BUILD_DIR} ${SCRIPT_DIR}/${src} 2>&1 | grep -v "warnings generated\|Suppressed.*warnings\|Use -header-filter"
-        done
-        
+        CARGO_BIN_DIR="${CARGO_HOME:-$HOME/.cargo}/bin"
         echo ""
-        echo "Analysis Complete"
-        echo "Files analyzed: ${TOTAL_FILES}"
+        echo "Running cargo install for xcpclient and bintool..."
+        echo "  Install destination: $CARGO_BIN_DIR"
+        CARGO_INSTALL_FLAG=""
+        [[ "$BUILD_TYPE" == "Release" || "$BUILD_TYPE" == "RelWithDebInfo" ]] && CARGO_INSTALL_FLAG="" || true
+        if cargo install --path "$SCRIPT_DIR/tools/xcpclient" ${CARGO_INSTALL_FLAG:+$CARGO_INSTALL_FLAG} --force; then
+            echo "  xcpclient installed to $CARGO_BIN_DIR/xcpclient"
+        else
+            echo "  xcpclient cargo install failed"
+            BUILD_SUCCESS=false
+        fi
+        if cargo install --path "$SCRIPT_DIR/tools/bintool" ${CARGO_INSTALL_FLAG:+$CARGO_INSTALL_FLAG} --force; then
+            echo "  bintool installed to $CARGO_BIN_DIR/bintool"
+        else
+            echo "  bintool cargo install failed"
+            BUILD_SUCCESS=false
+        fi
     fi
 fi
 
-echo ""
-echo "==================================================================="
-echo "Build Configuration: $BUILD_TYPE mode"
-
-if [ "$INSTALL_LIBRARY" = true ]; then
-    if [ -n "$INSTALL_PREFIX" ]; then
-        echo "Install Location: $INSTALL_PREFIX"
+# clang-tidy
+if [[ "$RUN_CLANG_TIDY" == true && "$BUILD_SUCCESS" == true ]]; then
+    echo ""
+    echo "Running clang-tidy..."
+    CLANG_TIDY="clang-tidy"
+    if ! command -v "$CLANG_TIDY" &> /dev/null; then
+        echo "Error: clang-tidy not found (macOS: brew install llvm)"
+        BUILD_SUCCESS=false
     else
-        echo "Install Location: $BUILD_DIR/install (local staging)"
+        if [[ ! -f "$BUILD_DIR/compile_commands.json" ]]; then
+            cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -S . -B "$BUILD_DIR"
+        fi
+        XCPLITE_SOURCES=(
+            src/xcpappl.c src/xcplite.c src/xcpethserver.c src/xcpethtl.c
+            src/queue32.c src/queue64v.c src/queue64f.c src/shm.c
+            src/cal.c src/a2l.c src/a2l_writer.c src/persistence.c src/platform.c src/util.c
+        )
+        for src in "${XCPLITE_SOURCES[@]}"; do
+            [[ -f "$SCRIPT_DIR/$src" ]] || { echo "Warning: not found: $src"; continue; }
+            echo "  $src"
+            "$CLANG_TIDY" -p="$BUILD_DIR" "$SCRIPT_DIR/$src" 2>&1 \
+                | grep -v "warnings generated\|Suppressed.*warnings\|Use -header-filter"
+        done
+        echo "clang-tidy complete"
     fi
 fi
-echo "==================================================================="
+
+echo ""
+echo "=================================================================="
+echo "Build summary"
+echo "=================================================================="
+echo "  Configuration : $CONFIGURATION"
+echo "  Build type    : $BUILD_TYPE"
+echo "  Build dir     : $BUILD_DIR"
 echo ""
 
-if [ "$BUILD_SUCCESS" = true ]; then
+# Print what was actually targeted per configuration
+case "$CONFIGURATION" in
+    default)
+        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : hello_xcp, hello_xcp_cpp, c_demo, cpp_demo, point_cloud_demo, struct_demo, multi_thread_demo" \
+            || echo "  Examples      : (not built)"
+        [[ "$CMAKE_BUILD_TESTS" == "ON" ]]    && echo "  Tests         : a2l_test, cal_test, daq_test, clock_test, queue_test, type_detection_test_*" \
+            || echo "  Tests         : (not built)"
+        [[ "$CMAKE_BUILD_TOOLS" == "ON" ]]    && echo "  Tools         : (none for default configuration)" \
+            || echo "  Tools         : (not built)"
+        ;;
+    no_a2l)
+        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : no_a2l_demo" \
+            || echo "  Examples      : (not built)"
+        echo "  Tests         : (none for no_a2l configuration)"
+        echo "  Tools         : (none for no_a2l configuration)"
+        ;;
+    ptp)
+        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : ptp4l_demo (Linux only)" \
+            || echo "  Examples      : (not built)"
+        [[ "$CMAKE_BUILD_TESTS" == "ON" ]]    && echo "  Tests         : clock_test" \
+            || echo "  Tests         : (not built)"
+        [[ "$CMAKE_BUILD_TOOLS" == "ON" ]]    && echo "  Tools         : ptptool (Linux only)" \
+            || echo "  Tools         : (not built)"
+        ;;
+    shm)
+        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : hello_xcp (SHM), hello_xcp_cpp (SHM)" \
+            || echo "  Examples      : (not built)"
+        echo "  Tests         : (none for shm configuration)"
+        [[ "$CMAKE_BUILD_TOOLS" == "ON" ]]    && echo "  Tools         : shmtool, xcpdaemon" \
+            || echo "  Tools         : (not built)"
+        ;;
+    rtos)
+        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : freertos_demo (Linux/macOS only; downloads FreeRTOS-Kernel)" \
+            || echo "  Examples      : (not built)"
+        echo "  Tests         : (none for rtos configuration)"
+        echo "  Tools         : (none for rtos configuration)"
+        ;;
+esac
+
+[[ "$CMAKE_BUILD_RUST" == "ON" ]] && echo "  Rust tools    : xcpclient, bintool" \
+    || echo "  Rust tools    : (not built)"
+
+if [[ "$CMAKE_BUILD_RUST" == "ON" ]]; then
+    CARGO_SUBDIR="debug"
+    [[ "$BUILD_TYPE" == "Release" || "$BUILD_TYPE" == "RelWithDebInfo" ]] && CARGO_SUBDIR="release"
+    echo "  Rust binaries : tools/xcpclient/target/$CARGO_SUBDIR/xcpclient"
+    echo "                  tools/bintool/target/$CARGO_SUBDIR/bintool"
+    if [[ "$CARGO_INSTALL" == true ]]; then
+        echo "  cargo install : ${CARGO_HOME:-$HOME/.cargo}/bin/"
+    else
+        echo "  cargo install : (not run — use cargo_install option to install to ~/.cargo/bin)"
+    fi
+fi
+
+if [[ "$INSTALL_LIBRARY" == true ]]; then
+    echo "  Installed to  : ${INSTALL_PREFIX:-$BUILD_DIR/install}"
+fi
+
+echo "=================================================================="
+echo ""
+
+if [[ "$BUILD_SUCCESS" == true ]]; then
     exit 0
 else
-    echo "Build failed - see error messages above"
-    # On Windows Git Bash, keep the window open so errors are visible.
-    if [ "${OS:-}" = "Windows_NT" ] || [ -n "${MSYSTEM:-}" ]; then
-        read -r -p "Press Enter to close..."
-    fi
+    echo "Build failed — see errors above"
+    [[ "${OS:-}" == "Windows_NT" || -n "${MSYSTEM:-}" ]] && read -r -p "Press Enter to close..."
     exit 1
 fi
-
-

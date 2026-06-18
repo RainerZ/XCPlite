@@ -36,23 +36,25 @@
 #include "xcpethtl.h" // for XcpEthTlxxx
 #include "xcptl.h"    // for XcpTlHandleTransmitQueue
 
+#ifdef OPTION_SHM_MODE
+#include <unistd.h> // for getpid()
+#endif
+
 #ifdef TEST_STACK_SIZE
-#ifdef _FREE_RTOS
-#else
+#ifndef _FREE_RTOS
 #include <limits.h>   // for PTHREAD_STACK_MIN
 #include <sys/mman.h> // for mmap, munmap
 #endif
 #endif
-#ifdef OPTION_SHM_MODE
-#include <unistd.h> // for getpid()
+
+#if !defined(OPTION_ENABLE_TCP) && !defined(OPTION_ENABLE_UDP)
+#error "Please define OPTION_ENABLE_TCP or OPTION_ENABLE_UDP"
 #endif
 
 static THREAD_FUNC_RETURN XcpServerReceiveThread(void *par);
 static THREAD_FUNC_RETURN XcpServerTransmitThread(void *par);
 
-#if !defined(OPTION_ENABLE_TCP) && !defined(OPTION_ENABLE_UDP)
-#error "Please define OPTION_ENABLE_TCP or OPTION_ENABLE_UDP"
-#endif
+void XcpEthServerDebugInfo(size_t *rxStackSize, size_t *txStackSize);
 
 //-------------------------------------------------------------------------------------------------------
 
@@ -97,8 +99,7 @@ static struct {
 #endif
 
 #ifdef TEST_STACK_SIZE
-#ifdef _FREE_RTOS
-#else
+#ifndef _FREE_RTOS
 #define RECEIVE_STACK_SIZE (16 * 1024)
 #define TRANSMIT_STACK_SIZE (16 * 1024)
     uint8_t *transmit_thread_stack;    // mmap'd stack buffer
@@ -326,8 +327,7 @@ bool XcpEthServerInit(const uint8_t *addr, uint16_t port, bool useTCP, uint32_t 
 
 // Create the receive thread which starts the XCP protocol layer and handles incoming XCP unicast commands
 #ifdef TEST_STACK_SIZE
-#ifdef _FREE_RTOS
-#else
+#ifndef _FREE_RTOS
         size_t receive_stack_size = RECEIVE_STACK_SIZE;
         if (receive_stack_size < (size_t)PTHREAD_STACK_MIN) {
             DBG_PRINTF_WARNING("RECEIVE_STACK_SIZE %zu < PTHREAD_STACK_MIN %zu, clamping\n", receive_stack_size, (size_t)PTHREAD_STACK_MIN);
@@ -360,8 +360,7 @@ bool XcpEthServerInit(const uint8_t *addr, uint16_t port, bool useTCP, uint32_t 
         // Create the transmit thread
         // @@@@ TODO: Check, why start the transmit thread after the receive thread, should it better be before, once we implement first cycle data acquisition ?
 #ifdef TEST_STACK_SIZE
-#ifdef _FREE_RTOS
-#else
+#ifndef _FREE_RTOS
         size_t transmit_stack_size = TRANSMIT_STACK_SIZE;
         if (transmit_stack_size < (size_t)PTHREAD_STACK_MIN) {
             DBG_PRINTF_WARNING("TRANSMIT_STACK_SIZE %zu < PTHREAD_STACK_MIN %zu, clamping\n", transmit_stack_size, (size_t)PTHREAD_STACK_MIN);
@@ -450,33 +449,11 @@ bool XcpEthServerShutdown(void) {
 #endif
 
 #ifdef TEST_STACK_SIZE
-#ifdef _FREE_RTOS
-    UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(gXcpServer.transmit_thread_handle);
-    UBaseType_t rxHighWaterMark = uxTaskGetStackHighWaterMark(gXcpServer.receive_thread_handle);
-    DBG_PRINTF3("transmit thread stack high-water mark: %zu bytes (of %zu allocated)\n", uxHighWaterMark, OPTION_FREERTOS_STACK_BYTES);
-    DBG_PRINTF3("receive thread stack high-water mark: %zu bytes (of %zu allocated)\n", rxHighWaterMark, OPTION_FREERTOS_STACK_BYTES);
-#else
-    // Stack grows downward: unused canary bytes are at the LOW end (index 0..N), used bytes at the HIGH end
-    size_t transmit_unused = 0;
-    for (size_t i = 0; i < gXcpServer.actual_transmit_stack_size; i++) {
-        if (gXcpServer.transmit_thread_stack[i] == 0xAA) {
-            transmit_unused++;
-        } else {
-            break;
-        }
-    }
-    size_t receive_unused = 0;
-    for (size_t i = 0; i < gXcpServer.actual_receive_stack_size; i++) {
-        if (gXcpServer.receive_thread_stack[i] == 0xAA) {
-            receive_unused++;
-        } else {
-            break;
-        }
-    }
-    DBG_PRINTF3("transmit thread stack high-water mark: %zu bytes (of %zu allocated)\n", gXcpServer.actual_transmit_stack_size - transmit_unused,
-                gXcpServer.actual_transmit_stack_size);
-    DBG_PRINTF3("receive thread stack high-water mark: %zu bytes (of %zu allocated)\n", gXcpServer.actual_receive_stack_size - receive_unused,
-                gXcpServer.actual_receive_stack_size);
+    size_t rxStackSize, txStackSize;
+    XcpEthServerDebugInfo(&rxStackSize, &txStackSize);
+    DBG_PRINTF3("transmit thread stack high-water mark: %zu bytes \n", txStackSize);
+    DBG_PRINTF3("receive thread stack high-water mark: %zu bytes )\n", rxStackSize);
+#ifndef _FREE_RTOS
     munmap(gXcpServer.transmit_thread_stack, gXcpServer.actual_transmit_stack_size);
     munmap(gXcpServer.receive_thread_stack, gXcpServer.actual_receive_stack_size);
 #endif
@@ -514,6 +491,9 @@ THREAD_FUNC_RETURN XcpServerReceiveThread(void *par) {
 
         // Handle background tasks, e.g. pending calibration updates
         XcpBackgroundTasks();
+
+        // Handle user defined background tasks, e.g. clock overflows
+        ApplXcpBackgroundTasks();
 
         // SHM mode
 #ifdef OPTION_SHM_MODE // increment alive counter and check A2L finalize request
@@ -602,4 +582,39 @@ THREAD_FUNC_RETURN XcpServerTransmitThread(void *par) {
 
     DBG_PRINT3("XCP transmit thread terminated!\n");
     THREAD_FUNC_END;
+}
+
+void XcpEthServerDebugInfo(size_t *rxStackSize, size_t *txStackSize) {
+#ifdef TEST_STACK_SIZE
+#ifdef _FREE_RTOS
+    UBaseType_t txHighWaterMark = uxTaskGetStackHighWaterMark(gXcpServer.transmit_thread_handle);
+    if (txStackSize != NULL)
+        *txStackSize = OPTION_FREERTOS_STACK_BYTES - txHighWaterMark * sizeof(StackType_t);
+    UBaseType_t rxHighWaterMark = uxTaskGetStackHighWaterMark(gXcpServer.receive_thread_handle);
+    if (rxStackSize != NULL)
+        *rxStackSize = OPTION_FREERTOS_STACK_BYTES - rxHighWaterMark * sizeof(StackType_t);
+#else
+    // Stack grows downward: unused canary bytes are at the LOW end (index 0..N), used bytes at the HIGH end
+    size_t transmit_unused = 0;
+    for (size_t i = 0; i < gXcpServer.actual_transmit_stack_size; i++) {
+        if (gXcpServer.transmit_thread_stack[i] == 0xAA) {
+            transmit_unused++;
+        } else {
+            break;
+        }
+    }
+    size_t receive_unused = 0;
+    for (size_t i = 0; i < gXcpServer.actual_receive_stack_size; i++) {
+        if (gXcpServer.receive_thread_stack[i] == 0xAA) {
+            receive_unused++;
+        } else {
+            break;
+        }
+    }
+    if (rxStackSize != NULL)
+        *rxStackSize = gXcpServer.actual_receive_stack_size - receive_unused;
+    if (txStackSize != NULL)
+        *txStackSize = gXcpServer.actual_transmit_stack_size - transmit_unused;
+#endif
+#endif
 }

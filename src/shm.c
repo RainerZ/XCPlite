@@ -9,7 +9,6 @@
 | Licensed under the MIT license. See LICENSE file in the project root for details.
 |***************************************************************************/
 
-
 #include <inttypes.h> // for PRIx32, PRIu64
 #include <stdbool.h>  // for bool
 
@@ -17,15 +16,14 @@
 
 #ifdef OPTION_SHM_MODE
 
-#include <assert.h>   // for assert
-#include <signal.h>   // for kill
-#include <stdarg.h>   // for va_list, va_start, va_arg, va_end
-#include <stdint.h>   // for uint8_t, uint16_t, ...
-#include <stdio.h>    // for printf
-#include <stdlib.h>   // for size_t, NULL, abort
-#include <string.h>   // for memcpy, memset
-#include <unistd.h>   // for getpid()
-
+#include <assert.h> // for assert
+#include <signal.h> // for kill
+#include <stdarg.h> // for va_list, va_start, va_arg, va_end
+#include <stdint.h> // for uint8_t, uint16_t, ...
+#include <stdio.h>  // for printf
+#include <stdlib.h> // for size_t, NULL, abort
+#include <string.h> // for memcpy, memset
+#include <unistd.h> // for getpid()
 
 #include "shm.h"
 
@@ -468,7 +466,7 @@ void XcpShmCheckAliveCounters(void) {
             if (res == 0 /* success */ || errno != ESRCH /* Does not exist */) {
                 // Process is still alive, but not incrementing alive counter, maybe it's stuck or paused. We will detect it as stale in the next check after a few seconds, which
                 // is acceptable.
-                DBG_PRINTF_WARNING("XcpShmCheckAliveCounters: Detected aliv e_counter==0 application %u:'%s' (pid=%u), but process is still alive, waiting for next check...\n", i,
+                DBG_PRINTF_WARNING("XcpShmCheckAliveCounters: Detected alive_counter==0 application %u:'%s' (pid=%u), but process is still alive, waiting for next check...\n", i,
                                    app->u.project_name, app->u.pid);
                 continue;
             }

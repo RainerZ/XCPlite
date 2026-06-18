@@ -961,7 +961,6 @@ typedef struct {
     uint32_t cycle_time_ns;
     uint8_t priority;
     uint8_t res[16 - sizeof(char *) - 4 - 1];
-    // tXcpEventId id;
 } tXcpEventDescriptor;
 static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
 #endif
@@ -978,8 +977,10 @@ static uint16_t XcpRegisterSectionEvents(void) {
     // resolve to NULL rather than causing an undefined-reference linker error.
     extern const tXcpEventDescriptor __start_xcp_evts[] __attribute__((weak));
     extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
-    if (__start_xcp_evts != NULL) {
-        for (const tXcpEventDescriptor *e = __start_xcp_evts; e < __stop_xcp_evts; e++) {
+    const tXcpEventDescriptor *begin = __start_xcp_evts;
+    const tXcpEventDescriptor *end = __stop_xcp_evts;
+    if (begin != NULL && end != NULL && begin < end) {
+        for (const tXcpEventDescriptor *e = begin; e < end; e++) {
             tXcpEventId id = XcpFindEvent(e->name);
             if (id == XCP_UNDEFINED_EVENT_ID) {
                 id = XcpCreateEvent(e->name, e->cycle_time_ns, e->priority);
@@ -1006,6 +1007,8 @@ static uint16_t XcpRegisterSectionEvents(void) {
     } else {
         DBG_PRINT_WARNING("No xcp_evts section found\n");
     }
+#else
+// #error "Unsupported platform for event segment registration"
 #endif
 
     if (count > 0)
@@ -1613,7 +1616,7 @@ static void XcpTriggerDaqList_(tQueueHandle queue_handle, uint16_t daq, const ui
 static void XcpTriggerDaqEvent_(tQueueHandle queue_handle, tXcpEventId event_id, int count, const uint8_t **bases, uint64_t clock) {
 
 #ifdef TEST_ENABLE_DBG_METRICS
-    gXcpDaqEventCount++;
+    atomic_fetch_add_explicit(&gXcpDaqEventCount, 1, memory_order_relaxed);
 #endif
 
     // Take event timestamp if not already done
@@ -2949,7 +2952,7 @@ void XcpBackgroundTasks(void) {
         local_mut.last_publish_time = now;
     } else if (res == CRC_CMD_PENDING) {
         // Warn if delayed by more than 200ms
-        if (now - local.last_publish_time > CLOCK_TICKS_PER_MS * 200) {
+        if (now - local.last_publish_time > (200 * 1000000ULL)) {
             if (local.last_publish_time != 0)
                 DBG_PRINT_WARNING("XcpBackgroundTasks: Calibration segment publish delayed by more than 200ms!\n");
             local_mut.last_publish_time = now;

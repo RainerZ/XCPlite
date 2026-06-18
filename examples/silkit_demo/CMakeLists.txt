@@ -29,6 +29,18 @@ find_package(SilKit REQUIRED)
 # ---------------------------------------------------------------------------
 find_package(xcplite REQUIRED)
 
+# Verify the installed xcplite was compiled with the shm configuration,
+# which is required for silkit_demo (shared-memory multi-application mode).
+# Remove this to be able to compile the participants with individual XCP servers by using the standard library build
+if(NOT XCPLITE_CONFIGURATION_INSTALLED STREQUAL "shm")
+    message(FATAL_ERROR
+        "silkit_demo requires xcplite compiled with the 'shm' configuration "
+        "(XCPLITE_CONFIGURATION=shm), but the installed library reports "
+        "'${XCPLITE_CONFIGURATION_INSTALLED}'. "
+        "Rebuild and reinstall xcplite: ./build.sh shm lib install"
+    )
+endif()
+
 # ---------------------------------------------------------------------------
 # Helper include directory (bundled from the SilKit demo tree)
 # ---------------------------------------------------------------------------

@@ -3,6 +3,13 @@
 All notable changes to XCPlite are documented in this file.
 
 
+## [V2.1.3]
+
+- cmake build system revisited, build configurations and build options
+- Improved convenience build script
+- README files for all example applications
+- xcpclient only uses the registry (xcp-lite xcp_registry crate), not the full Rust xcp-lite stack
+
 ## [V2.1.0]
 
 - esp32_freertos_demo with FreeRTOS and lwip
@@ -12,7 +19,7 @@ All notable changes to XCPlite are documented in this file.
 - Improved support for offline A2L creation from ELF files, file system dependency is now optional 
 - XCP event and segment descriptor memory sections to preregister events and calibration segments/block in XcpInit, for deterministic event numbers without .BIN file
 - The A2L generator in xcpclient can create an A2L file template with XCP events and segments from the ELF file only, by inspecting the event and segment descriptor memory sections
-- Optional custom GET_ID to upload the ELF file instead of the A2L file
+- Optional custom GET_ID to download the ELF file instead of the A2L file
 - Addressing schema XCPLITE__AXSDD, memory access via callbacks, no calibration segment management 
 
 

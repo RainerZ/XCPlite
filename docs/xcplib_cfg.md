@@ -33,8 +33,8 @@ This section describes the configuration parameters in xcplib_cfg.h.
 | `OPTION_ENABLE_UDP` | Enables UDP transport layer support for XCP communication |
 | `OPTION_MTU` | Ethernet packet size (MTU) in bytes. Must be divisible by 8. Jumbo frames are supported (default: 8000) |
 | `OPTION_DAQ_MEM_SIZE` | Memory bytes used for XCP DAQ tables. Each signal needs approximately 5 bytes (default: 32 × 1024 × 5) |
-| `OPTION_ENABLE_A2L_UPLOAD` | Enables A2L file upload through XCP protocol |
-| `OPTION_ENABLE_ELF_UPLOAD` | Enables ELF  file upload through XCP protocol |
+| `OPTION_ENABLE_A2L_UPLOAD` | Enables A2L file download (with XCP protocol UPLOAD commands) |
+| `OPTION_ENABLE_ELF_UPLOAD` | Enables ELF  file download (with XCP protocol UPLOAD commands) |
 | `OPTION_SERVER_FORCEFULL_TERMINATION` | Terminates server threads forcefully instead of waiting for graceful shutdown |
 
 ### Clock Configuration Options

@@ -309,6 +309,7 @@ void platformShmUnlink(const char *name);
 #if defined(_WIN) // Windows
 
 #define MUTEX CRITICAL_SECTION
+#define MUTEX_INTIALIZER {0}
 #define mutexLock EnterCriticalSection
 #define mutexUnlock LeaveCriticalSection
 
@@ -666,42 +667,39 @@ bool socketGetLocalAddr(uint8_t *mac, uint8_t *addr);
 //-------------------------------------------------------------------------------
 // High resolution clock
 
-#ifdef OPTION_CLOCK_TICKS_1NS
+#if defined(OPTION_CLOCK_TICKS_1NS)
 
-#define CLOCK_TICKS_PER_M (1000000000ULL * 60)
-#define CLOCK_TICKS_PER_S 1000000000ULL
-#define CLOCK_TICKS_PER_MS 1000000ULL
-#define CLOCK_TICKS_PER_US 1000ULL
-#define CLOCK_TICKS_PER_NS 1ULL
+#define CLOCK_TICKS_PER_S 1000000000UL
+
+#elif defined(OPTION_CLOCK_TICKS_1US)
+
+#define CLOCK_TICKS_PER_S 1000000UL
 
 #else
 
-#ifndef OPTION_CLOCK_TICKS_1US
-#error "Please define OPTION_CLOCK_TICKS_1NS or OPTION_CLOCK_TICKS_1US"
+#if !defined(CLOCK_TICKS_PER_S)
+#error "Please define CLOCK_TICKS_PER_S and use ApplXcpRegisterGetClockCallback if the clock is not in 1ns or 1us resolution"
 #endif
-
-#define CLOCK_TICKS_PER_S 1000000
-#define CLOCK_TICKS_PER_MS 1000
-#define CLOCK_TICKS_PER_US 1
 
 #endif
 
-// Clock (epoch and resolution configured by OPTION_CLOCK_EPOCH_ARB and OPTION_CLOCK_TICKS_1NS)
+// Clock (epoch and resolution as configured in CLOCK_TICKS_PER_S
+// Used as XCP DAQ clock
 bool clockInit(void);
 uint64_t clockGet(void);     // Clock value in ticks, epoch and resolution depend on configuration
 uint64_t clockGetLast(void); // Last known clock value, updated by all clockGet calls, used to save syscall overhead when the last known clock value is sufficient
 char *clockGetString(char *s, uint32_t l, uint64_t c);
-char *clockGetTimeString(char *s, uint32_t l, int64_t c);
 
-// Monotonic system clock
+// Monotonic system clock in ns or us resolution, with fast query functions for last seen value
+// Used for socket timestamping and timeouts
 uint64_t clockGetMonotonicNs(void);
 uint64_t clockGetMonotonicUs(void);
-// Realtime system clock
-uint64_t clockGetRealtimeNs(void);
-uint64_t clockGetRealtimeUs(void);
-// Last known monotonic and realtime clock values
 uint64_t clockGetMonotonicNsLast(void);
 uint64_t clockGetMonotonicUsLast(void);
+
+// Realtime system clock in ns or us resolution, with fast query functions for last seen value
+uint64_t clockGetRealtimeNs(void);
+uint64_t clockGetRealtimeUs(void);
 uint64_t clockGetRealtimeNsLast(void);
 uint64_t clockGetRealtimeUsLast(void);
 
@@ -735,6 +733,7 @@ bool fexists(const char *filename);
 #define atomic_uintptr_t uintptr_t
 #define atomic_uint_fast8_t uint8_t
 #define atomic_uint_fast16_t uint16_t
+#define atomic_uint_least8_t uint8_t
 #define atomic_uint_least16_t uint16_t
 #define atomic_uint_fast32_t uint32_t
 #define atomic_uint_least32_t uint32_t
