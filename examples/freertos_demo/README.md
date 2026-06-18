@@ -13,27 +13,27 @@ Refer to the README.md files in the demo folders for more specific details.
 
 ## What is shown
 
-The examples demonstrate XCPlite (XCP measurement and calibration) running inside FreeRTOS tasks.
+The examples demonstrate XCPlite measurement and calibration running inside FreeRTOS tasks.
 
 The included CANape projects and the XCP instrumentation in `xcp_demo.c` show:
 
-- Creating a high priority FreeRTOS task (fastTask) with precise cyclic execution timing
-- Creating a lower priority FreeRTOS task (slowTask) for background work
-- Pinning them to the same core to watch scheduling in action
-- Triggering XCP events in both tasks and acquiring global and local measurement variables
+- Create a high priority FreeRTOS task (fastTask) with precise cyclic execution timing
+- Create a lower priority FreeRTOS task (slowTask) for background work
+- Pin the tasks to the same core to watch scheduling in action
+- Trigger XCP events tracepoints in both tasks and acquiring global and local measurement variables
 - Provide high resolution XCP measurement event timestamps
 - Display cycle time jitter of the tasks in CANape
-- Counting task deadline overruns when calibrated periods are too aggressive
-- Creating thread-safe calibration parameters accessible in both tasks
-- Calibrating task cycle times and some other demo parameters
-- Observing both task trigger points with a two-channel oscilloscope to evaluate XCP instrumentation cost
-- How to create an A2L file or A2L file template for the user application code
+- Count task deadline overruns when calibrated periods are too aggressive
+- Create thread-safe calibration parameters accessible in both tasks
+- Calibrate task cycle times and some other demo parameters
+- Observe both task trigger points with a two-channel oscilloscope to evaluate XCP instrumentation cost
+- Create an A2L file or A2L file template for the user application code
 
-| Feature | How it is demonstrated |
+| Feature | API functions |
 |---|---|
-| XCP DAQ measurement | `DaqCreateEvent` / `DaqTriggerEvent` inside tasks |
+| XCP DAQ measurement | `DaqCreateEvent` / `DaqTriggerEvent` |
 | XCP calibration | `CalSegDecl` / `CalSegDeclRef` / `CalSegCreate`, `CalSegLock` / `CalSegUnlock` |
-| XCP server initialization | `XcpInit` `XcpEthServerInit` called before the FreeRTOS scheduler starts |
+| XCP server initialization | `XcpInit` `XcpEthServerInit` |
 
 The example application code in xcp_demo.c compiles as C or as C++.  
 
@@ -92,12 +92,14 @@ xcpclient --offline --udp --dest-addr 192.168.0.207 --elf build/Debug/STM32H753E
 
 ```
 
+See below how to obtain the xcpclient tool.  
+
 
 ## Test XCP Measurement and Calibration
 
 Using xcpclient:  
 
-Watch the fastTask counter
+Watch the global_counter counter
 
 ```bash
 xcpclient --udp --dest-addr <esp32-ip-address> --a2l esp32_freertos_demo.a2l --mea global_counter --verbose 2
@@ -115,14 +117,13 @@ Calibrate
 xcpclient --udp --dest-addr <esp32-ip-address> --a2l esp32_freertos_demo.a2l --cal parameters.counter_max 500
 ```
 
-Or use the CANape project in folder `CANape_Project`.
+Or use the CANape project in folder `CANape`.
 
 ![CANape Screenshot](CANape.png)
 
 Notes on CANape:
 - To enable the CANape internal ELF/DWARF reader and address updater, select the Map file reader: 'C# version with extended C++ support'.  
 - CANape will read the IP address of the XCP server from the generated A2L file. The xcpclient A2L generator writes the ip address given on its command line or otherwise defaults to 127.0.0.1.  
-- Note that CANape does not support address update for local variables on stack and address update of calibration memory segments is not working yet.  
 
 
 ### What to Measure
@@ -131,8 +132,8 @@ Good first measurements:
 - `global_counter`: global fast task activity counter
 - `fastTaskOverruns`: high-priority task missed deadlines
 - `slowTaskOverruns`: lower-priority task missed deadlines
-- `counter` in `fastTask`: local stack measurement near the fast task DAQ trigger
-- `counter` and `sineValue` in `slowTask`: local stack measurements near the slow task DAQ trigger
+- `counter` in `fastTask`: local stack measurement in scope the fast task DAQ trigger tracepoint
+- `counter` and `channel` in `slowTask`: local stack measurements in scope of the slow task DAQ trigger tracepoint
 
 And calibration parameters to play with:
 - `parameters.fast_task_period_ms`: calibratable fast task period
@@ -217,16 +218,16 @@ Init transport layer queue (queue32)
 ```
 
 The 32 bit transmit queue (queue_size given in bytes) is allocated with 2 mallocs for header and data. The given queue size in bytes is rounded down to match multiples of the transport layer segment size. There are no other mallocs in the 32 bit FreeRTOS build.  
-If using malloc is not acceptable, XcpEthServerInit could be changed to accept a memory buffer given as a parameter, but this would lead to some rounding waste.  
+If using malloc is not acceptable, XcpEthServerInit could be changed to accept a static memory buffer given as a parameter.  
 
 The memory size of static tXcpData is depending on the configuration in xcplib_cfg. and xcplib_rtos_cfg.h:  
 - OPTION_CAL_SEGMENT_COUNT: Max number of calibration segments or blocks
 - OPTION_CAL_MEM_SIZE: Space reserved for calibration data swapping and working pages (needs: 3 * page size * segment count)
-- #define OPTION_DAQ_MEM_SIZE: Memory size for DAQ tables (needs: 6 bytes per measurement with full fragmentation)
-- #define OPTION_DAQ_EVENT_COUNT: Maximum number of DAQ events
+- OPTION_DAQ_MEM_SIZE: Memory size for DAQ tables (needs: 6 bytes per measurement with full fragmentation)
+- OPTION_DAQ_EVENT_COUNT: Maximum number of DAQ events
 
 The stack size of the XCP rx and tx task may be defined in xcplib_rtos_cfg.h.  
-It is important to check these values, not to waste unnecessary memory.
+It is important to check these values, not to waste unnecessary memory. Search for TEST_STACK_SIZE.  
 
 Example:
 ```
@@ -250,11 +251,12 @@ Both XCP tasks currently use one tXcpCtoMessage (roughly MAX_CTO_SIZE+4 = 252 by
 
 ### Build xcpclient
 
-If no matching binary is available, build `xcpclient` from source. This is more complex because the Rust `xcp-lite` library contains the A2L registry, reader and writer for the xcpclient database generator and includes the C/C++ XCPlite repository as a submodule.
+Build `xcpclient` from source.  
+The Rust `xcp-lite` library contains is an external dependency. It contains the A2L registry, reader and writer for the xcpclient database generator.
 
-For the current development state, use matching branches of both repositories, for example `V2.1.0` on your XCPlite fork and the corresponding `V2.1.0` branch of your `xcp-lite` fork or dependency in Cargo.toml of xcpclient.
+For the current development state, use matching branches of both repositories, for example `V2.1.x` on your XCPlite fork and the corresponding `V2.1.x` branch of your `xcp-lite` fork or dependency in Cargo.toml of xcpclient.
 
-Typical example workflow:
+Typical workflow:
 
 ```bash
 cd git
@@ -476,4 +478,6 @@ from an ISR or from a high-priority FreeRTOS task.
 - Add TCP support
 - Do some benchmarking on CPU load, event trigger and calibration RCU latency
 - Avoid copying the transmit buffers
+- CANape does not support address update for local variables on stack and address update of calibration memory segments.  
+
 

@@ -1616,7 +1616,7 @@ static void XcpTriggerDaqList_(tQueueHandle queue_handle, uint16_t daq, const ui
 static void XcpTriggerDaqEvent_(tQueueHandle queue_handle, tXcpEventId event_id, int count, const uint8_t **bases, uint64_t clock) {
 
 #ifdef TEST_ENABLE_DBG_METRICS
-    gXcpDaqEventCount++;
+    atomic_fetch_add_explicit(&gXcpDaqEventCount, 1, memory_order_relaxed);
 #endif
 
     // Take event timestamp if not already done
