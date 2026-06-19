@@ -10,8 +10,8 @@
 |   There are 4 different implementations of the queue API, which are selected based on platform and configuration:
 |       queue64v.c  - Generic, lockless, variable entry size
 |       queue64f.c  - Generic, lockless, fixed entry size
-|       queue64.c   - XCP specific, lockless, variable entry size with optional message accumulation (deprecated)
 |       queue32.c   - XCP specific, mutex based, variable entry size with message accumulation (fallback for 32-bit platforms and Windows)
+|       queue32m.c  - XCP specific, critical section based, variable entry size with message accumulation (used for FreeRTOS targets)
 |
 |   Note:
 |     The 2 generic queue implementations are not specific for the XCP on Ethernet transport layer

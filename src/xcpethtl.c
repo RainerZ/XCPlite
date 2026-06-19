@@ -923,7 +923,7 @@ int32_t XcpTlHandleTransmitQueue(void) {
             flush = false; // Reset flush flag
             if (lost > 0) {
                 gXcpTl.ctr += (uint16_t)lost; // Increase packet counter by lost packets (must not be thread safe, used only to indicate error)
-                DBG_PRINTF_WARNING("Transmit queue32 overflow: lost %u packets, ctr=%u\n", lost, gXcpTl.ctr);
+                DBG_PRINTF_WARNING("Transmit queue overflow: lost %u packets, ctr=%u\n", lost, gXcpTl.ctr);
             }
             uint16_t l = queue_buffer.size;
             const uint8_t *b = queue_buffer.buffer;
@@ -988,7 +988,7 @@ bool XcpTlWaitForTransmitQueueEmpty(uint16_t timeout_ms) {
 //-------------------------------------------------------------------------------------------------------
 
 // Get the next transmit message counter
-// For queue32.c
+// For queue32.c and queue32m.c
 uint16_t XcpTlGetCtr(void) { return gXcpTl.ctr++; }
 
 //-------------------------------------------------------------------------------------------------------

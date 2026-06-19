@@ -56,7 +56,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     /git/XCPlite-RainerZ/src/xcplite.c 
     /git/XCPlite-RainerZ/src/xcpethserver.c 
     /git/XCPlite-RainerZ/src/xcpethtl.c 
-    /git/XCPlite-RainerZ/src/queue32.c 
+    /git/XCPlite-RainerZ/src/queue32m.c 
     /git/XCPlite-RainerZ/src/cal.c 
     /git/XCPlite-RainerZ/src/platform.c
 

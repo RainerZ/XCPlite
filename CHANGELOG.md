@@ -3,12 +3,25 @@
 All notable changes to XCPlite are documented in this file.
 
 
+## [V2.1.6]
+
+- Optimizations for microcontroller builds, optimized locking and static allocated queue
+
+
+
+## [V2.1.5]
+
+- freertos_stm32_demo with FreeRTOS and lwip for STM32 microcontrollers
+- More flexibility how to provide the DAQ timebase
+- Single source demo code for all FreeRTOS examples
+
 ## [V2.1.3]
 
 - cmake build system revisited, build configurations and build options
 - Improved convenience build script
 - README files for all example applications
 - xcpclient only uses the registry (xcp-lite xcp_registry crate), not the full Rust xcp-lite stack
+
 
 ## [V2.1.0]
 

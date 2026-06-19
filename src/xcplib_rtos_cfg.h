@@ -112,6 +112,8 @@
 #undef OPTION_QUEUE_64_VAR_SIZE
 #undef OPTION_QUEUE_64_FIX_SIZE
 #define OPTION_QUEUE_32
+// Fixed 4 KB for the queue buffer, parameter of XcpEthServerInit ignored, must be a multiple of sizeof(tXcpSegmentBuffer)
+#define OPTION_QUEUE_32_SIZE (16 * sizeof(tXcpSegmentBuffer))
 
 //-------------------------------------------------------------------------------
 // A2L / ELF — no filesystem on embedded; generate A2L externally via xcpclient or other tools

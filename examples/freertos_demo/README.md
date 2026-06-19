@@ -51,7 +51,7 @@ The following files are required:
 xcplite_sources = [
     "cal.c",
     "platform.c",
-    "queue32.c",
+    "queue32m.c",
     "xcpappl.c",
     "xcpethserver.c",
     "xcpethtl.c",
@@ -61,7 +61,7 @@ xcplite_sources = [
 
 The FreeRTOS build of XCPlite:
 - Uses the FreeRTOS/lwIP socket, thread, mutex and clock platform abstractions in `src/platform.c`.
-- Uses the mutex based 32-bit queue implementation `src/queue32.c`.
+- Uses the mutex based 32-bit queue implementation in `src/queue32.c` or the critical section based variant `src/queue32m.c`.
 
 
 ### Key files in the xcplite source tree
@@ -88,8 +88,10 @@ xcpclient --offline --udp --dest-addr <ip-addr> --elf <elf-file>  --elf-unit-fil
 
 
 # Automatically add all possible measurement variables and calibration parameters in calibration parameter segments from compilation unit 'xcp_demo'
+# Example freertos_stm32_demo:
 xcpclient --offline --udp --dest-addr 192.168.0.207 --elf build/Debug/STM32H753EthDemo.elf --a2l CANape/stm32_freertos_demo.a2l --elf-unit-filter xcp_demo
-
+# Example freertos_emu_demo:
+xcpclient --offline --udp --dest-addr 127.0.0.1 --elf build-rtos/Debug/freertos_emu_demo --a2l examples/freertos_demo/freertos_emu_demo/CANape/freertos_demo.a2l --elf-unit-filter xcp_demo
 ```
 
 See below how to obtain the xcpclient tool.  
@@ -102,13 +104,15 @@ Using xcpclient:
 Watch the global_counter counter
 
 ```bash
-xcpclient --udp --dest-addr <esp32-ip-address> --a2l esp32_freertos_demo.a2l --mea global_counter --verbose 2
+xcpclient --udp --dest-addr <esp32-ip-address> --a2l <a2l-file> --mea global_counter 
+# Example freertos_emu_demo:
+xcpclient --udp --dest-addr 127.0.0.1 --a2l examples/freertos_demo/freertos_emu_demo/CANape/freertos_demo.a2l --mea global_counter 
 ```
 
 Watch scheduler pressure:
 
 ```bash
-xcpclient --udp --dest-addr <esp32-ip-address> --a2l esp32_freertos_demo.a2l --mea fastTaskOverruns --verbose 2
+xcpclient --udp --dest-addr <esp32-ip-address> --a2l <a2l-file> --mea fastTaskOverruns
 ```
 
 Calibrate
@@ -217,8 +221,8 @@ Init transport layer queue (queue32)
   buffer_size=8896, queue_size=6 (8896 Bytes)
 ```
 
-The 32 bit transmit queue (queue_size given in bytes) is allocated with 2 mallocs for header and data. The given queue size in bytes is rounded down to match multiples of the transport layer segment size. There are no other mallocs in the 32 bit FreeRTOS build.  
-If using malloc is not acceptable, XcpEthServerInit could be changed to accept a static memory buffer given as a parameter.  
+The 32 bit transmit queue used for FreeRTOS is fixed (queue32m.c, OPTION_QUEUE_32_SIZE bytes).  
+There are no heap allocations in the 32 bit FreeRTOS build.  
 
 The memory size of static tXcpData is depending on the configuration in xcplib_cfg. and xcplib_rtos_cfg.h:  
 - OPTION_CAL_SEGMENT_COUNT: Max number of calibration segments or blocks

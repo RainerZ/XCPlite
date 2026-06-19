@@ -301,8 +301,7 @@ bool XcpEthServerInit(const uint8_t *addr, uint16_t port, bool useTCP, uint32_t 
         return false;
     }
 #else
-    // Create the transmit queue on heap
-    assert(queue_size > 0);
+    // Create the transmit queue
     gXcpServer.transmit_queue = queueInit(queue_size);
     if (gXcpServer.transmit_queue == NULL)
         return false;

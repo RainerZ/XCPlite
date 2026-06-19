@@ -230,7 +230,7 @@ src/xcpappl.c
 src/xcplite.c
 src/xcpethserver.c
 src/xcpethtl.c
-src/queue32.c
+src/queue32m.c
 src/cal.c
 src/platform.c
 ```
