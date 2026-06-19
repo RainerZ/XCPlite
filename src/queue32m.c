@@ -118,12 +118,12 @@ typedef struct Queue {
 
 // STM32
 // Place the queue in DTCM for better performance on Cortex-M targets (zero-wait-state, no cache needed)
-#if !defined(FREE_RTOS_POSIX_SIM)
+#if !defined(FREE_RTOS_POSIX_SIM) && !defined(ESP_PLATFORM)
 #define QUEUE_ATTRIBUTE __attribute__((section(".dtcm")))
 #else
 #define QUEUE_ATTRIBUTE
 #endif
-#if !defined(FREE_RTOS_POSIX_SIM)
+#if !defined(FREE_RTOS_POSIX_SIM) && !defined(ESP_PLATFORM)
 #define QUEUE_BUF_ATTRIBUTE __attribute__((section(".noncacheable")));
 #else
 #define QUEUE_BUF_ATTRIBUTE
