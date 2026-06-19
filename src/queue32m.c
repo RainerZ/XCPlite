@@ -17,33 +17,6 @@
 
 @@@@ TODO:
 
-1. Replace FreeRTOS mutex with critical section (biggest win on FreeRTOS targets)
-
-// Instead of: mutexLock(&queue->Mutex_Queue)
-taskENTER_CRITICAL();
-// Instead of: mutexUnlock(&queue->Mutex_Queue)
-taskEXIT_CRITICAL();
-
-taskENTER_CRITICAL() uses BASEPRI to mask interrupts up to configMAX_SYSCALL_INTERRUPT_PRIORITY — it's a single MSR instruction. No context switch possible, no scheduler
-involvement, no priority inversion.
-
-2. STM32H7 memory placement — DTCM vs AXI SRAM vs non-cacheable
-
-The STM32H7 has distinct memory regions with very different characteristics:
-
-Region	            Access	            Cache	    DMA
-DTCM (128KB)	    0-wait-state CPU	No	        No (MDMA only)
-AXI SRAM (512KB)	~3 cycles	        D-Cache	    Yes (all DMAs)
-Non-cacheable SRAM	varies	            No	        Yes
-
-Place the tQueue header struct (hot: queue_rp, queue_len, msg_ptr) in DTCM via __attribute__((section(".dtcm"))) — zero-wait-state, no cache needed.
-
-Place the queue->queue segment buffer array in a non-cacheable AXI SRAM region — avoids the need for SCB_CleanDCacheByAddr before DMA Ethernet TX and SCB_InvalidateDCacheByAddr
-after RX
-
-Without non-cacheable placement, the D-Cache creates correctness hazards: the CPU writes data into the queue buffer, the cache line is dirty, but the Ethernet DMA reads stale data
-from AXI SRAM. You need explicit SCB_CleanDCacheByAddr before queueRelease hands the buffer to the network stack.
-
 
 3. Power-of-2 segment count → replace modulo with AND
 */
@@ -116,6 +89,25 @@ typedef struct Queue {
 
 } tQueue;
 
+
+
+/*
+STM32H7 memory placement — DTCM vs AXI SRAM vs non-cacheable
+The STM32H7 has distinct memory regions with very different characteristics:
+
+Region	            Access	            Cache	    DMA
+DTCM (128KB)	    0-wait-state CPU	No	        No (MDMA only)
+AXI SRAM (512KB)	~3 cycles	        D-Cache	    Yes (all DMAs)
+Non-cacheable SRAM	varies	            No	        Yes
+
+Place the tQueue header struct (hot: queue_rp, queue_len, msg_ptr) in DTCM via __attribute__((section(".dtcm"))) — zero-wait-state, no cache needed.
+Place the queue->queue segment buffer array in a non-cacheable AXI SRAM region — avoids the need for SCB_CleanDCacheByAddr before DMA Ethernet TX and SCB_InvalidateDCacheByAddr
+after RX
+
+Without non-cacheable placement, the D-Cache creates correctness hazards: the CPU writes data into the queue buffer, the cache line is dirty, but the Ethernet DMA reads stale data
+from AXI SRAM. You need explicit SCB_CleanDCacheByAddr before queueRelease hands the buffer to the network stack.
+*/
+
 // STM32
 // Place the queue in DTCM for better performance on Cortex-M targets (zero-wait-state, no cache needed)
 #if !defined(FREE_RTOS_POSIX_SIM) && !defined(ESP_PLATFORM)
@@ -146,6 +138,34 @@ static tXcpSegmentBuffer s_queue_buf[N] __attribute__((section(".noncacheable"))
 
 */
 
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------
+// Locking
+
+/*
+FreeRTOS mutex or critical section
+
+mutexLock(&queue->Mutex_Queue)  -  taskENTER_CRITICAL();
+mutexUnlock(&queue->Mutex_Queue)  -  taskEXIT_CRITICAL();
+
+On STM32 taskENTER_CRITICAL() uses BASEPRI to mask interrupts up to configMAX_SYSCALL_INTERRUPT_PRIORITY — it's a single MSR instruction. No context switch possible, no scheduler
+involvement, no priority inversion
+
+taskENTER_CRITICAL() and taskEXIT_CRITICAL() must not be called from an interrupt service routine (ISR)
+*/
+
+#ifdef OPTION_QUEUE32_MUTEX
+#define LOCK mutexLock(&sXcpQueue.Mutex_Queue)
+#define UNLOCK mutexUnlock(&sXcpQueue.Mutex_Queue)
+#elif defined(ESP_PLATFORM)
+static portMUX_TYPE sXcpQueueMux = portMUX_INITIALIZER_UNLOCKED;
+#define LOCK taskENTER_CRITICAL(&sXcpQueueMux)
+#define UNLOCK taskEXIT_CRITICAL(&sXcpQueueMux)
+#else
+#define LOCK taskENTER_CRITICAL()
+#define UNLOCK taskEXIT_CRITICAL()
+#endif
+
 //-------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // Allocate a new segment buffer (in sXcpQueue.msg_ptr)
@@ -172,11 +192,11 @@ static void newSegmentBuffer(void) {
 }
 
 static void clearQueue(void) {
-    mutexLock(&sXcpQueue.Mutex_Queue);
+    LOCK;
     sXcpQueue.queue_rp = 0;
     sXcpQueue.queue_len = 0;
     sXcpQueue.msg_ptr = NULL;
-    mutexUnlock(&sXcpQueue.Mutex_Queue);
+    UNLOCK;
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -212,13 +232,13 @@ tQueueHandle queueInit(size_t queue_buffer_size) {
 
     mutexInit(&sXcpQueue.Mutex_Queue, false, 1000);
 
-    mutexLock(&sXcpQueue.Mutex_Queue);
+    LOCK;
     sXcpQueue.queue_rp = 0;
     sXcpQueue.queue_len = 0;
     sXcpQueue.packets_lost = 0;
     sXcpQueue.msg_ptr = NULL;
     newSegmentBuffer();
-    mutexUnlock(&sXcpQueue.Mutex_Queue);
+    UNLOCK;
 
     assert(sXcpQueue.msg_ptr);
     return (tQueueHandle)queue;
@@ -262,7 +282,7 @@ tQueueBuffer queueAcquire(tQueueHandle _queue_handle, uint16_t packet_size) {
 
     msg_size = (uint16_t)(packet_size + XCPTL_TRANSPORT_LAYER_HEADER_SIZE);
 
-    mutexLock(&sXcpQueue.Mutex_Queue);
+    LOCK;
 
     // Get another message buffer from queue, when active buffer ist full
     b = sXcpQueue.msg_ptr;
@@ -279,7 +299,7 @@ tQueueBuffer queueAcquire(tQueueHandle _queue_handle, uint16_t packet_size) {
         sXcpQueue.packets_lost++; // No segment buffer available, queue overflow
     }
 
-    mutexUnlock(&sXcpQueue.Mutex_Queue);
+    UNLOCK;
 
     if (p == NULL) {
         tQueueBuffer ret = {.buffer = NULL, .handle = NULL, .size = 0};
@@ -302,7 +322,7 @@ tQueueBuffer queueAcquire(tQueueHandle _queue_handle, uint16_t packet_size) {
 // Commit a buffer (returned from XcpTlGetTransmitBuffer)
 void queuePush(tQueueHandle _queue_handle, const tQueueBuffer *queue_buffer, bool flush) {
 
-    mutexLock(&sXcpQueue.Mutex_Queue);
+    LOCK;
 
     ((tXcpSegmentBuffer *)queue_buffer->handle)->uncommitted--;
 
@@ -316,7 +336,7 @@ void queuePush(tQueueHandle _queue_handle, const tQueueBuffer *queue_buffer, boo
         newSegmentBuffer();
     }
 
-    mutexUnlock(&sXcpQueue.Mutex_Queue);
+    UNLOCK;
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -353,7 +373,7 @@ tQueueBuffer queuePop(tQueueHandle _queue_handle, bool accumulate, bool flush, u
     }
 
     // Check if there is a message segment ready in the transmit queue
-    mutexLock(&sXcpQueue.Mutex_Queue);
+    LOCK;
 
     if (sXcpQueue.queue_len >= 1) {
 
@@ -370,7 +390,7 @@ tQueueBuffer queuePop(tQueueHandle _queue_handle, bool accumulate, bool flush, u
         }
     }
 
-    mutexUnlock(&sXcpQueue.Mutex_Queue);
+    UNLOCK;
 
     if (b == NULL) {
 
@@ -409,11 +429,11 @@ tQueueBuffer queuePop(tQueueHandle _queue_handle, bool accumulate, bool flush, u
 void queueRelease(tQueueHandle _queue_handle, const tQueueBuffer *queue_buffer) {
 
     // Free this segment buffer when successfully sent
-    mutexLock(&sXcpQueue.Mutex_Queue);
+    LOCK;
     if (++sXcpQueue.queue_rp >= sXcpQueue.queue_size)
         sXcpQueue.queue_rp = 0;
     sXcpQueue.queue_len--;
-    mutexUnlock(&sXcpQueue.Mutex_Queue);
+    UNLOCK;
 }
 
 #endif

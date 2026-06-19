@@ -461,8 +461,8 @@ extern const uint8_t *gXcpBaseAddr;
 /// Cache the event name lookup in global storage, can not be called with different names in its code location
 /// @param name Name given as identifier
 #define DaqTriggerEvent(name)                                                                                                                                                      \
+    static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                              \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                              \
         if (trg__AAS__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                          \
             trg__AAS__##name = XcpFindEvent(#name);                                                                                                                                \
             assert(trg__AAS__##name != XCP_UNDEFINED_EVENT_ID);                                                                                                                    \
@@ -470,8 +470,8 @@ extern const uint8_t *gXcpBaseAddr;
         XcpEventExt_Var(trg__AAS__##name, 1, xcp_get_frame_addr());                                                                                                                \
     }
 #define DaqTriggerEventAt(name, clock)                                                                                                                                             \
+    static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                              \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                              \
         if (trg__AAS__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                          \
             trg__AAS__##name = XcpFindEvent(#name);                                                                                                                                \
             assert(trg__AAS__##name != XCP_UNDEFINED_EVENT_ID);                                                                                                                    \
@@ -483,13 +483,13 @@ extern const uint8_t *gXcpBaseAddr;
 /// No lookup overhead, event id must be valid
 /// @param name Event given as id
 #define DaqTriggerEvent_i(event_id)                                                                                                                                                \
+    static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                              \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                              \
         XcpEventExt(event_id, xcp_get_frame_addr());                                                                                                                               \
     }
 #define DaqTriggerEventAt_i(event_id, clock)                                                                                                                                       \
+    static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                              \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                              \
         XcpEventExtAt(event_id, xcp_get_frame_addr(), clock);                                                                                                                      \
     }
 
@@ -498,8 +498,8 @@ extern const uint8_t *gXcpBaseAddr;
 /// @param name Name given as identifier
 /// @param base_addr Base address pointer for relative addressing mode
 #define DaqTriggerEventExt(name, base_addr)                                                                                                                                        \
+    static tXcpEventId trg__AASD__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                             \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        static tXcpEventId trg__AASD__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                             \
         if (trg__AASD__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                         \
             trg__AASD__##name = XcpFindEvent(#name);                                                                                                                               \
             assert(trg__AASD__##name != XCP_UNDEFINED_EVENT_ID);                                                                                                                   \
@@ -512,8 +512,8 @@ extern const uint8_t *gXcpBaseAddr;
 /// @param name Name given as string, must be unique per thread and code location
 /// @param base_addr Base address pointer for relative addressing mode
 #define DaqTriggerEventExt_s(name, base_addr)                                                                                                                                      \
+    static THREAD_LOCAL tXcpEventId trg__AASD__ = XCP_UNDEFINED_EVENT_ID;                                                                                                      \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        static THREAD_LOCAL tXcpEventId trg__AASD__ = XCP_UNDEFINED_EVENT_ID;                                                                                                      \
         if (trg__AASD__ == XCP_UNDEFINED_EVENT_ID) {                                                                                                                               \
             trg__AASD__ = XcpFindEvent(name);                                                                                                                                      \
             assert(trg__AASD__ != XCP_UNDEFINED_EVENT_ID);                                                                                                                         \
@@ -526,8 +526,8 @@ extern const uint8_t *gXcpBaseAddr;
 /// @param event_id Event given as id
 /// @param base_addr Base address pointer for relative addressing mode
 #define DaqTriggerEventExt_i(event_id, base_addr)                                                                                                                                  \
+    static tXcpEventId trg__AASD = XCP_UNDEFINED_EVENT_ID;                                                                                                                     \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        static tXcpEventId trg__AASD = XCP_UNDEFINED_EVENT_ID;                                                                                                                     \
         XcpEventExt_Var(event_id, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                                          \
     }
 

@@ -221,6 +221,8 @@ static void fastTask(void *parameter) {
 
         // Trigger the DAQ event 'fastTask'
         DaqTriggerEvent(fastTask);
+        // Trigger the event a second time to measure runtime of the DaqTriggerEvent function
+        // XcpEventExt_Var(trg__AAS__fastTask, 1, xcp_get_frame_addr()); 
 
 #ifdef OPTION_IO
         rstPin1();
