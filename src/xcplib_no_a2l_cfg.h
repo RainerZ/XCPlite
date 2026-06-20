@@ -29,19 +29,27 @@
 |     -
  ----------------------------------------------------------------------------*/
 
-//-------------------------------------------------------------------------------
-// Calibration segments
+ // No persistence — not supported in OPTION_CAL_SEGMENTS_ABS
+ #undef OPTION_ENABLE_PERSISTENCE
 
-// No persistence — not supported in OPTION_CAL_SEGMENTS_ABS
-#undef OPTION_ENABLE_PERSISTENCE
+
+ //-------------------------------------------------------------------------------
+// Calibration segments
 
 // Default: Relative addressing mode (address extension 0 is segment relative addressing)
 
 // Option: Absolute addressing mode (address extension 0 is absolute addressing)
 // #define OPTION_CAL_SEGMENTS_ABS
 
-// Persistence is currently not fully supported
-// #undef OPTION_ENABLE_PERSISTENCE
+
+//-------------------------------------------------------------------------------
+// Events
+
+// Create an asynchronous, cyclic DAQ event with event id 0 for asynchronous data acquisition
+// Global variables default to this event 
+#undef OPTION_DAQ_ASYNC_EVENT
+#define OPTION_DAQ_ASYNC_EVENT         
+
 
 //-------------------------------------------------------------------------------
 // A2L / ELF — generated externally from ELF by xcpclient; disable on-target features

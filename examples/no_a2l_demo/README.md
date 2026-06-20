@@ -33,13 +33,20 @@ Option 1: A2L template generation:
 Option 2: Full A2L content generation:
 
 - Add calibration parameters
-    The reference pages of all calibration parameters must be in addressable (4 GB - 32bit) global memory (.bss segment must be in this range)
-    Detect calibration parameters by the address of their default/reference page by naming convention and segment marker variable
-    XCP needs to be configured for absolute calibration segment addressing
+    Option 1: #undef OPTION_CAL_SEGMENTS_ABS
+        XCP configured for segment relative addressing mode
+        Detect calibration parameters by their segment number and offset.
+    Option 2: #define OPTION_CAL_SEGMENTS_ABS
+        XCP configured for absolute calibration segment addressing
+        This is the prefered option for microcontrollers
+        The reference pages of all calibration parameters must be in addressable (4 GB - 32bit) global memory (.bss or .rodata segment must be in this range)
+        Detect calibration parameters by the address of their default/reference page by naming convention and segment marker variable
+
 - Add measurement variables
     Global or static measurements must be in addressable (4 GB - 32bit) global memory (.bss segment must be in this range)
     Takes all global, static and local variables into account in specified compilation units
     Try to detect an appropriate fixed event for each variable by detecting a event trigger in the same function, if not use the unsafe default event named 'async' as default event
+
 - Add all types required as TYPEDEF_STRUCTURE
 
 Content generation step 2 can alternatively be done manually, with any other A2L tool from Vector or open source
@@ -58,14 +65,16 @@ differ from the defaults:
 ```c
 // src/xcplib_no_a2l_cfg.h — lean override, only differences from xcplib_cfg.h defaults
 #undef  OPTION_ENABLE_PERSISTENCE       // no file system needed on bare-metal / RTOS targets
-#define OPTION_CAL_SEGMENTS_ABS         // absolute calibration addressing (required for the A2L creator)
+#define OPTION_CAL_SEGMENTS_ABS         // absolute addressing has address exension 0, calibration segments may be accessed with the absolute address of their static default page
 #undef  OPTION_CAL_SEGMENT_EPK          // no EPK segment
+#define OPTION_QUEUE_32                 // 32-bit queue
 #undef  OPTION_QUEUE_64_VAR_SIZE
 #undef  OPTION_QUEUE_64_FIX_SIZE
-#define OPTION_QUEUE_32                 // 32-bit queue for embedded / RTOS targets
 #undef  OPTION_ENABLE_A2L_GENERATOR     // no on-target A2L generation
 #undef  OPTION_ENABLE_A2L_UPLOAD        // no A2L upload via XCP
 #undef OPTION_ENABLE_ELF_UPLOAD         // no ELF upload via XCP, A2L creator works with ELF file on disk as well
+#define OPTION_DAQ_ASYNC_EVENT          // Create event 'async' with id 0 as default event for global variables
+
 ```
 
 The override is applied at the end of `xcplib_cfg.h` via:
@@ -86,7 +95,7 @@ target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"xcplib_no_a2l_
 This is already set when building with `XCPLITE_CONFIGURATION=no_a2l`.
 The same pattern can be used to create any other application-specific configuration override.
 
-> **Note:** The no_a2l_demo must be built in isolation because the override disables the A2L generator that other examples depend on. A dedicated build directory avoids cache conflicts.
+> **Note:** The no_a2l_demo must be built in isolation because the override disables the A2L generator that other examples depend on. A dedicated build directory `build-no_a2l` avoids cache conflicts.
 
 ---
 
@@ -215,17 +224,18 @@ cmake --build build-no_a2l
 cmake -B build-no_a2l -S . -DXCPLITE_CONFIGURATION=no_a2l -DCMAKE_BUILD_TYPE=Debug -DXCPLITE_BUILD_EXAMPLES=ON -DCMAKE_OSX_ARCHITECTURES=arm64
 cmake --build build-no_a2l
 
-# Generate an A2L file for the no_a2l_demo application from its ELF file
+# Generate an A2L file for the no_a2l_demo application offline from its ELF file
+# Example:
 # Add all variables
-xcpclient  --offline --elf no_a2l_demo.elf --a2l no_a2l_demo.a2l --create-a2l --verbose 1
+xcpclient  --offline --elf build-no_a2l/no_a2l_demo --a2l no_a2l_demo.a2l --create-a2l --verbose 1
 # Add the given IP address:port and protocol to the generated A2L file
-xcpclient --udp --dest-addr 192.168.0.206:555  --offline --elf no_a2l_demo.elf  --a2l no_a2l_demo.a2l  --create-a2l 
+xcpclient --udp --dest-addr 192.168.0.206  --offline --elf build-no_a2l/no_a2l_demo  --a2l no_a2l_demo.a2l  --create-a2l 
 # Filter on specific variables and compilation units
-xcpclient --offline --elf no_a2l_demo.elf --a2l no_a2l_demo.a2l --create-a2l --elf-unit-filter main --elf-var-filter "^(counter|params)" 
+xcpclient --offline --udp --dest-addr 192.168.0.206 --elf build-no_a2l/no_a2l_demo   --a2l no_a2l_demo.a2l --create-a2l --elf-unit-filter main --elf-var-filter "^(counter|params)"
 
 
 # Connect to the XCP on UDP server on 192.168.0.206:5555, upload ELF file from target (requires OPTION_ENABLE_ELF_UPLOAD) and create the A2L file
-xcpclient --udp --dest-addr 192.168.0.206:5555  --elf no_a2l_demo.elf --upload-elf  --create-a2l
+xcpclient --udp --dest-addr 192.168.0.206  --elf no_a2l_demo.elf --upload-elf  --create-a2l --elf-unit-filter main --elf-var-filter "^(counter|params)"
 
 # Measurement of variable global_counter with the ELF file only
 xcpclient --udp --dest-addr=192.168.0.206:5555 --elf no_a2l_demo.elf --elf-var-filter "global_counter" --mea ".*" --time 5 --csv no_a2l_demo.csv
