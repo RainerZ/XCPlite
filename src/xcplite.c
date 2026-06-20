@@ -1720,6 +1720,7 @@ void XcpEventExtAt_(tXcpEventId event, int count, const uint8_t **bases, uint64_
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1743,6 +1744,7 @@ void XcpEventExt_(tXcpEventId event, int count, const uint8_t **bases) {
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1788,6 +1790,7 @@ void XcpEvent(tXcpEventId event) {
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1807,6 +1810,7 @@ void XcpEventAt(tXcpEventId event, uint64_t clock) {
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1832,6 +1836,7 @@ void XcpEventExt_Var(tXcpEventId event, int args_count, ...) {
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1862,6 +1867,7 @@ void XcpEventExtAt_Var(tXcpEventId event, uint64_t clock, int args_count, ...) {
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1891,12 +1897,9 @@ void XcpEventExtAt_Var(tXcpEventId event, uint64_t clock, int args_count, ...) {
 void XcpEventEnable(tXcpEventId event, bool enable) {
     if (!isStarted())
         return;
-    if (event == XCP_UNDEFINED_EVENT_ID) {
-        DBG_PRINT_WARNING("XcpEventEnable: Undefined event id\n");
-        return;
-    }
     if (event >= getEventCount()) {
-        DBG_PRINTF_WARNING("XcpEventEnableInvalid event id %u\n", event);
+        DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
     tXcpEvent *evt = &shared_mut.event_list.event[event];
