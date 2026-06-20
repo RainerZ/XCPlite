@@ -39,7 +39,7 @@ Option 2: Full A2L content generation:
 - Add measurement variables
     Global or static measurements must be in addressable (4 GB - 32bit) global memory (.bss segment must be in this range)
     Takes all global, static and local variables into account in specified compilation units
-    Try to detect an appropriate fixed event for each variable by detecting a event trigger in the same function, if not use the unsafe standard async event as default event
+    Try to detect an appropriate fixed event for each variable by detecting a event trigger in the same function, if not use the unsafe default event named 'async' as default event
 - Add all types required as TYPEDEF_STRUCTURE
 
 Content generation step 2 can alternatively be done manually, with any other A2L tool from Vector or open source

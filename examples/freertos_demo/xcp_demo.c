@@ -175,10 +175,12 @@ static void fastTask(void *parameter) {
     // Volatile keeps this local measurement variable visible in optimized builds,
     // The offline A2L generator can discover it in the ELF file and associate it to the functions DAQ event trigger.
     volatile uint16_t counter = 0;
+    static volatile uint16_t static_counter = 0; 
 
     printf("fastTask started\n");
     printf("  frameaddr = %p\n", xcp_get_frame_addr());
     printf("  &counter = %p\n", &counter);
+    printf("  &static_counter = %p\n", &static_counter);
 
     // Create a DAQ event named 'fastTask'
     DaqCreateEvent(fastTask);
@@ -206,8 +208,10 @@ static void fastTask(void *parameter) {
             clamp_parameter(period_ms, params->fast_task_period_ms, FASTTASK_PERIOD_MIN_MS, FASTTASK_PERIOD_MAX_MS);
 
             counter++;
+            static_counter++;
             if (counter > params->counter_max) {
                 counter = 0;
+                static_counter = 0;
             }
             global_counter++;
             if (global_counter > params->counter_max) {

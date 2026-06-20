@@ -902,14 +902,6 @@ int32_t XcpTlHandleTransmitQueue(void) {
     const uint32_t outer_loop_sleep_ms = 1; // Sleep time in ms for each outer loop
 #endif
 
-// @@@@ TODO: This is too early, when the server is started before A2lInit !!!!!!!!!!!!!
-#if defined(OPTION_DAQ_ASYNC_EVENT) && defined(XCP_ENABLE_DAQ_EVENT_LIST)
-    static tXcpEventId gXcpAsyncEvent = XCP_UNDEFINED_EVENT_ID;
-    if (gXcpAsyncEvent == XCP_UNDEFINED_EVENT_ID) {
-        gXcpAsyncEvent = XcpCreateEvent("async", outer_loop_sleep_ms * (CLOCK_TICKS_PER_S / 1000), 0);
-    }
-#endif
-
     int32_t n = 0;      // Number of bytes sent
     bool flush = false; // Flush queue in regular intervals
 
@@ -953,8 +945,10 @@ int32_t XcpTlHandleTransmitQueue(void) {
         }
 
         sleepMs(outer_loop_sleep_ms);
+
+        // Trigger the async event (event id 0)
 #if defined(OPTION_DAQ_ASYNC_EVENT) && defined(XCP_ENABLE_DAQ_EVENT_LIST)
-        XcpEvent(gXcpAsyncEvent);
+        XcpEvent(0);
 #endif
 
     } // for(j)

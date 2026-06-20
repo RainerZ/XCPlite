@@ -3218,6 +3218,16 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     local_mut.shm_app_id = (uint8_t)app_id;
 #endif
 
+
+// Create the async event with id 0 and cycle time 1ms
+#ifdef XCP_ENABLE_DAQ_EVENT_LIST
+#ifdef OPTION_DAQ_ASYNC_EVENT
+    static const tXcpEventDescriptor evt__async XCP_EVENT_SECTION_ATTR = {"async", 1000000, 0};
+    tXcpEventId id = XcpCreateEvent("async", 0, 0);
+    assert(id==0);
+#endif
+#endif
+
 #ifdef XCP_ENABLE_CALSEG_LIST
 #ifdef XCP_ENABLE_EPK_CALSEG
     // Create the EPK calibration segment with index 0

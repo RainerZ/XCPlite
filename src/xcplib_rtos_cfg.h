@@ -118,6 +118,12 @@
 #define OPTION_QUEUE32_CRITICAL_SECTION
 #undef OPTION_QUEUE32_MUTEX
 
+// Create an asynchronous, cyclic DAQ event with event id 0 for asynchronous data acquisition
+// Global variables default to this event 
+#undef OPTION_DAQ_ASYNC_EVENT
+#define OPTION_DAQ_ASYNC_EVENT         
+
+
 //-------------------------------------------------------------------------------
 // A2L / ELF — no filesystem on embedded; generate A2L externally via xcpclient or other tools
 #undef OPTION_ENABLE_A2L_GENERATOR

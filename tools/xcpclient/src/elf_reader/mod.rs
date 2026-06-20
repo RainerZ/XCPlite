@@ -32,7 +32,7 @@ Which information can be detected from ELF/DWARF:
 
     Key benefits:
     - Instance names get prefixed with function name if local stack or static variables
-    - All instances get the correct fixed event id, if there is one in their scope, default is event id 0
+    - All instances get the correct fixed event id, if there is one in their scope, otherwise default event id is 0
     - Event compilation unit, function and CFA is detected to enable local variable access
 
     Todo:

@@ -123,6 +123,17 @@ static_assert(sizeof(tXcpCto) == XCPTL_MAX_CTO_SIZE, "tXcpCto size should be XCP
 /* DAQ events                                                               */
 /****************************************************************************/
 
+// Platform section attribute for tXcpEventDescriptor const static variables created by DaqCreateEvent().
+// Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
+// pre-register every event before the first trigger, without requiring the call site of the event creation to execute first.
+#if defined(__ELF__)
+#define XCP_EVENT_SECTION_ATTR __attribute__((section("xcp_evts"), used))
+#elif defined(__APPLE__)
+#define XCP_EVENT_SECTION_ATTR __attribute__((section("__DATA,xcp_evts"), used))
+#else
+#define XCP_EVENT_SECTION_ATTR /* section-based registration not supported on this platform */
+#endif
+
 // XCP event identifier type
 typedef uint16_t tXcpEventId;
 #define XCP_UNDEFINED_EVENT_ID 0xFFFF

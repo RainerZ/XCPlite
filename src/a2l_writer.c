@@ -398,7 +398,7 @@ static void createEventGroupsAndConversions(const char *project_name, bool event
         if (event_groups) {
             fprintf(gA2lFile, "\n/begin GROUP Events \"Events\" ROOT /begin SUB_GROUP");
 #ifdef OPTION_DAQ_ASYNC_EVENT
-            uint32_t id = 1; // Skip event 0 which is the built-in asynchronous events
+            uint32_t id = 1; // Skip event 0 which is the built-in asynchronous event
 #else
             uint32_t id = 0;
 #endif

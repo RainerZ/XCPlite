@@ -5,8 +5,8 @@ All notable changes to XCPlite are documented in this file.
 
 ## [V2.1.6]
 
-- Optimizations for microcontroller builds, optimized locking and static allocated queue
-
+- Optimizations for microcontroller builds, optimized locking and static allocated queue (new queue32m.c)
+- Enabled 1ms event 'async' (event id 0) as default event for global variables
 
 
 ## [V2.1.5]
@@ -14,6 +14,7 @@ All notable changes to XCPlite are documented in this file.
 - freertos_stm32_demo with FreeRTOS and lwip for STM32 microcontrollers
 - More flexibility how to provide the DAQ timebase
 - Single source demo code for all FreeRTOS examples
+
 
 ## [V2.1.3]
 
