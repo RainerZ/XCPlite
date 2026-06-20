@@ -52,11 +52,6 @@ bool XcpIsStarted(void);
 bool XcpIsConnected(void);
 bool XcpIsDaqRunning(void);
 
-// Debug metrics
-void XcpEthServerDebugInfo(size_t *rxStackSize, size_t *txStackSize);
-void XcpEthTlPrintStatistics(void);
-void clockGetPrintStatistic(void);
-
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Calibration segments
 
@@ -789,9 +784,10 @@ uint64_t clockGetMonotonicUs(void);
 void sleepUs(uint32_t us);
 void sleepMs(uint32_t ms);
 
-// Test metrics
+// Debug metrics
 void XcpEthTlPrintStatistics(void);
-void clockPrintStatistics(void);
+void XcpEthServerDebugInfo(size_t *rxStackSize, size_t *txStackSize);
+void clockGetPrintStatistic(void);
 
 #ifdef __cplusplus
 } // extern "C"

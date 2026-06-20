@@ -7,8 +7,6 @@
 |
 | Description:
 |   C++ header file for the XCPlite library XCPlite/libxcplite application programming interface
-|   Generic C++ RAII wrapper for calibration parameter segments
-|   Provides automatic lock/unlock management using a guard pattern
 |
 | Copyright (c) Vector Informatik GmbH. All rights reserved.
 | See LICENSE file in the project root for details.
