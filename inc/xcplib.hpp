@@ -280,7 +280,6 @@ template <typename... Bases> XCPLIB_ALWAYS_INLINE void DaqTriggerVarTemplate(con
         static std::once_flag once_flag;
         std::call_once(once_flag, [&]() {
             event_id = XcpCreateEvent(event_name, 0, 0);
-            assert(event_id != XCP_UNDEFINED_EVENT_ID);
         });
         XcpEventExt_Var(event_id, sizeof...(Bases), &bases...);
     }
@@ -362,7 +361,6 @@ template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventExtTemplat
         const uint8_t *frame_addr = (const uint8_t *)xcp_get_frame_addr(); // Capture caller's frame address before lambda
         std::call_once(once_flag, [&]() {
             event_id = XcpCreateEvent(event_name, 0, 0);
-            assert(event_id != XCP_UNDEFINED_EVENT_ID);
             A2lLock();
             A2lSetAutoAddrMode__i(event_id, frame_addr, (const uint8_t *)base);
             (registerMeasurement(measurements), ...);
@@ -380,7 +378,6 @@ template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventTemplate(c
         const uint8_t *frame_addr = (const uint8_t *)xcp_get_frame_addr(); // Capture caller's frame address before lambda
         std::call_once(once_flag, [&]() {
             event_id = XcpCreateEvent(event_name, 0, 0);
-            assert(event_id != XCP_UNDEFINED_EVENT_ID);
             A2lLock();
             A2lSetAutoAddrMode__i(event_id, frame_addr, NULL);
             (registerMeasurement(measurements), ...);

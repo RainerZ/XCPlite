@@ -452,11 +452,6 @@ extern const uint8_t *gXcpBaseAddr;
 // Uses local scope static or thread local storage to create a once pattern for the event lookup to save runtime overhead
 // All macros can be used to measure variables registered in absolute addressing mode as well
 
-// Note:
-// All macros assert that the event is found in the one time lookup, which means an event has to exist, before it is triggered the first time
-// The asserts may be removed with the consequence, that the event lookup takes place on every trigger, before the event is created
-// This might add unwanted runtime overhead (a linear search in the event list) on every trigger call
-
 /// Trigger the global XCP event 'name' for stack relative or absolute addressing
 /// Cache the event name lookup in global storage, can not be called with different names in its code location
 /// @param name Name given as identifier
@@ -465,7 +460,6 @@ extern const uint8_t *gXcpBaseAddr;
     if (XcpIsActivated()) {                                                                                                                                                        \
         if (trg__AAS__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                          \
             trg__AAS__##name = XcpFindEvent(#name);                                                                                                                                \
-            assert(trg__AAS__##name != XCP_UNDEFINED_EVENT_ID);                                                                                                                    \
         }                                                                                                                                                                          \
         XcpEventExt_Var(trg__AAS__##name, 1, xcp_get_frame_addr());                                                                                                                \
     }
@@ -474,7 +468,6 @@ extern const uint8_t *gXcpBaseAddr;
     if (XcpIsActivated()) {                                                                                                                                                        \
         if (trg__AAS__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                          \
             trg__AAS__##name = XcpFindEvent(#name);                                                                                                                                \
-            assert(trg__AAS__##name != XCP_UNDEFINED_EVENT_ID);                                                                                                                    \
         }                                                                                                                                                                          \
         XcpEventExtAt_Var(trg__AAS__##name, clock, 1, xcp_get_frame_addr());                                                                                                       \
     }
@@ -502,7 +495,6 @@ extern const uint8_t *gXcpBaseAddr;
     if (XcpIsActivated()) {                                                                                                                                                        \
         if (trg__AASD__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                         \
             trg__AASD__##name = XcpFindEvent(#name);                                                                                                                               \
-            assert(trg__AASD__##name != XCP_UNDEFINED_EVENT_ID);                                                                                                                   \
         }                                                                                                                                                                          \
         XcpEventExt_Var(trg__AASD__##name, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                                 \
     }
@@ -516,7 +508,6 @@ extern const uint8_t *gXcpBaseAddr;
     if (XcpIsActivated()) {                                                                                                                                                        \
         if (trg__AASD__ == XCP_UNDEFINED_EVENT_ID) {                                                                                                                               \
             trg__AASD__ = XcpFindEvent(name);                                                                                                                                      \
-            assert(trg__AASD__ != XCP_UNDEFINED_EVENT_ID);                                                                                                                         \
         }                                                                                                                                                                          \
         XcpEventExt_Var(trg__AASD__, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                                       \
     }

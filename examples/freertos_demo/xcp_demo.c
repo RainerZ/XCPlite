@@ -254,8 +254,6 @@ static void slowTask(void *parameter) {
     printf("  frameaddr = %p\n", xcp_get_frame_addr());
     printf("  &counter = %p\n", &counter);
 
-    DaqCreateEvent(slowTask);
-
     TickType_t lastWakeTime = xTaskGetTickCount();
     for (;;) {
 
@@ -289,7 +287,7 @@ static void slowTask(void *parameter) {
 #endif
         }
 
-        DaqTriggerEvent(slowTask);
+        DaqCreateAndTriggerEvent(slowTask);
 
         // printf("slowTask: counter = %u, period = %u ms, channel1 = %f\n", counter, slow_task_period_ms, channel1);
 #ifdef OPTION_DISPLAY
