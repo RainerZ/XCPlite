@@ -51,12 +51,15 @@ class Publisher : public ApplicationBase {
         _temperaturePublisher = GetParticipant()->CreateDataPublisher("TemperaturePublisher", dataSpecTemperature, 0);
 
         // Create a typedef for struct GpsData
-        A2lCreateTypedef(GpsData, "GPS data struct", A2L_MEASUREMENT_COMPONENT(latitude, "GPS latitude in degrees", ""), //
-                         A2L_MEASUREMENT_COMPONENT(longitude, "GPS longitude in degrees", ""),                           //
-                         A2L_MEASUREMENT_COMPONENT(signal, "GPS signal quality", "")                                     //
+        // Variabic template style
+        A2lCreateTypedef(GpsData, "GPS data struct",                                           //
+                         A2L_MEASUREMENT_COMPONENT(latitude, "GPS latitude in degrees", ""),   //
+                         A2L_MEASUREMENT_COMPONENT(longitude, "GPS longitude in degrees", ""), //
+                         A2L_MEASUREMENT_COMPONENT(signal, "GPS signal quality", "")           //
         );
 
         // Create a typedef for struct ParametersT
+        // C style
         A2lTypedefBegin(ParametersT, &kParameters, "A2L Typedef for ParametersT");
         A2lTypedefParameterComponent(counter_max, "Maximum counter value", "", 0, 2000);
         A2lTypedefParameterComponent(delay_us, "Mainloop delay time in us", "us", 0, 999999);
@@ -125,7 +128,13 @@ class Publisher : public ApplicationBase {
 int main(int argc, char **argv) {
 
     // Initialize XCP server for measurement on TCP port 5555
-    XcpServerInit("Publisher", "V1.7", 5555, XCP_MODE_SHM);
+
+    // Use this for a separate, dedicated XCP server participant
+    // XcpServerInit("Publisher", "V1.7", 5555, XCP_MODE_SHM);
+
+    // Use this for a single XCP server participant
+    // The first participant becomes the server, the others use shared memory
+    XcpServerInit("Publisher", "V1.7", 5555, XCP_MODE_SHM_AUTO);
 
     Arguments args;
     args.participantName = "Publisher";

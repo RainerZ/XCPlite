@@ -10,7 +10,7 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 XCPLITE_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-XCPLITE_INSTALL="${XCPLITE_ROOT}/build/install"
+XCPLITE_INSTALL="${XCPLITE_ROOT}/build-shm/install"
 
 
 # ---------------------------------------------------------------------------
@@ -36,11 +36,11 @@ fi
 # ---------------------------------------------------------------------------
 # Step 1: Build & install xcplite
 # ---------------------------------------------------------------------------
-echo -e "${GREEN}Step 1: Building and installing xcplite ...${NC}"
-echo "------------------------------------------------------------"
+echo -e "${GREEN}Step 1: Building and installing xcplite in shared memory mode...${NC}"
+echo "--------------------------------------------------------------------------------"
 cd "${XCPLITE_ROOT}"
-# ./build.sh release install
-./build.sh install
+# ./build.sh shm release install
+./build.sh shm install
 
 # ---------------------------------------------------------------------------
 # Step 2: Install SilKit from its build tree (idempotent)
@@ -49,7 +49,7 @@ cd "${XCPLITE_ROOT}"
 # that may not have been built.
 # ---------------------------------------------------------------------------
 echo -e "${GREEN}Step 2: Installing SilKit to ${SILKIT_INSTALL_DIR} ...${NC}"
-echo "------------------------------------------------------------"
+echo "--------------------------------------------------------------------------"
 cmake --install "${SILKIT_BUILD_DIR}" --prefix "${SILKIT_INSTALL_DIR}" --component bin
 cmake --install "${SILKIT_BUILD_DIR}" --prefix "${SILKIT_INSTALL_DIR}" --component dev
 

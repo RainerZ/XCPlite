@@ -90,7 +90,13 @@ class Subscriber : public ApplicationBase {
 int main(int argc, char **argv) {
 
     // Initialize XCP server
-    XcpServerInit("Subscriber", "V1.7", 5556, XCP_MODE_SHM);
+
+    // Use this for a separate, dedicated XCP server participant
+    // XcpServerInit("Publisher", "V1.7", 5555, XCP_MODE_SHM);
+
+    // Use this for multi-application shared memory mode
+    // The first participant becomes the server, the others use shared memory
+    XcpServerInit("Subscriber", "V1.7", 5555, XCP_MODE_SHM_AUTO);
 
     Arguments args;
     args.participantName = "Subscriber";

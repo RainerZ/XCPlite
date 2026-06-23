@@ -2,7 +2,7 @@
 # Run script for silkit_demo
 # Opens separate terminals for:
 #   1. sil-kit-registry
-#   2. SilKitXcpServer
+#   2. SilKitXcpServer (optional)
 #   3. SilKitDemoPublisher
 #   4. SilKitDemoSubscriber
 #   5. sil-kit-system-controller  (starts the simulation)
@@ -12,6 +12,7 @@
 #   -d <us>   Simulation step duration in microseconds 
 #   -f        Run as fast as possible (no animation throttle)
 #   -r        Run in approximately real time (SIL Kit AnimationFactor=1.0)
+#   -s        Start the SilKitXcpServer participant
 #   -h        Show this help
 
 set -e
@@ -45,22 +46,25 @@ fi
 STEP_US=""
 FAST_FLAG=""
 REALTIME=""
+START_SERVER=""
 
 usage() {
     echo "Usage: $0 [options]"
     echo "  -d <us>   Simulation step duration in microseconds (default: 10000 = 10ms)"
     echo "  -f        Run as fast as possible (no real-time throttle)"
     echo "  -r        Run in approximately real time (SIL Kit AnimationFactor=1.0)"
+    echo "  -s        Start the SilKitXcpServer participant"
     echo "  -h        Show this help"
     exit 0
 }
 
-while getopts ":d:frh" opt; do
+while getopts ":d:frsh" opt; do
     case ${opt} in
         d) STEP_US="${OPTARG}" ;;
         f) FAST_FLAG="yes" ;;
         r) REALTIME="yes" ;;
-        h) usage ;;
+        s) START_SERVER="yes" ;;
+        h) usage ;;  
         :) echo "ERROR: Option -${OPTARG} requires an argument."; exit 1 ;;
         \?) echo "ERROR: Unknown option -${OPTARG}"; exit 1 ;;
     esac
@@ -99,6 +103,11 @@ for bin in "${REGISTRY}" "${SYSCTRL}" "${PUBLISHER}" "${SUBSCRIBER}"; do
         exit 1
     fi
 done
+if [[ -n "${START_SERVER}" ]] && [ ! -x "${XCP_SERVER}" ]; then
+    echo "ERROR: binary not found or not executable: ${XCP_SERVER}"
+    echo "Run ./build.sh first."
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Helper: open a new terminal and run a command.
@@ -151,7 +160,7 @@ open_terminal() {
 
 echo "Starting silkit_demo ..."
 echo "  Registry        : ${REGISTRY}"
-echo "  XcpServer       : ${XCP_SERVER}"
+[[ -n "${START_SERVER}" ]] && echo "  XcpServer       : ${XCP_SERVER}" || echo "  XcpServer       : (not started, use -s to enable)"
 echo "  Publisher       : ${PUBLISHER}"
 echo "  Subscriber      : ${SUBSCRIBER}"
 echo "  SystemController: ${SYSCTRL}"
@@ -172,9 +181,11 @@ open_terminal "sil-kit-registry" "\"${REGISTRY}\""
 sleep 1
 
 # ---------------------------------------------------------------------------
-# 2. XCP Server – start before the system controller
+# 2. XCP Server – start before the system controller (optional, use -s to enable)
 # ---------------------------------------------------------------------------
-open_terminal "SilKitXcpServer" "\"${XCP_SERVER}\"${PARTICIPANT_ARGS:+ ${PARTICIPANT_ARGS}}"
+if [[ -n "${START_SERVER}" ]]; then
+    open_terminal "SilKitXcpServer" "\"${XCP_SERVER}\"${PARTICIPANT_ARGS:+ ${PARTICIPANT_ARGS}}"
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Publisher
@@ -191,6 +202,8 @@ open_terminal "SilKitDemoSubscriber" "\"${SUBSCRIBER}\"${PARTICIPANT_ARGS:+ ${PA
 # 5. System Controller – start last so all participants are already connecting
 # ---------------------------------------------------------------------------
 sleep 1
-open_terminal "sil-kit-system-controller" "\"${SYSCTRL}\" XcpServer Publisher Subscriber"
+SYSCTRL_PARTICIPANTS="Publisher Subscriber"
+[[ -n "${START_SERVER}" ]] && SYSCTRL_PARTICIPANTS="XcpServer ${SYSCTRL_PARTICIPANTS}"
+open_terminal "sil-kit-system-controller" "\"${SYSCTRL}\" ${SYSCTRL_PARTICIPANTS}"
 
 echo "All terminals launched."
