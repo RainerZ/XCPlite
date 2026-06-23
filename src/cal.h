@@ -220,12 +220,12 @@ typedef struct {
     uint16_t size;
     uint16_t type;
     uint8_t res[32 - sizeof(char *) - sizeof(void *) - sizeof(tXcpCalSegIndex *) - 2 - 2];
-} tXcpCalDescriptor;
+} tXcpCalSegDescriptor;
 
-static_assert(sizeof(tXcpCalDescriptor) == 32, "sizeof(XcpCalDescriptor) must be 32");
-static_assert(sizeof(((tXcpCalDescriptor*)0)->res) > 0, "tXcpCalDescriptor res padding must not be zero; check pointer sizes vs struct layout");
+static_assert(sizeof(tXcpCalSegDescriptor) == 32, "sizeof(XcpCalDescriptor) must be 32");
+static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescriptor res padding must not be zero; check pointer sizes vs struct layout");
 
-// Platform section attribute for tXcpCalDescriptor static variables created by CalSegCreate() and CalBlkCreate().
+// Platform section attribute for tXcpCalSegDescriptor static variables created by CalSegCreate() and CalBlkCreate().
 // Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
 // pre-register every calibration segment or block before the first use, without requiring the call site of the creation to execute first.
 #if defined(__ELF__)

@@ -118,7 +118,7 @@ static void *XcpCalMemAlloc_(size_t size) {
     return &shared_mut_safe.cal_seg_list.cal_mem.pool[old_used];
 }
 
-// Pre-register all tXcpCalDescriptor variables placed in the xcp_cals section by DaqCreateEvent().
+// Pre-register all tXcpCalSegDescriptor variables placed in the xcp_cals section by DaqCreateEvent().
 // Must be called after SS_ACTIVATED is set (XcpCreateEvent requires isActivated()).
 // If a persistence file was loaded before this call, events are matched by name and keep their saved id.
 uint16_t XcpRegisterSectionCalSegs(void) {
@@ -128,12 +128,12 @@ uint16_t XcpRegisterSectionCalSegs(void) {
 #if defined(__ELF__)
     // Declared weak: if no object file contributes to the xcp_cals section the symbols
     // resolve to NULL rather than causing an undefined-reference linker error.
-    extern const tXcpCalDescriptor __start_xcp_cals[] __attribute__((weak));
-    extern const tXcpCalDescriptor __stop_xcp_cals[] __attribute__((weak));
-    const tXcpCalDescriptor *begin = __start_xcp_cals;
-    const tXcpCalDescriptor *end = __stop_xcp_cals;
+    extern const tXcpCalSegDescriptor __start_xcp_cals[] __attribute__((weak));
+    extern const tXcpCalSegDescriptor __stop_xcp_cals[] __attribute__((weak));
+    const tXcpCalSegDescriptor *begin = __start_xcp_cals;
+    const tXcpCalSegDescriptor *end = __stop_xcp_cals;
     if (begin != NULL && end != NULL && begin < end) {
-        for (const tXcpCalDescriptor *e = begin; e < end; e++) {
+        for (const tXcpCalSegDescriptor *e = begin; e < end; e++) {
             DBG_PRINTF6("Found calibration segment descriptor in section: name=%s, addr=%p, size=%u, type=%x, indexp=%p\n", e->name, e->addr, e->size, e->type, e->indexp);
             tXcpCalSegIndex index = XcpFindCalSeg(e->name);
             if (index == XCP_UNDEFINED_CALSEG) {
@@ -149,10 +149,10 @@ uint16_t XcpRegisterSectionCalSegs(void) {
     }
 #elif defined(__APPLE__)
     unsigned long sz = 0;
-    const tXcpCalDescriptor *begin = (tXcpCalDescriptor *)getsectiondata(&_mh_execute_header, "__DATA", "xcp_cals", &sz);
+    const tXcpCalSegDescriptor *begin = (tXcpCalSegDescriptor *)getsectiondata(&_mh_execute_header, "__DATA", "xcp_cals", &sz);
     if (begin != NULL) {
-        const tXcpCalDescriptor *end = begin + (sz / sizeof(tXcpCalDescriptor));
-        for (const tXcpCalDescriptor *e = begin; e < end; e++) {
+        const tXcpCalSegDescriptor *end = begin + (sz / sizeof(tXcpCalSegDescriptor));
+        for (const tXcpCalSegDescriptor *e = begin; e < end; e++) {
             DBG_PRINTF6("Found calibration segment descriptor in section: name=%s, addr=%p, size=%u, type=%x, indexp=%p\n", e->name, e->addr, e->size, e->type, e->indexp);
             tXcpCalSegIndex index = XcpFindCalSeg(e->name);
             if (index == XCP_UNDEFINED_CALSEG) {

@@ -337,7 +337,7 @@ void XcpUnlockCalSeg(tXcpCalSegIndex index);
 
 #### C macros — section-registered (required for offline A2L generation)
 
-These macros emit a `tXcpCalDescriptor` into the `.xcp_cals` ELF section so `XcpInit()`
+These macros emit a `tXcpCalSegDescriptor` into the `.xcp_cals` ELF section so `XcpInit()`
 registers the segment automatically and `xcpclient` can discover it without runtime A2L calls.
 
 ```c
@@ -381,7 +381,7 @@ const struct parameters parameters = { .period_ms = 2, .amplitude = 1.0f };
 CalSegDeclRef(parameters, parameters_calseg);
 // Expands to:
 //   static tXcpCalSegIndex calseg_id_parameters = XCP_UNDEFINED_CALSEG;
-//   static tXcpCalDescriptor calseg__parameters __attribute__((section("xcp_cals"))) = {...};
+//   static tXcpCalSegDescriptor calseg__parameters __attribute__((section("xcp_cals"))) = {...};
 //   static CalSegRef<parameters> parameters_calseg(&calseg_id_parameters, &parameters);
 
 // Shorthand — handle named <value>_calseg:

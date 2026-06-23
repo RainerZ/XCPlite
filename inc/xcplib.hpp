@@ -234,7 +234,7 @@ template <typename T> class CalBlk {
 /// Usage: CalSegDeclRef(parameters, parameters_calseg); auto parameters = parameters_calseg.lock();
 #define CalSegDeclRef(value, handle)                                                                                                                                               \
     static tXcpCalSegIndex calseg_id_##value = XCP_UNDEFINED_CALSEG;                                                                                                               \
-    static const tXcpCalDescriptor calseg__##value __asm__("calseg__" #value)                                                                                                      \
+    static const tXcpCalSegDescriptor calseg__##value __asm__("calseg__" #value)                                                                                                   \
         XCP_CAL_SECTION_ATTR = {#value, (const void *)&value, &calseg_id_##value, sizeof(value), XCP_CALSEG_TYPE_SEGMENT};                                                         \
     static const xcplib::CalSegRef<decltype(value)> handle(&calseg_id_##value, &value)
 
@@ -276,9 +276,7 @@ template <typename... Bases> XCPLIB_ALWAYS_INLINE void DaqTriggerVarTemplate(con
     if (XcpIsActivated()) {
         static tXcpEventId event_id = XCP_UNDEFINED_EVENT_ID;
         static std::once_flag once_flag;
-        std::call_once(once_flag, [&]() {
-            event_id = XcpCreateEvent(event_name, 0, 0);
-        });
+        std::call_once(once_flag, [&]() { event_id = XcpCreateEvent(event_name, 0, 0); });
         XcpEventExt_Var(event_id, sizeof...(Bases), &bases...);
     }
 }

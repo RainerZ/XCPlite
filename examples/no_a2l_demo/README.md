@@ -174,7 +174,7 @@ The following API subset remains fully available and is unchanged:
 
 | Macro / Function | Emits to ELF | Purpose |
 |---|---|---|
-| `CalSegDecl(name)` | `xcp_cals` (at file scope) | Declare + emit `tXcpCalDescriptor` into `.xcp_cals` |
+| `CalSegDecl(name)` | `xcp_cals` (at file scope) | Declare + emit `tXcpCalSegDescriptor` into `.xcp_cals` |
 | `CalSegCreate(name)` | — | Register segment at runtime (pairs with `CalSegDecl`) |
 | `CalSegLock(name)` | — | Lock segment for read; returns `const T *` to the active page |
 | `CalSegUnlock(name)` | — | Release the lock |

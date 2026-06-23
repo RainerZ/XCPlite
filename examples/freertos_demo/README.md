@@ -161,7 +161,7 @@ DWARF debug information, to build the A2L file without any runtime A2L calls in 
 emits a `tXcpEventDescriptor` (name, cycle time, priority) into `.xcp_evts`. xcpclient
 iterates this section to discover all events.
 
-**`xcp_cals` section** — every `CalSegDecl(name)` at file scope emits a `tXcpCalDescriptor`
+**`xcp_cals` section** — every `CalSegDecl(name)` at file scope emits a `tXcpCalSegDescriptor`
 (name, default page address, size) into `.xcp_cals`. xcpclient iterates this to discover all
 calibration segments.
 
@@ -436,7 +436,7 @@ const struct parameters parameters = { .fast_task_period_ms = 2, ... };
 CalSegDeclRef(parameters, parameters_calseg);
 // This expands to:
 //   static tXcpCalSegIndex     calseg_id_parameters = XCP_UNDEFINED_CALSEG;
-//   static tXcpCalDescriptor   calseg__parameters   __attribute__((section("xcp_cals"))) = {...};
+//   static tXcpCalSegDescriptor   calseg__parameters   __attribute__((section("xcp_cals"))) = {...};
 //   static CalSegRef<parameters> parameters_calseg(&calseg_id_parameters, &parameters);
 //
 
