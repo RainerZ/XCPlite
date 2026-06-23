@@ -223,6 +223,7 @@ typedef struct {
 } tXcpCalDescriptor;
 
 static_assert(sizeof(tXcpCalDescriptor) == 32, "sizeof(XcpCalDescriptor) must be 32");
+static_assert(sizeof(((tXcpCalDescriptor*)0)->res) > 0, "tXcpCalDescriptor res padding must not be zero; check pointer sizes vs struct layout");
 
 // Platform section attribute for tXcpCalDescriptor static variables created by CalSegCreate() and CalBlkCreate().
 // Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and

@@ -963,6 +963,7 @@ typedef struct {
     uint8_t res[16 - sizeof(char *) - 4 - 1];
 } tXcpEventDescriptor;
 static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
+static_assert(sizeof(((tXcpEventDescriptor*)0)->res) > 0, "tXcpEventDescriptor res padding must not be zero; check pointer size vs struct layout");
 #endif
 
 // Pre-register all tXcpEventDescriptor variables placed in the xcp_evts section by DaqCreateEvent().
@@ -3225,7 +3226,7 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
 // Create the async event with id 0 and cycle time 1ms
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
 #ifdef OPTION_DAQ_ASYNC_EVENT
-    static const tXcpEventDescriptor evt__async XCP_EVENT_SECTION_ATTR = {"async", 1000000, 0};
+    static const tXcpEventDescriptor evt__async XCP_EVENT_SECTION_ATTR = { .name = "async", .cycle_time_ns = 1000000, .priority = 0 };
     tXcpEventId id = XcpCreateEvent("async", 0, 0);
     assert(id==0);
 #endif
@@ -3237,8 +3238,8 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     // In SHM multiapplication mode, only the leader reaches this point, and creates a EPK segment for the whole system
     // @@@@ TODO: Currently the EPK segment is treated like any other segment, even if it is read-only and should only expose the default page
     static tXcpCalSegIndex calseg_id_epk = XCP_UNDEFINED_CALSEG;
-    const static tXcpCalDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {XCP_EPK_CALSEG_NAME, &calseg_id_epk, (void *)&calseg_id_epk, XCP_EPK_MAX_LENGTH + 1,
-                                                                       XCP_CALSEG_TYPE_SEGMENT};
+    const static tXcpCalDescriptor calseg__epk XCP_CAL_SECTION_ATTR = { .name = XCP_EPK_CALSEG_NAME, .addr = &calseg_id_epk, .indexp = (tXcpCalSegIndex *)&calseg_id_epk, .size = XCP_EPK_MAX_LENGTH + 1,
+                                                                       .type = XCP_CALSEG_TYPE_SEGMENT };
     DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s'\n", XCP_EPK_CALSEG_NAME);
 #ifdef OPTION_SHM_MODE
     calseg_id_epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, XcpGetEcuEpk(), XCP_EPK_MAX_LENGTH + 1);
