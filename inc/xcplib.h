@@ -323,12 +323,12 @@ static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor 
 /// @param name Name given as identifier
 /// @param cycle_time Cycle time in microseconds (0 = sporadic)
 /// @param priority Priority of the event (0 = normal, >=1 = realtime)
-#define DaqCreateEventExt(event_name, cycle_time, priority)                                                                                                                        \
-    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = (cycle_time) * 1000U, .priority = (priority)};              \
+#define DaqCreateEventExt(event_name, cycle, prio)                                                                                                                                 \
+    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = (cycle) * 1000U, .priority = (prio)};                       \
     static tXcpEventId evt_id_##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                               \
     if (XcpIsActivated()) {                                                                                                                                                        \
         if (evt_id_##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                       \
-            evt_id_##event_name = XcpCreateEvent(#event_name, (cycle_time) * 1000U, (priority));                                                                                   \
+            evt_id_##event_name = XcpCreateEvent(#event_name, (cycle) * 1000U, (prio));                                                                                            \
         }                                                                                                                                                                          \
     }
 
