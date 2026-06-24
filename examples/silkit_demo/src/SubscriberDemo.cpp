@@ -18,6 +18,7 @@ class Subscriber : public ApplicationBase {
     IDataSubscriber *_temperatureSubscriber;
 
     uint16_t _counter = 0;
+    double _signal = 0.0;
     GpsData _gps_data = {0.0, 0.0, 0.0};
     double _temperature = 0.0;
 
@@ -25,29 +26,41 @@ class Subscriber : public ApplicationBase {
 
     void EvaluateCommandLineArgs() override {}
 
+    // ----------------------------------------------------------------
     void CreateControllers() override {
-        _gpsSubscriber = GetParticipant()->CreateDataSubscriber("GpsSubscriber", dataSpecGps, [this](IDataSubscriber * /*subscriber*/, const DataMessageEvent &dataMessageEvent) {
-            _gps_data = DeserializeGPSData(SilKit::Util::ToStdVector(dataMessageEvent.data));
 
-            // std::stringstream ss;
-            // ss << "Received GPS data: lat=" << _gps_data.latitude << ", lon=" << _gps_data.longitude << ", signal=" << _gps_data.signal;
-            // GetLogger()->Info(ss.str());
+        printf("Subscriber: CreateControllers\n");
 
-            XcpUpdateSimTime(dataMessageEvent.timestamp.count());
-            DaqTriggerEventExt(Gps, this);
-        });
+        // Create data subscribers for GPS and temperature data
 
-        _temperatureSubscriber = GetParticipant()->CreateDataSubscriber("TemperatureSubscriber", dataSpecTemperature,
-                                                                        [this](IDataSubscriber * /*subscriber*/, const DataMessageEvent &dataMessageEvent) {
-                                                                            _temperature = DeserializeTemperature(SilKit::Util::ToStdVector(dataMessageEvent.data));
+        _gpsSubscriber = GetParticipant()->CreateDataSubscriber( //
+            "GpsSubscriber",                                     //
+            dataSpecGps,                                         //
 
-                                                                            // std::stringstream ss;
-                                                                            // ss << "Received temperature data: temperature=" << _temperature;
-                                                                            // GetLogger()->Info(ss.str());
+            [this](IDataSubscriber * /*subscriber*/, const DataMessageEvent &dataMessageEvent) {
+                // Deserialize the received GPS data struct from the serialized byte array
+                _gps_data = DeserializeGPSData(SilKit::Util::ToStdVector(dataMessageEvent.data));
 
-                                                                            XcpUpdateSimTime(dataMessageEvent.timestamp.count());
-                                                                            DaqTriggerEventExt(Temp, this);
-                                                                        });
+                // Trigger XCP measurement event Subscriber.Gps with the timestamp of the received data message
+                // @@@@ TODO: Use the current time instead
+                XcpUpdateSimTime(dataMessageEvent.timestamp.count());
+                DaqTriggerEventExt(Gps, this);
+            });
+
+        _temperatureSubscriber = GetParticipant()->CreateDataSubscriber( //
+            "TemperatureSubscriber",                                     //
+            dataSpecTemperature,                                         //
+
+            [this](IDataSubscriber * /*subscriber*/, const DataMessageEvent &dataMessageEvent) {
+                // Deserialize the received temperature value from the serialized byte array
+                _temperature = DeserializeTemperature(SilKit::Util::ToStdVector(dataMessageEvent.data));
+                printf("Subscriber: Received temperature data: temperature=%g\n", _temperature);
+
+                // Trigger XCP measurement event Subscriber.Temp with the timestamp of the received data message
+                // @@@@ TODO: Use the current time instead
+                XcpUpdateSimTime(dataMessageEvent.timestamp.count());
+                DaqTriggerEventExt(Temp, this);
+            });
 
         // Create a typedef for struct GpsData
         A2lCreateTypedef(GpsData, "GPS data struct", A2L_MEASUREMENT_COMPONENT(latitude, "GPS latitude in degrees", ""), //
@@ -55,53 +68,71 @@ class Subscriber : public ApplicationBase {
                          A2L_MEASUREMENT_COMPONENT(signal, "GPS signal quality", "")                                     //
         );
 
-        // Create events and measurements of instance variable
+        // Create events and associate measurements of instance variables (addressing mode relative to this)
+
         DaqCreateEvent(DoWorkSync); // On simulation step
         A2lSetRelativeAddrMode(DoWorkSync, this);
-        A2lCreateMeasurement(_counter, "Simulation step counter");
-        DaqCreateEvent(Gps); // On reception of GPS data
-        A2lSetRelativeAddrMode(Gps, this);
-        A2lCreateTypedefInstance(_gps_data, GpsData, "GPS data struct");
-        DaqCreateEvent(Temp); // On reception of temperature data
-        A2lSetRelativeAddrMode(Temp, this);
-        A2lCreateMeasurement(_temperature, "Received temperature in Celsius");
+        A2lCreateMeasurement(_counter, "Simulation step counter"); // Declare and associate _counter with the DoWorkSync event
+        A2lCreateMeasurement(_signal, "GPS signal strength");      // Declare and associate _signal with the GPS signal strength event
 
-        // Attach to the calibration parameter segment created in PublisherDemo
-        tXcpCalSegIndex calseg = XcpFindCalSeg("kParameters");
-        printf("Found calibration segment 'kParameters': %u\n", calseg);
+        DaqCreateEvent(Gps); // On reception callback for of GPS data
+        A2lSetRelativeAddrMode(Gps, this);
+        A2lCreateTypedefInstance(_gps_data, GpsData, "GPS data struct"); // Declare and associate _gps_data with the GpsData event
+
+        DaqCreateEvent(Temp); // On reception callback for temperature data
+        A2lSetRelativeAddrMode(Temp, this);
+        A2lCreateMeasurement(_temperature, "Received temperature in Celsius"); // Declare and associate _temperature with the Temp event
     }
 
-    void InitControllers() override {}
+    // ----------------------------------------------------------------
+    void InitControllers() override { printf("Subscriber: InitControllers\n"); }
 
+    // ----------------------------------------------------------------
     void DoWorkSync(std::chrono::nanoseconds now) override {
 
-        _counter++;
+        printf("Subscriber: DoWorkSync %gs\n", now.count() * 1e-9);
 
+        // Demo measurement variable Subscriber._counter
+        _counter++;
+        if (_counter > 1000)
+            _counter = 0;
+
+        // Demo measurement variable Subscriber._signal (just a copy of the GPS signal strength)
+        _signal = _gps_data.signal;
+
+        // Trigger XCP measurement event Subscriber.DoWorkSync with simulated time
+        // C style API, global, stack relative and this relative addressing mode
         XcpUpdateSimTime(now.count());
         DaqTriggerEventExt(DoWorkSync, this);
 
         // Sleep some time to simulate work
-        std::this_thread::sleep_for(std::chrono::microseconds(500));
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
 
-    void DoWorkAsync() override { printf("Doing async work\n"); }
+    // ----------------------------------------------------------------
+    void DoWorkAsync() override {
+
+        printf("Subscriber: DoWorkAsync\n");
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
 };
 
+// ----------------------------------------------------------------
 int main(int argc, char **argv) {
 
     // Initialize XCP server
 
-    // Use this for a separate, dedicated XCP server participant
+    // Use this variant for a separate, dedicated XCP server participant
     // XcpServerInit("Publisher", "V1.7", 5555, XCP_MODE_SHM);
 
-    // Use this for multi-application shared memory mode
+    // Use this variant for multi-application shared memory mode
     // The first participant becomes the server, the others use shared memory
-    XcpServerInit("Subscriber", "V1.7", 5555, XCP_MODE_SHM_AUTO);
+    XcpServerInit("Subscriber", "V200", 5555, XCP_MODE_SHM_AUTO);
 
     Arguments args;
     args.participantName = "Subscriber";
     Subscriber app{args};
-    app.SetupCommandLineArgs(argc, argv, "SIL Kit Demo - Subscriber: Receive GPS and Temperature data");
+    app.SetupCommandLineArgs(argc, argv, "XCPlite SIL-Kit Demo - Subscriber");
 
     return app.Run();
 }

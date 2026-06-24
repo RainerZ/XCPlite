@@ -77,4 +77,12 @@ echo "Binaries: ${SCRIPT_DIR}/build/"
 echo "  SilKitDemoPublisher"
 echo "  SilKitDemoSubscriber"
 echo ""
-echo "Run the demo with:  ./run.sh"
+
+
+
+echo "Run the demo with:"
+echo "../../../sil-kit/_build/debug/Debug/sil-kit-registry"
+echo "./build/SilKitDemoPublisher --sim-step-duration 10000 --fast" 
+echo "./build/SilKitDemoSubscriber --sim-step-duration 10000 --fast" 
+echo "../../../sil-kit/_build/debug/Debug/sil-kit-system-controller Publisher Subscriber"
+

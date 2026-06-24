@@ -126,7 +126,7 @@ Open separate terminals. All commands are relative to the silkit_demo directory.
 
 ```bash
 /path/to/sil-kit/_build/debug/Debug/sil-kit-registry
-# Example: /Users/Rainer.Zaiser/git/sil-kit/_build/debug/Debug/sil-kit-registry
+# Example: ../../sil-kit/_build/debug/Debug/sil-kit-registry
 ```
 
 **Terminal 1 — XCP Server participant** 
@@ -164,7 +164,7 @@ Starts synchronized simulation:
 
 ```bash
 /path/to/sil-kit/_build/debug/Debug/sil-kit-system-controller XcpServer Publisher Subscriber
-# Example: /Users/Rainer.Zaiser/git/sil-kit/_build/debug/Debug/sil-kit-system-controller XcpServer Publisher Subscriber
+# Example: ../../sil-kit/_build/debug/Debug/sil-kit-system-controller XcpServer Publisher Subscriber
 ```
 
 The `--sim-step-duration <us>` and `--fast` flags can be passed directly to both participant binaries when starting manually.
@@ -175,7 +175,7 @@ The `--sim-step-duration <us>` and `--fast` flags can be passed directly to both
 Check status of the XCP server:
 
 ```bash
-../../build/shmtool status -v
+../../build-shm/shmtool status -v
 
 /xcpdata mmap found, size = 32768 bytes
 ================================================================================
@@ -219,15 +219,15 @@ CalSegs (2):
 Use the test XCP client (see tools/xcpclient)to verify the XCP server is running, A2L file can be uploaded and parsed, and symbols are visible:
 
 ```bash
-
 xcpclient --upload-a2l --udp  --list-mea .   --list-cal .
+```
 
+```
 Calibration variables:
  Publisher.kParameters.counter_max 0:80010000  = 1000
  Publisher.kParameters.delay_us 0:80010004  = 1000
  Publisher.kParameters.signal_amplitude 0:80010008 = 1
  Publisher.kParameters.use_simulated_time 0:80010010  = 1
-
 
 Measurement variables:
  Publisher._counter 3:0x00C00000 event 3 2 byte unsigned
@@ -240,6 +240,10 @@ Measurement variables:
  Subscriber._gps_data.latitude 3:0x00400128 event 1 8 byte float
  Subscriber._gps_data.longitude 3:0x00400130 event 1 8 byte float
  Subscriber._gps_data.signal 3:0x00400138 event 1 8 byte float
+```
+
+```bash
+xcpclient --upload-a2l --udp  --mea counter
 ```
 
 
@@ -393,3 +397,9 @@ silkit_demo/
     ├── PublisherDemo.cpp   # Publisher demo with XCP instrumentation
     └── SubscriberDemo.cpp  # Subscriber demo with XCP instrumentation
 ```
+
+
+
+
+
+

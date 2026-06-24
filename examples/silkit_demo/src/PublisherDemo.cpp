@@ -45,13 +45,17 @@ class Publisher : public ApplicationBase {
 
     void EvaluateCommandLineArgs() override {}
 
+    // ----------------------------------------------------------------
     void CreateControllers() override {
 
+        printf("Publisher: CreateControllers\n");
+
+        // Create data publishers for GPS and temperature data
         _gpsPublisher = GetParticipant()->CreateDataPublisher("GpsPublisher", dataSpecGps, 0);
         _temperaturePublisher = GetParticipant()->CreateDataPublisher("TemperaturePublisher", dataSpecTemperature, 0);
 
         // Create a typedef for struct GpsData
-        // Variabic template style
+        // (Variadic template style API)
         A2lCreateTypedef(GpsData, "GPS data struct",                                           //
                          A2L_MEASUREMENT_COMPONENT(latitude, "GPS latitude in degrees", ""),   //
                          A2L_MEASUREMENT_COMPONENT(longitude, "GPS longitude in degrees", ""), //
@@ -59,7 +63,7 @@ class Publisher : public ApplicationBase {
         );
 
         // Create a typedef for struct ParametersT
-        // C style
+        // (C style API)
         A2lTypedefBegin(ParametersT, &kParameters, "A2L Typedef for ParametersT");
         A2lTypedefParameterComponent(counter_max, "Maximum counter value", "", 0, 2000);
         A2lTypedefParameterComponent(delay_us, "Mainloop delay time in us", "us", 0, 999999);
@@ -71,37 +75,47 @@ class Publisher : public ApplicationBase {
         _parameters.CreateA2lTypedefInstance("ParametersT", "Main parameters");
     }
 
-    void InitControllers() override {}
+    // ----------------------------------------------------------------
+    void InitControllers() override { printf("Publisher: InitControllers\n"); }
 
+    // ----------------------------------------------------------------
     void PublishGPSData(std::chrono::nanoseconds now) {
 
-        _gps_data.latitude = 48.8235 + static_cast<double>((rand() % 150)) / 100000;
-        _gps_data.longitude = 9.0965 + static_cast<double>((rand() % 150)) / 100000;
-        _gps_data.signal =
-            _parameters.lock()->signal_amplitude * std::sin(2.0 * M_PI * std::chrono::duration<double>(now).count()); // sine signal with values between -1 and 1 and period of 1s
+        // Demo measurement struct variable Subscriber._gps_data
+        _gps_data.latitude = 48.8235;
+        _gps_data.longitude = 9.0965;
 
+        // Simulate a GPS signal strength as a sine wave between 0 and parameter Subscriber.signal_amplitude with a period of 1 second
+        double time_sec = std::chrono::duration<double>(now).count();
+        _gps_data.signal = _parameters.lock()->signal_amplitude * (0.5 * (std::sin(2.0 * M_PI * time_sec) + 1.0));
+
+        // Publish the GPS data struct as a serialized byte array
         auto gpsSerialized = SerializeGPSData(_gps_data);
         _gpsPublisher->Publish(gpsSerialized);
 
-        // std::stringstream ss;
-        // ss << "Publishing GPS data: lat=" << _gps_data.latitude << ", lon=" << _gps_data.longitude << ", signal=" << _gps_data.signal;
-        // GetLogger()->Info(ss.str());
+        printf("Published GPS data: lat=%g, lon=%g, signal=%g\n", _gps_data.latitude, _gps_data.longitude, _gps_data.signal);
     }
 
+    // ----------------------------------------------------------------
     void PublishTemperatureData() {
 
+        // Demo measurement variable Subscriber._temperature
         _temperature = 25.0 + static_cast<double>(rand() % 10) / 10.0;
 
+        // Publish the temperature value as a serialized byte array
         auto temperatureSerialized = SerializeTemperature(_temperature);
         _temperaturePublisher->Publish(temperatureSerialized);
 
-        // std::stringstream ss;
-        // ss << "Publishing temperature data: temperature=" << temperature;
-        // GetLogger()->Info(ss.str());
+        printf("Published temperature data: temperature=%g\n", _temperature);
     }
 
+    // ----------------------------------------------------------------
     void DoWorkSync(std::chrono::nanoseconds now) override {
 
+        printf("Publisher: DoWorkSync %gs\n", now.count() * 1e-9);
+
+        // Demo measurement variable Subscriber._counter
+        // Limited by the calibration parameter Subscriber.counter_max
         _counter++;
         if (_counter > _parameters.lock()->counter_max)
             _counter = 0;
@@ -109,7 +123,8 @@ class Publisher : public ApplicationBase {
         PublishGPSData(now);
         PublishTemperatureData();
 
-        // Trigger a XCP measurement event with simulated time
+        // Trigger XCP measurement event DoWorkSync with simulated time
+        // C++ variadic template style API, individual relative addressing mode for each measurement
         XcpUpdateSimTime(now.count());
         DaqEventVar(DoWorkSync,                                                               //
                     A2L_MEAS(_counter, "Simulation step counter"),                            //
@@ -119,26 +134,32 @@ class Publisher : public ApplicationBase {
         // Sleep some time to simulate work
         // Read delay_us before sleep to avoid holding the calibration lock during sleep
         const auto delay_us = _parameters.lock()->delay_us;
-        std::this_thread::sleep_for(std::chrono::microseconds(delay_us));
+        if (delay_us > 0)
+            std::this_thread::sleep_for(std::chrono::microseconds(delay_us));
     }
 
-    void DoWorkAsync() override {}
+    // ----------------------------------------------------------------
+    void DoWorkAsync() override {
+        printf("Publisher: DoWorkAsync\n");
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
 };
 
+// ----------------------------------------------------------------
 int main(int argc, char **argv) {
 
     // Initialize XCP server for measurement on TCP port 5555
 
-    // Use this for a separate, dedicated XCP server participant
+    // Use this variant for a separate, dedicated XCP server participant
     // XcpServerInit("Publisher", "V1.7", 5555, XCP_MODE_SHM);
 
-    // Use this for a single XCP server participant
+    // Use this variantfor a single XCP server participant
     // The first participant becomes the server, the others use shared memory
-    XcpServerInit("Publisher", "V1.7", 5555, XCP_MODE_SHM_AUTO);
+    XcpServerInit("Publisher", "V200", 5555, XCP_MODE_SHM_AUTO);
 
     Arguments args;
     args.participantName = "Publisher";
     Publisher app{args};
-    app.SetupCommandLineArgs(argc, argv, "SIL Kit Demo - Publisher");
+    app.SetupCommandLineArgs(argc, argv, "XCPlite SIL-Kit Demo - Publisher");
     return app.Run();
 }
