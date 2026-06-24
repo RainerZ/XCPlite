@@ -28,7 +28,7 @@
 #include "persistence.h" // for XcpBinWrite, XcpBinDelete
 #include "platform.h"    // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex
 #include "xcp_cfg.h"     // for XCP_xxx
-#include "xcplite.h"     // for XcpGetEpk
+#include "xcplite.h"     // for XcpGetEcuEpk
 #include "xcptl_cfg.h"   // for XCPTL_xxx
 
 //----------------------------------------------------------------------------------
@@ -349,9 +349,9 @@ static const char *A2lGetFilenameHelper_(const char *project_name, const char *e
     return gA2lFileName;
 }
 
-static const char *A2lGetFilename_(uint8_t file_type) { return A2lGetFilenameHelper_(XcpGetProjectName(), XcpGetEpk(), file_type); }
+static const char *A2lGetFilename_(uint8_t file_type) { return A2lGetFilenameHelper_(XcpGetProjectName(), XcpGetLocalEpk(), file_type); }
 
-const char *A2lGetFilename(void) { return A2lGetFilenameHelper_(XcpGetProjectName(), XcpGetEpk(), A2L_MAIN_FILE); }
+const char *A2lGetFilename(void) { return A2lGetFilenameHelper_(XcpGetProjectName(), XcpGetLocalEpk(), A2L_MAIN_FILE); }
 #ifdef OPTION_SHM_MODE // get application partial A2L file name
 // A2L file name for application partial files in SHM mode, which are included into the main file and deleted afterwards
 const char *A2lGetAppFilename(const char *project_name, const char *epk) { return A2lGetFilenameHelper_(project_name, epk, A2L_OBJECTS_FILE); }
@@ -1631,8 +1631,9 @@ bool A2lFinalize(void) {
     // In SHM mode, the server creates the main A2L file and the binary persistence file
     if (XcpShmIsXcpServer()) {
 
-        // Regenerate the EPK and write to the EPK segment, so the the BIN file get it as well and the client can upload it
-        const char *epk = XcpGetEcuEpk(); // Get (generate) the current ECU EPK for all existing applications
+        // Regenerate the EPK
+        uint32_t epk_addr = XCP_ADDR_EPK;    // XcpShmGetEcuEpkAddr();
+        const char *epk = XcpShmGetEcuEpk(); // Get (generate) the current ECU EPK for all existing applications
 
         // Create the main A2L file by including the partial A2L files created by all applications
         const char *files[SHM_MAX_APP_COUNT];
@@ -1640,9 +1641,10 @@ bool A2lFinalize(void) {
         if (count == 0) {
             DBG_PRINT_WARNING("No A2L files to include found\n");
         }
-        A2lWriter(A2lGetFilename_(A2L_MAIN_FILE), gA2lMode, XcpGetProjectName(), epk, count, files, gA2lOptionBindAddr, gA2lOptionPort, gA2lUseTCP);
+        A2lWriter(A2lGetFilename_(A2L_MAIN_FILE), gA2lMode, XcpGetProjectName(), epk, epk_addr, count, files, gA2lOptionBindAddr, gA2lOptionPort, gA2lUseTCP);
 
-        // Update the EPK in the EPK segment, so the the client can upload it and the BIN file gets it as well
+        // Update the EPK in the EPK segment, so the the client can upload it from the memory location of the EPK segment
+        // There are 4 different ways to get the EPK via XCP: via the A2L file, via the addr in A2L file, via the EPK segment, or via GET_ID
         XcpCalUpdateEpkSeg(epk);
 
 // Write the binary persistence file with default page data
@@ -1667,7 +1669,7 @@ bool A2lFinalize(void) {
     const char *include_files[1] = {a2l_object_file};
     int include_count = 1;
     const char *a2l_main_file = A2lGetFilename_(A2L_MAIN_FILE);
-    A2lWriter(a2l_main_file, gA2lMode, XcpGetProjectName(), XcpGetEcuEpk(), include_count, include_files, gA2lOptionBindAddr, gA2lOptionPort, gA2lUseTCP);
+    A2lWriter(a2l_main_file, gA2lMode, XcpGetProjectName(), XcpGetEcuEpk(), XCP_ADDR_EPK, include_count, include_files, gA2lOptionBindAddr, gA2lOptionPort, gA2lUseTCP);
     remove(a2l_object_file); // Remove the temporary include files, not needed anymore
 
     // Notify the XCP server the inalized A2L file is available for upload
@@ -1676,7 +1678,7 @@ bool A2lFinalize(void) {
     // Create the binary persistence file associated to this A2L file with initial default page data
 #ifdef OPTION_ENABLE_PERSISTENCE
     if ((XcpGetInitMode() & XCP_MODE_PERSISTENCE)) {
-        XcpBinWrite(XcpGetEpk());
+        XcpBinWrite(XcpGetEcuEpk());
     }
 #endif
 

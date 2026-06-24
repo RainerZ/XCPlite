@@ -30,7 +30,7 @@
 #include "shm.h"       // for shared memory management
 #include "xcp.h"       // for CRC_XXX
 #include "xcp_cfg.h"   // for XCP_xxx
-#include "xcplite.h"   // for tXcpDaqLists, XcpXxx, ApplXcpXxx, XcpGetEpk
+#include "xcplite.h"   // for tXcpDaqLists, XcpXxx, ApplXcpXxx, XcpGetEcuEpk
 #include "xcptl_cfg.h" // for XCPTL_xxx
 
 #if !defined(XCP_ENABLE_DAQ_EVENT_LIST) || !defined(XCP_ENABLE_CALSEG_LIST)
@@ -108,7 +108,7 @@ const char *XcpBinGetFilename(void) {
     SNPRINTF(gXcpBinFilename, XCP_BIN_FILENAME_MAX_LENGTH, "%s.bin", XcpShmGetEcuProjectName());
     return gXcpBinFilename;
 #else
-    SNPRINTF(gXcpBinFilename, XCP_BIN_FILENAME_MAX_LENGTH, "%s_%s.bin", XcpGetProjectName(), XcpGetEpk());
+    SNPRINTF(gXcpBinFilename, XCP_BIN_FILENAME_MAX_LENGTH, "%s_%s.bin", XcpGetProjectName(), XcpGetEcuEpk());
     return gXcpBinFilename;
 #endif
 }

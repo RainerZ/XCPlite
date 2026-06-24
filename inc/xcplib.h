@@ -709,7 +709,8 @@ bool XcpIsInShmMode(void);
 const char *XcpGetProjectName(void);
 
 // EPK software version identifier
-const char *XcpGetEpk(void);
+const char *XcpGetEcuEpk(void);
+const char *XcpGetLocalEpk(void);
 
 // A2L file name
 // Notify XCPlite there is a valid A2L with this name to be provided for upload via XCP command GET_ID

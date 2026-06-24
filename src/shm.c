@@ -90,7 +90,8 @@ bool XcpShmIsFollower(void) { return (local.init_mode & XCP_MODE_SHM) != 0 && !l
 // Returns this process's application id (the slot index in shm_header.app_list)
 uint8_t XcpShmGetAppId(void) { return local.shm_app_id; }
 
-// Returns the EPK string of the overall ECU
+// Returns the EPK string of the overall ECU and update it in the SHM header
+// Called from A2L generation and new application registration
 // Computes a FNV-1a 64-bit hash over all application EPK strings and returns it as a 16-char hex string.
 // The result is always 16 ASCII hex characters, fits in XCP_ECU_EPK_MAX_LENGTH, and changes whenever any app EPK changes.
 const char *XcpShmGetEcuEpk(void) {
@@ -586,7 +587,7 @@ int16_t XcpShmRegisterApp(const char *name, const char *epk, uint32_t pid, uint8
     atomic_store(&app->u.a2l_finalized, 0U);
     atomic_store(&app->u.alive_counter, 0U);
 
-    // Update the ECU EPK hash
+    // Update the ECU EPK hash in the SHM header
     XcpShmGetEcuEpk();
 
     DBG_PRINTF5("XcpShmRegisterApp: Registered application %u:'%s' (pid=%u, mode=%02X %s %s)\n", slot, name, (unsigned)getpid(), xcp_init_mode, is_leader ? "leader" : "",

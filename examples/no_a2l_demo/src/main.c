@@ -233,7 +233,7 @@ int main(int argc, char *argv[]) {
 
     // Initialize the XCP singleton, activate XCP, must be called before starting the server
     // @@@@ TODO: Using binary persistence files not supported, | XCP_MODE_PERSISTENCE
-    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL );
+    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
     XcpSetElfName(argv[0]); // Set ELF file name for upload via GET_ID, optional with OPTION_ENABLE_ELF_UPLOAD
 
     // Initialize the XCP Server
@@ -310,7 +310,7 @@ int main(int argc, char *argv[]) {
 
     // Save current calibration segments to binary persistence file
     // @@@@ TODO: Using binary persistence files not supported
-    // XcpBinWrite(XcpGetEpk());
+    // XcpBinWrite(XcpGetEcuEpk());
 
     // Stop the XCP server
     XcpEthServerShutdown();

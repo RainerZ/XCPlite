@@ -473,8 +473,9 @@ static void XcpSetEpk(const char *epk) {
     DBG_PRINTF3("EPK = '%s'\n", local.epk);
 }
 
-// Get the EPK from the static buffer in the local state
-const char *XcpGetEpk(void) {
+// Get a reference to the EPK in a static lifetime buffer
+// local.epk
+const char *XcpGetLocalEpk(void) {
     if (STRNLEN(local.epk, XCP_EPK_MAX_LENGTH) == 0) {
         assert(0 && "EPK not set");
         return "";
@@ -482,13 +483,14 @@ const char *XcpGetEpk(void) {
     return local.epk;
 }
 
-// Get the EPK from the static buffer in the local state
-// Only in SHM mode there is a difference to XcpGetEpk(), the ECU EPK is for the complete multi application system, while XcpGetEpk() is for the application
+// Get a reference to the EPK in a static lifetime buffer
+// local.epk or shared.shm_header.ecu_epk depending on the build configuration
+// Only in SHM mode there is a difference to XcpGetLocalEpk(), the ecu EPK is for the complete multi application system, while XcpGetLocalEpk() is for the application
 const char *XcpGetEcuEpk(void) {
 #ifdef OPTION_SHM_MODE // get ecu epk which is a hash for all applications
     return XcpShmGetEcuEpk();
 #else // ecu epk is the same as application epk
-    return XcpGetEpk();
+    return XcpGetLocalEpk();
 #endif
 }
 
@@ -610,7 +612,7 @@ uint8_t XcpReadMta(uint8_t size, uint8_t *data) {
 // Sets the memory transfer address in local.mta_addr/local.mta_ext
 // Absolute addressing mode:
 //   Converted to pointer addressing mode local.mta_ptr=ApplXcpGetBaseAddr()+XcpAddrDecodeAbsOffset(local.mta_addr) and local.mta_ext=XCP_ADDR_EXT_PTR
-//   EPK access is local.mta_ptr=XcpGetEpk() and local.mta_ext=XCP_ADDR_EXT_PTR
+//   EPK access is local.mta_ptr=XcpGetEcuEpk() and local.mta_ext=XCP_ADDR_EXT_PTR
 //   Absolute access to calibration segments is converted to segment relative addressing mode local.mta_ext=XCP_ADDR_EXT_SEG
 // Other addressing mode are left unchanged
 // Called by XCP commands SET_MTA, SHORT_DOWNLOAD and SHORT_UPLOAD
@@ -624,7 +626,7 @@ uint8_t XcpSetMta(uint8_t ext_, uint32_t addr_) {
 #if !defined(XCP_ENABLE_EPK_CALSEG) || (defined(XCP_ENABLE_ABS_ADDRESSING) && (XCP_ADDR_EXT_ABS == 0))
     // Direct EPK access
     if (local.mta_ext == XCP_ADDR_EXT_EPK && local.mta_addr == XCP_ADDR_EPK) {
-        local_mut.mta_ptr = (uint8_t *)XcpGetEpk();
+        local_mut.mta_ptr = (uint8_t *)XcpGetEcuEpk();
         local_mut.mta_ext = XCP_ADDR_EXT_PTR;
         DBG_PRINTF6("XcpSetMta: XCP_ADDR_EXT_PTR p=%p\n", local_mut.mta_ptr);
         return CRC_CMD_OK;
@@ -3240,11 +3242,9 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     const static tXcpCalSegDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {
         .name = XCP_EPK_CALSEG_NAME, .addr = &calseg_id_epk, .indexp = (tXcpCalSegIndex *)&calseg_id_epk, .size = XCP_EPK_MAX_LENGTH + 1, .type = XCP_CALSEG_TYPE_SEGMENT};
     DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s'\n", XCP_EPK_CALSEG_NAME);
-#ifdef OPTION_SHM_MODE
+    // @@@@ TODO: Check that this works in absolute addressing mode, since the reference page is not copied anymore: what is writen to the A2L file
+    // Note that this, this might not be the final EPK yet
     calseg_id_epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, XcpGetEcuEpk(), XCP_EPK_MAX_LENGTH + 1);
-#else
-    calseg_id_epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, local.epk, XCP_EPK_MAX_LENGTH + 1);
-#endif
     assert(calseg_id_epk == 0);
 #endif
 

@@ -249,7 +249,7 @@ static const char *A2lGetCalSegName_(const char *project_name, uint8_t app_id, c
 //----------------------------------------------------------------------------------
 
 // Create MOD_PAR memory segments
-static void A2lCreate_MOD_PAR(const char *project_name, const char *epk_str) {
+static void A2lCreate_MOD_PAR(const char *project_name, const char *epk_str, uint32_t epk_addr) {
 
     assert(gA2lFile != NULL);
 
@@ -257,7 +257,7 @@ static void A2lCreate_MOD_PAR(const char *project_name, const char *epk_str) {
 
     // Write the ECU EPK
     if (epk_str) {
-        fprintf(gA2lFile, "EPK \"%s\" ADDR_EPK 0x%08X\n", epk_str, XCP_ADDR_EPK);
+        fprintf(gA2lFile, "EPK \"%s\" ADDR_EPK 0x%08X\n", epk_str, epk_addr);
     }
 
     // Memory segments
@@ -459,8 +459,8 @@ static void includePartialA2lFiles(uint8_t a2l_mode, uint16_t count, const char 
 // Write A2L file
 // Include multiple partial A2L files with measurments, characteristic, typedefs, conversions given in include_files
 
-bool A2lWriter(const char *a2l_filename, uint8_t a2l_mode, const char *project_name, const char *epk_str, uint16_t include_count, const char **include_files, const uint8_t *addr,
-               uint16_t port, bool use_tcp) {
+bool A2lWriter(const char *a2l_filename, uint8_t a2l_mode, const char *project_name, const char *epk_str, uint32_t epk_addr, uint16_t include_count, const char **include_files,
+               const uint8_t *addr, uint16_t port, bool use_tcp) {
 
     assert(addr != NULL);
     assert(port != 0);
@@ -528,7 +528,7 @@ bool A2lWriter(const char *a2l_filename, uint8_t a2l_mode, const char *project_n
 #endif
 
     // Create MOD_PAR section with EPK and calibration segments
-    A2lCreate_MOD_PAR(project_name, epk_str);
+    A2lCreate_MOD_PAR(project_name, epk_str, epk_addr);
 
     // Create IF_DATA section with event list and transport layer info
     A2lCreate_ETH_IF_DATA(project_name, use_tcp, addr, port);
