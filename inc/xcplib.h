@@ -176,33 +176,33 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
 /// Macro maybe used outside function scope
 /// @param name given as identifier, &name is expected to be the const static lifetime pointer to the default page, sizeof(name) is used as size of the calibration segment
 // calseg__##name and calblk__##name are the linker map file markers for calibration segments and blocks
-#define CalSegDecl(name)                                                                                                                                                           \
-    static tXcpCalSegIndex calseg_id_##name = XCP_UNDEFINED_CALSEG;                                                                                                                \
-    const static tXcpCalSegDescriptor calseg__##name XCP_CAL_SECTION_ATTR = {                                                                                                      \
-        .name = #name, .addr = (const void *)&(name), .indexp = &calseg_id_##name, .size = sizeof(name), .type = XCP_CALSEG_TYPE_SEGMENT};
-#define CalBlkDecl(name)                                                                                                                                                           \
-    static tXcpCalSegIndex calblk_id_##name = XCP_UNDEFINED_CALSEG;                                                                                                                \
-    const static tXcpCalSegDescriptor calblk__##name XCP_CAL_SECTION_ATTR = {                                                                                                      \
-        .name = #name, .addr = (const void *)&(name), .indexp = &calblk_id_##name, .size = sizeof(name), .type = XCP_CALSEG_TYPE_BLOCK};
+#define CalSegDecl(calseg_name)                                                                                                                                                    \
+    static tXcpCalSegIndex calseg_id_##calseg_name = XCP_UNDEFINED_CALSEG;                                                                                                         \
+    const static tXcpCalSegDescriptor calseg__##calseg_name XCP_CAL_SECTION_ATTR = {                                                                                               \
+        .name = #calseg_name, .addr = (const void *)&(calseg_name), .indexp = &calseg_id_##calseg_name, .size = sizeof(calseg_name), .type = XCP_CALSEG_TYPE_SEGMENT};
+#define CalBlkDecl(calblk_name)                                                                                                                                                    \
+    static tXcpCalSegIndex calblk_id_##calblk_name = XCP_UNDEFINED_CALSEG;                                                                                                         \
+    const static tXcpCalSegDescriptor calblk__##calblk_name XCP_CAL_SECTION_ATTR = {                                                                                               \
+        .name = #calblk_name, .addr = (const void *)&(calblk_name), .indexp = &calblk_id_##calblk_name, .size = sizeof(calblk_name), .type = XCP_CALSEG_TYPE_BLOCK};
 
 /// Dynamic creation of a calibration segment or block
 /// Name given as identifier, type name and segment name must be identical
 /// Macro may be used anywhere in the code, even in loops
 /// @param name given as identifier, &name is expected to be the const static lifetime pointer to the default page, sizeof(name) is used as size of the calibration segment
 // calseg__##name and calblk__##name are the linker map file markers for calibration segments and blocks
-#define CalSegCreate(name)                                                                                                                                                         \
-    static tXcpCalSegIndex calseg_id_##name = XCP_UNDEFINED_CALSEG;                                                                                                                \
-    const static tXcpCalSegDescriptor calseg__##name XCP_CAL_SECTION_ATTR = {                                                                                                      \
-        .name = #name, .addr = (void *)&(name), .indexp = &calseg_id_##name, .size = sizeof(name), .type = XCP_CALSEG_TYPE_SEGMENT};                                               \
-    if (calseg_id_##name == XCP_UNDEFINED_CALSEG) {                                                                                                                                \
-        calseg_id_##name = XcpCreateCalSeg(#name, (uint8_t *)&(name), sizeof(name));                                                                                               \
+#define CalSegCreate(calseg_name)                                                                                                                                                  \
+    static tXcpCalSegIndex calseg_id_##calseg_name = XCP_UNDEFINED_CALSEG;                                                                                                         \
+    const static tXcpCalSegDescriptor calseg__##calseg_name XCP_CAL_SECTION_ATTR = {                                                                                               \
+        .name = #calseg_name, .addr = (void *)&(calseg_name), .indexp = &calseg_id_##calseg_name, .size = sizeof(calseg_name), .type = XCP_CALSEG_TYPE_SEGMENT};                   \
+    if (calseg_id_##calseg_name == XCP_UNDEFINED_CALSEG) {                                                                                                                         \
+        calseg_id_##calseg_name = XcpCreateCalSeg(#calseg_name, (uint8_t *)&(calseg_name), sizeof(calseg_name));                                                                   \
     }
-#define CalBlkCreate(name)                                                                                                                                                         \
-    static tXcpCalSegIndex calblk_id_##name = XCP_UNDEFINED_CALSEG;                                                                                                                \
-    const static tXcpCalSegDescriptor calblk__##name XCP_CAL_SECTION_ATTR = {                                                                                                      \
-        .name = #name, .addr = (void *)&(name), .indexp = &calblk_id_##name, .size = sizeof(name), .type = XCP_CALSEG_TYPE_BLOCK};                                                 \
-    if (calblk_id_##name == XCP_UNDEFINED_CALSEG) {                                                                                                                                \
-        calblk_id_##name = XcpCreateCalBlk(#name, (uint8_t *)&(name), sizeof(name));                                                                                               \
+#define CalBlkCreate(calblk_name)                                                                                                                                                  \
+    static tXcpCalSegIndex calblk_id_##calblk_name = XCP_UNDEFINED_CALSEG;                                                                                                         \
+    const static tXcpCalSegDescriptor calblk__##calblk_name XCP_CAL_SECTION_ATTR = {                                                                                               \
+        .name = #calblk_name, .addr = (void *)&(calblk_name), .indexp = &calblk_id_##calblk_name, .size = sizeof(calblk_name), .type = XCP_CALSEG_TYPE_BLOCK};                     \
+    if (calblk_id_##calblk_name == XCP_UNDEFINED_CALSEG) {                                                                                                                         \
+        calblk_id_##calblk_name = XcpCreateCalBlk(#calblk_name, (uint8_t *)&(calblk_name), sizeof(calblk_name));                                                                   \
     }
 
 /// Lock calibration segment macro
@@ -528,16 +528,16 @@ extern const uint8_t *gXcpBaseAddr;
 
 /// Create and trigger the global XCP event 'name' for stack relative or absolute addressing
 /// The descriptor is placed in the xcp_evts section so XcpInit() pre-registers the event.
-/// trg__AAS__##name is kept as a linker map marker for the trigger location (same role as in DaqTriggerEvent).
-/// @param name Name given as identifier
-#define DaqCreateAndTriggerEvent(name)                                                                                                                                             \
-    static const tXcpEventDescriptor evt__##name XCP_EVENT_SECTION_ATTR = {.name = #name, .cycle_time_ns = 0, .priority = 0};                                                      \
-    static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                                  \
+/// trg__AAS__##event_name is kept as a linker map marker for the trigger location (same role as in DaqTriggerEvent).
+/// @param event_name Name given as identifier
+#define DaqCreateAndTriggerEvent(event_name)                                                                                                                                       \
+    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                          \
+    static tXcpEventId trg__AAS__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                            \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        if (trg__AAS__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                          \
-            trg__AAS__##name = XcpCreateEvent(#name, 0, 0);                                                                                                                        \
+        if (trg__AAS__##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                    \
+            trg__AAS__##event_name = XcpCreateEvent(#event_name, 0, 0);                                                                                                            \
         }                                                                                                                                                                          \
-        XcpEventExt_Var(trg__AAS__##name, 1, xcp_get_frame_addr());                                                                                                                \
+        XcpEventExt_Var(trg__AAS__##event_name, 1, xcp_get_frame_addr());                                                                                                          \
     }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -709,7 +709,7 @@ bool XcpIsInShmMode(void);
 const char *XcpGetProjectName(void);
 
 // EPK software version identifier
-const char *XcpGetEcuEpk(void);
+const char *XcpGetEcuEpk(void); // Only in SHM mode different to XcpGetLocalEpk(), which is for the application, while XcpGetEcuEpk() is for the overall ECU
 const char *XcpGetLocalEpk(void);
 
 // A2L file name

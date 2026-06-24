@@ -62,8 +62,8 @@ void XcpDeinit(void);
 const char *XcpGetProjectName(void);
 
 // EPK software version identifier
-const char *XcpGetLocalEpk(void);
 const char *XcpGetEcuEpk(void); // Only in SHM mode different to XcpGetLocalEpk(), which is for the application, while XcpGetEcuEpk() is for the overall ECU
+const char *XcpGetLocalEpk(void);
 
 // XCP command processor
 // Execute an XCP command
