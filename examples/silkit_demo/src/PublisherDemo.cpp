@@ -48,8 +48,6 @@ class Publisher : public ApplicationBase {
     // ----------------------------------------------------------------
     void CreateControllers() override {
 
-        printf("Publisher: CreateControllers\n");
-
         // Create data publishers for GPS and temperature data
         _gpsPublisher = GetParticipant()->CreateDataPublisher("GpsPublisher", dataSpecGps, 0);
         _temperaturePublisher = GetParticipant()->CreateDataPublisher("TemperaturePublisher", dataSpecTemperature, 0);
@@ -76,7 +74,7 @@ class Publisher : public ApplicationBase {
     }
 
     // ----------------------------------------------------------------
-    void InitControllers() override { printf("Publisher: InitControllers\n"); }
+    void InitControllers() override {}
 
     // ----------------------------------------------------------------
     void PublishGPSData(std::chrono::nanoseconds now) {
@@ -93,7 +91,7 @@ class Publisher : public ApplicationBase {
         auto gpsSerialized = SerializeGPSData(_gps_data);
         _gpsPublisher->Publish(gpsSerialized);
 
-        printf("Published GPS data: lat=%g, lon=%g, signal=%g\n", _gps_data.latitude, _gps_data.longitude, _gps_data.signal);
+        // printf("Published GPS data: lat=%g, lon=%g, signal=%g\n", _gps_data.latitude, _gps_data.longitude, _gps_data.signal);
     }
 
     // ----------------------------------------------------------------
@@ -106,13 +104,13 @@ class Publisher : public ApplicationBase {
         auto temperatureSerialized = SerializeTemperature(_temperature);
         _temperaturePublisher->Publish(temperatureSerialized);
 
-        printf("Published temperature data: temperature=%g\n", _temperature);
+        // printf("Published temperature data: temperature=%g\n", _temperature);
     }
 
     // ----------------------------------------------------------------
     void DoWorkSync(std::chrono::nanoseconds now) override {
 
-        printf("Publisher: DoWorkSync %gs\n", now.count() * 1e-9);
+        // printf("Publisher: DoWorkSync %gs\n", now.count() * 1e-9);
 
         // Demo measurement variable Subscriber._counter
         // Limited by the calibration parameter Subscriber.counter_max
@@ -140,7 +138,7 @@ class Publisher : public ApplicationBase {
 
     // ----------------------------------------------------------------
     void DoWorkAsync() override {
-        printf("Publisher: DoWorkAsync\n");
+        // printf("Publisher: DoWorkAsync\n");
         std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
 };

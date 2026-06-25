@@ -842,16 +842,22 @@ uint8_t XcpCalSegWriteMemory(uint32_t dst, uint16_t size, const uint8_t *src) {
 }
 
 // Update the EKP segment with the current EPK value
+// Silently ignored, if the EPK segment is not present
+// Parameter epk is an array[XCP_EPK_MAX_LENGTH+1] which has to contain a null-terminated string
 #ifdef OPTION_SHM_MODE // Update the EPK
 #ifdef XCP_ENABLE_EPK_CALSEG
-void XcpCalUpdateEpkSeg(const char *epk) {
-
-    const uint16_t epk_len = (uint16_t)STRNLEN(epk, XCP_EPK_MAX_LENGTH) + 1;
-    tXcpCalSeg *c = CalSegPtrMut(0); // EPK segment is always at index 0
-    assert(c != NULL);
-    assert(c->h.size >= epk_len);
-    memcpy(CalSegDefaultPage(c), epk, epk_len); // Update the default page with the current EPK value
-    memcpy(CalSegEcuPage(c), epk, epk_len);     // Update the ECU page with the current EPK value
+void XcpCalUpdateEpkSeg(const char epk[XCP_EPK_MAX_LENGTH + 1]) {
+    if (XcpGetCalSegCount() > 0) {
+        tXcpCalSeg *c = CalSegPtrMut(0); // EPK segment is always at index 0
+        assert(c != NULL);
+        assert(c->h.size >= XCP_EPK_MAX_LENGTH + 1);
+        memcpy(CalSegDefaultPage(c), epk, XCP_EPK_MAX_LENGTH + 1); // Update the default page with the current EPK value
+        memcpy(CalSegEcuPage(c), epk, XCP_EPK_MAX_LENGTH + 1);     // Update the ECU page with the current EPK value
+        memcpy(CalSegXcpPage(c), epk, XCP_EPK_MAX_LENGTH + 1);     // Update the XCP page with the current EPK value
+        DBG_PRINTF4(ANSI_COLOR_BLUE "EPK calibration segment 'epk' updated to  '%s'\n" ANSI_COLOR_RESET, epk);
+    } else {
+        DBG_PRINTF5(ANSI_COLOR_BLUE "EPK calibration segment 'epk' not present, EPK '%s' not updated\n" ANSI_COLOR_RESET, epk);
+    }
 }
 #endif
 #endif

@@ -79,6 +79,10 @@ cd /path/to/XCPlite
 cmake -B build -DXCPLITE_CONFIGURATION=shm
 cmake --build build
 cmake --install build --prefix build/install
+
+# build the shm tool for testing
+./build.sh shm tools
+
 ```
 
 ---

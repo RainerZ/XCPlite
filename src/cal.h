@@ -199,7 +199,7 @@ uint8_t XcpUnlockCalSeg(tXcpCalSegIndex calseg);
 
 // Update the EKP segment with the current EPK value
 #ifdef XCP_ENABLE_EPK_CALSEG
-void XcpCalUpdateEpkSeg(const char *epk);
+void XcpCalUpdateEpkSeg(const char epk[XCP_EPK_MAX_LENGTH + 1]);
 #endif
 
 /**************************************************************************/

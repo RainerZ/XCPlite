@@ -488,6 +488,7 @@ const char *XcpGetLocalEpk(void) {
 // Only in SHM mode there is a difference to XcpGetLocalEpk(), the ecu EPK is for the complete multi application system, while XcpGetLocalEpk() is for the application
 const char *XcpGetEcuEpk(void) {
 #ifdef OPTION_SHM_MODE // get ecu epk which is a hash for all applications
+    assert(XcpShmGetAppCount() > 0);
     return XcpShmGetEcuEpk();
 #else // ecu epk is the same as application epk
     return XcpGetLocalEpk();
@@ -3242,8 +3243,10 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     const static tXcpCalSegDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {
         .name = XCP_EPK_CALSEG_NAME, .addr = &calseg_id_epk, .indexp = (tXcpCalSegIndex *)&calseg_id_epk, .size = XCP_EPK_MAX_LENGTH + 1, .type = XCP_CALSEG_TYPE_SEGMENT};
     DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s'\n", XCP_EPK_CALSEG_NAME);
-    // @@@@ TODO: Check that this works in absolute addressing mode, since the reference page is not copied anymore: what is writen to the A2L file
+    // @@@@ TODO: Are we sure, that this works in absolute addressing mode, since the reference page is not copied anymore: what is writen to the A2L file
     // Note that this, this might not be the final EPK yet
+    // In SHM mode, it is too early to initialize the EPK segment, since the EPK is a hash of the applications EPKs
+    // XcpGetEcuEpk() will return the EPK a static lifetime empty string in this case, with XCP_EPK_MAX_LENGTH + 1 zero initialized bytes
     calseg_id_epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, XcpGetEcuEpk(), XCP_EPK_MAX_LENGTH + 1);
     assert(calseg_id_epk == 0);
 #endif

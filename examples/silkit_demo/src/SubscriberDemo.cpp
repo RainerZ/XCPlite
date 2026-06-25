@@ -29,8 +29,6 @@ class Subscriber : public ApplicationBase {
     // ----------------------------------------------------------------
     void CreateControllers() override {
 
-        printf("Subscriber: CreateControllers\n");
-
         // Create data subscribers for GPS and temperature data
 
         _gpsSubscriber = GetParticipant()->CreateDataSubscriber( //
@@ -54,7 +52,7 @@ class Subscriber : public ApplicationBase {
             [this](IDataSubscriber * /*subscriber*/, const DataMessageEvent &dataMessageEvent) {
                 // Deserialize the received temperature value from the serialized byte array
                 _temperature = DeserializeTemperature(SilKit::Util::ToStdVector(dataMessageEvent.data));
-                printf("Subscriber: Received temperature data: temperature=%g\n", _temperature);
+                // printf("Subscriber: Received temperature data: temperature=%g\n", _temperature);
 
                 // Trigger XCP measurement event Subscriber.Temp with the timestamp of the received data message
                 // @@@@ TODO: Use the current time instead
@@ -85,12 +83,12 @@ class Subscriber : public ApplicationBase {
     }
 
     // ----------------------------------------------------------------
-    void InitControllers() override { printf("Subscriber: InitControllers\n"); }
+    void InitControllers() override {}
 
     // ----------------------------------------------------------------
     void DoWorkSync(std::chrono::nanoseconds now) override {
 
-        printf("Subscriber: DoWorkSync %gs\n", now.count() * 1e-9);
+        // printf("Subscriber: DoWorkSync %gs\n", now.count() * 1e-9);
 
         // Demo measurement variable Subscriber._counter
         _counter++;
@@ -112,7 +110,7 @@ class Subscriber : public ApplicationBase {
     // ----------------------------------------------------------------
     void DoWorkAsync() override {
 
-        printf("Subscriber: DoWorkAsync\n");
+        // printf("Subscriber: DoWorkAsync\n");
         std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
 };

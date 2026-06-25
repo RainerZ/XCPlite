@@ -1643,10 +1643,6 @@ bool A2lFinalize(void) {
         }
         A2lWriter(A2lGetFilename_(A2L_MAIN_FILE), gA2lMode, XcpGetProjectName(), epk, epk_addr, count, files, gA2lOptionBindAddr, gA2lOptionPort, gA2lUseTCP);
 
-        // Update the EPK in the EPK segment, so the the client can upload it from the memory location of the EPK segment
-        // There are 4 different ways to get the EPK via XCP: via the A2L file, via the addr in A2L file, via the EPK segment, or via GET_ID
-        XcpCalUpdateEpkSeg(epk);
-
 // Write the binary persistence file with default page data
 #ifdef OPTION_ENABLE_PERSISTENCE
         XcpBinWrite(epk);
