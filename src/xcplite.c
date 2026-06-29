@@ -1758,6 +1758,8 @@ void XcpEventExt_(tXcpEventId event, int count, const uint8_t **bases) {
     XcpProcessPendingCommand(event, count, bases);
 #endif // XCP_ENABLE_DYN_ADDRESSING
 
+    if (!isDaqRunning())
+        return; // DAQ not running
     XcpTriggerDaqEvent_(local.queue, event, count, bases, ApplXcpGetClock64());
 }
 
@@ -1804,7 +1806,6 @@ void XcpEvent(tXcpEventId event) {
 #else
     const uint8_t *bases[2] = {NULL, xcp_get_base_addr()};
 #endif
-
     XcpTriggerDaqEvent_(local.queue, event, 2, bases, ApplXcpGetClock64());
 }
 void XcpEventAt(tXcpEventId event, uint64_t clock) {
@@ -1824,7 +1825,6 @@ void XcpEventAt(tXcpEventId event, uint64_t clock) {
 #else
     const uint8_t *bases[2] = {NULL, xcp_get_base_addr()};
 #endif
-
     XcpTriggerDaqEvent_(local.queue, event, 2, bases, clock);
 }
 
@@ -1859,7 +1859,6 @@ void XcpEventExt_Var(tXcpEventId event, int args_count, ...) {
 
     if (!isDaqRunning())
         return; // DAQ not running
-
     XcpTriggerDaqEvent_(local.queue, event, XCP_ADDR_EXT_DYN + args_count, bases, ApplXcpGetClock64());
 }
 
@@ -1890,7 +1889,6 @@ void XcpEventExtAt_Var(tXcpEventId event, uint64_t clock, int args_count, ...) {
 
     if (!isDaqRunning())
         return; // DAQ not running
-
     XcpTriggerDaqEvent_(local.queue, event, XCP_ADDR_EXT_DYN + args_count, bases, clock);
 }
 
