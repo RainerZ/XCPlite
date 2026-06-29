@@ -258,7 +258,7 @@ template <typename T> class CalBlk {
 #define XCPLIB_ALWAYS_INLINE __attribute__((always_inline)) inline
 #else
 #define XCPLIB_ALWAYS_INLINE inline
-#warning "XCPLIB_ALWAYS_INLINE may not guarantee inlining on this compiler - stack frame addresses may be incorrect"
+#error "XCPLIB_ALWAYS_INLINE may not guarantee inlining on this compiler - stack frame addresses may be incorrect"
 #endif
 
 namespace xcp {
