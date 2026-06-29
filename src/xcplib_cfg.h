@@ -25,15 +25,11 @@
 // (Disable COPY_CAL_PAGE bug workaround and enable .this references to shared calibration axis)
 #define OPTION_CANAPE_24
 
-//-------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------
-// Specific build settings of libxcplite
-
+// Legacy trap
+// @@@@ TODO: Remove this
 #if defined(XCPLIB_FOR_RUST) // Set by the Rust build script
-
-#include "xcplib_rust_cfg.h" // for Rust xcp-lite specific configuration
-
-#else
+#error "XCPLIB_FOR_RUST is deprecated, use configuration override instead"
+#endif
 
 //-------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------
@@ -196,6 +192,4 @@
 // See xcplib_rtos_cfg.h and xcplib_no_a2l_cfg.h for example override files.
 #ifdef XCPLIB_CFG_OVERRIDE
 #include XCPLIB_CFG_OVERRIDE
-#endif
-
 #endif
