@@ -584,6 +584,8 @@ THREAD_FUNC_RETURN XcpServerTransmitThread(void *par) {
 }
 
 void XcpEthServerDebugInfo(size_t *rxStackSize, size_t *txStackSize) {
+    (void)rxStackSize;
+    (void)txStackSize;
 #ifdef TEST_STACK_SIZE
 #ifdef _FREE_RTOS
     UBaseType_t txHighWaterMark = uxTaskGetStackHighWaterMark(gXcpServer.transmit_thread_handle);

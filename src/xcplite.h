@@ -275,6 +275,9 @@ typedef struct {
     uint16_t config_id;
 #endif
 #if !defined(XCP_ENABLE_DAQ_EVENT_LIST) && defined(XCP_MAX_EVENT_COUNT)
+#if (XCP_MAX_EVENT_COUNT == 0) || (XCP_MAX_EVENT_COUNT > 1024)
+#error "XCP_MAX_EVENT_COUNT must be > 0 and <= 1024, remove this if you are sure you want this"
+#endif
     uint16_t daq_first[XCP_MAX_EVENT_COUNT]; // Event channel to DAQ list mapping when there is no event management
 #endif
 

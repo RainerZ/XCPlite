@@ -123,7 +123,11 @@
 // DAQ settings
 
 #define OPTION_DAQ_MEM_SIZE (512 * 6) // Memory bytes used for XCP DAQ tables - 6 bytes per measurement signal/block needed
-#define OPTION_DAQ_EVENT_COUNT 32     // Maximum number of DAQ events (integer value, must be even)
+
+// Maximum number of DAQ events (integer value, must be even)
+// Needs OPTION_DAQ_EVENT_COUNT*2 bytes of memory
+#define OPTION_DAQ_EVENT_COUNT 32
+
 // #define OPTION_DAQ_ASYNC_EVENT         // Create an asynchronous, cyclic DAQ event for asynchronous data acquisition
 
 // Transport layer queue, vectored IO, lockless with variable queue entry size

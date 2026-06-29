@@ -40,10 +40,12 @@
 /*----------------------------------------------------------------------------*/
 /* DAQ event management */
 
-// Enable event list (Default)
+// Enable event list (Always enable for XCPlite, disabled for Rust xcp-lite)
+// @@@@ TODO: Make this a configuration override for xcplib_cfg.h OPTION_DAQ_EVENT_LIST, OPTION_DAQ_EVENT_COUNT
 #ifndef XCPLIB_FOR_RUST // Rust has its own event management
 #define XCP_ENABLE_DAQ_EVENT_LIST
 #endif
+
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
 
 #if defined(OPTION_DAQ_EVENT_COUNT) && (OPTION_DAQ_EVENT_COUNT > 0)
@@ -58,12 +60,20 @@
 // Maximum length of event name without the trailing 0
 #define XCP_MAX_EVENT_NAME 15
 
-#else                           // XCP_ENABLE_DAQ_EVENT_LIST
+#else // XCP_ENABLE_DAQ_EVENT_LIST
+
+#if defined(OPTION_DAQ_EVENT_COUNT) && (OPTION_DAQ_EVENT_COUNT > 0)
 
 // If XCP_MAX_EVENT_COUNT is defined and DAQ event management is not used, DAQ list to event association lookup will be optimized
 // Set the maximum number of DAQ events (the highest DAQ event number used), XCP_MAX_EVENT_COUNT must be even
 // Requires XCP_MAX_EVENT_COUNT * 2 bytes of memory
-#define XCP_MAX_EVENT_COUNT 256 // For available event numbers from 0 to 255
+#define XCP_MAX_EVENT_COUNT OPTION_DAQ_EVENT_COUNT
+
+#else
+
+#error "Please define OPTION_DAQ_EVENT_COUNT, remove this error if you want arbitrary event numbers without a maximum count"
+
+#endif
 
 #endif // !XCP_ENABLE_DAQ_EVENT_LIST
 
