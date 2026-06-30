@@ -437,10 +437,10 @@ async fn test_calibration(xcp_client: &mut XcpClient) -> bool {
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------
-// Setup test
+// Setup test (XCP on ETH)
 // Connect, upload A2l, check EPK, check id, ...
 pub async fn test_setup(
-    tcp: bool,
+    protocol: &'static str,
     dest_addr: std::net::SocketAddr,
     local_addr: std::net::SocketAddr,
     load_a2l: bool,
@@ -454,7 +454,7 @@ pub async fn test_setup(
 
     info!("  dest_addr: {}", dest_addr);
     info!("  local_addr: {}", local_addr);
-    let mut xcp_client = XcpClient::new(tcp, dest_addr, local_addr); // false = UDP
+    let mut xcp_client = XcpClient::new(protocol, dest_addr, local_addr, 0);
     let daq_decoder: Arc<parking_lot::lock_api::Mutex<parking_lot::RawMutex, DaqDecoder>> = Arc::new(Mutex::new(DaqDecoder::new()));
     let serv_text_decoder = ServTextDecoder::new();
     xcp_client
@@ -591,7 +591,7 @@ pub async fn test_disconnect(xcp_client: &mut XcpClient) {
 //-------------------------------------------------------------------------------------------------------------------------------------
 
 pub async fn test_executor(
-    tcp: bool,
+    protocol: &'static str,
     dest_addr: std::net::SocketAddr,
     local_addr: std::net::SocketAddr,
     test_mode_cal: TestModeCal,
@@ -599,7 +599,7 @@ pub async fn test_executor(
     daq_test_duration_ms: u64,
 ) {
     let load_a2l = test_mode_cal != TestModeCal::None || test_mode_daq != TestModeDaq::None;
-    let (mut xcp_client, daq_decoder) = test_setup(tcp, dest_addr, local_addr, load_a2l, true).await;
+    let (mut xcp_client, daq_decoder) = test_setup(protocol, dest_addr, local_addr, load_a2l, true).await;
 
     //-------------------------------------------------------------------------------------------------------------------------------------
     //  Daq test

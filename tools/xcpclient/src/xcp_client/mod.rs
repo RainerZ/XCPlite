@@ -366,7 +366,11 @@ impl XcpSocket {
 
 /// XCP client
 pub struct XcpClient {
-    tcp: bool,
+    protocol: &'static str,
+    baud_rate: u32,
+    bind_addr: SocketAddr,
+    dest_addr: SocketAddr,
+
     // Information from connect and get_comm_mode_info commands
     pub resources: u8,
     pub comm_mode_basic: u8,
@@ -385,9 +389,6 @@ pub struct XcpClient {
     timestamp_resolution_ns: u64,
     daq_header_size: u8,
 
-    bind_addr: SocketAddr,
-    dest_addr: SocketAddr,
-
     socket: Option<XcpSocket>,
     receive_task: Option<tokio::task::JoinHandle<()>>,
     rx_cmd_resp: Option<mpsc::Receiver<Vec<u8>>>,
@@ -405,11 +406,12 @@ impl XcpClient {
     // new
     //
     #[allow(clippy::type_complexity)]
-    pub fn new(tcp: bool, dest_addr: SocketAddr, bind_addr: SocketAddr) -> XcpClient {
+    pub fn new(protocol: &'static str, dest_addr: SocketAddr, bind_addr: SocketAddr, baud_rate: u32) -> XcpClient {
         XcpClient {
-            tcp,
+            protocol,
             bind_addr,
             dest_addr,
+            baud_rate,
             socket: None,
             receive_task: None,
             rx_cmd_resp: None,
@@ -693,7 +695,7 @@ impl XcpClient {
         D: XcpDaqDecoder + Send + 'static,
     {
         // Create socket
-        let socket = if self.tcp {
+        let socket = if self.protocol == "TCP" {
             // Create TCP socket and connect
             let stream = TcpStream::connect(self.dest_addr).await?;
             debug!("TCP connection established to {:?}", stream.peer_addr()?);

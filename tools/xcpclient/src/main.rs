@@ -69,6 +69,11 @@ struct Args {
     #[arg(long, default_value = "0.0.0.0")]
     bind_addr: String,
 
+    // --baud-rate
+    /// Baud rate for XCP communication (only applicable for certain protocols).
+    #[arg(long, default_value_t = 115200)]
+    baud_rate: u32,
+
     // --tcp
     /// Use TCP for XCP communication..
     #[arg(long, default_value_t = false)]
@@ -77,6 +82,10 @@ struct Args {
     /// Use UDP for XCP communication
     #[arg(long, default_value_t = false)]
     udp: bool,
+    // --sxi
+    /// Use SxI for XCP communication
+    #[arg(long, default_value_t = false)]
+    sxi: bool,
 
     // --connect-mode
     /// XCP connect mode
@@ -458,10 +467,10 @@ impl XcpTextDecoder for ServTextDecoder {
 
 async fn xcp_client(
     verbose: usize,
-    tcp: bool,
-    udp: bool,
+    protocol: &'static str,
     dest_addr: std::net::SocketAddr,
     local_addr: std::net::SocketAddr,
+    baud_rate: u32,
     connect_mode: u8,
     offline: bool,
     a2l_filename: String,
@@ -485,7 +494,7 @@ async fn xcp_client(
     csv_filename: String,
 ) -> Result<(), Box<dyn Error>> {
     // Create xcp_client
-    let mut xcp_client = XcpClient::new(tcp, dest_addr, local_addr);
+    let mut xcp_client = XcpClient::new(protocol, dest_addr, local_addr, baud_rate);
 
     // Target ECU name (from GET_ID)
     let mut ecu_name = String::new();
@@ -499,12 +508,12 @@ async fn xcp_client(
     // Execute main logic and capture the result
     let result = async {
         //----------------------------------------------------------------
-        // Connect the XCP server if required
-        let go_online = !offline && (tcp || udp || upload_a2l || upload_elf || !measurement_list.is_empty() || !cal_args.is_empty());
+        // Connect the XCP on ETH server if required
+        let go_online = !offline && (protocol == "TCP" || protocol == "UDP" || upload_a2l || upload_elf || !measurement_list.is_empty() || !cal_args.is_empty());
         if go_online {
             // Connect to the XCP server
             // Print protocol information
-            info!("XCP Connect using {}", if tcp { "TCP" } else { "UDP" });
+            info!("XCP Connect using {}", protocol);
             let daq_decoder = Arc::new(Mutex::new(DaqDecoder::new(2, &csv_filename)));
             match xcp_client.connect(connect_mode, Arc::clone(&daq_decoder), ServTextDecoder::new()).await {
                 Ok(_) => {
@@ -641,6 +650,7 @@ async fn xcp_client(
                 return Err("A2L upload failed".into());
             }
         }
+        //
         //----------------------------------------------------------------
         // Create A2L file
         // If an ELF file is available, create an A2L file from the XCP server information and the ELF file
@@ -666,15 +676,21 @@ async fn xcp_client(
             };
             info!("Generate A2L file {} with {} ", a2l_path.display(), mode);
 
-            // Set registry XCP default transport layer informations for A2L file
-            let protocol = if tcp { "TCP" } else { "UDP" };
-            let addr = dest_addr.ip();
-            let ipv4_addr = match addr {
-                std::net::IpAddr::V4(v4) => v4,
-                std::net::IpAddr::V6(_) => Ipv4Addr::new(127, 0, 0, 1),
-            };
-            let port: u16 = dest_addr.port();
-            reg.set_xcp_params(protocol, ipv4_addr, port);
+            // Set registry XCP transport layer information for A2L file
+            // TCP or UDP: set IP address and port number
+            if protocol == "TCP" || protocol == "UDP" {
+                let addr = dest_addr.ip();
+                let ipv4_addr = match addr {
+                    std::net::IpAddr::V4(v4) => v4,
+                    std::net::IpAddr::V6(_) => Ipv4Addr::new(127, 0, 0, 1),
+                };
+                let port: u16 = dest_addr.port();
+                reg.set_xcp_eth_params(protocol, ipv4_addr, port);
+            }
+            // SxI protocol: set baud rate
+            else if protocol == "SxI" {
+                reg.set_xcp_sxi_params(baud_rate);
+            }
 
             // If there is an ECU online, get event and segment information via XCP
             if xcp_client.is_connected() {
@@ -1112,33 +1128,44 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     // Parse IP addresses and ports
-    let mut tcp = args.tcp;
-    let udp = args.udp;
+    let protocol = if args.tcp {
+        "TCP"
+    } else if args.udp {
+        "UDP"
+    } else if args.sxi {
+        "SxI"
+    } else {
+        warn!("No protocol specified, defaulting to TCP");
+        "TCP"
+    };
     let dest_addr: std::net::SocketAddr = parse_dest_addr(&args.dest_addr, args.port)?;
     let local_addr: std::net::SocketAddr = parse_dest_addr(&args.bind_addr, 0)?;
+    let mut baud_rate = args.baud_rate;
     if args.offline {
         info!("XCP client offline mode");
     } else {
-        info!("XCP server dest addr: {}", dest_addr);
-        info!("XCP client local bind addr: {}", local_addr);
-        if !tcp && !udp {
-            warn!("No protocol specified, defaulting to TCP");
-            tcp = true;
+        if protocol == "SxI" && baud_rate == 0 {
+            warn!("No baud rate specified for SxI protocol, defaulting to 115200");
+            baud_rate = 115200;
+        }
+        if protocol == "TCP" || protocol == "UDP" {
+            info!("XCP server dest addr: {}", dest_addr);
+            info!("XCP client local bind addr: {}", local_addr);
         }
     }
 
     // Run the test executor if --test is specified
     if args.test {
-        test_executor(args.tcp, dest_addr, local_addr, TEST_CAL, TEST_DAQ, TEST_DURATION_MS).await
+        test_executor(protocol, dest_addr, local_addr, TEST_CAL, TEST_DAQ, TEST_DURATION_MS).await
     }
     // Run the XCP client
     else {
         let res = xcp_client(
             args.verbose,
-            tcp,
-            udp,
+            protocol,
             dest_addr,
             local_addr,
+            baud_rate,
             args.connect_mode,
             args.offline,
             args.a2l,
