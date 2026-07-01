@@ -119,7 +119,8 @@
 // DAQ settings
 
 // Enable DAQ event management
-// Mandatory for XCPlite, rust xcp-lite has its own DAQ event management
+// Mandatory for some of the standard examples in XCPlite, rust xcp-lite has its own DAQ event management
+// Enables dynamic event creation and per thread event instances
 // Enables tXcpEvent, XcpCreateIndexedEvent, XcpCreateEvent, XcpCreateEventInstance, XcpGetEventCount, XcpFindEvent,XcpGetEventName,XcpGetEventIndex,XcpGetEvent
 #define OPTION_DAQ_EVENT_LIST
 

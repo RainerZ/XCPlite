@@ -577,8 +577,6 @@ void A2lSetSegmentAddrMode__s(const char *calseg_name, const uint8_t *calseg_ins
 
 #endif // XCP_ENABLE_CALSEG_LIST
 
-#ifdef XCP_ENABLE_DAQ_EVENT_LIST
-
 static void beginEventGroup(tXcpEventId event_id) {
     DBG_PRINTF5("beginEventGroup: event_id=%u\n", event_id);
     if ((gA2lMode & A2L_MODE_AUTO_GROUPS)) {
@@ -694,7 +692,6 @@ void A2lSetAbsoluteAddrMode__i(tXcpEventId event_id) {
         }
     }
 }
-#endif // XCP_ENABLE_DAQ_EVENT_LIST
 
 #ifdef XCP_ENABLE_APP_ADDRESSING
 void A2lSetApplicationAddrMode(void) {

@@ -285,15 +285,35 @@ uint16_t XcpGetEventIndex(tXcpEventId event);
 #endif // THREAD_LOCAL
 
 // Event descriptor used by DaqCreateEvent() for section-based pre-registration
+#ifndef __XCPLITE_H__ // Public API header guard
+
 typedef struct {
     const char *name;
     uint32_t cycle_time_ns;
     uint8_t priority;
     uint8_t res[16 - sizeof(char *) - 4 - 1];
 } tXcpEventDescriptor;
-
 static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
 static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor res padding must not be zero; check pointer size vs struct layout");
+
+// Linker-synthesized section boundary symbols, resolved at link time
+#if defined(__ELF__)
+// Declared weak: if no object file contributes to the xcp_evts section the symbols resolve
+// to NULL rather than causing an undefined-reference linker error. Keeps Linux (production)
+// builds with zero section-registered events linkable and graceful.
+extern const tXcpEventDescriptor __start_xcp_evts[] __attribute__((weak));
+extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
+#elif defined(__APPLE__)
+// Mach-O (ld64) boundary symbols. Not weak: if no descriptor is ever placed in the section
+// the link fails with an undefined-symbol error. That is acceptable here - macOS is a
+// development-only target and a build with zero events is a non-functional configuration.
+extern const tXcpEventDescriptor __start_xcp_evts[] __asm("section$start$__DATA$xcp_evts");
+extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp_evts");
+#else
+#error "Unsupported platform for event segment registration"
+#endif
+
+#endif // __XCPLITE_H__
 
 // Platform section attribute for tXcpEventDescriptor const static variables created by DaqCreateEvent().
 // Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
@@ -306,59 +326,68 @@ static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor 
 #define XCP_EVENT_SECTION_ATTR /* section-based registration not supported on this platform */
 #endif
 
-/// Create a global event
-/// Macro may be used anywhere in the code, even in loops
+// Link-time event id derived from the descriptor's position in the xcp_evts section
+// Only with clang on Linux, this is a link-time constant, usable as a static initializer
+#if defined(__clang__) && defined(_Linux)
+// Get the event id as compile-time constant for an event descriptor name (evt__<event_name>)
+#define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) ((tXcpEventId)(&(evt) - __start_xcp_evts))
+// Set the event id for an event descriptor at runtime not needed, the link-time id is already set
+#define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id)
+#else
+// Get the event id as compile-time constant for an event descriptor not possible
+#define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) XCP_UNDEFINED_EVENT_ID
+// Set the event id for an event descriptor at runtime
+#define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id) ((evt_id) = ((tXcpEventId)(&(evt_descr) - __start_xcp_evts)))
+#endif
+
+/// Create an event
+/// Once execution pattern, a new event is created only once, subsequent calls are ignored
 /// @param name Name given as identifier
 #define DaqCreateEvent(event_name)                                                                                                                                                 \
     static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                          \
-    static tXcpEventId evt_id_##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                               \
-    if (XcpIsActivated()) {                                                                                                                                                        \
-        if (evt_id_##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                       \
-            evt_id_##event_name = XcpCreateEvent(#event_name, 0, 0);                                                                                                               \
-        }                                                                                                                                                                          \
-    }
+    static tXcpEventId evt_id_##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                                 \
+    XCP_EVENT_SECTION_SET_ID(evt__##event_name, evt_id_##event_name);
 
-/// Create a global event with given expected cycle time and priority
-/// Macro may be used anywhere in the code, even in loops
+/// Create an event with given expected cycle time and priority
+/// Once execution pattern, a new event is created only once, subsequent calls are ignored
 /// @param name Name given as identifier
 /// @param cycle_time Cycle time in microseconds (0 = sporadic)
 /// @param priority Priority of the event (0 = normal, >=1 = realtime)
 #define DaqCreateEventExt(event_name, cycle, prio)                                                                                                                                 \
     static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = (cycle) * 1000U, .priority = (prio)};                       \
-    static tXcpEventId evt_id_##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                               \
-    if (XcpIsActivated()) {                                                                                                                                                        \
-        if (evt_id_##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                       \
-            evt_id_##event_name = XcpCreateEvent(#event_name, (cycle) * 1000U, (prio));                                                                                            \
-        }                                                                                                                                                                          \
-    }
+    static tXcpEventId evt_id_##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                                 \
+    XCP_EVENT_SECTION_SET_ID(evt__##event_name, evt_id_##event_name);
 
-/// Create a thread local event with dynamic name
-/// Macro may be used anywhere in the code, even in loops
+/// Create an event
+/// Thread local once execution pattern, a new event is created only once per thread, subsequent calls are ignored
+/// User is responsible to ensure that the event name is unique per thread !!
 /// The first call in a thread creates the event, must be unique per thread and per code location
 /// Name may be different per code location in different threads
 /// Calling again in the same thread is ignored, ignored if the the event name is different
 /// @param name Name given as string
-#define DaqCreateEvent_s(name)                                                                                                                                                     \
-    static THREAD_LOCAL tXcpEventId evt__dynname = XCP_UNDEFINED_EVENT_ID;                                                                                                         \
-    if (XcpIsActivated()) {                                                                                                                                                        \
-        if (evt__dynname == XCP_UNDEFINED_EVENT_ID) {                                                                                                                              \
-            evt__dynname = XcpCreateEvent(name, 0, 0);                                                                                                                             \
+#define DaqCreateEvent_s(event_name)                                                                                                                                               \
+    {                                                                                                                                                                              \
+        static THREAD_LOCAL tXcpEventId evt__dynname = XCP_UNDEFINED_EVENT_ID;                                                                                                     \
+        if (XcpIsActivated()) {                                                                                                                                                    \
+            if (evt__dynname == XCP_UNDEFINED_EVENT_ID) {                                                                                                                          \
+                evt__dynname = XcpCreateEvent(event_name, 0, 0);                                                                                                                   \
+            }                                                                                                                                                                      \
         }                                                                                                                                                                          \
     }
 
-/// Multi instance event
+/// Create a multi instance event
 /// No once pattern, a new event instance is created for each call
-/// If the name exists, an incrementing instance index is generated and appended to the event <name>_xxx in the A2L file
+/// If the name exists, an incrementing instance index is generated and appended to the event name (<name>_<instance_index>)
 /// @param name Name given as identifier
-#define DaqCreateEventInstance(name)                                                                                                                                               \
-    static tXcpEventId evt__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                                       \
+#define DaqCreateEventInstance(event_name)                                                                                                                                         \
+    static tXcpEventId evt__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                                 \
     if (XcpIsActivated()) {                                                                                                                                                        \
-        evt__##name = XcpCreateEventInstance(#name, 0, 0);                                                                                                                         \
+        evt__##event_name = XcpCreateEventInstance(#event_name, 0, 0);                                                                                                             \
     }
 
 /// Get event instance id
 /// @param name Name given as identifier
-#define DaqGetEventInstanceId(name) evt__##name
+#define DaqGetEventInstanceId(event_name) evt__##event_name
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // DAQ event trigger measurement instrumentation point
@@ -447,70 +476,66 @@ extern const uint8_t *gXcpBaseAddr;
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // DAQ event trigger convenience macros
 
-// Event name parameter is a symbol, a string (_s) or an event index (_i)
-// Creates linker map file markers (static variables: trg__xxxx_'eventname' ) for the XCP event id used
-// No need to take care to store the event id
-// Uses local scope static or thread local storage to create a once pattern for the event lookup to save runtime overhead
+// Event name parameter is a symbol, a string (_s) or an event index tXcpEventIndex (_i)
+// Creates linker map file markers (static variables: trg__xxxx_'eventname' )
+// If needed, uses local scope static or thread local storage to create a once pattern for the event lookup to save runtime overhead
 // All macros can be used to measure variables registered in absolute addressing mode as well
+// Note that XCP_EVENT_SECTION_SET_ID expands to nothing on platforms where the event id is a link-time constant
 
-/// Trigger the global XCP event 'name' for stack relative or absolute addressing
-/// Cache the event name lookup in global storage, can not be called with different names in its code location
+// @@@@ TODO: Not all permutations of name, string, index with At implemented
+
+/// Trigger the global XCP event 'name' for stack relative or absolute addressing AAS
 /// @param name Name given as identifier
-#define DaqTriggerEvent(name)                                                                                                                                                      \
-    static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                                  \
-    if (XcpIsActivated()) {                                                                                                                                                        \
-        if (trg__AAS__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                          \
-            trg__AAS__##name = XcpFindEvent(#name);                                                                                                                                \
-        }                                                                                                                                                                          \
-        XcpEventExt_Var(trg__AAS__##name, 1, xcp_get_frame_addr());                                                                                                                \
+#define DaqTriggerEvent(event_name)                                                                                                                                                \
+    {                                                                                                                                                                              \
+        static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                          \
+        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
+        XcpEventExt_Var(trg__AAS__##event_name, 1, xcp_get_frame_addr());                                                                                                          \
     }
-#define DaqTriggerEventAt(name, clock)                                                                                                                                             \
-    static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                                  \
-    if (XcpIsActivated()) {                                                                                                                                                        \
-        if (trg__AAS__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                          \
-            trg__AAS__##name = XcpFindEvent(#name);                                                                                                                                \
-        }                                                                                                                                                                          \
-        XcpEventExtAt_Var(trg__AAS__##name, clock, 1, xcp_get_frame_addr());                                                                                                       \
+#define DaqTriggerEventAt(event_name, clock)                                                                                                                                       \
+    {                                                                                                                                                                              \
+        static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                          \
+        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
+        XcpEventExtAt_Var(trg__AAS__##event_name, clock, 1, xcp_get_frame_addr());                                                                                                 \
     }
 
-/// Trigger the XCP event by handle 'event_id' for stack relative or absolute addressing
+/// Trigger the XCP event by handle 'tXcpEventId event_id' for stack relative or absolute addressing AAS
 /// No lookup overhead, event id must be valid
 /// @param name Event given as id
 #define DaqTriggerEvent_i(event_id)                                                                                                                                                \
-    static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                                  \
-    if (XcpIsActivated()) {                                                                                                                                                        \
+    {                                                                                                                                                                              \
+        static tXcpEventId trg__AAS = XCP_UNDEFINED_EVENT_ID;                                                                                                                      \
         XcpEventExt(event_id, xcp_get_frame_addr());                                                                                                                               \
     }
 #define DaqTriggerEventAt_i(event_id, clock)                                                                                                                                       \
-    static tXcpEventId trg__AAS__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                                  \
-    if (XcpIsActivated()) {                                                                                                                                                        \
+    {                                                                                                                                                                              \
+        static tXcpEventId trg__AAS = XCP_UNDEFINED_EVENT_ID;                                                                                                                      \
         XcpEventExtAt(event_id, xcp_get_frame_addr(), clock);                                                                                                                      \
     }
 
-/// Trigger the XCP event 'name' for absolute, stack and relative addressing mode with given individual base address (from A2lSetRelativeAddrMode(base_addr))
-/// Cache the event name lookup in global storage, can not be called with different names in its code location
+/// Trigger the XCP event 'name' for absolute, stack and relative addressing mode AASD with a single given individual base address (from A2lSetRelativeAddrMode(base_addr))
 /// @param name Name given as identifier
 /// @param base_addr Base address pointer for relative addressing mode
-#define DaqTriggerEventExt(name, base_addr)                                                                                                                                        \
-    static tXcpEventId trg__AASD__##name = XCP_UNDEFINED_EVENT_ID;                                                                                                                 \
-    if (XcpIsActivated()) {                                                                                                                                                        \
-        if (trg__AASD__##name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                         \
-            trg__AASD__##name = XcpFindEvent(#name);                                                                                                                               \
-        }                                                                                                                                                                          \
-        XcpEventExt_Var(trg__AASD__##name, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                                 \
+#define DaqTriggerEventExt(event_name, base_addr)                                                                                                                                  \
+    {                                                                                                                                                                              \
+        static tXcpEventId trg__AASD__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                       \
+        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASD__##event_name);                                                                                                      \
+        XcpEventExt_Var(trg__AASD__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                           \
     }
 
 /// Trigger the XCP event 'name' for absolute, stack and relative addressing mode with given individual base address (from A2lSetRelativeAddrMode(base_addr))
-/// Cache the event lookup in thread local storage, can be called with different names in the same code location in different threads
+/// Cache the one time event lookup in thread local storage, can be called with different names in the same code location in different threads
 /// @param name Name given as string, must be unique per thread and code location
 /// @param base_addr Base address pointer for relative addressing mode
-#define DaqTriggerEventExt_s(name, base_addr)                                                                                                                                      \
-    static THREAD_LOCAL tXcpEventId trg__AASD__ = XCP_UNDEFINED_EVENT_ID;                                                                                                          \
-    if (XcpIsActivated()) {                                                                                                                                                        \
-        if (trg__AASD__ == XCP_UNDEFINED_EVENT_ID) {                                                                                                                               \
-            trg__AASD__ = XcpFindEvent(name);                                                                                                                                      \
+#define DaqTriggerEventExt_s(event_name, base_addr)                                                                                                                                \
+    {                                                                                                                                                                              \
+        static THREAD_LOCAL tXcpEventId trg__AASD__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                          \
+        if (XcpIsActivated()) {                                                                                                                                                    \
+            if (trg__AASD__##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                               \
+                trg__AASD__##event_name = XcpFindEvent(event_name);                                                                                                                \
+            }                                                                                                                                                                      \
+            XcpEventExt_Var(trg__AASD__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                       \
         }                                                                                                                                                                          \
-        XcpEventExt_Var(trg__AASD__, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                                       \
     }
 
 /// Trigger the XCP event by handle 'event_id' for absolute, stack and relative addressing mode with given individual base address (from A2lSetRelativeAddrMode(base_addr))
@@ -518,8 +543,8 @@ extern const uint8_t *gXcpBaseAddr;
 /// @param event_id Event given as id
 /// @param base_addr Base address pointer for relative addressing mode
 #define DaqTriggerEventExt_i(event_id, base_addr)                                                                                                                                  \
-    static tXcpEventId trg__AASD = XCP_UNDEFINED_EVENT_ID;                                                                                                                         \
-    if (XcpIsActivated()) {                                                                                                                                                        \
+    {                                                                                                                                                                              \
+        static tXcpEventId trg__AASD = XCP_UNDEFINED_EVENT_ID;                                                                                                                     \
         XcpEventExt_Var(event_id, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                                          \
     }
 
@@ -531,12 +556,10 @@ extern const uint8_t *gXcpBaseAddr;
 /// trg__AAS__##event_name is kept as a linker map marker for the trigger location (same role as in DaqTriggerEvent).
 /// @param event_name Name given as identifier
 #define DaqCreateAndTriggerEvent(event_name)                                                                                                                                       \
-    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                          \
-    static tXcpEventId trg__AAS__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                            \
-    if (XcpIsActivated()) {                                                                                                                                                        \
-        if (trg__AAS__##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                    \
-            trg__AAS__##event_name = XcpCreateEvent(#event_name, 0, 0);                                                                                                            \
-        }                                                                                                                                                                          \
+    {                                                                                                                                                                              \
+        static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                      \
+        static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                          \
+        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
         XcpEventExt_Var(trg__AAS__##event_name, 1, xcp_get_frame_addr());                                                                                                          \
     }
 
@@ -921,83 +944,29 @@ void clockGetPrintStatistic(void);
 // Strips the outer parentheses from (var, comment) and passes to macro as two separate arguments
 #define XCPLIB_APPLY_(m, args) m args
 
-// @@@@ REMOVE: Deprecated
-
-// Create the daq event (just for unique naming scheme)
-// #define XcpCreateDaqEvent DaqCreateEvent
-
-// Register measurements once and trigger an already created event with stack addressing mode
-#if 0
-#define XcpTriggerDaqEvent(event_name, ...)                                                                                                                                        \
-    do {                                                                                                                                                                           \
-        A2lOnce() {                                                                                                                                                                \
-            A2lLock();                                                                                                                                                             \
-            A2lSetStackAddrMode__s(#event_name, xcp_get_frame_addr());                                                                                                             \
-            XCPLIB_FOR_EACH_MEAS_(A2L_UNPACK_AND_REG_, __VA_ARGS__)                                                                                                                \
-            A2lUnlock();                                                                                                                                                           \
-        }                                                                                                                                                                          \
-        DaqTriggerEvent(event_name);                                                                                                                                               \
-    } while (0)
-#endif
-
-// Register measurements once and trigger an already created event with stack or relative addressing mode
-#if 0
-#define XcpTriggerDaqEventExt(event_name, base, ...)                                                                                                                               \
-    do {                                                                                                                                                                           \
-        A2lOnce() {                                                                                                                                                                \
-            A2lLock();                                                                                                                                                             \
-            A2lSetAutoAddrMode__s(#event_name, xcp_get_frame_addr(), (const uint8_t *)base);                                                                                       \
-            XCPLIB_FOR_EACH_MEAS_(A2L_UNPACK_AND_REG_, __VA_ARGS__)                                                                                                                \
-            A2lUnlock();                                                                                                                                                           \
-        }                                                                                                                                                                          \
-        DaqTriggerEventExt(event_name, base);                                                                                                                                      \
-    } while (0)
-#endif
-
 // =============================================================================
 // Variadic DAQ macros which create, register variables and trigger events in one call
 
 /// Trigger an event, create the event once and register global and local measurement variables once
 /// Supports absolute, stack and relative addressing mode measurements
+/// Don't use same event name in multiple code locations
+/// @param event_name Name of the event to trigger
+/// @param ... List of measurement variables to register, each as a tuple (var, comment) or (var, comment, unit_or_conversion, min, max)
+/// Needs #define OPTION_DAQ_EVENT_LIST for on target A2L generation
 #define DaqEventVar(event_name, ...)                                                                                                                                               \
     do {                                                                                                                                                                           \
         static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                      \
         static tXcpEventId trg__AAS__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                        \
+        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
         if (XcpIsActivated()) {                                                                                                                                                    \
-            if (trg__AAS__##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                                \
-                trg__AAS__##event_name = XcpCreateEvent(#event_name, 0, 0);                                                                                                        \
-                A2lOnce() {                                                                                                                                                        \
-                    A2lLock();                                                                                                                                                     \
-                    A2lSetAutoAddrMode__s(#event_name, xcp_get_frame_addr(), NULL);                                                                                                \
-                    XCPLIB_FOR_EACH_MEAS_(A2L_UNPACK_AND_REG_, __VA_ARGS__)                                                                                                        \
-                    A2lUnlock();                                                                                                                                                   \
-                }                                                                                                                                                                  \
-            }                                                                                                                                                                      \
-            XcpEventExt_Var(trg__AAS__##event_name, 1, xcp_get_frame_addr());                                                                                                      \
-        }                                                                                                                                                                          \
-    } while (0)
-
-/// Trigger an event, create the event once and register global, local and relative addressing mode measurement variables once
-/// Supports absolute, stack and relative addressing mode measurements
-// @@@@ REMOVE: Not used, replaced by the template-based C++ version
-#if 0
-#define DaqEventExtVar(event_name, base, ...)                                                                                                                                      \
-    do {                                                                                                                                                                           \
-        static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                      \
-        static tXcpEventId trg__AASD__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                       \
-        if (XcpIsActivated()) {                                                                                                                                                    \
-            if (trg__AASD__##event_name == XCP_UNDEFINED_EVENT_ID) {                                                                                                               \
-                trg__AASD__##event_name = XcpCreateEvent(#event_name, 0, 0);                                                                                                       \
-                A2lOnce() {                                                                                                                                                        \
-                    A2lLock();                                                                                                                                                     \
-                    A2lSetAutoAddrMode__s(#event_name, xcp_get_frame_addr(), (const uint8_t *)base);                                                                               \
-                    XCPLIB_FOR_EACH_MEAS_(A2L_UNPACK_AND_REG_, __VA_ARGS__)                                                                                                        \
-                    A2lUnlock();                                                                                                                                                   \
-                }                                                                                                                                                                  \
-                XcpEventExt_Var(trg__AASD__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)base);                                                                          \
+            A2lOnce() {                                                                                                                                                            \
+                A2lLock();                                                                                                                                                         \
+                A2lSetAutoAddrMode__s(#event_name, xcp_get_frame_addr(), NULL);                                                                                                    \
+                XCPLIB_FOR_EACH_MEAS_(A2L_UNPACK_AND_REG_, __VA_ARGS__);                                                                                                           \
+                A2lUnlock();                                                                                                                                                       \
             }                                                                                                                                                                      \
         }                                                                                                                                                                          \
+        XcpEventExt_Var(trg__AAS__##event_name, 1, xcp_get_frame_addr());                                                                                                          \
     } while (0)
-#endif
 
 #endif // !__cplusplus

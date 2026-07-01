@@ -268,6 +268,8 @@ namespace xcp {
 // For XCP DAQ event creation, measurement registration and triggering
 // =============================================================================
 
+// @@@@ TODO: Support link time event registration
+
 /// Trigger an event with variadic base address list
 #define DaqTriggerEventVar(event_name, ...) xcp::DaqTriggerVarTemplate(#event_name, __VA_ARGS__)
 
@@ -365,6 +367,8 @@ template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventExtTemplat
         XcpEventExt_Var(event_id, 2, frame_addr, (const uint8_t *)base);
     }
 }
+
+// @@@@ TODO: Support link time event registration
 
 // Main template function for once event creation and registration with automatic addressing mode, and event triggering
 template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventTemplate(const char *event_name, Measurements &&...measurements) {

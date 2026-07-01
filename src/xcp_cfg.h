@@ -40,6 +40,9 @@
 /*----------------------------------------------------------------------------*/
 /* DAQ event management */
 
+// Maximum length of event name without the trailing 0
+#define XCP_MAX_EVENT_NAME 15
+
 // Enable event list (Always enable for XCPlite, disabled for Rust xcp-lite)
 #ifdef OPTION_DAQ_EVENT_LIST
 
@@ -56,9 +59,6 @@
 
 // Enable XCP_GET_EVENT_INFO, if this is enabled, event information can be queried by the XCP client tool
 #define XCP_ENABLE_DAQ_EVENT_INFO
-
-// Maximum length of event name without the trailing 0
-#define XCP_MAX_EVENT_NAME 15
 
 #else // XCP_ENABLE_DAQ_EVENT_LIST
 

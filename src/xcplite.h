@@ -123,6 +123,38 @@ static_assert(sizeof(tXcpCto) == XCPTL_MAX_CTO_SIZE, "tXcpCto size should be XCP
 /* DAQ events                                                               */
 /****************************************************************************/
 
+// Event descriptor used by DaqCreateEvent() for section-based pre-registration.
+// Also defined in xcplib.h; this guard prevents redefinition when both headers are included.
+#ifndef __XCPLIB_H__ // Public API header guard
+
+typedef struct {
+    const char *name;
+    uint32_t cycle_time_ns;
+    uint8_t priority;
+    uint8_t res[16 - sizeof(char *) - 4 - 1];
+} tXcpEventDescriptor;
+static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
+static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor res padding must not be zero; check pointer size vs struct layout");
+
+// Linker-synthesized section boundary symbols, resolved at link time
+#if defined(__ELF__)
+// Declared weak: if no object file contributes to the xcp_evts section the symbols resolve
+// to NULL rather than causing an undefined-reference linker error. Keeps Linux (production)
+// builds with zero section-registered events linkable and graceful.
+extern const tXcpEventDescriptor __start_xcp_evts[] __attribute__((weak));
+extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
+#elif defined(__APPLE__)
+// Mach-O (ld64) boundary symbols. Not weak: if no descriptor is ever placed in the section
+// the link fails with an undefined-symbol error. That is acceptable here - macOS is a
+// development-only target and a build with zero events is a non-functional configuration.
+extern const tXcpEventDescriptor __start_xcp_evts[] __asm("section$start$__DATA$xcp_evts");
+extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp_evts");
+#else
+#error "Unsupported platform for event segment registration"
+#endif
+
+#endif // __XCPLIB_H__
+
 // Platform section attribute for tXcpEventDescriptor const static variables created by DaqCreateEvent().
 // Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
 // pre-register every event before the first trigger, without requiring the call site of the event creation to execute first.
@@ -201,20 +233,13 @@ tXcpEventId XcpCreateIndexedEvent(const char *name, uint16_t index, uint32_t cyc
 
 // Add a measurement event to event list, return event number (0..MAX_EVENT-1)
 tXcpEventId XcpCreateEvent(const char *name, uint32_t cycle_time_ns /* ns */, uint8_t priority /* 0 = queued, >=1 flushing*/);
+
 // Add a measurement event to event list, return event number (0..MAX_EVENT-1), thread safe, if name exists, an instance id is appended to the name
 tXcpEventId XcpCreateEventInstance(const char *name, uint32_t cycle_time_ns /* ns */, uint8_t priority /* 0 = queued, >=1 flushing */);
 
-// Get the number of events in the XCP event list
-uint16_t XcpGetEventCount(void);
-
-// Get event id by name, returns XCP_UNDEFINED_EVENT_ID if not found
-// In SHM mode, only searches within the calling process's own events (scoped by app_id)
-tXcpEventId XcpFindEvent(const char *name);
-
-// Get event name by id, returns NULL if not found
-const char *XcpGetEventName(tXcpEventId event);
 // Get the event index (1..), return 0 if not found
 uint16_t XcpGetEventIndex(tXcpEventId event);
+
 // Get the event descriptor struct by id, returns NULL if not found
 const tXcpEvent *XcpGetEvent(tXcpEventId event);
 
@@ -223,7 +248,29 @@ const tXcpEvent *XcpGetEvent(tXcpEventId event);
 uint8_t XcpGetEventAppId(tXcpEventId event);
 #endif // SHM_MODE
 
-#endif // XCP_ENABLE_DAQ_EVENT_LIST
+#else
+
+#ifdef XCP_ENABLE_DAQ_PRESCALER
+#error "XCP_ENABLE_DAQ_PRESCALER requires XCP_ENABLE_DAQ_EVENT_LIST"
+#endif
+#ifdef OPTION_SHM_MODE
+#error "OPTION_SHM_MODE requires XCP_ENABLE_DAQ_EVENT_LIST"
+#endif
+
+// Get the event descriptor struct by id, returns NULL if not found
+const tXcpEventDescriptor *XcpGetEvent(tXcpEventId event);
+
+#endif // !XCP_ENABLE_DAQ_EVENT_LIST
+
+// Get event name by id, returns NULL if not found
+const char *XcpGetEventName(tXcpEventId event);
+
+// Get event id by name, returns XCP_UNDEFINED_EVENT_ID if not found
+// In SHM mode, only searches within the calling process's own events (scoped by app_id)
+tXcpEventId XcpFindEvent(const char *name);
+
+// Get the number of events in the XCP event list
+uint16_t XcpGetEventCount(void);
 
 /****************************************************************************/
 /* DAQ tables                                                               */

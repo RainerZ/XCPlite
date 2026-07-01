@@ -84,6 +84,11 @@
 #undef OPTION_SERVER_FORCEFULL_TERMINATION // FreeRTOS uses vTaskDelete(NULL) to end tasks — no forceful termination
 
 //-------------------------------------------------------------------------------
+// Calibration
+
+// Calibration segment management
+// #undef OPTION_CAL_SEGMENTS
+
 // Calibration segments max count and total memory size (each segment needs 3 copies of its data
 #undef OPTION_CAL_SEGMENT_COUNT
 #define OPTION_CAL_SEGMENT_COUNT 8
@@ -100,6 +105,10 @@
 
 //-------------------------------------------------------------------------------
 // Data acquisition
+
+// Event list management
+// #undef OPTION_DAQ_EVENT_LIST
+
 // Adjust OPTION_DAQ_MEM_SIZE and OPTION_DAQ_EVENT_COUNT to your application
 // In maximum fragmentation, each measurement value needs 6 bytes DAQ list memory
 #undef OPTION_DAQ_MEM_SIZE
@@ -119,10 +128,9 @@
 #undef OPTION_QUEUE32_MUTEX
 
 // Create an asynchronous, cyclic DAQ event with event id 0 for asynchronous data acquisition
-// Global variables default to this event 
+// Global variables default to this event
 #undef OPTION_DAQ_ASYNC_EVENT
-#define OPTION_DAQ_ASYNC_EVENT         
-
+#define OPTION_DAQ_ASYNC_EVENT
 
 //-------------------------------------------------------------------------------
 // A2L / ELF — no filesystem on embedded; generate A2L externally via xcpclient or other tools

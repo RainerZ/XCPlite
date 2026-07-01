@@ -69,11 +69,6 @@
 #include <unistd.h> // for getpid()
 #endif
 
-#ifdef __APPLE__
-#include <mach-o/getsect.h> // for getsectiondata(), used by XcpRegisterSectionEvents()
-#include <mach-o/ldsyms.h>  // for _mh_execute_header
-#endif
-
 #include "dbg_print.h"   // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
 #include "persistence.h" // for XcpBinFreezeCalSeg
 #include "platform.h"    // for atomics
@@ -780,6 +775,9 @@ static uint8_t calcChecksum(uint32_t checksum_size, uint32_t *checksum_result) {
 
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
 
+// Dynamic event list
+//--------------------
+
 // Using the less expensive getEventCount() is a deliberate choice for performance critical code paths like XcpEvent(),
 // where the visibility of new events created by other threads is not critical, while acquireEventCount() is used for thread safe access to the event count with guaranteed
 // visibility of new events created by other threads.
@@ -893,9 +891,6 @@ tXcpEventId XcpCreateIndexedEvent(const char *name, uint16_t index, uint32_t cyc
     shared_mut_safe.event_list.event[e].name[XCP_MAX_EVENT_NAME] = 0;
     shared_mut_safe.event_list.event[e].flags = (priority > 0) ? XCP_DAQ_EVENT_FLAG_PRIORITY : 0;
 #ifdef XCP_ENABLE_DAQ_PRESCALER
-#ifndef XCP_ENABLE_DAQ_EVENT_LIST
-#error "XCP_ENABLE_DAQ_PRESCALER requires XCP_ENABLE_DAQ_EVENT_LIST"
-#endif
     shared_mut_safe.event_list.event[e].daq_prescaler = 0;
     shared_mut_safe.event_list.event[e].daq_prescaler_cnt = 0;
 #endif
@@ -956,19 +951,6 @@ tXcpEventId XcpCreateEvent(const char *name, uint32_t cycle_time_ns, uint8_t pri
     return id;
 }
 
-// Event descriptor used by DaqCreateEvent() for section-based pre-registration.
-// Also defined in xcplib.h; this guard prevents redefinition when both headers are included.
-#ifndef __XCPLIB_H__
-typedef struct {
-    const char *name;
-    uint32_t cycle_time_ns;
-    uint8_t priority;
-    uint8_t res[16 - sizeof(char *) - 4 - 1];
-} tXcpEventDescriptor;
-static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
-static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor res padding must not be zero; check pointer size vs struct layout");
-#endif
-
 // Pre-register all tXcpEventDescriptor variables placed in the xcp_evts section by DaqCreateEvent().
 // Must be called after SS_ACTIVATED is set (XcpCreateEvent requires isActivated()).
 // If a persistence file was loaded before this call, events are matched by name and keep their saved id.
@@ -976,11 +958,6 @@ static uint16_t XcpRegisterSectionEvents(void) {
 
     uint16_t count = 0;
 
-#if defined(__ELF__)
-    // Declared weak: if no object file contributes to the xcp_evts section the symbols
-    // resolve to NULL rather than causing an undefined-reference linker error.
-    extern const tXcpEventDescriptor __start_xcp_evts[] __attribute__((weak));
-    extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
     const tXcpEventDescriptor *begin = __start_xcp_evts;
     const tXcpEventDescriptor *end = __stop_xcp_evts;
     if (begin != NULL && end != NULL && begin < end) {
@@ -995,25 +972,6 @@ static uint16_t XcpRegisterSectionEvents(void) {
     } else {
         DBG_PRINT_WARNING("No xcp_evts section found\n");
     }
-#elif defined(__APPLE__)
-    unsigned long sz = 0;
-    const tXcpEventDescriptor *begin = (const tXcpEventDescriptor *)getsectiondata(&_mh_execute_header, "__DATA", "xcp_evts", &sz);
-    if (begin != NULL) {
-        const tXcpEventDescriptor *end = begin + (sz / sizeof(tXcpEventDescriptor));
-        for (const tXcpEventDescriptor *e = begin; e < end; e++) {
-            tXcpEventId id = XcpFindEvent(e->name);
-            if (id == XCP_UNDEFINED_EVENT_ID) {
-                id = XcpCreateEvent(e->name, e->cycle_time_ns, e->priority);
-                assert(id != XCP_UNDEFINED_EVENT_ID);
-                count++;
-            }
-        }
-    } else {
-        DBG_PRINT_WARNING("No xcp_evts section found\n");
-    }
-#else
-// #error "Unsupported platform for event segment registration"
-#endif
 
     if (count > 0)
         DBG_PRINTF3(ANSI_COLOR_GREEN "Preregistered %u events from event descriptor section\n" ANSI_COLOR_RESET, count);
@@ -1024,9 +982,53 @@ static uint16_t XcpRegisterSectionEvents(void) {
 
 #else // XCP_ENABLE_DAQ_EVENT_LIST
 
+// Linker section event list
+//---------------------------
+
+uint16_t XcpGetEventCount(void) {
+
+    const tXcpEventDescriptor *begin = __start_xcp_evts;
+    const tXcpEventDescriptor *end = __stop_xcp_evts;
+    if (begin != NULL && end != NULL && begin < end) {
+        return (end - begin);
+    } else {
+        return 0;
+    }
+}
+
+const tXcpEventDescriptor *XcpGetEvent(tXcpEventId event) {
+    const tXcpEventDescriptor *begin = __start_xcp_evts;
+    const tXcpEventDescriptor *end = __stop_xcp_evts;
+    const tXcpEventDescriptor *event_desc = begin + event;
+    if (begin != NULL && end != NULL && event_desc < end) {
+        return event_desc;
+    }
+    return NULL;
+}
+
 const char *XcpGetEventName(tXcpEventId event) {
-    (void)event;
-    return "";
+
+    const tXcpEventDescriptor *begin = __start_xcp_evts;
+    const tXcpEventDescriptor *end = __stop_xcp_evts;
+    const tXcpEventDescriptor *event_desc = begin + event;
+    if (begin != NULL && end != NULL && event_desc < end) {
+        return event_desc->name;
+    }
+    return NULL;
+}
+
+tXcpEventId XcpFindEvent(const char *name) {
+
+    const tXcpEventDescriptor *begin = __start_xcp_evts;
+    const tXcpEventDescriptor *end = __stop_xcp_evts;
+    if (begin != NULL && end != NULL && begin < end) {
+        for (const tXcpEventDescriptor *e = begin; e < end; e++) {
+            if (strcmp(e->name, name) == 0) {
+                return (tXcpEventId)(e - begin);
+            }
+        }
+    }
+    return XCP_UNDEFINED_EVENT_ID;
 }
 
 #endif // XCP_ENABLE_DAQ_EVENT_LIST

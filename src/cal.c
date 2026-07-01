@@ -118,9 +118,9 @@ static void *XcpCalMemAlloc_(size_t size) {
     return &shared_mut_safe.cal_seg_list.cal_mem.pool[old_used];
 }
 
-// Pre-register all tXcpCalSegDescriptor variables placed in the xcp_cals section by DaqCreateEvent().
-// Must be called after SS_ACTIVATED is set (XcpCreateEvent requires isActivated()).
-// If a persistence file was loaded before this call, events are matched by name and keep their saved id.
+// Pre-register all tXcpCalSegDescriptor variables placed in the xcp_cals section
+// Must be called after SS_ACTIVATED is set
+// If a persistence file was loaded before this call, segments are matched by name and keep their saved id
 uint16_t XcpRegisterSectionCalSegs(void) {
 
     uint16_t count = 0;

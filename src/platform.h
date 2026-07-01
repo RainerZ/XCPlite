@@ -24,6 +24,8 @@
 //-------------------------------------------------------------------------------------------------
 // Platform defines
 
+// XCPlite uniquely uses _WIN, _LINUX, _MACOS, _QNX or _FREE_RTOS for platform specific code paths
+
 // 64 Bit or 32 Bit platform
 #if defined(_ix64_) || defined(__x86_64__) || defined(_M_X64) || defined(__aarch64__) || defined(_WIN64)
 #define PLATFORM_64BIT
