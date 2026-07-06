@@ -587,7 +587,7 @@ extern const uint8_t *gXcpBaseAddr;
     }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// Build time A2L file generation helpers
+// Build time A2L file generation macros for metadata annotations
 
 #if defined(__ELF__)
 #define XCP_METADATA_SECTION_ATTR __attribute__((section("xcp_meta"), used))
@@ -598,7 +598,6 @@ extern const uint8_t *gXcpBaseAddr;
 #error "Unsupported platform for XCP metadata section"
 #endif
 
-// Metadata annotations
 #define XCP_COMMENT(name, comment) static const char XCP_METADATA_SECTION_ATTR xcp_meta__comment__##name[] = comment;
 #define XCP_UNIT(name, unit) static const char XCP_METADATA_SECTION_ATTR xcp_meta__unit__##name[] = unit;
 #define XCP_LIMITS(name, min, max)                                                                                                                                                 \

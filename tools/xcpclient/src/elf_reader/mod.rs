@@ -49,16 +49,11 @@ Parse DW_TAG_variable with TLS-specific location expressions
 DW_OP_form_tls_address, etc
 
 
-
-
-
 Tools:
 dwarfdump --debug-info <filename>
 dwarfdump --debug-info --name <varname> <filename>
 objdump -h  <filename>
 objdump --syms <filename>
-
-
 
 Limitations:
 - With -o1 most stack variables are in registers, have to be manually spilled to stack or captured
