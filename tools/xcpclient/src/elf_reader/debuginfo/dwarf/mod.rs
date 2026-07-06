@@ -38,6 +38,8 @@ struct DebugDataReader<'elffile> {
     cfa_info: Vec<CfaInfo>,
     epk_string: Option<String>,
     epk_addr: u64,
+    xcp_meta_data: Option<(u64, Vec<u8>)>, // (section_base_addr, raw_bytes)
+    is_little_endian: bool,
 }
 
 // load the debug info from an elf file
@@ -84,6 +86,19 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
         log::info!("EPK string read from xcp_epk section: '{}' at address 0x{:08X}", epk, epk_addr);
     }
 
+    // read the xcp_meta section raw bytes for metadata (XCP_UNIT / XCP_LIMITS annotations)
+    let xcp_meta_section = elffile.section_by_name("xcp_meta");
+    let xcp_meta_data: Option<(u64, Vec<u8>)> = xcp_meta_section.and_then(|s| {
+        let addr = s.address();
+        s.data().ok().map(|data| (addr, data.to_vec()))
+    });
+    if let Some((addr, ref data)) = xcp_meta_data {
+        log::info!("XCP metadata section (xcp_meta) found at address 0x{:08X}, {} bytes", addr, data.len());
+    } else {
+        log::debug!("XCP metadata section (xcp_meta) not found in ELF file");
+    }
+    let is_little_endian = elffile.endianness() == Endianness::Little;
+
     // get CFA information for DebugDataReader
     let mut cfa_info = Vec::new();
     let res = get_cfa_from_object(&elffile, &mut cfa_info, verbose, unit_idx_limit);
@@ -112,6 +127,8 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
         cfa_info,
         epk_string,
         epk_addr,
+        xcp_meta_data,
+        is_little_endian,
     };
     log::debug!("Reading debug info entries");
     Ok(dbg_reader.read_debug_info_entries(unit_idx_limit))
@@ -237,6 +254,8 @@ impl DebugDataReader<'_> {
             cfa_info: self.cfa_info,
             epk_string: self.epk_string,
             epk_addr: self.epk_addr,
+            xcp_meta_data: self.xcp_meta_data,
+            is_little_endian: self.is_little_endian,
         }
     }
 

@@ -589,33 +589,21 @@ extern const uint8_t *gXcpBaseAddr;
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Build time A2L file generation helpers
 
-// @@@@ NOTE: Work in progress, compile time A2L file generation is not fully implemented yet
-#if 0
-
-#define _XCP_STRING(var_name, suffix, value) static const char __attribute__((section(XCP_STRING_SECTION), used)) __xcp_str_##var_name##suffix[] = value
-
-#ifdef __APPLE__
-// macOS Mach-O: segment,section format
-#define XCP_META_SECTION "__DATA,__xcp_meta"
-#define XCP_STRING_SECTION "__DATA,__xcp_str"
+#if defined(__ELF__)
+#define XCP_METADATA_SECTION_ATTR __attribute__((section("xcp_meta"), used))
+#elif defined(__APPLE__)
+#define XCP_METADATA_SECTION_ATTR __attribute__((section("__DATA,xcp_meta"), used))
 #else
-// Linux ELF: simple section names
-#define XCP_META_SECTION ".xcp.meta"
-#define XCP_STRING_SECTION ".xcp.strings"
+#define XCP_METADATA_SECTION_ATTR /* section-based registration not supported on this platform */
+#error "Unsupported platform for XCP metadata section"
 #endif
 
 // Metadata annotations
-#define XCP_COMMENT (name, comment) static const char *__attribute__((section(XCP_STRING_SECTION), used)) __a2l_comment_##name = comment;
-#define XCP_UNIT(name, unit) static const char *__attribute__((section(XCP_STRING_SECTION), used)) __a2l_unit_##name = unit;
+#define XCP_COMMENT(name, comment) static const char XCP_METADATA_SECTION_ATTR xcp_meta__comment__##name[] = comment;
+#define XCP_UNIT(name, unit) static const char XCP_METADATA_SECTION_ATTR xcp_meta__unit__##name[] = unit;
 #define XCP_LIMITS(name, min, max)                                                                                                                                                 \
-    static const double __attribute__((section(XCP_META_SECTION), used)) __a2l_min_##name = min;                                                                                   \
-    static const double __attribute__((section(XCP_META_SECTION), used)) __a2l_max_##name = max;
-
-#else
-#define XCP_COMMENT (name, comment)
-#define XCP_UNIT(name, unit)
-#define XCP_LIMITS(name, min, max)
-#endif
+    static const double XCP_METADATA_SECTION_ATTR xcp_meta__min__##name = min;                                                                                                     \
+    static const double XCP_METADATA_SECTION_ATTR xcp_meta__max__##name = max;
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Measurement of local variables and function parameters without A2L runtime generation enabled

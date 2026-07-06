@@ -758,6 +758,8 @@ async fn xcp_client(
                 // Skipped in --create-a2l-template mode; events and segments are still registered above
                 if !create_a2l_template {
                     elf_reader.register_variables(&mut reg, segment_relative, verbose, elf_idx_unit_limit, &elf_var_filter, &elf_unit_filter)?;
+                    // Apply metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the xcp_meta ELF section
+                    elf_reader.register_metadata(&mut reg, verbose)?;
                 }
             }
 
