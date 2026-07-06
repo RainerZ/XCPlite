@@ -257,12 +257,12 @@ struct DaqDecoder {
     event_count: usize,
     byte_count: usize,
     daq_timestamp: [u64; MAX_EVENT],
-    log_level: u8,
+    verbose: u8,
     csv_writer: Option<std::io::BufWriter<std::fs::File>>,
 }
 
 impl DaqDecoder {
-    pub fn new(log_level: u8, csv_filename: &str) -> DaqDecoder {
+    pub fn new(verbose: u8, csv_filename: &str) -> DaqDecoder {
         let csv_writer = if csv_filename.is_empty() {
             None
         } else {
@@ -284,7 +284,7 @@ impl DaqDecoder {
             event_count: 0,
             byte_count: 0,
             daq_timestamp: [0; MAX_EVENT],
-            log_level,
+            verbose,
             csv_writer,
         }
     }
@@ -372,12 +372,12 @@ impl XcpDaqDecoder for DaqDecoder {
         let t_ns = t * self.timestamp_resolution;
         let delta_us = ((t - t_last) * self.timestamp_resolution) / 1000;
 
-        if self.log_level >= 1 {
+        if self.verbose >= 2 {
             println!("DAQ: lost={}, daq={}, odt={}, t={}ns (+{}us)", lost, daq, odt, t_ns, delta_us);
         }
 
         // Decode all odt entries — for terminal (log_level >= 2) and/or CSV output
-        if self.log_level >= 2 || self.csv_writer.is_some() {
+        if self.verbose >= 1 || self.csv_writer.is_some() {
             let daq_list = &self.daq_odt_entries.as_ref().unwrap()[daq as usize];
 
             for odt_entry in daq_list.iter() {
@@ -418,7 +418,7 @@ impl XcpDaqDecoder for DaqDecoder {
                 if let Some(ref mut writer) = self.csv_writer {
                     let _ = writeln!(writer, "{},{},{},{}", t_ns, daq, odt_entry.name, value_str);
                 }
-                if self.log_level >= 2 {
+                if self.verbose >= 1 {
                     println!(" {} = {}", odt_entry.name, value_str);
                 }
             }
@@ -514,7 +514,7 @@ async fn xcp_client(
             // Connect to the XCP server
             // Print protocol information
             info!("XCP Connect using {}", protocol);
-            let daq_decoder = Arc::new(Mutex::new(DaqDecoder::new(2, &csv_filename)));
+            let daq_decoder = Arc::new(Mutex::new(DaqDecoder::new(verbose as u8, &csv_filename)));
             match xcp_client.connect(connect_mode, Arc::clone(&daq_decoder), ServTextDecoder::new()).await {
                 Ok(_) => {
                     info!("Connected to XCP server at {}", dest_addr);
