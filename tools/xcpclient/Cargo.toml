@@ -1,14 +1,13 @@
 [package]
 name = "xcpclient"
-version = "2.1.6"
+version = "3.0.1"
 edition = "2024"
 resolver = "2"
 authors = ["RainerZ"]
 description = "Simple XCP test client and ELF/A2L utilities"
 readme = "README.md"
 keywords = ["XCP","ASAM","CANape","A2L"]
-license = "MIT"
-homepage = "https://vector.com"  
+license = "MIT"  
 repository = "https://github.com/vectorgrp/XCPlite"
 categories = ["measurement and calibration"] 
 
@@ -41,8 +40,8 @@ cpp_demangle = "0.4"  # 0.5 removed DemangleOptions, would require code changes
 # xcp_registry from xcp-lite on Github
 # From VectorGrp/xcp-lite - currently not compatible
 # xcp_registry = { git = "https://github.com/vectorgrp/xcp-lite", features = ["a2l_reader"] }
-# From - Fork RainerZ/xcp-lite V3.0.0
-# xcp_registry = { git = "https://github.com/RainerZ/xcp-lite.git", branch = "V3.0.0", features = ["a2l_reader"] }
+# From fork RainerZ/xcp-lite branch V3.0.1
+# xcp_registry = { git = "https://github.com/RainerZ/xcp-lite.git", branch = "V3.0.1", features = ["a2l_reader"] }
 # From local directory current branch
 xcp_registry = { path = "../../../xcp-lite-RainerZ/xcp_registry", features = ["a2l_reader"] } 
 

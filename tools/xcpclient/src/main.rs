@@ -634,7 +634,7 @@ async fn xcp_client(
                 // Generate a different file name for the uploaded A2L file
                 let new_a2l_path = a2l_path
                     .with_file_name(format!("{}_upload", a2l_path.file_stem().unwrap().to_str().unwrap()))
-                    .with_extension(".a2l");
+                    .with_extension("a2l");
                 warn!(
                     "The A2L file '{}' already exists and matches the XCP server A2L file name (from GET_ID ASAM_NAME), uploading to {}",
                     a2l_path.display(),
