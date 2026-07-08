@@ -67,7 +67,7 @@ All notable changes to XCPlite are documented in this file.
 ## [V2.0.1]
 
 - General refactoring and code cleanup, various minor code improvements and optimizations
-- Renamed to 'libxcplite' with external package name `xcplite`
+- Renamed to `libxcplite` with external package name `xcplite`
 - DAQ performance optimization, lock-less transmit queue for vectored IO
 - New function XcpCreateCalBlk to create calibration blocks without A2L memory segments
 - Simplified build script and CMake configuration, build script option to install libxcplite 
@@ -93,7 +93,7 @@ void XcpInit(const char *name, const char *epk, uint8_t mode);
 
 ### Experimental
 
-- Multi application mode (OPTION_SHM_MODE). See 'SHM.md' for details.  
+- Multi application mode (OPTION_SHM_MODE). See `SHM.md` for details.  
 
 
 ## [V1.2.1]
@@ -195,7 +195,7 @@ void XcpInit(const char *name, const char *epk, bool activate);
 ### Experimental
 - Tool `bintool` to convert XCPlite-specific BIN files to Intel-HEX format and apply Intel-HEX files to BIN files
 - New demo `no_a2l_demo` to demonstrate workflows without runtime A2L generation (using a XCPlite-specific A2L creator, see README.md of `no_a2l_demo`)
-- New demo 'bpf_demo' to demonstrate usage of XCPlite together with eBPF programs for Linux kernel tracing (see README.md of `bpf_demo`)
+- New demo `bpf_demo` to demonstrate usage of XCPlite together with eBPF programs for Linux kernel tracing (see README.md of `bpf_demo`)
 - Internal naming convention refactored to support A2L creation for dynamic objects from ELF/DWARF binaries
 - Rust xcp-lite >V1.0.0 uses the calibration segment management of XCPlite instead of implementing its own
 
