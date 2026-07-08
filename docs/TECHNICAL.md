@@ -68,7 +68,7 @@ The A2l address generation for measurement variables on stack needs to be done o
 ### Option 1: Runtime Generation (Volatile)
 
 The A2L file is always created during application runtime. The A2L may be volatile, which means it may change on each restart of the application. This happens when there are race conditions in registering segments and events. The A2L file is just downloaded again by the XCP client.  
-Note: XCP used the term 'upload' in the sense of upload to the client, which is a bit confusing, because the file is created on the target and then downloaded by the client.
+Note: XCP used the term `upload` in the sense of upload to the client, which is a bit confusing, because the file is created on the target and then downloaded by the client.
 
 To avoid A2L changes on each restart, the creation order of events and segments just has to be deterministic.
 

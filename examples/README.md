@@ -10,7 +10,7 @@ To get started, take a first look at the C example `hello_xcp` or at `hello_xcp_
 ### Example CANape Projects
 
 There is a CANape project for each example in a directory folder `<ExampleFolder>/CANape` or `<ExampleFolder>/CANape_Project`.  
-To load a project into CANape, select load project and navigate to the file 'CANape.ini' in this "project" folder.  
+To load a project into CANape, select load project and navigate to the file `CANape.ini` in this "project" folder.  
 All CANape project examples (execpt no_a2l and free_rtos demos) are configured to provide downloading the A2L file from target ECU via XCP upload commands (XCP has unusual naming conventions, the target ECU technically is the UDP/TCP server, but the commands to read data from target it are called upload). The IP address of the XCP server is stored in the A2L file "uploaded" last time. If CANape can not connect, check that the correct IP address is configured in "Device Configuration/Devices/<DeviceName>/Protocol/Transport Layer".  
 
 The examples should run with a CANape demo version, which can be downloaded from <https://www.vector.com/de/de/support-downloads/download-center>.

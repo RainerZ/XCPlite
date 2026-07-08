@@ -6,7 +6,7 @@ There are 3 different demos:
 - freertos_esp32_demo for ESP32 with PlatformIO
 - freertos_stm32_demo for STM32 with QubeMx
 
-All examples are based on the same demo application code in 'xcp_demo.c' and 'xcp_demo.h'.  
+All examples are based on the same demo application code in `xcp_demo.c` and `xcp_demo.h`.  
 
 Refer to the README.md files in the demo folders for more specific details.  
 
