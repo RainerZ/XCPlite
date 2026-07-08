@@ -30,7 +30,7 @@ constexpr bool XCP_OPTION_USE_TCP = false;
 constexpr uint8_t XCP_OPTION_SERVER_ADDR[4] = {0, 0, 0, 0};
 constexpr uint16_t XCP_OPTION_SERVER_PORT = 5555;
 constexpr size_t XCP_OPTION_QUEUE_SIZE = (1024 * 32);
-constexpr int XCP_OPTION_LOG_LEVEL = 3; // Default XCP log level: 0=none, 1=error, 2=warning, 3=info, 4=XCP protocol debug, 5=very verbose
+constexpr int XCP_OPTION_LOG_LEVEL = 4; // Default XCP log level: 0=none, 1=error, 2=warning, 3=info, 4=XCP protocol debug, 5=very verbose
 
 //-----------------------------------------------------------------------------------------------------
 // Optional: Use a PTP4L synchronized real-time clock instead of the system monotonic clock
@@ -343,10 +343,10 @@ int main(int argc, char *argv[]) {
         if ((xcp_clock - gXcpClockLastPps) > 1000000000) { // Every second in simulated time
 
             xcp_clock_pps = 1;
-            uint64_t t = (xcp_clock / 1000000000) * 1000000000;                      // Round down to last second in XCP time
-            DaqEventAtVar(pps, t, A2L_MEAS(xcp_clock_pps, "100 ms long PPS pulse")); // Start of the pulse
+            uint64_t t = (xcp_clock / 1000000000) * 1000000000;                       // Round down to last second in XCP time
+            DaqEventAtVar(pps1, t, A2L_MEAS(xcp_clock_pps, "100 ms long PPS pulse")); // Start of the pulse
             xcp_clock_pps = 0;
-            DaqEventAtVar(pps, t + 100000000, A2L_MEAS(xcp_clock_pps, "100 ms long PPS pulse")); // End of the pulse (+100ms)
+            DaqEventAtVar(pps2, t + 100000000, A2L_MEAS(xcp_clock_pps, "100 ms long PPS pulse")); // End of the pulse (+100ms)
 
             printf("PPS event at xcp_clock = %" PRIu64 " ns\n", t);
             gXcpClockLastPps = xcp_clock;
