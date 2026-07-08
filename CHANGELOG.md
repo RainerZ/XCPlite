@@ -5,8 +5,17 @@ All notable changes to XCPlite are documented in this file.
 
 ## [V2.1.6]
 
-- Optimizations for microcontroller builds, optimized locking and static allocated queue (new queue32m.c)
-- Enabled 1ms event 'async' (event id 0) as default event for global variables
+- Critical bugfix in ´XcpEventExt_´, undefined behaviour when DAQ is not running 
+- Optimizations for microcontroller/RTOS builds, optimized locking (critical section instead of mutex)and static allocated queue (new ´queue32m.c´)
+- Link time, deterministic event id assignment (´tXcpEventDescriptor´ in section ´xcp_evts´)
+- Implemented ´XCP_LIMIT´, XCP_COMMENT and ´XCP_UNIT´ metadata definition to support A2L generation in RTOS use cases (new linker section ´xcp_meta´). See example no_a2l_demo for details
+- ´xcpclient´ tool refactoring and bugfixes, xcp_registry dependency switched back to ´xcplite´ crate main on VectorGrp
+- Made OPTION_DAQ_EVENT_LIST an configuration override and removed special configuration handling with XCPLIB_FOR_RUST
+- Enabled 1ms event ´async´ (event id 0) as default event for global variables in RTOS builds
+- ´XcpGetEcuEpk´ renamed to ´XcpGetLocalEpk´ for clarity in SHM mode
+- silkit_demo updated
+- ´DaqCreateEventExt´ fixed
+- Asserts removed from the DAQ trigger macros 
 
 
 ## [V2.1.5]
