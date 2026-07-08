@@ -15,9 +15,12 @@ which is part of this repository under `tools/xcpclient/`.
 ## The XCPlite Build Time A2L Generation Concept
   
 The fundamental idea is to provide a specialized A2L database creator (ELF -> A2L converter) designed exclusively for XCPlite.  
-The XCPlite A2L creator knows implementation details of the XCPlite code instrumentation library to automate the A2L generation process as much as possible.  
-It automatically detects all events and calibration memory segments created by the XCPlite instrumentation macros.
-It detects the code locations of the event trigger points and automatically associates local and member variables with complex types existing in each events scope.  
+The XCPlite A2L creator knows implementation details of the XCPlite code instrumentation library to automate the A2L generation process as much as possible:  
+- It automatically detects all events and calibration memory segments created by the XCPlite instrumentation macros.
+- It detects the code locations of the event trigger points and automatically associates local and member variables with complex types existing in each events scope.  
+- It can add metadata for calibration parameters and measurement variables, such as physical units, min/max limits, and scaling information.
+
+
 The test XCP client in the xcpclient tool can work with the ELF file directly, no need for a separate A2L file. 
 
 
@@ -27,7 +30,7 @@ An XCPlite specific A2L creator/writer with ELF/DWARF reader is built into the x
 
 Option 1: A2L template generation:
 
-- Creates a complete A2L template with IF_DATA, epk version,memory segments and events from ELF by detecting static segment and event marker variables created by the XCPlite code instrumentaion
+- Creates a complete A2L template with IF_DATA, epk version, memory segments and events from ELF by detecting static segment and event marker variables created by the XCPlite code instrumentation
 
 
 Option 2: Full A2L content generation:
@@ -38,7 +41,7 @@ Option 2: Full A2L content generation:
         Detect calibration parameters by their segment number and offset.
     Option 2: #define OPTION_CAL_SEGMENTS_ABS
         XCP configured for absolute calibration segment addressing
-        This is the prefered option for microcontrollers
+        This is the preferred option for microcontrollers
         The reference pages of all calibration parameters must be in addressable (4 GB - 32bit) global memory (.bss or .rodata segment must be in this range)
         Detect calibration parameters by the address of their default/reference page by naming convention and segment marker variable
 
@@ -57,7 +60,7 @@ Content generation step 2 can alternatively be done manually, with any other A2L
 ## Library Configuration Override
 
 The default configuration options for xcplite are set in `src/xcplib_cfg.h`.
-All defaults are defined there; nothing needs to be edited for a no-A2L build.
+All defaults are defined there; nothing needs to be edited for a `no_a2l` build.
 
 For this use case a dedicated override file `src/xcplib_no_a2l_cfg.h` adjusts only the settings that
 differ from the defaults:
@@ -65,7 +68,7 @@ differ from the defaults:
 ```c
 // src/xcplib_no_a2l_cfg.h — lean override, only differences from xcplib_cfg.h defaults
 #undef  OPTION_ENABLE_PERSISTENCE       // no file system needed on bare-metal / RTOS targets
-#define OPTION_CAL_SEGMENTS_ABS         // absolute addressing has address exension 0, calibration segments may be accessed with the absolute address of their static default page
+#define OPTION_CAL_SEGMENTS_ABS         // absolute addressing has address extension 0, calibration segments may be accessed with the absolute address of their static default page
 #undef  OPTION_CAL_SEGMENT_EPK          // no EPK segment
 #define OPTION_QUEUE_32                 // 32-bit queue
 #undef  OPTION_QUEUE_64_VAR_SIZE
@@ -127,17 +130,12 @@ To make this work correctly, follow these rules:
    allocated for the program lifetime and xcpclient can find it.
 
 For the full ELF/DWARF mechanics — section layouts, the `trg__` anchor naming convention,
-and the `AddrExt` encoding — see
+and address encoding — see
 [docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation--elfdwarf-internals).
 
 ---
 
 ## API subset for no-A2L workflows
-
-When `XCPLIB_CFG_OVERRIDE="xcplib_no_a2l_cfg.h"` is active, the on-target A2L generator
-is compiled out. The application must **not** call any `A2lCreate*`, `A2lTypedef*`,
-`A2lSetXxxAddrMode`, `A2lFinalize`, or `A2lOnce` macros — they expand to nothing or are
-absent. The A2L file is produced offline from ELF/DWARF by `xcpclient`.
 
 The following API subset remains fully available and is unchanged:
 
@@ -148,37 +146,31 @@ The following API subset remains fully available and is unchanged:
 | `XcpInit(name, epk, mode)` | Initialize the XCP core |
 | `XcpEthServerInit(addr, port, tcp, queue_size)` | Start the XCP/Ethernet server |
 | `XcpEthServerShutdown()` | Stop the server |
-| `XcpSetElfName(path)` | Register ELF file path for `GET_ID` upload (`OPTION_ENABLE_ELF_UPLOAD`) |
 | `XcpSetLogLevel(level)` | Set log verbosity |
 
-### Events and measurement triggers — macros only (`xcplib.h`)
-
-> **These macros are essential for offline A2L generation.** Use only the macros listed here —
-> not the raw `XcpCreateEvent()` / `XcpEvent()` C functions — because only the macros emit
-> the ELF section descriptors and DWARF anchors that xcpclient needs.
+### Events and measurement triggers (`xcplib.h`)
 
 | Macro | Emits to ELF | Purpose |
 |---|---|---|
 | `DaqCreateEvent(name)` | `xcp_evts` | Register a named DAQ event; emits `tXcpEventDescriptor` |
-| `DaqCreateEventInstance(name)` | `xcp_evts` | Thread-local event instance; emits descriptor |
+| `DaqCreateEventExt(name)` | `xcp_evts` | Register a named DAQ event with cycle time and priority; emits `tXcpEventDescriptor` |
 | `DaqCreateAndTriggerEvent(name)` | `xcp_evts` + DWARF anchor | Declare and trigger in one step — ideal for short-lived functions |
-| `DaqTriggerEvent(name)` | DWARF anchor (`trg__AAS__`) | Trigger and anchor local variable scope for xcpclient |
-| `DaqTriggerEventExt(name, base)` | DWARF anchor (`trg__AASD__`) | Trigger with explicit base pointer (heap / relative addressing) |
-| `DaqTriggerEvent_i(event_id)` | DWARF anchor | Trigger by cached event ID (thread-local instances) |
+| `DaqTriggerEvent(name)`, `DaqTriggerEventAt` | DWARF anchor (`trg__AAS__`) | Trigger and anchor local variable scope for xcpclient |
+| `DaqTriggerEventExt(name, base)`, `DaqTriggerEventExt_s(name, base)` | DWARF anchor (`trg__AASD__`) | Trigger with explicit base pointer (heap / relative addressing) |
+| `DaqEventVar(event_name, ...)` | — | Declare a variadic DAQ event |
 | `DaqEventEnable(name)` / `DaqEventDisable(name)` | — | Enable/disable individual events at runtime |
 
-### Calibration — macros only (`xcplib.h`)
+
+### Calibration (`xcplib.h`)
 
 > **These macros are essential for offline A2L generation.** Only `CalSegDecl` + `CalSegCreate`
 > emit the `xcp_cals` section descriptor that xcpclient reads. `XcpCreateCalSeg()` does not.
 
 | Macro / Function | Emits to ELF | Purpose |
 |---|---|---|
-| `CalSegDecl(name)` | `xcp_cals` (at file scope) | Declare + emit `tXcpCalSegDescriptor` into `.xcp_cals` |
-| `CalSegCreate(name)` | — | Register segment at runtime (pairs with `CalSegDecl`) |
+| `CalSegDecl(name)`, `CalSegCreate(name)` | `xcp_cals` (at file scope) | Declare + emit `tXcpCalSegDescriptor` into `.xcp_cals` |
 | `CalSegLock(name)` | — | Lock segment for read; returns `const T *` to the active page |
 | `CalSegUnlock(name)` | — | Release the lock |
-| `XcpBinWrite(epk)` | — | Write binary calibration file (no A2L required) |
 
 ### C++ RAII calibration wrapper (`xcplib.hpp`)
 
