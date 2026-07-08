@@ -149,11 +149,11 @@ using std::atomic_uint_least8_t;
 #error "Unsupported host OS for FreeRTOS POSIX simulator"
 #endif
 
-#ifndef _DEFAULT_SOURCE
-#define _DEFAULT_SOURCE
-#endif
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
+// _GNU_SOURCE must be provided by the build system.
+// The freertos_emu_demo CMakeLists.txt sets it via target_compile_definitions.
+// Non-CMake builds: pass -D_GNU_SOURCE on the compiler command line.
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#error "_GNU_SOURCE is not defined. Pass -D_GNU_SOURCE on the compiler command line."
 #endif
 
 #include <net/if.h>
@@ -164,16 +164,13 @@ using std::atomic_uint_least8_t;
 
 #else
 
-// Define feature test macros before any includes to ensure POSIX functions are available
-#ifndef _DEFAULT_SOURCE
-#define _DEFAULT_SOURCE
+// _GNU_SOURCE must be defined by the build system before any system headers are included.
+// When using CMake: link against xcplite::xcplite — _GNU_SOURCE is a PUBLIC compile definition
+// on Linux and propagates automatically to all consumers.
+// Non-CMake builds: pass -D_GNU_SOURCE on the compiler command line.
+#if defined(_LINUX) && !defined(_GNU_SOURCE)
+#error "_GNU_SOURCE is not defined. Add -D_GNU_SOURCE to your compiler flags, or use the xcplite CMake target (xcplite::xcplite) which propagates this automatically on Linux."
 #endif
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-// #ifndef _POSIX_C_SOURCE
-// #define _POSIX_C_SOURCE 200809L
-// #endif
 
 #include <net/if.h>  // for IFNAMSIZ
 #include <pthread.h> // for pthread_mutex

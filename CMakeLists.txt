@@ -205,8 +205,10 @@ if(WIN32)
     # Define _CRT_SECURE_NO_WARNINGS for Windows to suppress secure CRT warnings
     target_compile_definitions(xcplite PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
-    # Define _GNU_SOURCE for Linux/Unix to make POSIX/BSD extensions available
-    target_compile_definitions(xcplite PRIVATE _GNU_SOURCE)
+    # _GNU_SOURCE: Linux only, propagated PUBLIC so CMake consumers of xcplite::xcplite
+    # get it automatically without having to set it themselves.
+    # macOS/QNX do not need it; Windows is already excluded by the if(WIN32) above.
+    target_compile_definitions(xcplite PUBLIC $<$<PLATFORM_ID:Linux>:_GNU_SOURCE>)
 endif()
 
 # Link threads library to xcplite (needed for pthread usage in platform.h)

@@ -40,11 +40,11 @@ Within a chosen configuration, the following options control what gets built:
 
 | Configuration | Examples (`BUILD_EXAMPLES`) | Tests (`BUILD_TESTS`) | Tools (`BUILD_TOOLS`) |
 |---------------|-----------------------------|-----------------------|-----------------------|
-| `default` | hello_xcp, hello_xcp_cpp, c_demo, cpp_demo, point_cloud_demo, struct_demo, multi_thread_demo, ptp4l_demo¹, bpf_demo¹² | a2l_test, cal_test, daq_test, clock_test, queue_test, type_detection_test_* | *(none)* |
+| `default` | hello_xcp, hello_xcp_cpp, c_demo, cpp_demo, point_cloud_demo, struct_demo, multi_thread_demo, ptp4l_demo¹, bpf_demo¹² | a2l_test, cal_test, daq_test, clock_test, queue_test, xcp_test, type_detection_test_* | *(none)* |
 | `no_a2l` | no_a2l_demo | *(none)* | *(none)* |
 | `ptp` | ptp4l_demo¹ | clock_test | ptptool¹ |
 | `shm` | hello_xcp (SHM), hello_xcp_cpp (SHM) | *(none)* | shmtool, xcpdaemon³ |
-| `rtos` | freertos_demo³ (downloads FreeRTOS-Kernel) | *(none)* | *(none)* |
+| `rtos` | freertos_emu_demo³ (downloads FreeRTOS-Kernel) | *(none)* | *(none)* |
 
 ¹ Linux only  ² requires libbpf  ³ not supported on Windows
 
@@ -54,7 +54,7 @@ These examples have their own `CMakeLists.txt` and use `find_package(xcplite)` a
 
 - **`examples/silkit_demo/`** — Requires [SilKit](https://github.com/vectorgrp/sil-kit) and an installed xcplite (shm configuration recommended). See `examples/silkit_demo/README.md`.
 - **`examples/external_example/`** — Minimal C/C++ consumer example. Shows how to use xcplite from an installed package. See `examples/external_example/README.md`.
-- **`examples/esp32_freertos_demo/`** — ESP32 FreeRTOS target. Uses the same `xcplib_rtos_cfg.h` override as the `rtos` CMake configuration, but is built with [PlatformIO](https://platformio.org/). Not a CMake project. The CMake `rtos` configuration builds `freertos_demo` instead, which runs the same FreeRTOS xcplite code on a POSIX simulator for host-side testing (Linux only).
+- **`examples/esp32_freertos_demo/`** — ESP32 FreeRTOS target. Uses the same `xcplib_rtos_cfg.h` override as the `rtos` CMake configuration, but is built with [PlatformIO](https://platformio.org/). Not a CMake project. The CMake `rtos` configuration builds `freertos_emu_demo` instead, which runs the same FreeRTOS xcplite code on a POSIX simulator for host-side testing (Linux/macOS only).
 
 ## Quick Build
 
@@ -134,6 +134,10 @@ Examples:
 
 # Build with GCC, all targets
 CC=gcc CXX=g++ ./build.sh release all
+
+# Build with Clang, all targets
+CC=clang CXX=clang++ ./build.sh release all
+
 ```
 
 #### Using pure CMake
@@ -292,24 +296,31 @@ See `examples/external_example/README.md` and `examples/silkit_demo/README.md` f
 
 First of all, note that XCPlite requires C11 (and C++17 for C++ support).
 
-A possible problematic requirement is that the 64-bit lockless transmit queue implementation requires `atomic_uint_least64_t`.  
-This may cause problems on some platforms when using the clang compiler.  
-**Prefer gcc for better compatibility.**  
-If this is not an option, the mutex based 32-bit queue may be used instead.
+The 64-bit lockless transmit queue (`queue64v.c`) requires `atomic_uint_least64_t`. On some ARM platforms, Clang emits calls to `__atomic_*` runtime helpers for 64-bit atomics and needs `-latomic`. CMakeLists.txt detects and links this library automatically. On 32-bit platforms, or when `OPTION_ATOMIC_EMULATION` is set, the build falls back to the mutex-based `queue32.c` automatically.
 
 ### Testing Different Compilers
 
-Use standard CMake environment variables to test different compilers:
+Use `build.sh` with `CC`/`CXX` environment variables — the script passes them through to CMake explicitly, so the selection is always honoured even for existing build directories:
+
+```bash
+# Test with GCC
+CC=gcc CXX=g++ ./build.sh clean
+
+# Test with Clang
+CC=clang CXX=clang++ ./build.sh clean
+```
+
+Or use raw CMake (note: a fresh build directory is required when switching compilers, because CMake caches the compiler in `CMakeCache.txt` and ignores `CC`/`CXX` on re-configures):
 
 ```bash
 # Test with system default
 cmake -B build -S . && cmake --build build
 
-# Test with GCC
-CC=gcc CXX=g++ cmake -B build -S . && cmake --build build
+# Test with GCC (fresh directory)
+rm -rf build && CC=gcc CXX=g++ cmake -B build -S . && cmake --build build
 
-# Test with Clang
-CC=clang CXX=clang++ cmake -B build -S . && cmake --build build
+# Test with Clang (fresh directory)
+rm -rf build && CC=clang CXX=clang++ cmake -B build -S . && cmake --build build
 ```
 
 ### Using build.sh for Diagnostics
