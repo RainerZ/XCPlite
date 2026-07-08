@@ -164,9 +164,11 @@ _TARGET_LIST=()
 [[ "$CMAKE_BUILD_TOOLS" == "ON" ]]    && _TARGET_LIST+=("tools")
 [[ "$CMAKE_BUILD_RUST" == "ON" ]]     && _TARGET_LIST+=("rust_tools")
 [[ ${#_TARGET_LIST[@]} -eq 0 ]]       && _TARGET_LIST+=("lib")
+_COMPILER_DISPLAY="${CC:-default}${CXX:+ / $CXX}"
 echo "Configuration : $CONFIGURATION  ($BUILD_DIR)"
 echo "Build type    : $BUILD_TYPE"
 echo "Target        : ${_TARGET_LIST[*]}"
+echo "Compiler      : $_COMPILER_DISPLAY"
 echo ""
 
 # Clean if requested
@@ -176,6 +178,14 @@ if [[ "$CLEAN_BUILD" == true ]]; then
     echo ""
 fi
 
+# Explicit compiler flags: pass -DCMAKE_C/CXX_COMPILER when CC/CXX are set in the environment.
+# CMake caches the compiler after the first configure and silently ignores CC/CXX on
+# re-configures of an existing build directory.  Passing the flag explicitly overrides
+# the cache so compiler switching works even without 'clean'.
+CMAKE_COMPILER_ARGS=()
+if [[ -n "${CC:-}" ]];  then CMAKE_COMPILER_ARGS+=("-DCMAKE_C_COMPILER=$CC");   fi
+if [[ -n "${CXX:-}" ]]; then CMAKE_COMPILER_ARGS+=("-DCMAKE_CXX_COMPILER=$CXX"); fi
+
 # Configure
 cmake \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
@@ -184,6 +194,7 @@ cmake \
     -DXCPLITE_BUILD_TESTS="$CMAKE_BUILD_TESTS" \
     -DXCPLITE_BUILD_TOOLS="$CMAKE_BUILD_TOOLS" \
     -DXCPLITE_BUILD_RUST_TOOLS="$CMAKE_BUILD_RUST" \
+    "${CMAKE_COMPILER_ARGS[@]}" \
     $CMAKE_INSTALL_ARGS \
     -S . -B "$BUILD_DIR"
 
@@ -272,15 +283,16 @@ echo "Build summary"
 echo "=================================================================="
 echo "  Configuration : $CONFIGURATION"
 echo "  Build type    : $BUILD_TYPE"
+echo "  Compiler      : $_COMPILER_DISPLAY"
 echo "  Build dir     : $BUILD_DIR"
 echo ""
 
 # Print what was actually targeted per configuration
 case "$CONFIGURATION" in
     default)
-        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : hello_xcp, hello_xcp_cpp, c_demo, cpp_demo, point_cloud_demo, struct_demo, multi_thread_demo" \
+        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : hello_xcp, hello_xcp_cpp, c_demo, cpp_demo, point_cloud_demo, struct_demo, multi_thread_demo, ptp4l_demo (Linux), bpf_demo (Linux, if XCPLITE_BUILD_BPF_DEMO=ON)" \
             || echo "  Examples      : (not built)"
-        [[ "$CMAKE_BUILD_TESTS" == "ON" ]]    && echo "  Tests         : a2l_test, cal_test, daq_test, clock_test, queue_test, type_detection_test_*" \
+        [[ "$CMAKE_BUILD_TESTS" == "ON" ]]    && echo "  Tests         : a2l_test, cal_test, daq_test, clock_test, queue_test, xcp_test, type_detection_test_*" \
             || echo "  Tests         : (not built)"
         [[ "$CMAKE_BUILD_TOOLS" == "ON" ]]    && echo "  Tools         : (none for default configuration)" \
             || echo "  Tools         : (not built)"
@@ -307,7 +319,7 @@ case "$CONFIGURATION" in
             || echo "  Tools         : (not built)"
         ;;
     rtos)
-        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : freertos_demo (Linux/macOS only; downloads FreeRTOS-Kernel)" \
+        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : freertos_emu_demo (Linux/macOS only; downloads FreeRTOS-Kernel)" \
             || echo "  Examples      : (not built)"
         echo "  Tests         : (none for rtos configuration)"
         echo "  Tools         : (none for rtos configuration)"
