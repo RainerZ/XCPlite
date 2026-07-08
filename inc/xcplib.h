@@ -178,11 +178,11 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
 // calseg__##name and calblk__##name are the linker map file markers for calibration segments and blocks
 #define CalSegDecl(calseg_name)                                                                                                                                                    \
     static tXcpCalSegIndex calseg_id_##calseg_name = XCP_UNDEFINED_CALSEG;                                                                                                         \
-    const static tXcpCalSegDescriptor calseg__##calseg_name XCP_CAL_SECTION_ATTR = {                                                                                               \
+    static const tXcpCalSegDescriptor calseg__##calseg_name XCP_CAL_SECTION_ATTR = {                                                                                               \
         .name = #calseg_name, .addr = (const void *)&(calseg_name), .indexp = &calseg_id_##calseg_name, .size = sizeof(calseg_name), .type = XCP_CALSEG_TYPE_SEGMENT};
 #define CalBlkDecl(calblk_name)                                                                                                                                                    \
     static tXcpCalSegIndex calblk_id_##calblk_name = XCP_UNDEFINED_CALSEG;                                                                                                         \
-    const static tXcpCalSegDescriptor calblk__##calblk_name XCP_CAL_SECTION_ATTR = {                                                                                               \
+    static const tXcpCalSegDescriptor calblk__##calblk_name XCP_CAL_SECTION_ATTR = {                                                                                               \
         .name = #calblk_name, .addr = (const void *)&(calblk_name), .indexp = &calblk_id_##calblk_name, .size = sizeof(calblk_name), .type = XCP_CALSEG_TYPE_BLOCK};
 
 /// Dynamic creation of a calibration segment or block
@@ -192,14 +192,14 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
 // calseg__##name and calblk__##name are the linker map file markers for calibration segments and blocks
 #define CalSegCreate(calseg_name)                                                                                                                                                  \
     static tXcpCalSegIndex calseg_id_##calseg_name = XCP_UNDEFINED_CALSEG;                                                                                                         \
-    const static tXcpCalSegDescriptor calseg__##calseg_name XCP_CAL_SECTION_ATTR = {                                                                                               \
+    static const tXcpCalSegDescriptor calseg__##calseg_name XCP_CAL_SECTION_ATTR = {                                                                                               \
         .name = #calseg_name, .addr = (void *)&(calseg_name), .indexp = &calseg_id_##calseg_name, .size = sizeof(calseg_name), .type = XCP_CALSEG_TYPE_SEGMENT};                   \
     if (calseg_id_##calseg_name == XCP_UNDEFINED_CALSEG) {                                                                                                                         \
         calseg_id_##calseg_name = XcpCreateCalSeg(#calseg_name, (uint8_t *)&(calseg_name), sizeof(calseg_name));                                                                   \
     }
 #define CalBlkCreate(calblk_name)                                                                                                                                                  \
     static tXcpCalSegIndex calblk_id_##calblk_name = XCP_UNDEFINED_CALSEG;                                                                                                         \
-    const static tXcpCalSegDescriptor calblk__##calblk_name XCP_CAL_SECTION_ATTR = {                                                                                               \
+    static const tXcpCalSegDescriptor calblk__##calblk_name XCP_CAL_SECTION_ATTR = {                                                                                               \
         .name = #calblk_name, .addr = (void *)&(calblk_name), .indexp = &calblk_id_##calblk_name, .size = sizeof(calblk_name), .type = XCP_CALSEG_TYPE_BLOCK};                     \
     if (calblk_id_##calblk_name == XCP_UNDEFINED_CALSEG) {                                                                                                                         \
         calblk_id_##calblk_name = XcpCreateCalBlk(#calblk_name, (uint8_t *)&(calblk_name), sizeof(calblk_name));                                                                   \

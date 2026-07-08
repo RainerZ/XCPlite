@@ -3240,7 +3240,7 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     // In SHM multiapplication mode, only the leader reaches this point, and creates a EPK segment for the whole system
     // @@@@ TODO: Currently the EPK segment is treated like any other segment, even if it is read-only and should only expose the default page
     static tXcpCalSegIndex calseg_id_epk = XCP_UNDEFINED_CALSEG;
-    const static tXcpCalSegDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {
+    static const tXcpCalSegDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {
         .name = XCP_EPK_CALSEG_NAME, .addr = &calseg_id_epk, .indexp = (tXcpCalSegIndex *)&calseg_id_epk, .size = XCP_EPK_MAX_LENGTH + 1, .type = XCP_CALSEG_TYPE_SEGMENT};
     DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s'\n", XCP_EPK_CALSEG_NAME);
     // @@@@ TODO: Are we sure, that this works in absolute addressing mode, since the reference page is not copied anymore: what is writen to the A2L file
@@ -3670,6 +3670,7 @@ static void XcpPrintCmd(const tXcpCto *cmdBuf) {
             printf(" UNKNOWN TRANSPORT LAYER COMMAND %02X\n", CRO_TL_SUBCOMMAND);
             break;
         } // switch (CRO_TL_SUBCOMMAND)
+        break;
 
     case CC_NOP:
         printf(" NOP\n");
