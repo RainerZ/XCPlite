@@ -73,17 +73,24 @@ const struct params params = {.delay_us = 1000,
 // Define a global calibration parameter segment named 'params' for the calibration parameters in 'const struct params params' as default/reference page
 CalSegDecl(params);
 
-// Example Vector A2L Creator code parser annotation for a calibration parameter in the params calibration segment
+// Example metadata annotations For the calibration parameter 'delay_us' in the params calibration segment
+
+// Metadata annotation as comments for Vector A2L Toolset Creator
 /*
-@@ ELEMENT = counter_max
 @@ STRUCTURE = params
+@@ ELEMENT = delay_us
+@@ DESCRIPTION = "Sleep time in microseconds for the main and the task loop"
+@@ UNIT = "us"
+@@ LIMITS = 1.0, 10000.0
 @@ DATA_TYPE = UWORD [0 ... 10000]
 @@ END
 */
 
-// Example meta data annotations via linker map file
-XCP_LIMITS(delay_us, 1.0, 10000.0);
-XCP_UNIT(delay_us, "us");
+// Metadata annotation as code (static data in a special ELF section)
+// Via linker map file and xcpclient tool ELF->A2L generation, not supported by Vector A2L Toolset ELF reader
+// For struct instance fields, use __ as path separator (params__delay_us means params.delay_us)
+XCP_LIMITS(params__delay_us, 1, 10000);
+XCP_UNIT(params__delay_us, "us");
 
 //-----------------------------------------------------------------------------------------------------
 // Demo global measurement values
@@ -91,13 +98,13 @@ XCP_UNIT(delay_us, "us");
 // Global measurement variable
 // Modified in function foo
 // Measuring it in main or task, is possible, but asynchronous and may give inconsistent results
+XCP_COMMENT(global_counter, "Global measurement variable"); // Example for meta data annotation as code
 uint16_t global_counter = 0;
 
-// Example A2L Creator code parser annotation
+// A2L Creator code parser annotation
 /*
 @@ SYMBOL = global_counter
-@@ DESCRIPTION = "Global counter incremented in function main synch with event mainloop"
-@@ UNIT = "delay_us ticks"
+@@ DESCRIPTION = "Global measurement variable"
 @@ END
 */
 
@@ -129,11 +136,12 @@ THREAD_FUNC_RETURN task(void *p) {
     printf("Start thread %u ...\n", get_thread_id());
 
     // Static local scope measurement variable
+    XCP_COMMENT(static_counter, "Static local measurement variable"); // Example for meta data annotation as code
     volatile static uint16_t static_counter = 0;
 
     // Local measurement variable
+    XCP_COMMENT(counter, "Local measurement variable"); // Example for meta data annotation as code
     volatile uint32_t counter = 0;
-    XCP_UNIT(counter, "ticks"); // Example for an A2L Creator annotation as code
 
     // Heap measurement variable
     struct test_struct *volatile heap_struct = (struct test_struct *)malloc(sizeof(struct test_struct));
@@ -233,7 +241,7 @@ int main(int argc, char *argv[]) {
 
     // Initialize the XCP singleton, activate XCP, must be called before starting the server
     // @@@@ TODO: Using binary persistence files not supported, | XCP_MODE_PERSISTENCE
-    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL );
+    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
     XcpSetElfName(argv[0]); // Set ELF file name for upload via GET_ID, optional with OPTION_ENABLE_ELF_UPLOAD
 
     // Initialize the XCP Server
@@ -310,7 +318,7 @@ int main(int argc, char *argv[]) {
 
     // Save current calibration segments to binary persistence file
     // @@@@ TODO: Using binary persistence files not supported
-    // XcpBinWrite(XcpGetEpk());
+    // XcpBinWrite(XcpGetEcuEpk());
 
     // Stop the XCP server
     XcpEthServerShutdown();

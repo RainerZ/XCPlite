@@ -118,9 +118,9 @@ static void *XcpCalMemAlloc_(size_t size) {
     return &shared_mut_safe.cal_seg_list.cal_mem.pool[old_used];
 }
 
-// Pre-register all tXcpCalDescriptor variables placed in the xcp_cals section by DaqCreateEvent().
-// Must be called after SS_ACTIVATED is set (XcpCreateEvent requires isActivated()).
-// If a persistence file was loaded before this call, events are matched by name and keep their saved id.
+// Pre-register all tXcpCalSegDescriptor variables placed in the xcp_cals section
+// Must be called after SS_ACTIVATED is set
+// If a persistence file was loaded before this call, segments are matched by name and keep their saved id
 uint16_t XcpRegisterSectionCalSegs(void) {
 
     uint16_t count = 0;
@@ -128,12 +128,12 @@ uint16_t XcpRegisterSectionCalSegs(void) {
 #if defined(__ELF__)
     // Declared weak: if no object file contributes to the xcp_cals section the symbols
     // resolve to NULL rather than causing an undefined-reference linker error.
-    extern const tXcpCalDescriptor __start_xcp_cals[] __attribute__((weak));
-    extern const tXcpCalDescriptor __stop_xcp_cals[] __attribute__((weak));
-    const tXcpCalDescriptor *begin = __start_xcp_cals;
-    const tXcpCalDescriptor *end = __stop_xcp_cals;
+    extern const tXcpCalSegDescriptor __start_xcp_cals[] __attribute__((weak));
+    extern const tXcpCalSegDescriptor __stop_xcp_cals[] __attribute__((weak));
+    const tXcpCalSegDescriptor *begin = __start_xcp_cals;
+    const tXcpCalSegDescriptor *end = __stop_xcp_cals;
     if (begin != NULL && end != NULL && begin < end) {
-        for (const tXcpCalDescriptor *e = begin; e < end; e++) {
+        for (const tXcpCalSegDescriptor *e = begin; e < end; e++) {
             DBG_PRINTF6("Found calibration segment descriptor in section: name=%s, addr=%p, size=%u, type=%x, indexp=%p\n", e->name, e->addr, e->size, e->type, e->indexp);
             tXcpCalSegIndex index = XcpFindCalSeg(e->name);
             if (index == XCP_UNDEFINED_CALSEG) {
@@ -149,10 +149,10 @@ uint16_t XcpRegisterSectionCalSegs(void) {
     }
 #elif defined(__APPLE__)
     unsigned long sz = 0;
-    const tXcpCalDescriptor *begin = (tXcpCalDescriptor *)getsectiondata(&_mh_execute_header, "__DATA", "xcp_cals", &sz);
+    const tXcpCalSegDescriptor *begin = (tXcpCalSegDescriptor *)getsectiondata(&_mh_execute_header, "__DATA", "xcp_cals", &sz);
     if (begin != NULL) {
-        const tXcpCalDescriptor *end = begin + (sz / sizeof(tXcpCalDescriptor));
-        for (const tXcpCalDescriptor *e = begin; e < end; e++) {
+        const tXcpCalSegDescriptor *end = begin + (sz / sizeof(tXcpCalSegDescriptor));
+        for (const tXcpCalSegDescriptor *e = begin; e < end; e++) {
             DBG_PRINTF6("Found calibration segment descriptor in section: name=%s, addr=%p, size=%u, type=%x, indexp=%p\n", e->name, e->addr, e->size, e->type, e->indexp);
             tXcpCalSegIndex index = XcpFindCalSeg(e->name);
             if (index == XCP_UNDEFINED_CALSEG) {
@@ -842,16 +842,22 @@ uint8_t XcpCalSegWriteMemory(uint32_t dst, uint16_t size, const uint8_t *src) {
 }
 
 // Update the EKP segment with the current EPK value
+// Silently ignored, if the EPK segment is not present
+// Parameter epk is an array[XCP_EPK_MAX_LENGTH+1] which has to contain a null-terminated string
 #ifdef OPTION_SHM_MODE // Update the EPK
 #ifdef XCP_ENABLE_EPK_CALSEG
-void XcpCalUpdateEpkSeg(const char *epk) {
-
-    const uint16_t epk_len = (uint16_t)STRNLEN(epk, XCP_EPK_MAX_LENGTH) + 1;
-    tXcpCalSeg *c = CalSegPtrMut(0); // EPK segment is always at index 0
-    assert(c != NULL);
-    assert(c->h.size >= epk_len);
-    memcpy(CalSegDefaultPage(c), epk, epk_len); // Update the default page with the current EPK value
-    memcpy(CalSegEcuPage(c), epk, epk_len);     // Update the ECU page with the current EPK value
+void XcpCalUpdateEpkSeg(const char epk[XCP_EPK_MAX_LENGTH + 1]) {
+    if (XcpGetCalSegCount() > 0) {
+        tXcpCalSeg *c = CalSegPtrMut(0); // EPK segment is always at index 0
+        assert(c != NULL);
+        assert(c->h.size >= XCP_EPK_MAX_LENGTH + 1);
+        memcpy(CalSegDefaultPage(c), epk, XCP_EPK_MAX_LENGTH + 1); // Update the default page with the current EPK value
+        memcpy(CalSegEcuPage(c), epk, XCP_EPK_MAX_LENGTH + 1);     // Update the ECU page with the current EPK value
+        memcpy(CalSegXcpPage(c), epk, XCP_EPK_MAX_LENGTH + 1);     // Update the XCP page with the current EPK value
+        DBG_PRINTF4(ANSI_COLOR_BLUE "EPK calibration segment 'epk' updated to  '%s'\n" ANSI_COLOR_RESET, epk);
+    } else {
+        DBG_PRINTF5(ANSI_COLOR_BLUE "EPK calibration segment 'epk' not present, EPK '%s' not updated\n" ANSI_COLOR_RESET, epk);
+    }
 }
 #endif
 #endif

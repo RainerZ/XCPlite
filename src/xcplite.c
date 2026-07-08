@@ -69,11 +69,6 @@
 #include <unistd.h> // for getpid()
 #endif
 
-#ifdef __APPLE__
-#include <mach-o/getsect.h> // for getsectiondata(), used by XcpRegisterSectionEvents()
-#include <mach-o/ldsyms.h>  // for _mh_execute_header
-#endif
-
 #include "dbg_print.h"   // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
 #include "persistence.h" // for XcpBinFreezeCalSeg
 #include "platform.h"    // for atomics
@@ -473,8 +468,9 @@ static void XcpSetEpk(const char *epk) {
     DBG_PRINTF3("EPK = '%s'\n", local.epk);
 }
 
-// Get the EPK from the static buffer in the local state
-const char *XcpGetEpk(void) {
+// Get a reference to the EPK in a static lifetime buffer
+// local.epk
+const char *XcpGetLocalEpk(void) {
     if (STRNLEN(local.epk, XCP_EPK_MAX_LENGTH) == 0) {
         assert(0 && "EPK not set");
         return "";
@@ -482,13 +478,15 @@ const char *XcpGetEpk(void) {
     return local.epk;
 }
 
-// Get the EPK from the static buffer in the local state
-// Only in SHM mode there is a difference to XcpGetEpk(), the ECU EPK is for the complete multi application system, while XcpGetEpk() is for the application
+// Get a reference to the EPK in a static lifetime buffer
+// local.epk or shared.shm_header.ecu_epk depending on the build configuration
+// Only in SHM mode there is a difference to XcpGetLocalEpk(), the ecu EPK is for the complete multi application system, while XcpGetLocalEpk() is for the application
 const char *XcpGetEcuEpk(void) {
 #ifdef OPTION_SHM_MODE // get ecu epk which is a hash for all applications
+    assert(XcpShmGetAppCount() > 0);
     return XcpShmGetEcuEpk();
 #else // ecu epk is the same as application epk
-    return XcpGetEpk();
+    return XcpGetLocalEpk();
 #endif
 }
 
@@ -610,7 +608,7 @@ uint8_t XcpReadMta(uint8_t size, uint8_t *data) {
 // Sets the memory transfer address in local.mta_addr/local.mta_ext
 // Absolute addressing mode:
 //   Converted to pointer addressing mode local.mta_ptr=ApplXcpGetBaseAddr()+XcpAddrDecodeAbsOffset(local.mta_addr) and local.mta_ext=XCP_ADDR_EXT_PTR
-//   EPK access is local.mta_ptr=XcpGetEpk() and local.mta_ext=XCP_ADDR_EXT_PTR
+//   EPK access is local.mta_ptr=XcpGetEcuEpk() and local.mta_ext=XCP_ADDR_EXT_PTR
 //   Absolute access to calibration segments is converted to segment relative addressing mode local.mta_ext=XCP_ADDR_EXT_SEG
 // Other addressing mode are left unchanged
 // Called by XCP commands SET_MTA, SHORT_DOWNLOAD and SHORT_UPLOAD
@@ -624,7 +622,7 @@ uint8_t XcpSetMta(uint8_t ext_, uint32_t addr_) {
 #if !defined(XCP_ENABLE_EPK_CALSEG) || (defined(XCP_ENABLE_ABS_ADDRESSING) && (XCP_ADDR_EXT_ABS == 0))
     // Direct EPK access
     if (local.mta_ext == XCP_ADDR_EXT_EPK && local.mta_addr == XCP_ADDR_EPK) {
-        local_mut.mta_ptr = (uint8_t *)XcpGetEpk();
+        local_mut.mta_ptr = (uint8_t *)XcpGetEcuEpk();
         local_mut.mta_ext = XCP_ADDR_EXT_PTR;
         DBG_PRINTF6("XcpSetMta: XCP_ADDR_EXT_PTR p=%p\n", local_mut.mta_ptr);
         return CRC_CMD_OK;
@@ -777,6 +775,9 @@ static uint8_t calcChecksum(uint32_t checksum_size, uint32_t *checksum_result) {
 
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
 
+// Dynamic event list
+//--------------------
+
 // Using the less expensive getEventCount() is a deliberate choice for performance critical code paths like XcpEvent(),
 // where the visibility of new events created by other threads is not critical, while acquireEventCount() is used for thread safe access to the event count with guaranteed
 // visibility of new events created by other threads.
@@ -890,9 +891,6 @@ tXcpEventId XcpCreateIndexedEvent(const char *name, uint16_t index, uint32_t cyc
     shared_mut_safe.event_list.event[e].name[XCP_MAX_EVENT_NAME] = 0;
     shared_mut_safe.event_list.event[e].flags = (priority > 0) ? XCP_DAQ_EVENT_FLAG_PRIORITY : 0;
 #ifdef XCP_ENABLE_DAQ_PRESCALER
-#ifndef XCP_ENABLE_DAQ_EVENT_LIST
-#error "XCP_ENABLE_DAQ_PRESCALER requires XCP_ENABLE_DAQ_EVENT_LIST"
-#endif
     shared_mut_safe.event_list.event[e].daq_prescaler = 0;
     shared_mut_safe.event_list.event[e].daq_prescaler_cnt = 0;
 #endif
@@ -953,18 +951,6 @@ tXcpEventId XcpCreateEvent(const char *name, uint32_t cycle_time_ns, uint8_t pri
     return id;
 }
 
-// Event descriptor used by DaqCreateEvent() for section-based pre-registration.
-// Also defined in xcplib.h; this guard prevents redefinition when both headers are included.
-#ifndef __XCPLIB_H__
-typedef struct {
-    const char *name;
-    uint32_t cycle_time_ns;
-    uint8_t priority;
-    uint8_t res[16 - sizeof(char *) - 4 - 1];
-} tXcpEventDescriptor;
-static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
-#endif
-
 // Pre-register all tXcpEventDescriptor variables placed in the xcp_evts section by DaqCreateEvent().
 // Must be called after SS_ACTIVATED is set (XcpCreateEvent requires isActivated()).
 // If a persistence file was loaded before this call, events are matched by name and keep their saved id.
@@ -972,11 +958,6 @@ static uint16_t XcpRegisterSectionEvents(void) {
 
     uint16_t count = 0;
 
-#if defined(__ELF__)
-    // Declared weak: if no object file contributes to the xcp_evts section the symbols
-    // resolve to NULL rather than causing an undefined-reference linker error.
-    extern const tXcpEventDescriptor __start_xcp_evts[] __attribute__((weak));
-    extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
     const tXcpEventDescriptor *begin = __start_xcp_evts;
     const tXcpEventDescriptor *end = __stop_xcp_evts;
     if (begin != NULL && end != NULL && begin < end) {
@@ -991,25 +972,6 @@ static uint16_t XcpRegisterSectionEvents(void) {
     } else {
         DBG_PRINT_WARNING("No xcp_evts section found\n");
     }
-#elif defined(__APPLE__)
-    unsigned long sz = 0;
-    const tXcpEventDescriptor *begin = (const tXcpEventDescriptor *)getsectiondata(&_mh_execute_header, "__DATA", "xcp_evts", &sz);
-    if (begin != NULL) {
-        const tXcpEventDescriptor *end = begin + (sz / sizeof(tXcpEventDescriptor));
-        for (const tXcpEventDescriptor *e = begin; e < end; e++) {
-            tXcpEventId id = XcpFindEvent(e->name);
-            if (id == XCP_UNDEFINED_EVENT_ID) {
-                id = XcpCreateEvent(e->name, e->cycle_time_ns, e->priority);
-                assert(id != XCP_UNDEFINED_EVENT_ID);
-                count++;
-            }
-        }
-    } else {
-        DBG_PRINT_WARNING("No xcp_evts section found\n");
-    }
-#else
-// #error "Unsupported platform for event segment registration"
-#endif
 
     if (count > 0)
         DBG_PRINTF3(ANSI_COLOR_GREEN "Preregistered %u events from event descriptor section\n" ANSI_COLOR_RESET, count);
@@ -1020,9 +982,53 @@ static uint16_t XcpRegisterSectionEvents(void) {
 
 #else // XCP_ENABLE_DAQ_EVENT_LIST
 
+// Linker section event list
+//---------------------------
+
+uint16_t XcpGetEventCount(void) {
+
+    const tXcpEventDescriptor *begin = __start_xcp_evts;
+    const tXcpEventDescriptor *end = __stop_xcp_evts;
+    if (begin != NULL && end != NULL && begin < end) {
+        return (end - begin);
+    } else {
+        return 0;
+    }
+}
+
+const tXcpEventDescriptor *XcpGetEvent(tXcpEventId event) {
+    const tXcpEventDescriptor *begin = __start_xcp_evts;
+    const tXcpEventDescriptor *end = __stop_xcp_evts;
+    const tXcpEventDescriptor *event_desc = begin + event;
+    if (begin != NULL && end != NULL && event_desc < end) {
+        return event_desc;
+    }
+    return NULL;
+}
+
 const char *XcpGetEventName(tXcpEventId event) {
-    (void)event;
-    return "";
+
+    const tXcpEventDescriptor *begin = __start_xcp_evts;
+    const tXcpEventDescriptor *end = __stop_xcp_evts;
+    const tXcpEventDescriptor *event_desc = begin + event;
+    if (begin != NULL && end != NULL && event_desc < end) {
+        return event_desc->name;
+    }
+    return NULL;
+}
+
+tXcpEventId XcpFindEvent(const char *name) {
+
+    const tXcpEventDescriptor *begin = __start_xcp_evts;
+    const tXcpEventDescriptor *end = __stop_xcp_evts;
+    if (begin != NULL && end != NULL && begin < end) {
+        for (const tXcpEventDescriptor *e = begin; e < end; e++) {
+            if (strcmp(e->name, name) == 0) {
+                return (tXcpEventId)(e - begin);
+            }
+        }
+    }
+    return XCP_UNDEFINED_EVENT_ID;
 }
 
 #endif // XCP_ENABLE_DAQ_EVENT_LIST
@@ -1720,6 +1726,7 @@ void XcpEventExtAt_(tXcpEventId event, int count, const uint8_t **bases, uint64_
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1743,6 +1750,7 @@ void XcpEventExt_(tXcpEventId event, int count, const uint8_t **bases) {
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1752,6 +1760,8 @@ void XcpEventExt_(tXcpEventId event, int count, const uint8_t **bases) {
     XcpProcessPendingCommand(event, count, bases);
 #endif // XCP_ENABLE_DYN_ADDRESSING
 
+    if (!isDaqRunning())
+        return; // DAQ not running
     XcpTriggerDaqEvent_(local.queue, event, count, bases, ApplXcpGetClock64());
 }
 
@@ -1788,6 +1798,7 @@ void XcpEvent(tXcpEventId event) {
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1797,7 +1808,6 @@ void XcpEvent(tXcpEventId event) {
 #else
     const uint8_t *bases[2] = {NULL, xcp_get_base_addr()};
 #endif
-
     XcpTriggerDaqEvent_(local.queue, event, 2, bases, ApplXcpGetClock64());
 }
 void XcpEventAt(tXcpEventId event, uint64_t clock) {
@@ -1807,6 +1817,7 @@ void XcpEventAt(tXcpEventId event, uint64_t clock) {
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1816,7 +1827,6 @@ void XcpEventAt(tXcpEventId event, uint64_t clock) {
 #else
     const uint8_t *bases[2] = {NULL, xcp_get_base_addr()};
 #endif
-
     XcpTriggerDaqEvent_(local.queue, event, 2, bases, clock);
 }
 
@@ -1832,6 +1842,7 @@ void XcpEventExt_Var(tXcpEventId event, int args_count, ...) {
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1850,7 +1861,6 @@ void XcpEventExt_Var(tXcpEventId event, int args_count, ...) {
 
     if (!isDaqRunning())
         return; // DAQ not running
-
     XcpTriggerDaqEvent_(local.queue, event, XCP_ADDR_EXT_DYN + args_count, bases, ApplXcpGetClock64());
 }
 
@@ -1862,6 +1872,7 @@ void XcpEventExtAt_Var(tXcpEventId event, uint64_t clock, int args_count, ...) {
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
     if (event >= getEventCount()) {
         DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
 #endif
@@ -1880,7 +1891,6 @@ void XcpEventExtAt_Var(tXcpEventId event, uint64_t clock, int args_count, ...) {
 
     if (!isDaqRunning())
         return; // DAQ not running
-
     XcpTriggerDaqEvent_(local.queue, event, XCP_ADDR_EXT_DYN + args_count, bases, clock);
 }
 
@@ -1891,12 +1901,9 @@ void XcpEventExtAt_Var(tXcpEventId event, uint64_t clock, int args_count, ...) {
 void XcpEventEnable(tXcpEventId event, bool enable) {
     if (!isStarted())
         return;
-    if (event == XCP_UNDEFINED_EVENT_ID) {
-        DBG_PRINT_WARNING("XcpEventEnable: Undefined event id\n");
-        return;
-    }
     if (event >= getEventCount()) {
-        DBG_PRINTF_WARNING("XcpEventEnableInvalid event id %u\n", event);
+        DBG_PRINTF_ERROR("Event id %u out of range\n", event);
+        assert(false);
         return;
     }
     tXcpEvent *evt = &shared_mut.event_list.event[event];
@@ -3218,24 +3225,33 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     local_mut.shm_app_id = (uint8_t)app_id;
 #endif
 
+// Create the async event with id 0 and cycle time 1ms
+#ifdef XCP_ENABLE_DAQ_EVENT_LIST
+#ifdef OPTION_DAQ_ASYNC_EVENT
+    static const tXcpEventDescriptor evt__async XCP_EVENT_SECTION_ATTR = {.name = "async", .cycle_time_ns = 1000000, .priority = 0};
+    tXcpEventId id = XcpCreateEvent("async", 0, 0);
+    assert(id == 0);
+#endif
+#endif
+
 #ifdef XCP_ENABLE_CALSEG_LIST
 #ifdef XCP_ENABLE_EPK_CALSEG
     // Create the EPK calibration segment with index 0
     // In SHM multiapplication mode, only the leader reaches this point, and creates a EPK segment for the whole system
     // @@@@ TODO: Currently the EPK segment is treated like any other segment, even if it is read-only and should only expose the default page
     static tXcpCalSegIndex calseg_id_epk = XCP_UNDEFINED_CALSEG;
-    const static tXcpCalDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {XCP_EPK_CALSEG_NAME, &calseg_id_epk, (void *)&calseg_id_epk, XCP_EPK_MAX_LENGTH + 1,
-                                                                       XCP_CALSEG_TYPE_SEGMENT};
+    const static tXcpCalSegDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {
+        .name = XCP_EPK_CALSEG_NAME, .addr = &calseg_id_epk, .indexp = (tXcpCalSegIndex *)&calseg_id_epk, .size = XCP_EPK_MAX_LENGTH + 1, .type = XCP_CALSEG_TYPE_SEGMENT};
     DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s'\n", XCP_EPK_CALSEG_NAME);
-#ifdef OPTION_SHM_MODE
+    // @@@@ TODO: Are we sure, that this works in absolute addressing mode, since the reference page is not copied anymore: what is writen to the A2L file
+    // Note that this, this might not be the final EPK yet
+    // In SHM mode, it is too early to initialize the EPK segment, since the EPK is a hash of the applications EPKs
+    // XcpGetEcuEpk() will return the EPK a static lifetime empty string in this case, with XCP_EPK_MAX_LENGTH + 1 zero initialized bytes
     calseg_id_epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, XcpGetEcuEpk(), XCP_EPK_MAX_LENGTH + 1);
-#else
-    calseg_id_epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, local.epk, XCP_EPK_MAX_LENGTH + 1);
-#endif
     assert(calseg_id_epk == 0);
 #endif
 
-    // Pre-register all segments whose tXcpCalDescriptor lives in the xcp_cals binary section.
+    // Pre-register all segments whose tXcpCalSegDescriptor lives in the xcp_cals binary section.
     // This optionally replaces the lazy creation at all CalSegCreate(), CalBlkCreate() macro call sites
     // This is done after loading the persistence file, to ensure that all segments from the persistence file are already in the segment list, in particular segments from other
     // applications in SHM mode

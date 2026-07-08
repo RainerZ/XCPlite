@@ -12,7 +12,7 @@ use std::ffi::OsStr;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 
-use xcp_registry::{McAddress, McDimType, McEvent, McObjectType, McSupportData, McValueType, Registry};
+use xcp_registry::{McAddress, McDimType, McEvent, McObjectType, McSupportData, McValueType, Registry, RegistryError};
 
 /*
 Which information can be detected from ELF/DWARF:
@@ -32,7 +32,7 @@ Which information can be detected from ELF/DWARF:
 
     Key benefits:
     - Instance names get prefixed with function name if local stack or static variables
-    - All instances get the correct fixed event id, if there is one in their scope, default is event id 0
+    - All instances get the correct fixed event id, if there is one in their scope, otherwise default event id is 0
     - Event compilation unit, function and CFA is detected to enable local variable access
 
     Todo:
@@ -49,16 +49,11 @@ Parse DW_TAG_variable with TLS-specific location expressions
 DW_OP_form_tls_address, etc
 
 
-
-
-
 Tools:
 dwarfdump --debug-info <filename>
 dwarfdump --debug-info --name <varname> <filename>
 objdump -h  <filename>
 objdump --syms <filename>
-
-
 
 Limitations:
 - With -o1 most stack variables are in registers, have to be manually spilled to stack or captured
@@ -638,7 +633,7 @@ impl ElfReader {
         // Iterate over variables
         for (var_name, var_infos) in &self.debug_data.variables {
             // Skip standard library variables and system/compiler internals (__<name>)s
-            // Skip global XCP variables (gXCP.. and gA2L..) and special marker variables (calseg__, evt__, trg__)
+            // Skip global XCP variables (gXCP.. and gA2L..) and special marker variables (calseg__, evt__, trg__, xcp_meta__)
             if var_name.starts_with("__")
                 || var_name.starts_with("gXcp")
                 || var_name.starts_with("gA2l")
@@ -646,6 +641,7 @@ impl ElfReader {
                 || var_name.starts_with("calblk__")
                 || var_name.starts_with("evt__")
                 || var_name.starts_with("trg__")
+                || var_name.starts_with("xcp_meta__")
             {
                 continue;
             }
@@ -865,5 +861,169 @@ impl ElfReader {
             }
         } // var_infos
         Ok(())
+    }
+
+    /// Read XCP_UNIT / XCP_LIMITS / XCP_COMMENT metadata from the xcp_meta ELF section
+    /// and apply them to already-registered instances in the registry.
+    /// Must be called after register_variables.
+    pub fn register_metadata(&self, reg: &mut Registry, verbose: usize) -> Result<(), Box<dyn Error>> {
+        info!("===============================================================");
+        info!("Registering metadata from xcp_meta section:");
+
+        let (meta_base_addr, meta_data) = match &self.debug_data.xcp_meta_data {
+            Some(data) => data,
+            None => {
+                info!("No xcp_meta section found, skipping metadata registration");
+                return Ok(());
+            }
+        };
+        let meta_end = meta_base_addr + meta_data.len() as u64;
+        let is_le = self.debug_data.is_little_endian;
+
+        for (var_name, var_infos) in &self.debug_data.variables {
+            // Only process metadata variables: xcp_meta__<kind>__<base_name>
+            let Some(rest) = var_name.strip_prefix("xcp_meta__") else {
+                continue;
+            };
+            let Some((kind, base_name)) = rest.split_once("__") else {
+                warn!("Unexpected xcp_meta__ variable name format: '{}'", var_name);
+                continue;
+            };
+
+            if var_infos.is_empty() {
+                continue;
+            }
+            let var_addr = var_infos[0].address.1;
+            if var_addr < *meta_base_addr || var_addr >= meta_end {
+                warn!("Metadata variable '{}' address 0x{:08X} is outside xcp_meta section", var_name, var_addr);
+                continue;
+            }
+
+            let offset = (var_addr - meta_base_addr) as usize;
+
+            // Decode base_name: __ is the path separator, e.g. "params__delay_us" means
+            // instance "params", field "delay_us".  Replace all __ with . to get the dot path.
+            let dot_path = base_name.replace("__", ".");
+
+            // Path A — typedef field metadata (instance + dot-separated field path)
+            // Applies when base_name contains __, i.e. it encodes a struct field reference.
+            // Uses set_instance_field_support_data which walks the typedef tree.
+            let field_applied = if dot_path.contains('.') {
+                let (instance_name, field_path) = dot_path.split_once('.').unwrap();
+                apply_field_metadata(reg, var_name, kind, instance_name, field_path, meta_data, offset, is_le, verbose)
+            } else {
+                false
+            };
+
+            // Path B — direct instance metadata (simple variable or flattened typedef)
+            // Matches instances whose A2L name equals dot_path or ends with ".{dot_path}".
+            // dot_path already has . separators so it matches both "delay_us" and "params.delay_us".
+            let escaped = dot_path.replace('.', "\\.");
+            let pattern = format!(r"^(.*\.)?{}$", escaped);
+            let names: Vec<String> = reg.instance_list.find_instances_regex(&pattern, McObjectType::Unspecified, None);
+            for name in &names {
+                if let Some(inst) = reg.instance_list.get_instance_mut(name, None) {
+                    apply_instance_metadata(inst, kind, meta_data, offset, is_le);
+                    if verbose >= 1 {
+                        info!("  Metadata {} applied to instance '{}'", var_name, name);
+                    }
+                }
+            }
+
+            if !field_applied && names.is_empty() {
+                debug!("Metadata '{}': no matching registry entry for '{}'", var_name, dot_path);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// Read a null-terminated UTF-8 string from a byte slice at a given offset
+fn read_cstr_at(data: &[u8], offset: usize) -> Option<String> {
+    if offset >= data.len() {
+        return None;
+    }
+    let end = data[offset..].iter().position(|&b| b == 0).map(|p| offset + p).unwrap_or(data.len());
+    String::from_utf8(data[offset..end].to_vec()).ok()
+}
+
+// Path A helper: apply metadata to a typedef field via set_instance_field_support_data.
+// Returns true if the metadata was successfully applied.
+fn apply_field_metadata(
+    reg: &mut Registry,
+    var_name: &str,
+    kind: &str,
+    instance_name: &str,
+    field_path: &str,
+    meta_data: &[u8],
+    offset: usize,
+    is_le: bool,
+    verbose: usize,
+) -> bool {
+    let support_data = match kind {
+        "unit" | "comment" => {
+            let Some(value) = read_cstr_at(meta_data, offset) else {
+                warn!("Failed to read string for metadata variable '{}'", var_name);
+                return false;
+            };
+            let sd = McSupportData::new(McObjectType::Unspecified);
+            if kind == "unit" { sd.set_unit(value) } else { sd.set_comment(value) }
+        }
+        "min" | "max" => {
+            if offset + 8 > meta_data.len() {
+                warn!("Not enough bytes for f64 at offset {} in xcp_meta for '{}'", offset, var_name);
+                return false;
+            }
+            let bytes: [u8; 8] = meta_data[offset..offset + 8].try_into().unwrap();
+            let value = if is_le { f64::from_le_bytes(bytes) } else { f64::from_be_bytes(bytes) };
+            let sd = McSupportData::new(McObjectType::Unspecified);
+            if kind == "min" { sd.set_min(Some(value)) } else { sd.set_max(Some(value)) }
+        }
+        _ => {
+            warn!("Unknown metadata kind '{}' in variable '{}'", kind, var_name);
+            return false;
+        }
+    };
+
+    match reg.set_instance_field_support_data(instance_name, field_path, support_data) {
+        Ok(()) => {
+            if verbose >= 1 {
+                info!("  Metadata {} applied to typedef field '{}.{}'", var_name, instance_name, field_path);
+            }
+            true
+        }
+        Err(RegistryError::NotFound(_)) => false, // no such instance or field — not an error, Path B will try
+        Err(e) => {
+            warn!("Metadata '{}': set_instance_field_support_data failed: {}", var_name, e);
+            false
+        }
+    }
+}
+
+// Path B helper: apply metadata directly to an McInstance's mc_support_data.
+fn apply_instance_metadata(inst: &mut xcp_registry::McInstance, kind: &str, meta_data: &[u8], offset: usize, is_le: bool) {
+    match kind {
+        "unit" | "comment" => {
+            if let Some(value) = read_cstr_at(meta_data, offset) {
+                if kind == "unit" {
+                    inst.mc_support_data.update_unit(value);
+                } else {
+                    inst.mc_support_data.update_comment(value);
+                }
+            }
+        }
+        "min" | "max" => {
+            if offset + 8 <= meta_data.len() {
+                let bytes: [u8; 8] = meta_data[offset..offset + 8].try_into().unwrap();
+                let value = if is_le { f64::from_le_bytes(bytes) } else { f64::from_be_bytes(bytes) };
+                if kind == "min" {
+                    inst.mc_support_data.update_min(Some(value));
+                } else {
+                    inst.mc_support_data.update_max(Some(value));
+                }
+            }
+        }
+        _ => {}
     }
 }

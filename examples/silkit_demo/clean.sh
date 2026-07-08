@@ -1,7 +1,7 @@
 #!/bin/bash
 # Clean SHM mode artefacts
 
-../../build/shmtool clean
+../../build-shm/shmtool clean
 rm *.a2l
 rm *.bin
 

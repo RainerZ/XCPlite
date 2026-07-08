@@ -84,6 +84,11 @@
 #undef OPTION_SERVER_FORCEFULL_TERMINATION // FreeRTOS uses vTaskDelete(NULL) to end tasks — no forceful termination
 
 //-------------------------------------------------------------------------------
+// Calibration
+
+// Calibration segment management
+// #undef OPTION_CAL_SEGMENTS
+
 // Calibration segments max count and total memory size (each segment needs 3 copies of its data
 #undef OPTION_CAL_SEGMENT_COUNT
 #define OPTION_CAL_SEGMENT_COUNT 8
@@ -100,6 +105,10 @@
 
 //-------------------------------------------------------------------------------
 // Data acquisition
+
+// Event list management
+// #undef OPTION_DAQ_EVENT_LIST
+
 // Adjust OPTION_DAQ_MEM_SIZE and OPTION_DAQ_EVENT_COUNT to your application
 // In maximum fragmentation, each measurement value needs 6 bytes DAQ list memory
 #undef OPTION_DAQ_MEM_SIZE
@@ -112,6 +121,16 @@
 #undef OPTION_QUEUE_64_VAR_SIZE
 #undef OPTION_QUEUE_64_FIX_SIZE
 #define OPTION_QUEUE_32
+// Fixed 4 KB for the queue buffer, parameter of XcpEthServerInit ignored, must be a multiple of sizeof(tXcpSegmentBuffer)
+#define OPTION_QUEUE_32_SIZE (16 * sizeof(tXcpSegmentBuffer))
+// Use a crtical section instead of a mutex, locked sequences are only a few instructions
+#define OPTION_QUEUE32_CRITICAL_SECTION
+#undef OPTION_QUEUE32_MUTEX
+
+// Create an asynchronous, cyclic DAQ event with event id 0 for asynchronous data acquisition
+// Global variables default to this event
+#undef OPTION_DAQ_ASYNC_EVENT
+#define OPTION_DAQ_ASYNC_EVENT
 
 //-------------------------------------------------------------------------------
 // A2L / ELF — no filesystem on embedded; generate A2L externally via xcpclient or other tools

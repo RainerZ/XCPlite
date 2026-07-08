@@ -179,12 +179,10 @@ Execute a measurement
 ```bash
 
 # with ELF file
-
-xcpclient --udp --dest-addr 192.168.0.146 --elf .pio/build/lilygo-t-display-s3/firmware.elf --elf-unit-filter xcp_demo --mea global_counter
+xcpclient --udp --dest-addr 192.168.0.154 --elf .pio/build/lilygo-t-display-s3/firmware.elf --elf-unit-filter xcp_demo --mea global_counter
 
 # or with an A2L file
-
-xcpclient --udp --dest-addr 192.168.0.146 --a2l CANape/esp32_freertos_demo.a2l  --mea global_counter
+xcpclient --udp --dest-addr 192.168.0.154 --a2l CANape/esp32_freertos_demo.a2l  --mea global_counter
 
 ```
 
@@ -196,7 +194,7 @@ Locate the ELF file and generate the A2L file with xcpclient (see chapter xcpcli
 Recommended command from this example directory:
 
 ```bash
-xcpclient --offline --udp --dest-addr 192.168.0.146 --elf .pio/build/lilygo-t-display-s3/firmware.elf --a2l CANape/esp32_freertos_demo.a2l --elf-unit-filter xcp_demo
+xcpclient --offline --udp --dest-addr 192.168.0.154 --elf .pio/build/lilygo-t-display-s3/firmware.elf --a2l CANape/freertos_demo.a2l --elf-unit-filter xcp_demo
 ```
 
 `--elf-unit-filter xcp_demo` keeps the generated A2L focused on this demo application instead of adding all symbols from all linked code. Use `--offline --udp --dest-addr x.x.x.x" to write the target IP address into the A2l file, otherwise it will default to localhost and you need to change it manually in CANape.  
@@ -230,7 +228,7 @@ src/xcpappl.c
 src/xcplite.c
 src/xcpethserver.c
 src/xcpethtl.c
-src/queue32.c
+src/queue32m.c
 src/cal.c
 src/platform.c
 ```

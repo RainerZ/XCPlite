@@ -24,6 +24,8 @@
 //-------------------------------------------------------------------------------------------------
 // Platform defines
 
+// XCPlite uniquely uses _WIN, _LINUX, _MACOS, _QNX or _FREE_RTOS for platform specific code paths
+
 // 64 Bit or 32 Bit platform
 #if defined(_ix64_) || defined(__x86_64__) || defined(_M_X64) || defined(__aarch64__) || defined(_WIN64)
 #define PLATFORM_64BIT
@@ -111,17 +113,13 @@ OPTION_CLOCK_EPOCH_ARB or OPTION_CLOCK_EPOCH_PTP
 #include "task.h"
 
 // Note on C11 atomics for FreeRTOS targets:
-// This code avoids 64-bit atomics on 32-bit embedded targets. On ESP32-S3
-// (Xtensa LX7), GCC emits helper calls for 64-bit atomics, so queue32 uses a
-// FreeRTOS mutex instead. Even if an uncontended 64-bit atomic were faster, it
-// would not provide priority inheritance.
+// This code avoids 64-bit atomics on 32-bit embedded targets.
 // ESP32-S3 / Xtensa LX7:
 //   32-bit RMW atomics such as fetch_add use a CAS loop; contention can add retries.
 //   atomic_uint_fast8_t is 32 bits with this toolchain, so ATOMIC_BOOL is word-sized.
 // STM32:
 //   On Cortex-M3/M4/M7/M33, 32-bit RMW atomics are typically implemented with
-//   LDREX/STREX. 64-bit atomics are not native on 32-bit Cortex-M cores and
-//   should be avoided in real-time paths unless checked for the exact toolchain.
+//   LDREX/STREX. 64-bit atomics are not native
 #ifndef __cplusplus
 #include <stdatomic.h>
 #define ATOMIC_BOOL_TYPE uint_fast8_t

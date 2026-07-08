@@ -25,15 +25,11 @@
 // (Disable COPY_CAL_PAGE bug workaround and enable .this references to shared calibration axis)
 #define OPTION_CANAPE_24
 
-//-------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------
-// Specific build settings of libxcplite
-
+// Legacy trap
+// @@@@ TODO: Remove this
 #if defined(XCPLIB_FOR_RUST) // Set by the Rust build script
-
-#include "xcplib_rust_cfg.h" // for Rust xcp-lite specific configuration
-
-#else
+#error "XCPLIB_FOR_RUST is deprecated, use configuration override instead"
+#endif
 
 //-------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------
@@ -122,29 +118,39 @@
 //-------------------------------------------------------------------------------
 // DAQ settings
 
-#define OPTION_DAQ_MEM_SIZE (512 * 6) // Memory bytes used for XCP DAQ tables - 6 bytes per measurement signal/block needed
-#define OPTION_DAQ_EVENT_COUNT 32     // Maximum number of DAQ events (integer value, must be even)
-// #define OPTION_DAQ_ASYNC_EVENT         // Create an asynchronous, cyclic DAQ event for asynchronous data acquisition
+// Enable DAQ event management
+// Mandatory for some of the standard examples in XCPlite, rust xcp-lite has its own DAQ event management
+// Enables dynamic event creation and per thread event instances
+// Enables tXcpEvent, XcpCreateIndexedEvent, XcpCreateEvent, XcpCreateEventInstance, XcpGetEventCount, XcpFindEvent,XcpGetEventName,XcpGetEventIndex,XcpGetEvent
+#define OPTION_DAQ_EVENT_LIST
+
+// Maximum number of DAQ events (integer value, must be even)
+// Needs OPTION_DAQ_EVENT_COUNT*2 bytes of memory
+// If OPTION_DAQ_EVENT_LIST is off, event number is bound which is used for optimization
+#define OPTION_DAQ_EVENT_COUNT (16)
+
+// Memory bytes used for XCP DAQ tables
+// 6 bytes per measurement signal (ODT entry) needed
+#define OPTION_DAQ_MEM_SIZE (512 * 6)
+
+// Create an cyclic DAQ event for asynchronous data acquisition
+// #define OPTION_DAQ_ASYNC_EVENT
 
 // Transport layer queue, vectored IO, lockless with variable queue entry size
-// Default:
-#define OPTION_QUEUE_64_VAR_SIZE
+// This is the default queue for 64 bit platforms
+#define OPTION_QUEUE_64_VAR_SIZE // (queue64v.c)
 
 // Transport layer queue, vectored IO, lockless with fixed queue entry size
-// For maximum performance with large DTO size, but less efficient memory usage with partially filled queue entries
+// For maximum performance, but less efficient memory usage with partially filled queue entries
 // Entry size is XCPTL_MAX_DTO_SIZE  + XCPTL_TRANSPORT_LAYER_HEADER_SIZE (4) + 4
 // Optimal overall queue size is required to be a multiple of the cache line size (so XCPTL_MAX_DTO_SIZE in xcptl_cfg.h currently set to 244)
 // Tune XCPTL_MAX_DTO_SIZE for best compromise between memory efficiency and performance
 // Larger DTO size may not payoff, rely on transport layer message accumulation
-// #define OPTION_QUEUE_64_FIX_SIZE
-// Optional benchmark switch for queue64f.c:
-// If undefined, slot reuse is published by a release-store to the fixed entry_header and tail is relaxed.
-// If defined, slot reuse is published by a release update to tail and producers acquire-load tail.
-// #define OPTION_QUEUE_64_FIX_SIZE_SYNC_TAIL
+// #define OPTION_QUEUE_64_FIX_SIZE // (queue64f.c)
 
-// Transport layer queue, with variable queue entry size, 32 bit not lockless with mutex synchronization
+// Transport layer queue, with variable queue entry size, 32 bit not lockless with mutex or critical_section synchronization
 // Mandatory for Windows and 32 bit platforms
-// #define OPTION_QUEUE_32
+// #define OPTION_QUEUE_32 // (queue32.c for Windows or queue32m.c optimized for FreeRTOS)
 #if defined(OPTION_ATOMIC_EMULATION) || defined(PLATFORM_32_BIT)
 #undef OPTION_QUEUE_64_VAR_SIZE
 #undef OPTION_QUEUE_64_FIX_SIZE
@@ -187,6 +193,4 @@
 // See xcplib_rtos_cfg.h and xcplib_no_a2l_cfg.h for example override files.
 #ifdef XCPLIB_CFG_OVERRIDE
 #include XCPLIB_CFG_OVERRIDE
-#endif
-
 #endif

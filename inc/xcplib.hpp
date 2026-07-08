@@ -7,8 +7,6 @@
 |
 | Description:
 |   C++ header file for the XCPlite library XCPlite/libxcplite application programming interface
-|   Generic C++ RAII wrapper for calibration parameter segments
-|   Provides automatic lock/unlock management using a guard pattern
 |
 | Copyright (c) Vector Informatik GmbH. All rights reserved.
 | See LICENSE file in the project root for details.
@@ -236,7 +234,7 @@ template <typename T> class CalBlk {
 /// Usage: CalSegDeclRef(parameters, parameters_calseg); auto parameters = parameters_calseg.lock();
 #define CalSegDeclRef(value, handle)                                                                                                                                               \
     static tXcpCalSegIndex calseg_id_##value = XCP_UNDEFINED_CALSEG;                                                                                                               \
-    static const tXcpCalDescriptor calseg__##value __asm__("calseg__" #value)                                                                                                      \
+    static const tXcpCalSegDescriptor calseg__##value __asm__("calseg__" #value)                                                                                                   \
         XCP_CAL_SECTION_ATTR = {#value, (const void *)&value, &calseg_id_##value, sizeof(value), XCP_CALSEG_TYPE_SEGMENT};                                                         \
     static const xcplib::CalSegRef<decltype(value)> handle(&calseg_id_##value, &value)
 
@@ -260,7 +258,7 @@ template <typename T> class CalBlk {
 #define XCPLIB_ALWAYS_INLINE __attribute__((always_inline)) inline
 #else
 #define XCPLIB_ALWAYS_INLINE inline
-#warning "XCPLIB_ALWAYS_INLINE may not guarantee inlining on this compiler - stack frame addresses may be incorrect"
+#error "XCPLIB_ALWAYS_INLINE may not guarantee inlining on this compiler - stack frame addresses may be incorrect"
 #endif
 
 namespace xcp {
@@ -270,6 +268,8 @@ namespace xcp {
 // For XCP DAQ event creation, measurement registration and triggering
 // =============================================================================
 
+// @@@@ TODO: Support link time event registration
+
 /// Trigger an event with variadic base address list
 #define DaqTriggerEventVar(event_name, ...) xcp::DaqTriggerVarTemplate(#event_name, __VA_ARGS__)
 
@@ -278,10 +278,7 @@ template <typename... Bases> XCPLIB_ALWAYS_INLINE void DaqTriggerVarTemplate(con
     if (XcpIsActivated()) {
         static tXcpEventId event_id = XCP_UNDEFINED_EVENT_ID;
         static std::once_flag once_flag;
-        std::call_once(once_flag, [&]() {
-            event_id = XcpCreateEvent(event_name, 0, 0);
-            assert(event_id != XCP_UNDEFINED_EVENT_ID);
-        });
+        std::call_once(once_flag, [&]() { event_id = XcpCreateEvent(event_name, 0, 0); });
         XcpEventExt_Var(event_id, sizeof...(Bases), &bases...);
     }
 }
@@ -362,7 +359,6 @@ template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventExtTemplat
         const uint8_t *frame_addr = (const uint8_t *)xcp_get_frame_addr(); // Capture caller's frame address before lambda
         std::call_once(once_flag, [&]() {
             event_id = XcpCreateEvent(event_name, 0, 0);
-            assert(event_id != XCP_UNDEFINED_EVENT_ID);
             A2lLock();
             A2lSetAutoAddrMode__i(event_id, frame_addr, (const uint8_t *)base);
             (registerMeasurement(measurements), ...);
@@ -372,6 +368,8 @@ template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventExtTemplat
     }
 }
 
+// @@@@ TODO: Support link time event registration
+
 // Main template function for once event creation and registration with automatic addressing mode, and event triggering
 template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventTemplate(const char *event_name, Measurements &&...measurements) {
     if (XcpIsActivated()) {
@@ -380,7 +378,6 @@ template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventTemplate(c
         const uint8_t *frame_addr = (const uint8_t *)xcp_get_frame_addr(); // Capture caller's frame address before lambda
         std::call_once(once_flag, [&]() {
             event_id = XcpCreateEvent(event_name, 0, 0);
-            assert(event_id != XCP_UNDEFINED_EVENT_ID);
             A2lLock();
             A2lSetAutoAddrMode__i(event_id, frame_addr, NULL);
             (registerMeasurement(measurements), ...);

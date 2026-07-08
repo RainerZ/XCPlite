@@ -35,6 +35,7 @@ shared tail cache line.
 Define OPTION_QUEUE_64_FIX_SIZE_SYNC_TAIL to benchmark the alternative scheme:
 the consumer clears entry_header relaxed and publishes slot reuse with a release
 update to tail, while producers acquire-load tail.
+@@@@ TODO Remove, no measurable difference in performance
 
 Because all possible entry_header locations are fixed, initialization and clear
 operations can reset those atomic headers with atomic stores and only use
@@ -76,7 +77,7 @@ memset to clear the non-atomic entry data area.
 // Assume a cache line size of 64 bytes for alignment and padding to avoid false sharing and to optimize performance on high contention
 #define CACHE_LINE_SIZE 64u
 
-// Overall fixed maximaum size of the queue entries in the queue buffer
+// Overall fixed maximum size of the queue entries in the queue buffer
 // Including the user header and payload and the internal atomic queue entry state of 4 bytes
 // Should be a multiple of cache line size to optimize performance and to avoid false sharing
 #define QUEUE_ENTRY_SIZE (QUEUE_ENTRY_USER_SIZE + 4) // Includes entry_header sizeof(atomic_uint_least32_t) = 4 bytes
@@ -467,7 +468,6 @@ tQueueBuffer queueAcquire(tQueueHandle queue_handle, uint16_t packet_len) {
 #ifdef TEST_ACQUIRE_LOCK_TIMING
     lock_test_add_sample(get_timestamp_ns() - spin_start);
 #endif
-
 
     if (entry == NULL) { // Overflow
         uint32_t lost = (uint32_t)atomic_fetch_add_explicit(&queue->h.packets_lost, 1, memory_order_relaxed);

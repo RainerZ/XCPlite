@@ -19,12 +19,14 @@ Designed exclusively for the **XCP on Ethernet Transport Layer** (TCP or UDP wit
 - **Calibration segments** - Page switching, consistent atomic modification, and parameter persistence
 - **PTP timestamps** - Prepared for high-precision PTP synchronized timestamps
 
-Compared to many other logging, tracing, observability, or telemetry solutions, XCPlite reaches the above goals by accessing variables in place in their original ABI, without unnecessary copying, buffering or reserialization.  
+Compared to many other logging, tracing, observability, or telemetry solutions, XCPlite reaches the above goals by accessing variables in global memory, stack or heap with their original ABI, without unnecessary copying, buffering or reserialization.  
 
-The C or C++ API provides instrumentation macros for developers to define measurement points, calibration parameters, and meta data.  
+The C or C++ API provides instrumentation for developers to define measurement points, calibration parameters, and meta data.  
 Lock-free implementations ensure thread safety and data consistency without blocking latencies, even under high contention on multicore systems.
 
-XCPlite is optimized for 64-bit architectures, compatible with 32-bit platforms. Requires C 11 and C++ 17.  
+XCPlite > v2.1 is optimized for 64-bit microprozessor and 32-bit microcontroller platform architectures.  
+
+XCPlite requires C 11 and C++ 17.  
 
 libxcplite serves as the C library foundation for the experimental [XCP-Lite Rust](https://github.com/vectorgrp/xcp-lite) API.  
 
@@ -52,25 +54,25 @@ Multiple examples demonstrating different features are available in the [example
 - [hello_xcp_cpp](examples/hello_xcp_cpp/README.md) - Basic XCP server setup and instrumentation in C++
 
 **Advanced examples:**
-- [no_a2l_demo](examples/no_a2l_demo/README.md) - Linux workflow without runtime A2L generation (offline A2L generation by xcpclient tool)
-- [freertos_demo](examples/freertos_demo/README.md) - FreeRTOS/lwip applications with XCP instrumentation for STM32, ESP32 and the FreeRTOS POSIX simulator (Linux)
-- [silkit_demo](examples/silkit_demo/README.md) - SIL-Kit multi-participant measurement and calibration (via shared memory)
+- [no_a2l_demo](examples/no_a2l_demo/README.md) - Linux workflow without runtime A2L generation (offline A2L generation from ELF file by using the included xcpclient tool)
+- [freertos_demo](examples/freertos_demo/README.md) - FreeRTOS/lwip demo applications for STM32, ESP32 and the FreeRTOS POSIX simulator (Linux)
+- [silkit_demo](examples/silkit_demo/README.md) - SIL-Kit multi-participant measurement and calibration (via shared memory (SHM mode))
 - [ptp4l_demo](examples/ptp4l_demo/README.md) - Using a PTP synchronized clock as XCP timestamp source
-- [multi_thread_demo](examples/multi_thread_demo/README.md) - Multi-threaded measurement and parameter sharing among threads
 - [bpf_demo](examples/bpf_demo/README.md) - eBPF based syscall tracing
-- [point_cloud_demo](examples/point_cloud_demo/README.md) - Visualizing dynamic data structures in CANape 3D scene window
+- [point_cloud_demo](examples/point_cloud_demo/README.md) - Measure and visualize dynamic length data structures in CANape (point cloud in 3D scene window)
 - [c_demo](examples/c_demo/README.md) - More detailed complex data objects, calibration objects, and page switching
 - [cpp_demo](examples/cpp_demo/README.md) - More detailed C++ class instrumentation and RAII wrappers
+- [multi_thread_demo](examples/multi_thread_demo/README.md) - More demanding multi-threaded measurement and parameter sharing among many threads
 - [struct_demo](examples/struct_demo/README.md) - More detailed nested structs and multidimensional arrays
 
 For detailed information about each example and how to set up CANape projects, see the [examples overview](examples/README.md).
 
 **Requirements:**
 
-XCPlite examples are designed to showcase advanced XCP capabilities and are tested with **CANape 23+** (free demo version available).  
+XCPlite examples are designed to showcase advanced CANape capabilities and are tested with **CANape 23+** (free demo version available).  
 The examples leverage:
 
-- **Runtime A2L creation** - No manual A2L file management required
+- **Runtime A2L creation and upload** - No manual A2L file management required
 - **A2L TYPEDEFs** - Complex data structures with reusable type definitions
 - **Address extensions** - Support for relative addressing (stack,heap) and multiple memory spaces
 - **Shared axis in typedefs** - Advanced calibration structures (CANape 24+, see `cpp_demo`)
@@ -83,7 +85,7 @@ These features enable efficient workflows for modern multicore HPC applications.
 
 XCPlite uses CMake as the build system.  
 For quick builds of all examples, use the provided build scripts.  
-Details how to build for Linux, QNX, macOS, and Windows are in the [building documentation](docs/BUILDING.md).
+Details how to build for Linux, QNX, macOS, and Windows are in the [building documentation](docs/BUILDING.md). For microcontroller builds, refer to the READMEs in the RTOS example folders.  
 
 
 ## Documentation
@@ -94,7 +96,7 @@ Details how to build for Linux, QNX, macOS, and Windows are in the [building doc
 - **[Configuration](docs/xcplib_cfg.md)** - Configuration options
 - **[Examples](examples/README.md)** - Example applications and CANape setup
 - **[Technical Details](docs/TECHNICAL.md)** - Addressing modes, A2L generation, instrumentation costs
-- **[Building](docs/BUILDING.md)** - Detailed build instructions and troubleshooting
+- **[Building](docs/BUILDING.md)** - Detailed build instructions
 - **[XCP Introduction](docs/XCP_INTRODUCTION.md)** - What is XCP?
 
 ## License

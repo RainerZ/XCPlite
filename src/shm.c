@@ -90,29 +90,41 @@ bool XcpShmIsFollower(void) { return (local.init_mode & XCP_MODE_SHM) != 0 && !l
 // Returns this process's application id (the slot index in shm_header.app_list)
 uint8_t XcpShmGetAppId(void) { return local.shm_app_id; }
 
-// Returns the EPK string of the overall ECU
+// Returns the EPK string of the overall ECU and update it in the SHM header
+// Called from A2L generation and new application registration, called via XcpGetEcuEpk() in SHM mode
 // Computes a FNV-1a 64-bit hash over all application EPK strings and returns it as a 16-char hex string.
 // The result is always 16 ASCII hex characters, fits in XCP_ECU_EPK_MAX_LENGTH, and changes whenever any app EPK changes.
 const char *XcpShmGetEcuEpk(void) {
+
     const tShmHeader *hdr = &gXcpData->shm_header;
     assert(hdr != NULL);
     if (hdr == NULL) {
-        return "";
+        return NULL;
     }
-
-    // FNV-1a 64-bit hash over all app EPK strings in slot order
-    // A separator byte is hashed between EPKs to prevent "AB"+"C" == "A"+"BC" collisions
-    uint64_t hash = 14695981039346656037ULL; // FNV-1a 64-bit offset basis
+    memset((void *)hdr->ecu_epk, 0, sizeof(hdr->ecu_epk)); // Clear the EPK string if no application is registered
     uint32_t app_count = (uint32_t)atomic_load(&hdr->app_count);
-    for (uint32_t i = 0; i < app_count; i++) {
-        const uint8_t *p = (const uint8_t *)hdr->app_list[i].u.epk;
-        while (*p) {
-            hash = (hash ^ (uint64_t)*p++) * 1099511628211ULL; // FNV prime
+    if (app_count > 0) {
+
+        // FNV-1a 64-bit hash over all app EPK strings in slot order
+        // A separator byte is hashed between EPKs to prevent "AB"+"C" == "A"+"BC" collisions
+        uint64_t hash = 14695981039346656037ULL; // FNV-1a 64-bit offset basis
+        for (uint32_t i = 0; i < app_count; i++) {
+            const uint8_t *p = (const uint8_t *)hdr->app_list[i].u.epk;
+            while (*p) {
+                hash = (hash ^ (uint64_t)*p++) * 1099511628211ULL; // FNV prime
+            }
+            hash = (hash ^ (uint64_t)'\0') * 1099511628211ULL; // end-of-string separator
         }
-        hash = (hash ^ (uint64_t)'\0') * 1099511628211ULL; // end-of-string separator
+        SNPRINTF(hdr->ecu_epk, sizeof(hdr->ecu_epk), "%016" PRIx64, hash);
+
+        // Update the EPK in the EPK segment, if it exists
+        // so the the client can upload it from the memory location of the EPK segment
+        // This is the only call to XcpCalUpdateEpkSeg() to ensure the EPK segment always matches the shared memory buffer for the EPK
+        // There are 4 different ways to get the EPK via XCP: via the A2L file, via the addr in A2L file, via the EPK segment, or via GET_ID
+        // GET_ID does not refer to the EPK segment, it may refer to the shared memory buffer for the EPK
+        XcpCalUpdateEpkSeg((const char *)hdr->ecu_epk);
     }
 
-    SNPRINTF(hdr->ecu_epk, sizeof(hdr->ecu_epk), "%016" PRIx64, hash);
     return (const char *)hdr->ecu_epk;
 }
 
@@ -586,7 +598,7 @@ int16_t XcpShmRegisterApp(const char *name, const char *epk, uint32_t pid, uint8
     atomic_store(&app->u.a2l_finalized, 0U);
     atomic_store(&app->u.alive_counter, 0U);
 
-    // Update the ECU EPK hash
+    // Update the ECU EPK hash in the SHM header
     XcpShmGetEcuEpk();
 
     DBG_PRINTF5("XcpShmRegisterApp: Registered application %u:'%s' (pid=%u, mode=%02X %s %s)\n", slot, name, (unsigned)getpid(), xcp_init_mode, is_leader ? "leader" : "",

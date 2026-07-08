@@ -40,32 +40,42 @@
 /*----------------------------------------------------------------------------*/
 /* DAQ event management */
 
-// Enable event list (Default)
-#ifndef XCPLIB_FOR_RUST // Rust has its own event management
+// Maximum length of event name without the trailing 0
+#define XCP_MAX_EVENT_NAME 15
+
+// Enable event list (Always enable for XCPlite, disabled for Rust xcp-lite)
+#ifdef OPTION_DAQ_EVENT_LIST
+
 #define XCP_ENABLE_DAQ_EVENT_LIST
-#endif
-#ifdef XCP_ENABLE_DAQ_EVENT_LIST
 
 #if defined(OPTION_DAQ_EVENT_COUNT) && (OPTION_DAQ_EVENT_COUNT > 0)
 #define XCP_MAX_EVENT_COUNT OPTION_DAQ_EVENT_COUNT
 #else
 #error "Please define OPTION_DAQ_EVENT_COUNT"
 #endif
+#if OPTION_DAQ_EVENT_COUNT > 1000
+#error "OPTION_DAQ_EVENT_COUNT is large, would need >20KB memory"
+#endif
 
 // Enable XCP_GET_EVENT_INFO, if this is enabled, event information can be queried by the XCP client tool
 #define XCP_ENABLE_DAQ_EVENT_INFO
 
-// Maximum length of event name without the trailing 0
-#define XCP_MAX_EVENT_NAME 15
+#else // XCP_ENABLE_DAQ_EVENT_LIST
 
-#else                           // XCP_ENABLE_DAQ_EVENT_LIST
+#if defined(OPTION_DAQ_EVENT_COUNT) && (OPTION_DAQ_EVENT_COUNT > 0)
 
 // If XCP_MAX_EVENT_COUNT is defined and DAQ event management is not used, DAQ list to event association lookup will be optimized
 // Set the maximum number of DAQ events (the highest DAQ event number used), XCP_MAX_EVENT_COUNT must be even
 // Requires XCP_MAX_EVENT_COUNT * 2 bytes of memory
-#define XCP_MAX_EVENT_COUNT 256 // For available event numbers from 0 to 255
+#define XCP_MAX_EVENT_COUNT OPTION_DAQ_EVENT_COUNT
 
-#endif // !XCP_ENABLE_DAQ_EVENT_LIST
+#else
+
+#error "Please define OPTION_DAQ_EVENT_COUNT, remove this error if you want arbitrary event numbers without a maximum count"
+
+#endif
+
+#endif // !defined(OPTION_DAQ_EVENT_LIST)
 
 /*----------------------------------------------------------------------------*/
 // Enable calibration segments
@@ -407,7 +417,7 @@ XCPlite multi application absolute addressing: XCP_ADDRESS_MODE_XCPLITE__CXSDD (
 #error "CLOCK_TICKS_PER_S is out of range"
 #endif
 #if ((1000000000ULL % CLOCK_TICKS_PER_S) != 0) // warn on rounding errors and switch to divide mode (CANape specific option)
-#warning "CLOCK_TICKS_PER_S can not be represented without rounding errors, switched to divide mode"
+#error "CLOCK_TICKS_PER_S can not be represented without rounding errors, switched to divide mode"
 #if 0                                       // @@@@ TODO Does not work yet, unclear
 #if ((CLOCK_TICKS_PER_S % 1000000ULL) != 0) // error if can not be represented without rounding errors even in divide mode
 #error "CLOCK_TICKS_PER_S is out of range for both normal and divide mode"

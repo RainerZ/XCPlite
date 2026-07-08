@@ -31,8 +31,8 @@
 #define XCP_PROJECT_VERSION "V102"
 #define XCP_USE_TCP false
 #define XCP_SERVER_PORT 5555
-#define XCP_QUEUE_SIZE (1024 * 8)
-#define XCP_LOG_LEVEL 4 // 3 - Info, 4 - Print XCP commands, 5 - Debug
+#define XCP_QUEUE_SIZE 0 // The queue size in bytes is fixed (OPTION_QUEUE_32_SIZE in xcplib_rtos_cfg.h) for the 32 bit FreeRTOS build, the parameter is ignored
+#define XCP_LOG_LEVEL 4  // 3 - Info, 4 - Print XCP commands, 5 - Debug
 
 bool startXcpServer() {
 
@@ -175,10 +175,12 @@ static void fastTask(void *parameter) {
     // Volatile keeps this local measurement variable visible in optimized builds,
     // The offline A2L generator can discover it in the ELF file and associate it to the functions DAQ event trigger.
     volatile uint16_t counter = 0;
+    static volatile uint16_t static_counter = 0; 
 
     printf("fastTask started\n");
     printf("  frameaddr = %p\n", xcp_get_frame_addr());
     printf("  &counter = %p\n", &counter);
+    printf("  &static_counter = %p\n", &static_counter);
 
     // Create a DAQ event named 'fastTask'
     DaqCreateEvent(fastTask);
@@ -206,8 +208,10 @@ static void fastTask(void *parameter) {
             clamp_parameter(period_ms, params->fast_task_period_ms, FASTTASK_PERIOD_MIN_MS, FASTTASK_PERIOD_MAX_MS);
 
             counter++;
+            static_counter++;
             if (counter > params->counter_max) {
                 counter = 0;
+                static_counter = 0;
             }
             global_counter++;
             if (global_counter > params->counter_max) {
@@ -221,6 +225,8 @@ static void fastTask(void *parameter) {
 
         // Trigger the DAQ event 'fastTask'
         DaqTriggerEvent(fastTask);
+        // Trigger the event a second time to measure runtime of the DaqTriggerEvent function
+        // XcpEventExt_Var(trg__AAS__fastTask, 1, xcp_get_frame_addr()); 
 
 #ifdef OPTION_IO
         rstPin1();
@@ -247,8 +253,6 @@ static void slowTask(void *parameter) {
     printf("slowTask started\n");
     printf("  frameaddr = %p\n", xcp_get_frame_addr());
     printf("  &counter = %p\n", &counter);
-
-    DaqCreateEvent(slowTask);
 
     TickType_t lastWakeTime = xTaskGetTickCount();
     for (;;) {
@@ -283,7 +287,7 @@ static void slowTask(void *parameter) {
 #endif
         }
 
-        DaqTriggerEvent(slowTask);
+        DaqCreateAndTriggerEvent(slowTask);
 
         // printf("slowTask: counter = %u, period = %u ms, channel1 = %f\n", counter, slow_task_period_ms, channel1);
 #ifdef OPTION_DISPLAY

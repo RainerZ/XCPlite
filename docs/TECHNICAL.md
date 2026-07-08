@@ -118,11 +118,11 @@ firmware, regardless of whether that code path has executed at the time of A2L g
 #### `xcp_cals` section — calibration segment descriptors
 
 Every `CalSegDecl(name)` + `CalSegCreate(name)` pair (or `CalSegDecl(name)` at file scope)
-emits a `tXcpCalDescriptor` constant into the `.xcp_cals` section:
+emits a `tXcpCalSegDescriptor` constant into the `.xcp_cals` section:
 
 ```c
 // What CalSegDecl(params) + CalSegCreate(params) expands to (simplified):
-static const tXcpCalDescriptor calseg__params
+static const tXcpCalSegDescriptor calseg__params
     __attribute__((section("xcp_cals"), used)) = {
         "params",           // name
         &params,            // pointer to the default/reference page
@@ -132,7 +132,7 @@ static const tXcpCalDescriptor calseg__params
     };
 ```
 
-`tXcpCalDescriptor` contains the segment name, the address of the default page, its size, and
+`tXcpCalSegDescriptor` contains the segment name, the address of the default page, its size, and
 the type (segment vs. block). xcpclient reads these to discover all calibration segments and
 their exact layout in memory — without any A2L registration calls in the application code.
 

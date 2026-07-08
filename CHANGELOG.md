@@ -3,12 +3,35 @@
 All notable changes to XCPlite are documented in this file.
 
 
+## [V2.1.6]
+
+- Critical bugfix in ´XcpEventExt_´, undefined behaviour when DAQ is not running 
+- Optimizations for microcontroller/RTOS builds, optimized locking (critical section instead of mutex)and static allocated queue (new ´queue32m.c´)
+- Link time, deterministic event id assignment (´tXcpEventDescriptor´ in section ´xcp_evts´)
+- Implemented ´XCP_LIMIT´, XCP_COMMENT and ´XCP_UNIT´ metadata definition to support A2L generation in RTOS use cases (new linker section ´xcp_meta´). See example no_a2l_demo for details
+- ´xcpclient´ tool refactoring and bugfixes, xcp_registry dependency switched back to ´xcplite´ crate main on VectorGrp
+- Made OPTION_DAQ_EVENT_LIST an configuration override and removed special configuration handling with XCPLIB_FOR_RUST
+- Enabled 1ms event ´async´ (event id 0) as default event for global variables in RTOS builds
+- ´XcpGetEcuEpk´ renamed to ´XcpGetLocalEpk´ for clarity in SHM mode
+- silkit_demo updated
+- ´DaqCreateEventExt´ fixed
+- Asserts removed from the DAQ trigger macros 
+
+
+## [V2.1.5]
+
+- freertos_stm32_demo with FreeRTOS and lwip for STM32 microcontrollers
+- More flexibility how to provide the DAQ timebase
+- Single source demo code for all FreeRTOS examples
+
+
 ## [V2.1.3]
 
 - cmake build system revisited, build configurations and build options
 - Improved convenience build script
 - README files for all example applications
 - xcpclient only uses the registry (xcp-lite xcp_registry crate), not the full Rust xcp-lite stack
+
 
 ## [V2.1.0]
 

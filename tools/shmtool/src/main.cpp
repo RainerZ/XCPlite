@@ -39,12 +39,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "xcp_cfg.h"
+#define XCPLIB_CFG_OVERRIDE "xcplib_shm_cfg.h"
 #include "xcplib_cfg.h"
 
-#ifdef OPTION_SHM_MODE
-
-#include "shm.h"     // for shared memory management
+#include "shm.h" // for shared memory management
+#include "xcp_cfg.h"
 #include "xcplite.h" // for tXcpData layout
 
 // ---------------------------------------------------------------------------
@@ -266,8 +265,6 @@ static int cmd_finalize(uint32_t timeout_ms) {
     return all_done ? 0 : 2; // exit code 2 = partial timeout
 }
 
-#endif // SHM_MODE
-
 // ---------------------------------------------------------------------------
 // clean command
 // ---------------------------------------------------------------------------
@@ -337,12 +334,10 @@ int main(int argc, char *argv[]) {
 
         if (arg == "clean")
             cmd = Cmd::Clean;
-#ifdef OPTION_SHM_MODE
         else if (arg == "status")
             cmd = Cmd::Status;
         else if (arg == "finalize")
             cmd = Cmd::Finalize;
-#endif
         else if (arg == "help" || arg == "--help" || arg == "-h")
             cmd = Cmd::Help;
         else if (arg == "-v" || arg == "--verbose")
@@ -358,17 +353,9 @@ int main(int argc, char *argv[]) {
 
     switch (cmd) {
     case Cmd::Status:
-#ifdef OPTION_SHM_MODE
         return cmd_status(verbose);
-#else // OPTION_SHM_MODE
-        break;
-#endif
     case Cmd::Finalize:
-#ifdef OPTION_SHM_MODE
         return cmd_finalize(timeout_ms);
-#else // OPTION_SHM_MODE
-        break;
-#endif
     case Cmd::Clean:
         return cmd_clean();
 

@@ -30,7 +30,7 @@
 #include "shm.h"       // for shared memory management
 #include "xcp.h"       // for CRC_XXX
 #include "xcp_cfg.h"   // for XCP_xxx
-#include "xcplite.h"   // for tXcpDaqLists, XcpXxx, ApplXcpXxx, XcpGetEpk
+#include "xcplite.h"   // for tXcpDaqLists, XcpXxx, ApplXcpXxx, XcpGetEcuEpk
 #include "xcptl_cfg.h" // for XCPTL_xxx
 
 #if !defined(XCP_ENABLE_DAQ_EVENT_LIST) || !defined(XCP_ENABLE_CALSEG_LIST)
@@ -45,15 +45,15 @@
 typedef struct {
     char signature[16];                              // File signature "XCPLITE__BINARY"
     uint16_t version;                                // File version
-    uint16_t event_count;                            // Number of events, tEventDescriptor
-    uint16_t calseg_count;                           // Number of calibration segments, tCalSegDescriptor
+    uint16_t event_count;                            // Number of events, tBinEvent
+    uint16_t calseg_count;                           // Number of calibration segments, tBinCalSeg
     uint16_t app_count;                              // Number of applications (processes) in SHM mode, 0 in local mode
     uint8_t reserved[128 - 16 - 2 - 2 - 2 - 2];      // Reserved for future use
     char Epk[XCP_EPK_MAX_LENGTH + 1];                // EPK string, 0 terminated
     uint8_t padding[128 - (XCP_EPK_MAX_LENGTH + 1)]; // Reserved for longer EPK strings up to 128 bytes
-} tHeader;
+} tBinHeader;
 
-static_assert(sizeof(tHeader) == 256, "Size of tHeader must be 256 bytes");
+static_assert(sizeof(tBinHeader) == 256, "Size of tBinHeader must be 256 bytes");
 
 typedef struct {
     uint16_t id;                                     // Event ID
@@ -64,9 +64,9 @@ typedef struct {
     uint8_t reserved[128 - 2 - 2 - 4 - 1 - 1];       // Reserved for future use
     char name[XCP_MAX_EVENT_NAME + 1];               // Event name, 0 terminated
     uint8_t padding[128 - (XCP_MAX_EVENT_NAME + 1)]; // Reserved for longer event names up to 128 bytes
-} tEventDescriptor;
+} tBinEvent;
 
-static_assert(sizeof(tEventDescriptor) == 256, "Size of tEventDescriptor must be 256 bytes");
+static_assert(sizeof(tBinEvent) == 256, "Size of tBinEvent must be 256 bytes");
 
 typedef struct {
     uint16_t index;                                   // Index of the calibration segment in the list, 0..<XCP_MAX_CALSEG_COUNT
@@ -77,9 +77,9 @@ typedef struct {
     uint8_t reserved[128 - 2 - 2 - 4 - 1 - 1];        // Reserved for future use
     char name[XCP_MAX_CALSEG_NAME + 1];               // Calibration segment name, 0 terminated
     uint8_t padding[128 - (XCP_MAX_CALSEG_NAME + 1)]; // Reserved for longer calibration segment names up to 128 bytes
-} tCalSegDescriptor;
+} tBinCalSeg;
 
-static_assert(sizeof(tCalSegDescriptor) == 256, "Size of tCalSegDescriptor must be 256 bytes");
+static_assert(sizeof(tBinCalSeg) == 256, "Size of tBinCalSeg must be 256 bytes");
 
 typedef struct {
     uint8_t app_id;                                                                      // App ID of the application owner in SHM mode, 0 in local mode
@@ -88,13 +88,13 @@ typedef struct {
     char project_name[XCP_PROJECT_NAME_MAX_LENGTH + 1];                                  // Application name, 0 terminated
     char epk[XCP_EPK_MAX_LENGTH + 1];                                                    // build version  (null-terminated)
     uint8_t padding[128 - (XCP_PROJECT_NAME_MAX_LENGTH + 1) - (XCP_EPK_MAX_LENGTH + 1)]; // Reserved for longer application names up to 128 bytes
-} tAppDescriptor;
+} tBinApp;
 
-static_assert(sizeof(tAppDescriptor) == 256, "Size of tAppDescriptor must be 256 bytes");
+static_assert(sizeof(tBinApp) == 256, "Size of tBinApp must be 256 bytes");
 
 #pragma pack(pop)
 
-static tHeader gBinHeader;
+static tBinHeader gBinHeader;
 
 //--------------------------------------------------------------------------------------------------------------------------------
 
@@ -108,7 +108,7 @@ const char *XcpBinGetFilename(void) {
     SNPRINTF(gXcpBinFilename, XCP_BIN_FILENAME_MAX_LENGTH, "%s.bin", XcpShmGetEcuProjectName());
     return gXcpBinFilename;
 #else
-    SNPRINTF(gXcpBinFilename, XCP_BIN_FILENAME_MAX_LENGTH, "%s_%s.bin", XcpGetProjectName(), XcpGetEpk());
+    SNPRINTF(gXcpBinFilename, XCP_BIN_FILENAME_MAX_LENGTH, "%s_%s.bin", XcpGetProjectName(), XcpGetEcuEpk());
     return gXcpBinFilename;
 #endif
 }
@@ -133,7 +133,7 @@ static void printCalsegPage(const uint8_t *page, uint16_t size) {
 // Write the BIN file header
 static bool writeHeader(FILE *file, const char *epk, uint16_t event_count, uint16_t calseg_count, uint8_t app_count) {
 
-    memset(&gBinHeader, 0, sizeof(tHeader));
+    memset(&gBinHeader, 0, sizeof(tBinHeader));
     strncpy(gBinHeader.signature, BIN_SIGNATURE, sizeof(gBinHeader.signature) - 1);
     gBinHeader.signature[sizeof(gBinHeader.signature) - 1] = '\0'; // Ensure null termination
     gBinHeader.version = BIN_VERSION;
@@ -142,7 +142,7 @@ static bool writeHeader(FILE *file, const char *epk, uint16_t event_count, uint1
     gBinHeader.event_count = event_count;
     gBinHeader.calseg_count = calseg_count;
     gBinHeader.app_count = app_count;
-    size_t written = fwrite(&gBinHeader, sizeof(tHeader), 1, file);
+    size_t written = fwrite(&gBinHeader, sizeof(tBinHeader), 1, file);
     if (written != 1) {
         DBG_PRINT_ERROR("Failed to write header to BIN file\n");
         return false;
@@ -152,8 +152,8 @@ static bool writeHeader(FILE *file, const char *epk, uint16_t event_count, uint1
 
 // Write an event descriptor to the BIN file
 static bool writeEvent(FILE *file, tXcpEventId event_id, const tXcpEvent *event) {
-    tEventDescriptor desc;
-    memset(&desc, 0, sizeof(tEventDescriptor));
+    tBinEvent desc;
+    memset(&desc, 0, sizeof(tBinEvent));
     memcpy(desc.name, event->name, sizeof(desc.name));
     // In SHM mode, save the app_id of the event owner
 #ifdef OPTION_SHM_MODE // initialized app-id in event descriptor
@@ -163,7 +163,7 @@ static bool writeEvent(FILE *file, tXcpEventId event_id, const tXcpEvent *event)
     desc.priority = event->flags & XCP_DAQ_EVENT_FLAG_PRIORITY ? 0xFF : 0x00;
     desc.id = event_id;
     desc.index = XcpGetEventIndex(event_id);
-    size_t written = fwrite(&desc, sizeof(tEventDescriptor), 1, file);
+    size_t written = fwrite(&desc, sizeof(tBinEvent), 1, file);
     if (written != 1) {
         DBG_PRINT_ERROR("Failed to write event descriptor to BIN file\n");
         return false;
@@ -174,8 +174,8 @@ static bool writeEvent(FILE *file, tXcpEventId event_id, const tXcpEvent *event)
 
 // Write a calibration segment descriptor and page data to the BIN file
 static bool writeCalseg(FILE *file, tXcpCalSegIndex calseg, const tXcpCalSeg *seg, uint8_t page) {
-    tCalSegDescriptor desc;
-    memset(&desc, 0, sizeof(tCalSegDescriptor));
+    tBinCalSeg desc;
+    memset(&desc, 0, sizeof(tBinCalSeg));
     memcpy(desc.name, seg->h.name, sizeof(desc.name)); // src and dst are same size, null-terminated
     desc.size = seg->h.size;
     desc.addr = XcpGetCalSegBaseAddress(calseg);
@@ -185,7 +185,7 @@ static bool writeCalseg(FILE *file, tXcpCalSegIndex calseg, const tXcpCalSeg *se
 #ifdef OPTION_SHM_MODE // initialize app-id in calibration segment descriptor
     desc.app_id = seg->h.app_id;
 #endif // SHM_MODE
-    size_t written = fwrite(&desc, sizeof(tCalSegDescriptor), 1, file);
+    size_t written = fwrite(&desc, sizeof(tBinCalSeg), 1, file);
     if (written != 1) {
         DBG_PRINT_ERROR("Failed to write calibration segment descriptor to BIN file\n");
         return false;
@@ -216,15 +216,15 @@ static bool writeCalseg(FILE *file, tXcpCalSegIndex calseg, const tXcpCalSeg *se
 static bool writeApp(FILE *file, uint8_t app_id, const char *project_name, const char *epk, uint8_t xcp_init_mode) {
     assert(project_name != NULL);
     assert(epk != NULL);
-    tAppDescriptor desc;
-    memset(&desc, 0, sizeof(tAppDescriptor));
+    tBinApp desc;
+    memset(&desc, 0, sizeof(tBinApp));
     strncpy(desc.project_name, project_name, XCP_PROJECT_NAME_MAX_LENGTH);
     desc.project_name[XCP_PROJECT_NAME_MAX_LENGTH] = '\0'; // Ensure null termination
     strncpy(desc.epk, epk, XCP_EPK_MAX_LENGTH);
     desc.epk[XCP_EPK_MAX_LENGTH] = '\0'; // Ensure null termination
     desc.xcp_init_mode = xcp_init_mode;
     desc.app_id = app_id;
-    size_t written = fwrite(&desc, sizeof(tAppDescriptor), 1, file);
+    size_t written = fwrite(&desc, sizeof(tBinApp), 1, file);
     if (written != 1) {
         DBG_PRINT_ERROR("Failed to write application descriptor to BIN file\n");
         return false;
@@ -345,7 +345,7 @@ bool XcpBinFreezeCalSeg(tXcpCalSegIndex calseg) {
     // Set position to start of calseg data and write the active page data
     assert(seg->h.file_pos > 0); // Ensure the file position is set
     size_t n = 0;
-    if (0 == fseek(file, seg->h.file_pos + sizeof(tCalSegDescriptor), SEEK_SET)) {
+    if (0 == fseek(file, seg->h.file_pos + sizeof(tBinCalSeg), SEEK_SET)) {
         const uint8_t *ecu_page = XcpLockCalSeg(calseg);
 #ifdef OPTION_ENABLE_DBG_PRINTS
         DBG_PRINTF4("Freezing calibration segment %u, size=%u active page data to file '%s'+%u\n", calseg, seg->h.size, filename, seg->h.file_pos);
@@ -384,7 +384,7 @@ static bool load(const char *filename, const char *epk) {
     }
 
     // Read and verify header
-    size_t read = fread(&gBinHeader, sizeof(tHeader), 1, file);
+    size_t read = fread(&gBinHeader, sizeof(tBinHeader), 1, file);
     if (read != 1 || strncmp(gBinHeader.signature, BIN_SIGNATURE, sizeof(gBinHeader.signature)) != 0) {
         DBG_PRINTF_ERROR("Invalid file format or signature in '%s'\n", filename);
         fclose(file);
@@ -413,11 +413,11 @@ static bool load(const char *filename, const char *epk) {
         return false;
     }
     for (uint16_t i = 0; i < gBinHeader.event_count; i++) {
-        tEventDescriptor desc;
+        tBinEvent desc;
         tXcpEventId event_id;
 
         // Read event descriptor
-        read = fread(&desc, sizeof(tEventDescriptor), 1, file);
+        read = fread(&desc, sizeof(tBinEvent), 1, file);
         if (read != 1) {
             DBG_PRINT_ERROR("Failed to read event descriptor from BIN file\n");
             fclose(file);
@@ -454,10 +454,10 @@ static bool load(const char *filename, const char *epk) {
     }
     for (uint16_t i = 0; i < gBinHeader.calseg_count; i++) {
 
-        tCalSegDescriptor desc;
+        tBinCalSeg desc;
 
         uint32_t file_pos = (uint32_t)ftell(file);
-        read = fread(&desc, sizeof(tCalSegDescriptor), 1, file);
+        read = fread(&desc, sizeof(tBinCalSeg), 1, file);
         if (read != 1) {
             DBG_PRINT_ERROR("Failed to read calibration segment descriptor from BIN file\n");
             fclose(file);
@@ -484,8 +484,8 @@ static bool load(const char *filename, const char *epk) {
 // In SHM mode, load application list and pre register applications (assuming the application list is empty at this point)
 #ifdef OPTION_SHM_MODE // load all application descriptors and pre register these applications
     for (uint8_t i = 0; i < gBinHeader.app_count; i++) {
-        tAppDescriptor desc;
-        read = fread(&desc, sizeof(tAppDescriptor), 1, file);
+        tBinApp desc;
+        read = fread(&desc, sizeof(tBinApp), 1, file);
         if (read != 1) {
             DBG_PRINT_ERROR("Failed to read application descriptor from BIN file\n");
             fclose(file);

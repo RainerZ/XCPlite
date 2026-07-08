@@ -94,6 +94,8 @@ pub(crate) struct DebugData {
     pub(crate) cfa_info: Vec<CfaInfo>,                    // CFA information for functions which contain an event trigger, the CFA is valid for  the location of the event trigger
     pub(crate) epk_string: Option<String>,                // EPK string read from xcp_epk ELF section
     pub(crate) epk_addr: u64,                             // Address of the xcp_epk ELF section (0 if not found)
+    pub(crate) xcp_meta_data: Option<(u64, Vec<u8>)>,     // (section_base_addr, raw_bytes) of xcp_meta section
+    pub(crate) is_little_endian: bool,                    // ELF endianness
 }
 
 // load_dwarf - loads and parses the DWARF debug information from an ELF file
