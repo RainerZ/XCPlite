@@ -851,6 +851,50 @@ impl ElfReader {
                                 }
                             }
                         }
+                        // Special case for enum types, which are represented as integer types with enumerators described as special unit format "value "NAME" value "NAME" ...".
+                        // We convert the enumerators to a unit string and store it in the McSupportData for the instance.
+                        DbgDataType::Enum { size, signed, enumerators } => {
+                            info!(
+                                "Add {} for enum {}: addr = {}:0x{:08x}, size = {}, signed = {}, enumerators = {:?}",
+                                if object_type == McObjectType::Characteristic { "characteristic" } else { "measurement" },
+                                a2l_name,
+                                mem_addr_ext,
+                                mem_addr,
+                                size,
+                                signed,
+                                enumerators
+                            );
+                            if verbose >= 2 {
+                                info!("type_info = {}", type_info);
+                            }
+                            let dim_type = self.get_dim_type(reg, type_info, object_type);
+                            let unit_string = enumerators_to_unit_string(enumerators);
+                            let mc_support_data = if let Some(unit_str) = unit_string {
+                                McSupportData::new(object_type).set_unit(unit_str)
+                            } else {
+                                warn!("Enum variable '{}' has no enumerators, no conversion table generated", a2l_name);
+                                McSupportData::new(object_type)
+                            };
+                            let res = reg.instance_list.add_instance(a2l_name.clone(), dim_type, mc_support_data, mc_addr);
+                            match res {
+                                Ok(_) => {
+                                    if verbose >= 1 {
+                                        info!(
+                                            "  Registered enum variable '{}' with type '{}', size = {}, event id = {}, unit = {:?}",
+                                            a2l_name,
+                                            type_name.as_ref().unwrap_or(&"<unnamed>".to_string()),
+                                            type_size,
+                                            xcp_event_id,
+                                            enumerators_to_unit_string(enumerators)
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to register variable '{}': {}", a2l_name, e);
+                                }
+                            }
+                        }
+
                         _ => {
                             warn!("Variable '{}' has unsupported type: {}", var_name, type_info);
                         }
@@ -937,6 +981,15 @@ impl ElfReader {
 
         Ok(())
     }
+}
+
+// Convert an enumerators vec to the XCP/A2L COMPU_VTAB string format: `value "NAME" value "NAME" ...`
+fn enumerators_to_unit_string(enumerators: &[(String, i64)]) -> Option<String> {
+    if enumerators.is_empty() {
+        return None;
+    }
+    let parts: Vec<String> = enumerators.iter().map(|(name, value)| format!(r#"{} "{}""#, value, name)).collect();
+    Some(parts.join(" "))
 }
 
 // Read a null-terminated UTF-8 string from a byte slice at a given offset

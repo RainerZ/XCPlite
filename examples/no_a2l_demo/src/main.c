@@ -95,7 +95,8 @@ XCP_LIMITS(params__delay_us, 1, 10000);
 XCP_UNIT(params__delay_us, "us");
 
 // Define the enum conversion for the calibration parameter test_par_enum
-XCP_UNIT(params__test_par_enum, "0 \"OFF\" 1 \"ON\" 2 \"STANDBY\" ");
+// @@@@ UNUSED: Remove, enum support now build into xcpclient tool
+// XCP_UNIT(params__test_par_enum, "0 \"OFF\" 1 \"ON\" 2 \"STANDBY\" ");
 
 //-----------------------------------------------------------------------------------------------------
 // Demo global measurement values
@@ -141,11 +142,11 @@ THREAD_FUNC_RETURN task(void *p) {
     printf("Start thread %u ...\n", get_thread_id());
 
     // Static local scope measurement variable
-    XCP_COMMENT(static_counter, "Static local measurement variable"); // Example for meta data annotation as code
+    XCP_COMMENT(static_counter, "Static local measurement variable in function task"); // Example for meta data annotation as code
     volatile static uint16_t static_counter = 0;
 
     // Local measurement variable
-    XCP_COMMENT(counter, "Local measurement variable"); // Example for meta data annotation as code
+    XCP_COMMENT(counter, "Local measurement variable in function task"); // Example for meta data annotation as code
     volatile uint32_t counter = 0;
 
     // Heap measurement variable
@@ -260,7 +261,9 @@ int main(int argc, char *argv[]) {
     create_thread(&__t1, NULL, task, NULL);
 
     // Demo measurement variables
-    volatile uint16_t local_counter = 0;
+    XCP_COMMENT(counter, "Local measurement variable in main");
+    volatile uint16_t counter = 0;
+    XCP_COMMENT(static_counter, "Static local measurement variable in main");
     volatile static uint16_t static_counter = 0;
 
     // Calibration parameter counter_max
@@ -286,7 +289,7 @@ int main(int argc, char *argv[]) {
         // Unlock the calibration block
         CalSegUnlock(counter_control);
 
-        local_counter = global_counter;
+        counter = global_counter;
         static_counter = global_counter;
 
         // Demonstrate calibration thread safety and consistency
