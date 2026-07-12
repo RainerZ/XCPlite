@@ -310,7 +310,9 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
 extern const tXcpEventDescriptor __start_xcp_evts[] __asm("section$start$__DATA$xcp_evts");
 extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp_evts");
 #else
+#ifndef _WIN32
 #error "Unsupported platform for event segment registration"
+#endif
 #endif
 
 #endif // __XCPLITE_H__
@@ -328,6 +330,7 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 
 // Link-time event id derived from the descriptor's position in the xcp_evts section
 // Only with clang on Linux, this is a link-time constant, usable as a static initializer
+#if defined(__ELF__) || defined(__APPLE__)
 #if defined(__clang__) && defined(_Linux)
 // Get the event id as compile-time constant for an event descriptor name (evt__<event_name>)
 #define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) ((tXcpEventId)(&(evt) - __start_xcp_evts))
@@ -338,6 +341,13 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 #define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) XCP_UNDEFINED_EVENT_ID
 // Set the event id for an event descriptor at runtime
 #define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id) ((evt_id) = ((tXcpEventId)(&(evt_descr) - __start_xcp_evts)))
+#endif
+#else
+#define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) XCP_UNDEFINED_EVENT_ID
+#define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id)                                                                                                                                \
+    if ((evt_id) == XCP_UNDEFINED_EVENT_ID) {                                                                                                                                      \
+        (evt_id) = XcpCreateEvent((evt_descr).name, 0, 0);                                                                                                                         \
+    }
 #endif
 
 /// Create an event
@@ -595,7 +605,9 @@ extern const uint8_t *gXcpBaseAddr;
 #define XCP_METADATA_SECTION_ATTR __attribute__((section("__DATA,xcp_meta"), used))
 #else
 #define XCP_METADATA_SECTION_ATTR /* section-based registration not supported on this platform */
+#ifndef _WIN32
 #error "Unsupported platform for XCP metadata section"
+#endif
 #endif
 
 #define XCP_COMMENT(name, comment) static const char XCP_METADATA_SECTION_ATTR xcp_meta__comment__##name[] = comment;

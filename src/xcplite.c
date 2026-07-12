@@ -958,6 +958,8 @@ static uint16_t XcpRegisterSectionEvents(void) {
 
     uint16_t count = 0;
 
+#ifndef _WIN
+
     const tXcpEventDescriptor *begin = __start_xcp_evts;
     const tXcpEventDescriptor *end = __stop_xcp_evts;
     if (begin != NULL && end != NULL && begin < end) {
@@ -972,12 +974,14 @@ static uint16_t XcpRegisterSectionEvents(void) {
     } else {
         DBG_PRINT_WARNING("No xcp_evts section found\n");
     }
+#endif
 
     if (count > 0)
         DBG_PRINTF3(ANSI_COLOR_GREEN "Preregistered %u events from event descriptor section\n" ANSI_COLOR_RESET, count);
+#ifndef _WIN
     else
         DBG_PRINT3("No new event descriptors found in section xcp_evts\n");
-    return count;
+#endif return count;
 }
 
 #else // XCP_ENABLE_DAQ_EVENT_LIST
