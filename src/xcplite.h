@@ -150,7 +150,9 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
 extern const tXcpEventDescriptor __start_xcp_evts[] __asm("section$start$__DATA$xcp_evts");
 extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp_evts");
 #else
+#ifndef _WIN32
 #error "Unsupported platform for event segment registration"
+#endif
 #endif
 
 #endif // __XCPLIB_H__

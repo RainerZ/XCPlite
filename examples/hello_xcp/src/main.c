@@ -15,7 +15,7 @@
 // XCP params
 
 #define OPTION_PROJECT_NAME "hello_xcp" // Project name, used to build the A2L and BIN file name
-#define OPTION_PROJECT_VERSION "213"    // EPK version string
+#define OPTION_PROJECT_VERSION "214"    // EPK version string
 #define OPTION_USE_TCP false            // TCP or UDP
 #define OPTION_SERVER_PORT 5555         // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0} // Bind addr, 0.0.0.0 = ANY
@@ -71,7 +71,7 @@ tXcpCalSegIndex params_calseg = XCP_UNDEFINED_CALSEG;
 uint8_t outside_temperature = -5 + 55;
 uint8_t inside_temperature = 20 + 55;
 // Heat Energy in kW
-double heat_energy = 0.0f;
+double heat_energy = 0.0;
 // A global counter limited by the calibration parameter counter_max
 uint32_t global_counter = 0;
 
