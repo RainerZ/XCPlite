@@ -981,7 +981,8 @@ static uint16_t XcpRegisterSectionEvents(void) {
 #ifndef _WIN
     else
         DBG_PRINT3("No new event descriptors found in section xcp_evts\n");
-#endif return count;
+#endif
+    return count;
 }
 
 #else // XCP_ENABLE_DAQ_EVENT_LIST
