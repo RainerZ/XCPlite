@@ -7,7 +7,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SHMTOOL="${SCRIPT_DIR}/../build/shmtool"
-DEMO_PROCS="hello_xcp|hello_xcp_cpp|c_demo|cpp_demo|multi_thread_demo|struct_demo|point_cloud_demo|no_a2l_demo|ptp4l_demo"
+DEMO_PROCS="hello_xcp|hello_xcp_cpp|c_demo|cpp_demo|multi_thread_demo|struct_demo|point_cloud_demo|no_a2l_demo|no_a2l_demo_cpp|ptp4l_demo"
 
 # Optionally kill running demo processes first so they can't re-create SHM after unlink
 if [[ "$1" == "--kill" ]]; then
