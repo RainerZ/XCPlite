@@ -22,7 +22,7 @@
 |   Platform requirements:
 |    File system for ELF optional ELF upload and .BIN files
 |   Examples:
-|    no_a2l_demo
+|    no_a2l_demo, no_a2l_demo_cpp
 |   Tools:
 |     Use xcpclient A2L generation from ELF
 |   Tests:

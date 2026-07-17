@@ -64,7 +64,7 @@ endif()
 #   XCPLITE_BUILD_EXAMPLES
 #     default  -> hello_xcp, hello_xcp_cpp, c_demo, cpp_demo, point_cloud_demo,
 #                 struct_demo, multi_thread_demo, ptp4l_demo (Linux)
-#     no_a2l   -> no_a2l_demo
+#     no_a2l   -> no_a2l_demo, no_a2l_demo_cpp
 #     ptp      -> ptp4l_demo (Linux)
 #     shm      -> hello_xcp (SHM mode), hello_xcp_cpp (SHM mode)
 #                Note: silkit_demo is a standalone project (requires SilKit + installed xcplite);
@@ -281,6 +281,10 @@ if(XCPLITE_BUILD_EXAMPLES)
         add_executable(no_a2l_demo examples/no_a2l_demo/src/main.c)
         target_link_libraries(no_a2l_demo PRIVATE xcplite)
         message(STATUS "no_a2l_demo: building with XCPLIB_CFG_OVERRIDE=\"xcplib_no_a2l_cfg.h\"")
+
+        add_executable(no_a2l_demo_cpp examples/no_a2l_demo_cpp/src/main.cpp)
+        target_link_libraries(no_a2l_demo_cpp PRIVATE xcplite)
+        message(STATUS "no_a2l_demo_cpp: building with XCPLIB_CFG_OVERRIDE=\"xcplib_no_a2l_cfg.h\"")
 
     elseif(XCPLITE_CONFIGURATION STREQUAL "ptp")
 

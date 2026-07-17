@@ -22,10 +22,9 @@ set -e  # Exit on error
 DEMO_NAME="${1:-cpp_demo}"
 
 # Determine XCP protocol based on demo
-# TCP demos: bpf_demo, hello_xcp, no_a2l_demo, struct_demo
-# UDP demos: c_demo, cpp_demo, multi_thread_demo
+# TCP demos: bpf_demo, struct_demo
 case "$DEMO_NAME" in
-    bpf_demo|hello_xcp|no_a2l_demo|struct_demo)
+    bpf_demo|struct_demo)
         XCP_PROTOCOL="--tcp"
         ;;
     *)
