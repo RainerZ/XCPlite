@@ -15,10 +15,21 @@
 
 #include <mutex> // for std::once_flag, std::call_once
 
-#include <a2l.h>
+#include "xcplib_cfg.h" // for OPTION_xxx, must include the correct configuration override file XCPLIB_CFG_OVERRIDE
+// #ifndef XCPLIB_CFG_OVERRIDE
+// #error "XCPLIB_CFG_OVERRIDE must be defined to point to the correct configuration override file"
+// #endif
 #include <xcplib.h>
+#ifdef OPTION_ENABLE_A2L_GENERATOR
+#include <a2l.h>
+#endif // OPTION_ENABLE_A2L_GENERATOR
 
 namespace xcplib = xcp; // Compatibility with V1.1.0 and earlier, where xcplib was used as the namespace
+
+// If A2L generation build option is turned off, we do not set segment address mode for the A2L generator
+#ifndef OPTION_ENABLE_A2L_GENERATOR
+#define A2lSetSegmentAddrMode__i(index, base)
+#endif
 
 namespace xcp {
 
@@ -84,6 +95,7 @@ template <typename T> class CalSeg {
     /// Create a guard that automatically locks and unlocks the calibration segment
     CalSegGuard lock() const { return CalSegGuard(index_, params_ptr_); }
 
+#ifdef OPTION_ENABLE_A2L_GENERATOR
     /// Create the A2L instance description for this calibration segment
     /// Thread safe
     /// @param type_name The name of the type as it should appear in the A2L file
@@ -96,6 +108,7 @@ template <typename T> class CalSeg {
             A2lUnlock();
         }
     }
+#endif
 };
 
 /// Non-owning typed wrapper for a section-registered calibration segment.
@@ -143,6 +156,7 @@ template <typename T> class CalSegRef {
 
     CalSegGuard lock() const { return CalSegGuard(getIndex(), default_params_); }
 
+#ifdef OPTION_ENABLE_A2L_GENERATOR
     /// Create the A2L instance description for this calibration segment.
     void CreateA2lTypedefInstance(const char *type_name, const char *comment) const {
         const tXcpCalSegIndex index = getIndex();
@@ -153,6 +167,7 @@ template <typename T> class CalSegRef {
             A2lUnlock();
         }
     }
+#endif
 };
 
 /// Generic RAII wrapper for a single parameter of complex or simple type
@@ -212,6 +227,7 @@ template <typename T> class CalBlk {
     /// Create a guard that automatically locks and unlocks the calibration segment
     CalSegGuard lock() const { return CalSegGuard(index_, params_ptr_); }
 
+#ifdef OPTION_ENABLE_A2L_GENERATOR
     /// Create the A2L instance description for this calibration segment
     /// Thread safe
     /// @param type_name The name of the type as it should appear in the A2L file
@@ -224,6 +240,7 @@ template <typename T> class CalBlk {
             A2lUnlock();
         }
     }
+#endif
 };
 
 /// Convenience macro to create a calibration segment with automatic name stringification
@@ -284,6 +301,8 @@ template <typename... Bases> XCPLIB_ALWAYS_INLINE void DaqTriggerVarTemplate(con
 }
 
 // =============================================================================
+
+#ifdef OPTION_ENABLE_A2L_GENERATOR
 
 // Helper macros for creating measurement or instance info objects, variable name stringification and address capture
 #define A2L_MEAS(var, comment) xcp::MeasurementInfo(#var, &(var), var, comment)
@@ -406,11 +425,14 @@ template <typename T> XCPLIB_ALWAYS_INLINE void registerDynMeasurement(uint8_t i
     A2lCreateInstance_(info.name, info.type_name, info.dim, (const void *)info.addr, info.comment);
 }
 
+#endif // OPTION_ENABLE_A2L_GENERATOR
+
 // Main template function for once event creation and registration with individual relative addressing mode, and event triggering
 template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventVarTemplate(tXcpEventId event_id, uint64_t clock, Measurements &&...measurements) {
     if (XcpIsActivated()) {
 
-        // Once
+// Once
+#ifdef OPTION_ENABLE_A2L_GENERATOR
         static std::once_flag once_flag;
         std::call_once(once_flag, [&]() {
             // Register measurements with individual DYN address extensions
@@ -419,6 +441,7 @@ template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventVarTemplat
             (registerDynMeasurement(index++, event_id, measurements), ...);
             A2lUnlock();
         });
+#endif // OPTION_ENABLE_A2L_GENERATOR
 
         // Always
         // Create base pointer list and trigger

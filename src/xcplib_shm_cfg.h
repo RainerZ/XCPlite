@@ -33,4 +33,5 @@
 
 // Experimental, work in progress, not fully tested yet, may change or be removed without major version change, use with caution
 
+// #undef OPTION_SHM_MODE
 #define OPTION_SHM_MODE

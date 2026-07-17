@@ -181,9 +181,13 @@ set(xcplite_SOURCES src/xcpappl.c src/xcplite.c src/xcpethserver.c src/xcpethtl.
 # Create xcplite library
 add_library(xcplite ${xcplite_SOURCES})
 
+# Publish the selected build configuration to consumers of xcplite::xcplite.
+# This becomes a preprocessor define for downstream C/C++ targets.
+target_compile_definitions(xcplite PUBLIC "XCPLITE_CONFIGURATION=\"${XCPLITE_CONFIGURATION}\"")
+
 # Apply configuration override (empty = use default xcplib_cfg.h)
 if(_xcplib_cfg_override)
-    target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"${_xcplib_cfg_override}\"")
+    target_compile_definitions(xcplite PUBLIC "XCPLIB_CFG_OVERRIDE=\"${_xcplib_cfg_override}\"")
 endif()
 
 # Set include directories using generator expressions for proper installation
