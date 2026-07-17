@@ -37,20 +37,24 @@ constexpr uint8_t OPTION_A2L_MODE = (A2L_MODE_WRITE_ONCE | A2L_MODE_FINALIZE_ON_
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
 
+enum StateT : uint8_t { OFF = 0, ON = 1, STANDBY = 2 };
+
 // Calibration parameters struct
 struct ParametersT {
     uint32_t delay_us;    // Mainloop delay time in us
     uint16_t counter_max; // Maximum value for the counter
-    double min;           // Minimum value for random number generation
-    double max;           // Maximum value for random number generation
-    uint8_t map[4][8];    // Demo 2D map with 4x8 values
-    uint16_t curve[16];   // Demo curve with 16 values
-    uint16_t axis[16];    // Demo axis with 16 values
+    uint8_t counter_state;
+    double min;         // Minimum value for random number generation
+    double max;         // Maximum value for random number generation
+    uint8_t map[4][8];  // Demo 2D map with 4x8 values
+    uint16_t curve[16]; // Demo curve with 16 values
+    uint16_t axis[16];  // Demo axis with 16 values
 };
 
 // Default parameter values
 const ParametersT kParameters = {.delay_us = 1000,
                                  .counter_max = 1024,
+                                 .counter_state = StateT::ON,
                                  .min = -2.0,
                                  .max = +2.0,
                                  .map = {{0, 1, 2, 3, 4, 5, 6, 7}, {11, 12, 13, 14, 15, 16, 17, 18}, {21, 22, 23, 24, 25, 26, 27, 28}, {31, 32, 33, 34, 35, 36, 37, 38}},
@@ -199,16 +203,22 @@ int main(int argc, char *argv[]) {
     }
 
 #ifdef OPTION_ENABLE_CALIBRATION
+    // Register the enum
+    A2lCreateEnumConversion("CounterState", "3 0 \"OFF\" 1 \"ON\" 2 \"STANDBY\"");
+
     // Register the ParametersT calibration segment description as a typedef and an instance in the A2L file
-    A2lCreateTypedef(ParametersT, "Typedef for ParametersT",                //
-                     A2L_MAP_COMPONENT(map, "Demo map", "", 0, 100),        //
-                     A2L_AXIS_COMPONENT(axis, "Demo axis", "", 0, 100),     //
-                     A2L_CURVE_COMPONENT(curve, "Demo curve", "", 0, 2000), //
+    A2lCreateTypedef(ParametersT, "Typedef for ParametersT",                                             //
+                     A2L_PARAMETER_COMPONENT(delay_us, "Mainloop delay time in us", "us", 0, 500000),    //
+                     A2L_PARAMETER_COMPONENT(counter_max, "Maximum counter value", "", 0, 65535),        //
+                     A2L_PARAMETER_COMPONENT(counter_state, "Counter state", "conv.CounterState", 0, 2), //
+                     A2L_PARAMETER_COMPONENT(min, "Minimum random number value", "", -100.0, 100.0),     //
+                     A2L_PARAMETER_COMPONENT(max, "Maximum random number value", "", -100.0, 100.0),     //
+                     A2L_MAP_COMPONENT(map, "Demo map", "", 0, 100),                                     //
+                     A2L_AXIS_COMPONENT(axis, "Demo axis", "", 0, 100),                                  //
+                     A2L_CURVE_COMPONENT(curve, "Demo curve", "", 0, 2000)                               //
                      // A2L_CURVE_WITH_AXIS_COMPONENT(curve, "Demo curve", "", 0, 100, axis), // CANape >= 24.0
-                     A2L_PARAMETER_COMPONENT(min, "Minimum random number value", "", -100.0, 100.0), //
-                     A2L_PARAMETER_COMPONENT(max, "Maximum random number value", "", -100.0, 100.0), //
-                     A2L_PARAMETER_COMPONENT(counter_max, "Maximum counter value", "", 0, 65535),    //
-                     A2L_PARAMETER_COMPONENT(delay_us, "Mainloop delay time in us", "us", 0, 500000));
+
+    );
 
     // Initialize the global calibration wrapper for the struct 'ParametersT' and set the default values in constant 'kParameters' as reference page (FLASH)
     gCalSeg.emplace("params", &kParameters);
@@ -228,15 +238,19 @@ int main(int argc, char *argv[]) {
     // Main loop
     std::cout << "Starting application main loop... (Press Ctrl+C to exit)" << std::endl;
     while (gRun) {
-        counter++;
         global_counter++;
         {
 #ifdef OPTION_ENABLE_CALIBRATION
             auto params = gCalSeg->lock(); // Don't keep the calibration parameters locked for longer than necessary, to minimize delays of XCP write access from the tool
 #endif
-            kDelayUs = params->delay_us;         // Get the delay_us calibration value
-            if (counter > params->counter_max) { // Get the counter_max calibration value and reset counter
-                counter = 0;
+
+            kDelayUs = params->delay_us; // Get the delay_us calibration value
+
+            if (params->counter_state == StateT::ON) {
+                counter++;
+                if (counter > params->counter_max) { // Get the counter_max calibration value and reset counter
+                    counter = 0;
+                }
             }
         }
 

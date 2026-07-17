@@ -55,6 +55,7 @@ SignalGenerator::SignalGenerator(const char *instance_name, const SignalParamete
 }
 
 SignalGenerator::~SignalGenerator() {
+    running_ = false;
     if (thread_ != nullptr) {
         if (thread_->joinable()) {
             thread_->join();
@@ -82,7 +83,7 @@ void SignalGenerator::Task() {
     A2lCreatePhysMeasurementInstance(instance_name_, time, "Signal generator time", "s", 0, 3600);
     A2lUnlock();
 
-    for (;;) {
+    while (running_) {
 
         time = static_cast<double>(clockGetMonotonicUs()) / 1000000 - start_time; // time in s since start of the signal generator
 

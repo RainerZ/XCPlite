@@ -3,10 +3,17 @@
 All notable changes to XCPlite are documented in this file.
 
 
+## [V2.1.8]
+
+- Added support for enums in build time A2L generation (xcpclient ELF->A2L converter)
+- New example no_a2l_demo_cpp demonstrating build time A2L generation for C++
+- Removed in code definition of _GNU_SOURCE, made it public in CMakeLists.txt
+
+
 ## [V2.1.6]
 
 - Critical bugfix in ´XcpEventExt_´, undefined behaviour when DAQ is not running 
-- Optimizations for microcontroller/RTOS builds, optimized locking (critical section instead of mutex)and static allocated queue (new ´queue32m.c´)
+- Optimizations for microcontroller/RTOS builds, optimized locking (critical section instead of mutex) and static allocated queue (new ´queue32m.c´)
 - Link time, deterministic event id assignment (´tXcpEventDescriptor´ in section ´xcp_evts´)
 - Implemented ´XCP_LIMIT´, XCP_COMMENT and ´XCP_UNIT´ metadata definition to support A2L generation in RTOS use cases (new linker section ´xcp_meta´). See example no_a2l_demo for details
 - ´xcpclient´ tool refactoring and bugfixes, xcp_registry dependency switched back to ´xcplite´ crate main on VectorGrp

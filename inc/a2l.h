@@ -291,7 +291,7 @@ static inline tA2lTypeId A2lGetTypeIdFromPtr_bool(const bool *p) {
         double *: A2L_TYPE_DOUBLE,                                                                                                                                                 \
         const bool *: A2L_TYPE_UINT8,                                                                                                                                              \
         bool *: A2L_TYPE_UINT8,                                                                                                                                                    \
-        default: A2L_TYPE_UNDEFINED)
+        default: A2L_TYPE_UINT8)
 
 #endif // !__cplusplus
 
