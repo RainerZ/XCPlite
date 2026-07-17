@@ -28,9 +28,9 @@
 extern "C" {
 #endif
 
-// #ifndef XCPLIB_CFG_OVERRIDE
-// #error "XCPLIB_CFG_OVERRIDE must be defined to point to the correct configuration override file"
-// #endif
+#ifndef XCPLITE_CONFIGURATION
+#error "XCPLITE_CONFIGURATION must be defined to make sure the correct configuration override file is set"
+#endif                  // XCPLITE_CONFIGURATION
 #include "xcplib_cfg.h" // for OPTION_xxx, must include the correct configuration override file XCPLIB_CFG_OVERRIDE
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

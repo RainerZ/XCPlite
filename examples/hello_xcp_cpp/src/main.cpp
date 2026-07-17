@@ -68,12 +68,12 @@ const ParametersT kParameters = {.delay_us = 1000,
 // This calibration segment has a working page (RAM) and a reference page (FLASH), it creates a MEMORY_SEGMENT in the A2L file
 // It provides safe (thread safe against XCP modifications), lock-free and consistent access to the calibration parameters
 // It supports XCP/ECU independent page switching, checksum calculation and reinitialization (copy reference page to working page)
-std::optional<xcplib::CalSeg<ParametersT>> gCalSeg;
+std::optional<xcp::CalSeg<ParametersT>> gCalSeg;
 // Option 2:
 // This calibration block does not create a MEMORY_SEGMENT in the A2L file
 // It provides safe (thread safe against XCP modifications), lock-free and consistent access to the calibration parameters
 // It supports XCP/ECU page switching, but can not be explicitly controlled via XCP commands
-// std::optional<xcplib::CalBlk<ParametersT>> gCalSeg;
+// std::optional<xcp::CalBlk<ParametersT>> gCalSeg;
 // Option 3:
 // Calibration disabled
 // const ParametersT *params = &kParameters; // Direct access to the calibration parameters constants
