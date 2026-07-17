@@ -106,9 +106,28 @@ echo "" > $LOGFILE
 echo "Step 1: Syncing project to target..."
 rsync -avz --delete \
     --exclude=build/ \
+    --exclude=build-no_a2l/ \
+    --exclude=build-ptp/ \
+    --exclude=build-shm/ \
+    --exclude=build-rtos/ \
+    --exclude=build_freertos/ \
+    --exclude=build_no_a2l_demo/ \
+    --exclude=build_ptptool/ \
+    --exclude=tools/bintool/target/ \
+    --exclude=tools/xcpclient/target/ \
+    --exclude=**/target/ \
+    --exclude=.pio/ \
+    --exclude=node_modules/ \
     --exclude=.git/ \
+    --exclude=.examples/esp32_freertos_demo/.pio/ \
+    --exclude=.venv/ \
     --exclude="*.o" \
     --exclude="*.a" \
+    --exclude="*.mf4" \
+    --exclude="*.elf" \
+    --exclude="*.out" \
+    --exclude="*.bin" \
+    --exclude="*.hex" \
     ./ $TARGET_USER@$TARGET_HOST:$TARGET_PATH/ >> $LOGFILE 2>&1
 
 if [ $? -ne 0 ]; then
