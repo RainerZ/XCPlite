@@ -26,8 +26,9 @@ void signal_handler(int signal) {
 //-----------------------------------------------------------------------------------------------------
 // XCP parameters
 
+#define OPTION_PROJECT_VERSION "109" // EPK version string
+
 constexpr const char OPTION_PROJECT_NAME[] = "no_a2l_demo_cpp"; // Project name, used to build the A2L and BIN file name
-constexpr char OPTION_PROJECT_VERSION[] = "109";                // EPK version string
 constexpr bool OPTION_USE_TCP = false;                          // TCP or UDP
 constexpr uint8_t OPTION_SERVER_ADDR[] = {0, 0, 0, 0};          // Bind addr, 0.0.0.0 = ANY
 constexpr uint16_t OPTION_SERVER_PORT = 5555;                   // Port

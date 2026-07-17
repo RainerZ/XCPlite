@@ -78,7 +78,30 @@ kill $(cat /tmp/xcpdaemon.pid)
 ### Sync, build and install to remote machine
 
 ```sh
-rsync -avz --exclude=build/ --exclude=.git/ ./ rainer@192.168.0.206:~/XCPlite-RainerZ/
+rsync -avz --delete \
+	--exclude=build/ \
+	--exclude=build-no_a2l/ \
+	--exclude=build-ptp/ \
+	--exclude=build-shm/ \
+	--exclude=build-rtos/ \
+	--exclude=build_freertos/ \
+	--exclude=build_no_a2l_demo/ \
+	--exclude=build_ptptool/ \
+	--exclude=tools/bintool/target/ \
+	--exclude=tools/xcpclient/target/ \
+	--exclude='**/target/' \
+	--exclude=.pio/ \
+	--exclude=node_modules/ \
+	--exclude=.git/ \
+	--exclude=.venv/ \
+	--exclude='*.o' \
+	--exclude='*.a' \
+	--exclude='*.mf4' \
+	--exclude='*.elf' \
+	--exclude='*.out' \
+	--exclude='*.bin' \
+	--exclude='*.hex' \
+	./ rainer@192.168.0.206:~/XCPlite-RainerZ/
 ssh rainer@192.168.0.206 "cd ~/XCPlite-RainerZ && cmake -B build -S . && cmake --build build"
 ```
 
