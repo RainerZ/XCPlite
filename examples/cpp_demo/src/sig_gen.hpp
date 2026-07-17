@@ -8,6 +8,7 @@ An instance of class SignalGenerator creates various waveforms, such as sine, sq
 Depending on calibration parameters ampl, phase, offset and period in struct SignalParametersT
 */
 
+#include <atomic>  // for std::atomic
 #include <cstdint> // for uintxx_t
 #include <thread>  // for thread
 
@@ -29,13 +30,13 @@ enum SignalTypeT : uint8_t {
 
 // Signal parameters struct
 struct SignalParametersT {
-    double ampl;                       // Amplitude
-    double phase;                      // Phase shift in radians
-    double offset;                     // Offset
-    double period;                     // Period in seconds
-    lookup_table::LookupTableT lookup; // Lookup table for arbitrary waveforms
-    uint32_t delay_us;                 // Delay in microseconds for the task loop
-    uint8_t signal_type;               // Type of the signal (SignalTypeT)
+    double ampl;                              // Amplitude
+    double phase;                             // Phase shift in radians
+    double offset;                            // Offset
+    double period;                            // Period in seconds
+    lookup_table::LookupTableT lookup;        // Lookup table for arbitrary waveforms
+    uint32_t delay_us;                        // Delay in microseconds for the task loop
+    uint8_t /*enum SignalTypeT*/ signal_type; // Type of the signal (SignalTypeT)
 };
 
 class SignalGenerator {
@@ -43,8 +44,9 @@ class SignalGenerator {
   private:
     xcplib::CalSeg<SignalParametersT> signal_parameters_; // Wrapped signal parameters struct to enable XCP calibration access
 
-    const char *instance_name_; // Instance name
-    std::thread *thread_;       // Thread for the signal generator task
+    const char *instance_name_;       // Instance name
+    std::thread *thread_;             // Thread for the signal generator task
+    std::atomic<bool> running_{true}; // Stop flag for the worker thread
 
     double value_{0};           // Current value
     double normalized_time_{0}; // Current normalized time in [0.0..1.0[
