@@ -27,7 +27,7 @@ void signal_handler(int signal) {
 // XCP parameters
 
 constexpr const char OPTION_PROJECT_NAME[] = "no_a2l_demo_cpp"; // Project name, used to build the A2L and BIN file name
-constexpr const char OPTION_PROJECT_VERSION[] = "109";          // EPK version string
+constexpr char OPTION_PROJECT_VERSION[] = "109";                // EPK version string
 constexpr bool OPTION_USE_TCP = false;                          // TCP or UDP
 constexpr uint8_t OPTION_SERVER_ADDR[] = {0, 0, 0, 0};          // Bind addr, 0.0.0.0 = ANY
 constexpr uint16_t OPTION_SERVER_PORT = 5555;                   // Port
@@ -57,23 +57,27 @@ struct params {
         uint8_t test_field_uint8_array[3];
     } test_par_struct;
 };
-const struct params kParams = {.delay_us = 1000,
-                               .test_par_double = 0.123456789,
-                               .test_par_bool = true,
-                               .test_par_uint64 = 0x1234567812345678,
-                               .test_par_uint32 = 0x1234,
-                               .test_par_uint16 = 0x1234,
-                               .test_par_enum = params::ON,
-                               .test_par_uint8_array = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
-                               .test_par_struct = {2, -2, 0.4f, {0, 1, 2}}};
+const struct params params = {.delay_us = 1000,
+                              .test_par_double = 0.123456789,
+                              .test_par_bool = true,
+                              .test_par_uint64 = 0x1234567812345678,
+                              .test_par_uint32 = 0x1234,
+                              .test_par_uint16 = 0x1234,
+                              .test_par_enum = params::ON,
+                              .test_par_uint8_array = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+                              .test_par_struct = {2, -2, 0.4f, {0, 1, 2}}};
 
-// Define a global calibration parameter segment named 'params' for the calibration parameters in 'const struct params kParams' as default/reference page
-// @@@@ CalSegDecl(params);
-std::optional<xcplib::CalSeg<struct params>> gCalSeg;
+// Declare a global calibration segment name `params', that wraps the constant 'params' for thread-safe and consistent access.
+// This creates:
+//  - a linker-section 'xcp_cals' descriptor used by XcpInit() for registration
+//  - a calibration segment RCU initialized by XcpInit()
+//  - a typed C++ handle 'params_calseg' (naming convention '<struct_name>_calseg') used by the tasks below
+// The offline A2L generator currently assumes that the struct type name and default-parameter variable name (`params`) are identical.
+CalSegDecl(params);
 
-// Example metadata annotations For the calibration parameter 'delay_us' in the params calibration segment
-
+// Metadata annotation option 1:
 // Metadata annotation as comments for Vector A2L Toolset Creator
+// Example metadata annotations For the calibration parameter 'delay_us' in the params calibration segment
 /*
 @@ STRUCTURE = params
 @@ ELEMENT = delay_us
@@ -84,6 +88,7 @@ std::optional<xcplib::CalSeg<struct params>> gCalSeg;
 @@ END
 */
 
+// Metadata annotation option 2:
 // Metadata annotation as code (static data in a special ELF section)
 // Via linker map file and xcpclient tool ELF->A2L generation, not supported by Vector A2L Toolset ELF reader
 // For struct instance fields, use __ as path separator (params__delay_us means params.delay_us)
@@ -92,20 +97,17 @@ std::optional<xcplib::CalSeg<struct params>> gCalSeg;
 XCP_LIMITS(params__delay_us, 1, 10000);
 XCP_UNIT(params__delay_us, "us");
 
-// Define the enum conversion for the calibration parameter test_par_enum
-// @@@@ UNUSED: Remove, enum support now build into xcpclient tool
-// XCP_UNIT(params__test_par_enum, "0 \"OFF\" 1 \"ON\" 2 \"STANDBY\" ");
-
 //-----------------------------------------------------------------------------------------------------
 // Demo global measurement values
 
 // Global measurement variable
-// Modified in function foo
-// Measuring it in main or task, is possible, but asynchronous and may give inconsistent results
-XCP_COMMENT(global_counter, "Global measurement variable"); // Example for meta data annotation as code
 uint16_t global_counter = 0;
 
-// A2L Creator code parser annotation
+// Meta data annotation as code
+// Modified in function foo, measuring it in main or task, is possible, but asynchronous and may give inconsistent results
+XCP_COMMENT(global_counter, "Global measurement variable"); // Example for meta data annotation as code
+
+// Meta data annotation for Vector A2L Creator
 /*
 @@ SYMBOL = global_counter
 @@ DESCRIPTION = "Global measurement variable"
@@ -147,6 +149,7 @@ THREAD_FUNC_RETURN task(void *p) {
     XCP_COMMENT(counter, "Local measurement variable in function task"); // Example for meta data annotation as code
     volatile uint32_t counter = 0;
 
+    // Create a section registered measurement event named "task"
     DaqCreateEvent(task);
 
     while (gRun) {
@@ -154,10 +157,11 @@ THREAD_FUNC_RETURN task(void *p) {
         counter++;
         static_counter++;
 
+        // Trigger the measurement event "task"
         DaqTriggerEvent(task);
 
         // Sleep for a tunable amount of time (not inside the lock for the calibration parameter block, to not block the XCP server or other threads unnecessarily long)
-        uint32_t delay = gCalSeg->lock()->delay_us;
+        uint32_t delay = params_calseg.lock()->delay_us;
         sleepUs(delay);
     }
 
@@ -212,20 +216,16 @@ int main(int argc, char *argv[]) {
     XcpSetLogLevel(OPTION_LOG_LEVEL);
 
     // Create the EPK software version string in an initialized memory section for offline A2L generation
-    // @@@@ XcpCreateEpk(OPTION_PROJECT_VERSION);
+    XcpCreateEpk(OPTION_PROJECT_VERSION);
 
     // Initialize the XCP singleton, activate XCP, must be called before starting the server
-    // @@@@ TODO: Using binary persistence files not supported, | XCP_MODE_PERSISTENCE
     XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
-    XcpSetElfName(argv[0]); // Set ELF file name for upload via GET_ID, optional with OPTION_ENABLE_ELF_UPLOAD
+    XcpSetElfName(argv[0]); // Set ELF file name for upload via GET_ID, optional
 
     // Initialize the XCP Server
     if (!XcpEthServerInit(OPTION_SERVER_ADDR, OPTION_SERVER_PORT, OPTION_USE_TCP, OPTION_QUEUE_SIZE)) {
         return 1;
     }
-
-    // Initialize access to global calibration parameters
-    gCalSeg.emplace("params", &kParams);
 
     // Create threads
     THREAD_HANDLE __t1 = 0;
@@ -244,11 +244,11 @@ int main(int argc, char *argv[]) {
     };
     const struct counter_control kCounterControl = {.counter_max = 1000, .counter_inc = 1};
     // @@@@ CalSegCreate(counter_control);
-    xcplib::CalSeg<struct counter_control> calSeg(
+    xcp::CalSeg<struct counter_control> counter_control_calseg(
         "counter_control",
         &kCounterControl); // Create a local calibration parameter segment for struct 'counter_control' to provide safe and consistent access to the calibration parameters
 
-    // Create a measurement event named "mainloop"
+    // Create a section registered measurement event named "mainloop"
     DaqCreateEvent(mainloop);
 
     // Mainloop
@@ -259,7 +259,7 @@ int main(int argc, char *argv[]) {
         // Calibration segment or block locking is wait-free, locks may be recursive
         // Returns a pointer to the active page (working or reference) of the calibration segment or block
         {
-            auto counter_control = calSeg.lock();
+            auto counter_control = counter_control_calseg.lock();
 
             global_counter += counter_control->counter_inc;
             if (global_counter > counter_control->counter_max) { // Limit the global counter with the counter_max calibration value
@@ -273,7 +273,7 @@ int main(int argc, char *argv[]) {
         // Demonstrate calibration thread safety and consistency
         {
             // Lock the global calibration parameter block gCalSeg for safe access
-            auto params = gCalSeg->lock();
+            auto params = params_calseg.lock();
 
             if (!((params->test_par_uint64 >> 32) == (params->test_par_uint64 & 0xFFFFFFFF))) {
                 printf("Calibration parameter test_par_uint64 is not consistent, value: %016" PRIx64 "\n", params->test_par_uint64);
@@ -292,7 +292,7 @@ int main(int argc, char *argv[]) {
         DaqTriggerEvent(mainloop);
 
         // Sleep for a tunable amount of time (not inside the lock for the calibration parameter block, to not block the XCP server or other threads unnecessarily long)
-        auto delay = gCalSeg->lock()->delay_us;
+        auto delay = params_calseg.lock()->delay_us;
         sleepUs(delay);
 
     } // for (;;)

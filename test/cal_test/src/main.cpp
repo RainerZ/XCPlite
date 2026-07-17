@@ -72,9 +72,9 @@ static ParametersT kParameters = {.run = true, .check = 0, .data = {0}};
 
 // Global calibration segment handle
 #ifdef TEST_CALBLK
-static xcplib::CalBlk<ParametersT> *calseg = nullptr; // Pointer to the calibration segment wrapper
+static xcp::CalBlk<ParametersT> *calseg = nullptr; // Pointer to the calibration segment wrapper
 #else
-static xcplib::CalSeg<ParametersT> *calseg = nullptr; // Pointer to the calibration segment wrapper
+static xcp::CalSeg<ParametersT> *calseg = nullptr; // Pointer to the calibration segment wrapper
 #endif
 
 //-----------------------------------------------------------------------------------------------------
@@ -393,9 +393,9 @@ int main(int argc, char *argv[]) {
 
 // Create the test calibration segment
 #ifdef TEST_CALBLK
-    auto calseg1 = xcplib::CalBlk("kParameters", &kParameters);
+    auto calseg1 = xcp::CalBlk("kParameters", &kParameters);
 #else
-    auto calseg1 = xcplib::CalSeg("kParameters", &kParameters);
+    auto calseg1 = xcp::CalSeg("kParameters", &kParameters);
 #endif
 
     // Add the calibration segment description as a typedef instance to the A2L file

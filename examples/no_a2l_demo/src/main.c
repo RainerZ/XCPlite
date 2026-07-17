@@ -248,7 +248,7 @@ int main(int argc, char *argv[]) {
     // Initialize the XCP singleton, activate XCP, must be called before starting the server
     // @@@@ TODO: Using binary persistence files not supported, | XCP_MODE_PERSISTENCE
     XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
-    XcpSetElfName(argv[0]); // Set ELF file name for upload via GET_ID, optional with OPTION_ENABLE_ELF_UPLOAD
+    XcpSetElfName(argv[0]); // Set ELF file name for upload via GET_ID, optional
 
     // Initialize the XCP Server
     const uint8_t __addr[4] = OPTION_SERVER_ADDR;

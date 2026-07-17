@@ -6,7 +6,7 @@
 #include <cmath>
 
 using namespace PubSubDemoCommon;
-using namespace xcplib; // For CalSeg
+using namespace xcp; // For CalSeg
 
 //-----------------------------------------------------------------------------------------------------
 // Tunable and persistent calibration parameters

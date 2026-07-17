@@ -16,15 +16,13 @@
 #include <mutex> // for std::once_flag, std::call_once
 
 #include "xcplib_cfg.h" // for OPTION_xxx, must include the correct configuration override file XCPLIB_CFG_OVERRIDE
-// #ifndef XCPLIB_CFG_OVERRIDE
-// #error "XCPLIB_CFG_OVERRIDE must be defined to point to the correct configuration override file"
-// #endif
+#ifndef XCPLITE_CONFIGURATION
+#error "XCPLITE_CONFIGURATION must be defined to make sure the correct configuration override file is set"
+#endif // XCPLITE_CONFIGURATION
 #include <xcplib.h>
 #ifdef OPTION_ENABLE_A2L_GENERATOR
 #include <a2l.h>
 #endif // OPTION_ENABLE_A2L_GENERATOR
-
-namespace xcplib = xcp; // Compatibility with V1.1.0 and earlier, where xcplib was used as the namespace
 
 // If A2L generation build option is turned off, we do not set segment address mode for the A2L generator
 #ifndef OPTION_ENABLE_A2L_GENERATOR
@@ -245,7 +243,7 @@ template <typename T> class CalBlk {
 
 /// Convenience macro to create a calibration segment with automatic name stringification
 /// Usage: auto calseg = CalSegCreate(initial_value);
-#define CalSegCreate(value) xcplib::CalSeg<decltype(value)>(#value, &value)
+#define CalSegCreate(value) xcp::CalSeg<decltype(value)>(#value, &value)
 
 /// Declare a section-registered global calibration segment and create a typed C++ handle.
 /// Usage: CalSegDeclRef(parameters, parameters_calseg); auto parameters = parameters_calseg.lock();
@@ -253,14 +251,14 @@ template <typename T> class CalBlk {
     static tXcpCalSegIndex calseg_id_##value = XCP_UNDEFINED_CALSEG;                                                                                                               \
     static const tXcpCalSegDescriptor calseg__##value __asm__("calseg__" #value)                                                                                                   \
         XCP_CAL_SECTION_ATTR = {#value, (const void *)&value, &calseg_id_##value, sizeof(value), XCP_CALSEG_TYPE_SEGMENT};                                                         \
-    static const xcplib::CalSegRef<decltype(value)> handle(&calseg_id_##value, &value)
+    static const xcp::CalSegRef<decltype(value)> handle(&calseg_id_##value, &value)
 
 /// Declare a section-registered global calibration segment and create a typed C++ handle named <value>_calseg.
 #define CalSegDecl(value) CalSegDeclRef(value, value##_calseg)
 
 /// Convenience macro to create a calibration value with automatic name stringification
 /// Usage: auto calval = CalVal(initial_value);
-#define CalBlkCreate(value) xcplib::CalBlk<decltype(value)>(#value, &value)
+#define CalBlkCreate(value) xcp::CalBlk<decltype(value)>(#value, &value)
 
 } // namespace xcp
 

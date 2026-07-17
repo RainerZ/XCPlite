@@ -3,7 +3,7 @@
 #include "ApplicationBase.hpp"
 #include "XcpHelper.hpp"
 
-using namespace xcplib; // For CalSeg
+using namespace xcp; // For CalSeg
 
 //-----------------------------------------------------------------------------------------------------
 // Demo global measurement values

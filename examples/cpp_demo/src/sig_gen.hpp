@@ -12,7 +12,7 @@ Depending on calibration parameters ampl, phase, offset and period in struct Sig
 #include <cstdint> // for uintxx_t
 #include <thread>  // for thread
 
-#include "xcplib.hpp" // for xcplib::CalSeg
+#include "xcplib.hpp" // for xcp::CalSeg
 
 #include "lookup.hpp" // for lookup_table::LookupTableT
 
@@ -42,7 +42,7 @@ struct SignalParametersT {
 class SignalGenerator {
 
   private:
-    xcplib::CalSeg<SignalParametersT> signal_parameters_; // Wrapped signal parameters struct to enable XCP calibration access
+    xcp::CalSeg<SignalParametersT> signal_parameters_; // Wrapped signal parameters struct to enable XCP calibration access
 
     const char *instance_name_;       // Instance name
     std::thread *thread_;             // Thread for the signal generator task
