@@ -28,6 +28,11 @@
 extern "C" {
 #endif
 
+// #ifndef XCPLIB_CFG_OVERRIDE
+// #error "XCPLIB_CFG_OVERRIDE must be defined to point to the correct configuration override file"
+// #endif
+#include "xcplib_cfg.h" // for OPTION_xxx, must include the correct configuration override file XCPLIB_CFG_OVERRIDE
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // XCP on Ethernet server
 
@@ -734,10 +739,12 @@ const char *XcpGetProjectName(void);
 const char *XcpGetEcuEpk(void); // Only in SHM mode different to XcpGetLocalEpk(), which is for the application, while XcpGetEcuEpk() is for the overall ECU
 const char *XcpGetLocalEpk(void);
 
+#ifdef OPTION_ENABLE_A2L_GENERATOR
 // A2L file name
 // Notify XCPlite there is a valid A2L with this name to be provided for upload via XCP command GET_ID
 void XcpSetA2lName(const char *name);
 const char *XcpGetA2lName(void);
+#endif // OPTION_ENABLE_A2L_GENERATOR
 
 // ELF file name
 // Notify XCPlite there is a valid ELF with this pathname to be provided for upload via XCP command GET_ID
@@ -826,6 +833,7 @@ void clockGetPrintStatistic(void);
 // Variadic C event trigger convinience macros DaqEventVar and DaqEventExtVar
 // Option to create event, register measurements and trigger event in one call
 
+#ifdef OPTION_ENABLE_A2L_GENERATOR
 #ifndef __cplusplus
 
 #define A2L_MEAS_PHYS
@@ -969,3 +977,4 @@ void clockGetPrintStatistic(void);
     } while (0)
 
 #endif // !__cplusplus
+#endif // OPTION_ENABLE_A2L_GENERATOR

@@ -301,9 +301,7 @@ int main(int argc, char *argv[]) {
     if (__t1)
         join_thread(__t1);
 
-    XcpDisconnect(); // Force disconnect the XCP client
-    A2lFinalize();   // Finalize A2L generation, if not done yet
-    // XcpFreeze(); // Save current calibration changes to binary persistence file
+    XcpDisconnect();        // Force disconnect the XCP client
     XcpEthServerShutdown(); // Stop the XCP server
 
     return 0;
