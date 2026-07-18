@@ -63,7 +63,7 @@ show_usage() {
     echo "  $0 tests                            # Tests, default config, debug"
     echo "  $0 shm tools                        # shm config: shmtool + xcpdaemon"
     echo "  $0 ptp tools                        # ptp config: ptptool (Linux only)"
-    echo "  $0 no_a2l examples                  # no_a2l config: no_a2l_demo"
+    echo "  $0 no_a2l examples                  # no_a2l config: no_a2l_demo, no_a2l_demo_cpp"
     echo "  $0 rtos examples                    # rtos config: freertos_demo (Linux/macOS only)"
     echo "  $0 lib install                      # Library only, install to build/install"
     echo "  $0 release lib install=/usr/local   # Release build, install to /usr/local"
@@ -298,7 +298,7 @@ case "$CONFIGURATION" in
             || echo "  Tools         : (not built)"
         ;;
     no_a2l)
-        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : no_a2l_demo" \
+        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : no_a2l_demo, no_a2l_demo_cpp" \
             || echo "  Examples      : (not built)"
         echo "  Tests         : (none for no_a2l configuration)"
         echo "  Tools         : (none for no_a2l configuration)"

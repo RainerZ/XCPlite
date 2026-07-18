@@ -117,8 +117,7 @@ firmware, regardless of whether that code path has executed at the time of A2L g
 
 #### `xcp_cals` section — calibration segment descriptors
 
-Every `CalSegDecl(name)` + `CalSegCreate(name)` pair (or `CalSegDecl(name)` at file scope)
-emits a `tXcpCalSegDescriptor` constant into the `.xcp_cals` section:
+Every `CalSegDecl(name)` + `CalSegCreate(name)` pair (or `CalSegDecl(name)` at file scope) emits a `tXcpCalSegDescriptor` constant into the `.xcp_cals` section:
 
 ```c
 // What CalSegDecl(params) + CalSegCreate(params) expands to (simplified):

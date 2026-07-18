@@ -49,7 +49,7 @@ Demonstrates using XCPlite without on-target runtime A2L generation.
 Offline A2L generation is performed using the XCPlite specific A2L generator/creator tool (xcpclient) during the build process and ELF/DWARF linker file informations.  
 Does not need file system support on the target and A2L upload.  
 
-### [no_a2l_demo_cpp](no_a2l_demo/README.md)
+### [no_a2l_demo_cpp](no_a2l_demo_cpp/README.md)
 
 C++ version of no_a2l_demo.  
 
