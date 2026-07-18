@@ -126,8 +126,10 @@ To make this work correctly, follow these rules:
 3. **Build with debug information** (`-g` / `CMAKE_BUILD_TYPE=Debug` or `RelWithDebInfo`).
    xcpclient reads DWARF; stripped builds have no type or location data.
 
-4. **`CalSegDecl` must be at file scope** (outside any function) so the descriptor is
-   allocated for the program lifetime and xcpclient can find it.
+4. **Prefer file-scope `CalSegDecl` / `CalSegDeclRef`** so the descriptor is clearly
+    visible and allocated for program lifetime. A local-scope `CalSegDeclRef` is also
+    valid when used intentionally to keep visibility local, as long as the default
+    object has static storage duration.
 
 For the full ELF/DWARF mechanics — section layouts, the `trg__` anchor naming convention,
 and address encoding — see
@@ -174,14 +176,11 @@ The following API subset remains fully available and is unchanged:
 
 ### C++ RAII calibration wrapper (`xcplib.hpp`)
 
-For C++ no-A2L builds, use `CalSegDeclRef` or `CalSegDecl` — these emit the `xcp_cals`
-section descriptor (like the C `CalSegDecl`) and additionally create a typed `CalSegRef<T>`
-RAII handle. Registration is done by `XcpInit()` from the section data; no runtime
-`XcpCreateCalSeg()` call is needed.
+For C++ no-A2L builds, use `CalSegDeclRef` or `CalSegDecl` — these emit the `xcp_cals` section descriptor (like the C `CalSegDecl`) and additionally create a typed `CalSegRef<T>` RAII handle. Registration is done by `XcpInit()` from the section data; no runtime `XcpCreateCalSeg()` call is needed. File scope is the recommended default; local-scope `CalSegDeclRef` is supported for intentionally local visibility.
 
 | Macro / Class | Emits to ELF | Purpose |
 |---|---|---|
-| `CalSegDeclRef(val, handle)` | `xcp_cals` (at file scope) | Declare section descriptor + create named `CalSegRef<T>` handle |
+| `CalSegDeclRef(val, handle)` | `xcp_cals` (file scope recommended; local scope supported) | Declare section descriptor + create named `CalSegRef<T>` handle |
 | `CalSegDecl(val)` | `xcp_cals` (at file scope) | Shorthand — handle is named `val##_calseg` |
 | `handle.lock()` | — | Lock and return `CalSegGuard` (RAII `const T *`, auto-unlocks) |
 

@@ -72,7 +72,7 @@ const struct params params = {.delay_us = 1000,
 // This creates:
 //  - a linker-section 'xcp_cals' descriptor used by XcpInit() for registration
 //  - a calibration segment RCU initialized by XcpInit()
-//  - a typed C++ handle 'params_calseg' (naming convention '<struct_name>_calseg') used by the tasks below
+//  - a typed C++ handle 'params_calseg' (naming convention '<struct_name>_calseg') with static lifetime and file scope, used by the tasks below
 // The offline A2L generator currently assumes that the struct type name and default-parameter variable name (`params`) are identical.
 CalSegDecl(params);
 
@@ -228,6 +228,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // Create a local scope calibration segment named 'counter_control'
+    // For the calibration parameter constants in 'const struct counter_control counter_control' as default/reference
+    // page Use CalSegDeclRef to give the calibration segment handle a different name
+    struct counter_control {
+        uint16_t counter_max;
+        uint16_t counter_inc;
+    };
+    static const struct counter_control counter_control = {.counter_max = 1000, .counter_inc = 1};
+    CalSegDeclRef(counter_control, counter_control_calseg);
+
     // Create threads
     THREAD_HANDLE __t1 = 0;
     create_thread(&__t1, NULL, task, NULL);
@@ -238,17 +248,6 @@ int main(int argc, char *argv[]) {
     XCP_COMMENT(static_counter, "Static local measurement variable in main");
     volatile static uint16_t static_counter = 0;
 
-    // Local calibration parameters
-    struct counter_control {
-        uint16_t counter_max;
-        uint16_t counter_inc;
-    };
-    const struct counter_control kCounterControl = {.counter_max = 1000, .counter_inc = 1};
-    // @@@@ CalSegCreate(counter_control);
-    xcp::CalSeg<struct counter_control> counter_control_calseg(
-        "counter_control",
-        &kCounterControl); // Create a local calibration parameter segment for struct 'counter_control' to provide safe and consistent access to the calibration parameters
-
     // Create a section registered measurement event named "mainloop"
     DaqCreateEvent(mainloop);
 
@@ -256,7 +255,7 @@ int main(int argc, char *argv[]) {
     printf("Start main loop...\n");
     while (gRun) {
 
-        // Lock the local calibration parameter block calSeg for safe access
+        // Lock local calibration parameter segment calSeg for safe access
         // Calibration segment or block locking is wait-free, locks may be recursive
         // Returns a pointer to the active page (working or reference) of the calibration segment or block
         {

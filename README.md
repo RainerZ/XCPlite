@@ -55,6 +55,7 @@ Multiple examples demonstrating different features are available in the [example
 
 **Advanced examples:**
 - [no_a2l_demo](examples/no_a2l_demo/README.md) - Linux workflow without runtime A2L generation (offline A2L generation from ELF file by using the included xcpclient tool)
+- [no_a2l_demo_cpp](examples/no_a2l_demo_cpp/README.md) - C++ no-A2L workflow with offline A2L generation from ELF via xcpclient
 - [freertos_demo](examples/freertos_demo/README.md) - FreeRTOS/lwip demo applications for STM32, ESP32 and the FreeRTOS POSIX simulator (Linux)
 - [silkit_demo](examples/silkit_demo/README.md) - SIL-Kit multi-participant measurement and calibration (via shared memory (SHM mode))
 - [ptp4l_demo](examples/ptp4l_demo/README.md) - Using a PTP synchronized clock as XCP timestamp source

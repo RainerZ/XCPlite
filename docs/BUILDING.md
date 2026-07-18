@@ -41,7 +41,7 @@ Within a chosen configuration, the following options control what gets built:
 | Configuration | Examples (`BUILD_EXAMPLES`) | Tests (`BUILD_TESTS`) | Tools (`BUILD_TOOLS`) |
 |---------------|-----------------------------|-----------------------|-----------------------|
 | `default` | hello_xcp, hello_xcp_cpp, c_demo, cpp_demo, point_cloud_demo, struct_demo, multi_thread_demo, ptp4l_demo¹, bpf_demo¹² | a2l_test, cal_test, daq_test, clock_test, queue_test, xcp_test, type_detection_test_* | *(none)* |
-| `no_a2l` | no_a2l_demo | *(none)* | *(none)* |
+| `no_a2l` | no_a2l_demo, no_a2l_demo_cpp | *(none)* | *(none)* |
 | `ptp` | ptp4l_demo¹ | clock_test | ptptool¹ |
 | `shm` | hello_xcp (SHM), hello_xcp_cpp (SHM) | *(none)* | shmtool, xcpdaemon³ |
 | `rtos` | freertos_emu_demo³ (downloads FreeRTOS-Kernel) | *(none)* | *(none)* |
@@ -105,7 +105,7 @@ Examples:
 # ptp config: ptptool (Linux only)
 ./build.sh ptp tools
 
-# no_a2l config: no_a2l_demo
+# no_a2l config: no_a2l_demo, no_a2l_demo_cpp
 ./build.sh no_a2l examples
 
 # rtos config: freertos_demo (Linux/macOS only)
@@ -157,7 +157,7 @@ cmake --build build --parallel
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DXCPLITE_BUILD_TESTS=ON
 cmake --build build --parallel
 
-# no_a2l configuration — library + no_a2l_demo
+# no_a2l configuration — library + no_a2l_demo + no_a2l_demo_cpp
 cmake -B build-no_a2l -S . -DXCPLITE_CONFIGURATION=no_a2l -DXCPLITE_BUILD_EXAMPLES=ON
 cmake --build build-no_a2l --parallel
 
