@@ -1,4 +1,4 @@
-# no_a2l_demo_cpp Demo
+# no_a2l_demo_cpp - XCPlite example
 
 Demonstrates XCPlite usage in C++ without runtime on-target A2L database generation.
 Requires xcpclient tool or manual A2L generation from ELF file.

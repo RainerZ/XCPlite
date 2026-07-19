@@ -8,16 +8,18 @@ XCP is a data acquisition (measurement) and parameter tuning (calibration) proto
 
 XCPlite extends XCP use cases beyond traditional embedded microcontrollers to **modern multicore microprocessors** and SoCs running POSIX-compliant operating systems (Linux, QNX) or real-time operating systems (RTOS) such as FreeRTOS or ThreadX.
 
-Designed exclusively for the **XCP on Ethernet Transport Layer** (TCP or UDP with jumbo frames), XCPlite solves the challenges of measurement and calibration in systems with true parallelism and multithreading:
+Designed exclusively for the **XCP on Ethernet Transport Layer** (using TCP or UDP socketswith jumbo frames), XCPlite solves the challenges of measurement and calibration in systems with true parallelism and multithreading:
 
+- **Relative Addressing** - Measure and calibrate variables in any storage location: on stack, heap, thread-local, and global memory using relative addressing schemes and event driven data access
 - **Thread-safe & lock-free** - Consistent data acquisition and parameter modification across multiple cores, free of blocking and inter-thread contention
-- **Memory-safe** - Measure and calibrate variables in any storage location: stack, heap, thread-local, and global
 - **Deterministic runtime and low resource consumption** - No heap allocations, static memory usage, zero copy and predictable execution times for real-time applications
-- **Runtime A2L generation and download** - Define events, measurements and parameters, with metadata as code; the description file (A2L format) is generated on target runtime and downloaded from target automatically
+- **Runtime A2L generation and download** - Define events, measurements and parameters, with metadata as code; the description file (A2L format, see note below) is generated on target and downloaded from target automatically
 - **Buildtime A2L generation** - Define events and calibration parameters as code and use an code instrumentation aware ELF->A2L generator during buildtime
 - **Complex type support** - Handles basic types, structs, arrays, and nested structures
 - **Calibration segments** - Page switching, consistent atomic modification, and parameter persistence
 - **PTP timestamps** - Prepared for high-precision PTP synchronized timestamps
+
+Note: An **A2L file** is a tool- and human-readable standardized description of the ECU measurements, parameters, data types, units, limits and communication settings, - comparable to a manifest that tells measurement and calibration tools what exists and how to access it.
 
 Compared to many other logging, tracing, observability, or telemetry solutions, XCPlite reaches the above goals by accessing variables in global memory, stack or heap with their original ABI, without unnecessary copying, buffering or reserialization.  
 
@@ -28,19 +30,24 @@ XCPlite > v2.1 is optimized for 64-bit microprozessor and 32-bit microcontroller
 
 XCPlite requires C 11 and C++ 17.  
 
-libxcplite serves as the C library foundation for the experimental [XCP-Lite Rust](https://github.com/vectorgrp/xcp-lite) API.  
+libxcplite serves as the C library foundation for the experimental [XCP-Lite Rust](https://github.com/vectorgrp/xcp-lite) API.   
+
+XCPlite for Rust demonstrates that direct-memory measurement and calibration can be implemented while preserving Rust safety guarantees. It also showcases advanced Rust features, including a derive macro that reflects types and provides metadata attributes for A2L generation. It demonstrates measurement of container types with variable size. It has an in memory registry for all A2L artifacts and supports serialization to non binary parameter persistence formats (JSON). 
 
 
-## Other XCP Implementations
+## Tool Compatibility
 
-- **XCPbasic** - Free implementation for smaller Microcontrollers (8-bit+), optimized for CAN
-- **XCPprof** - Commercial product in Vector's AUTOSAR MICROSAR and CANbedded portfolio
+XCPlite is XCP >1.4 compliant and interoperates with CANape, CANoe, and other third-party ASAM-compliant XCP tools and data loggers. It is tested regularly with CANape 23+.
 
-## New to XCP?
+For save operation, the client tool must respect fixed event definitions and handle address extensions correctly, because XCPlite uses them to encode relative memory addressing. The address extension and address together can be treated as an opaque handle that identifies a data object. Disrespecting this could lead to inconsistent or corrupt data acquisition or parameter modification.
+If a tool understands ABI details of complex data instances, it may still perform the usual address calculations for individual fields, array elements, or merge memory ranges to optimize upload, download, and data acquisition.  
 
-See the [detailed XCP introduction](docs/XCP_INTRODUCTION.md) or visit:  
-- [Vector XCP Book](https://www.vector.com/int/en/know-how/protocols/xcp-measurement-and-calibration-protocol/xcp-book#)
-- [Virtual VectorAcademy E-Learning](https://elearning.vector.com/)
+General-purpose A2L editors/creators typically cannot reconstruct XCPlite-specific relative address encoding automatically. For offline generation, use the XCPlite-aware xcpclient workflow described in the [technical documentation](docs/TECHNICAL.md).  
+
+Support for A2L TYPEDEF and shared axis references with `this.` is beneficial, but not strictly required.
+
+Support for A2L upload via GET_ID is useful, but in most cases the A2L file generated by the XCPlite on-target A2L creator is stable per build, which means the generated A2L does not change when the application is started again. Note that there are some more experimental examples which showcase dynamic per thread event creation for thread local data, where this is not true. In this case, the A2L needs to be uploaded always, not only on build version (EPK) change. 
+
 
 
 ## Getting Started
@@ -70,7 +77,7 @@ For detailed information about each example and how to set up CANape projects, s
 
 **Requirements:**
 
-XCPlite examples are designed to showcase advanced CANape capabilities and are tested with **CANape 23+** (free demo version available).  
+Some XCPlite examples are designed to showcase advanced CANape capabilities and are tested with **CANape 23+** (free demo version available).  
 The examples leverage:
 
 - **Runtime A2L creation and upload** - No manual A2L file management required
@@ -99,6 +106,20 @@ Details how to build for Linux, QNX, macOS, and Windows are in the [building doc
 - **[Technical Details](docs/TECHNICAL.md)** - Addressing modes, A2L generation, instrumentation costs
 - **[Building](docs/BUILDING.md)** - Detailed build instructions
 - **[XCP Introduction](docs/XCP_INTRODUCTION.md)** - What is XCP?
+
+
+## Other XCP Implementations
+
+- **XCPbasic** - Free implementation for smaller Microcontrollers (8-bit+), optimized for CAN
+- **XCPprof** - Commercial product in Vector's AUTOSAR MICROSAR and CANbedded portfolio
+
+
+## New to XCP?
+
+See the [detailed XCP introduction](docs/XCP_INTRODUCTION.md) or visit:  
+- [Vector XCP Book](https://www.vector.com/int/en/know-how/protocols/xcp-measurement-and-calibration-protocol/xcp-book#)
+- [Virtual VectorAcademy E-Learning](https://elearning.vector.com/)
+
 
 ## License
 
