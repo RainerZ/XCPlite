@@ -1,6 +1,6 @@
 # XCPlite Examples
 
-This directory contains various examples demonstrating different features and capabilities of XCPlite.
+This folder contains various examples demonstrating different features and capabilities of XCPlite.  
 
 ## Getting Started
 
@@ -9,19 +9,27 @@ To get started, take a first look at the C example `hello_xcp` or at `hello_xcp_
 
 ### Example CANape Projects
 
-There is a CANape project for each example in a directory folder `<ExampleFolder>/CANape` or `<ExampleFolder>/CANape_Project`.  
-To load a project into CANape, select load project and navigate to the file `CANape.ini` in this "project" folder.  
-All CANape project examples (execpt no_a2l and free_rtos demos) are configured to provide downloading the A2L file from target ECU via XCP upload commands (XCP has unusual naming conventions, the target ECU technically is the UDP/TCP server, but the commands to read data from target it are called upload). The IP address of the XCP server is stored in the A2L file "uploaded" last time. If CANape can not connect, check that the correct IP address is configured in "Device Configuration/Devices/<DeviceName>/Protocol/Transport Layer".  
+There is a CANape project for each example in a directory folder `<ExampleFolder>/CANape`.  
+To load a project into CANape, select `load project` and navigate to the file `CANape.ini` in the "project" folder.  
+All CANape project examples (except no_a2l and free_rtos demos) are configured to provide downloading the A2L file from target ECU via XCP upload commands (Note: XCP has unusual naming conventions, the target ECU technically is the UDP/TCP server, but the commands to read data from target are called "upload").  
+The IP address of the XCP server may be cached by CANape or stored in the A2L file. If CANape can not connect, check that the correct IP address is configured in "Device Configuration/Devices/<DeviceName>/Protocol/Transport Layer".  
 
-The examples should run with a CANape demo version, which can be downloaded from <https://www.vector.com/de/de/support-downloads/download-center>.
-The demo installation must be explicitly enabled in the installer and has some limitations:  
-It will store only the first seconds of measurement data and the number of measurement signals is limited.
+The examples should run with a CANape demo version, which can be downloaded from <https://www.vector.com/de/de/support-downloads/download-center>. The demo installation must be explicitly enabled in the installer and has some limitations: It will store only the first seconds of measurement data and the number of measurement signals is limited.
 
 
 
 ## Examples
 
-Note that examples may need different library build configurations. There are different build directories for each library configuration used. Default is build/.  
+Note that examples targets may need different XCPlite library build configurations. There are different build directories for each library configuration used: 
+
+```bash
+   cmake -B build        -S . -DXCPLITE_CONFIGURATION=default   # (or omit for default)
+   cmake -B build-no_a2l -S . -DXCPLITE_CONFIGURATION=no_a2l    # for no_a2l_demo and no_a2l_demo_cpp
+   cmake -B build-ptp    -S . -DXCPLITE_CONFIGURATION=ptp       # for ptp4l_demo
+   cmake -B build-shm    -S . -DXCPLITE_CONFIGURATION=shm       # for silkit_demo
+   cmake -B build-rtos   -S . -DXCPLITE_CONFIGURATION=rtos      # for freertos_demo with the FreeRTOS POSIX simulator
+```
+
 
 ### [hello_xcp](hello_xcp/README.md)
 
@@ -46,13 +54,13 @@ An example in C++ using more idiomatic C++ to demonstrate the capabilities of th
 ### [no_a2l_demo](no_a2l_demo/README.md)
 
 Demonstrates using XCPlite without on-target runtime A2L generation.  
-Offline A2L generation is performed using the XCPlite specific A2L generator/creator tool (xcpclient) during the build process and ELF/DWARF linker file informations.  
+Offline A2L generation is performed using the XCPlite specific A2L generator/creator tool (built into xcpclient) during the build process and ELF/DWARF linker file informations.
 Does not need file system support on the target and A2L upload.  
 
 ### [no_a2l_demo_cpp](no_a2l_demo_cpp/README.md)
 
 C++ version of no_a2l_demo.  
-
+    
 
 ### [freertos_demo](freertos_demo/README.md)
 
@@ -60,15 +68,6 @@ Demonstrates XCPlite running inside FreeRTOS tasks on 32 bit microcontrollers.
 Examples for STM32 and ESP32 microcontrollers, and the FreeRTOS POSIX simulator on Linux.  
 Shows how to use XCPlite in a real-time operating system with multiple tasks, and how to share parameters among tasks.  
 Uses the offline A2L generator tool (xcpclient).    
-
-
-### [external_example](external_example/README.md)
-
-**Demonstrates using libxcplite as a pre-built external library** - independent from the main build system.  
-- Shows how to build against an installed libxcplite binary (system-wide or local staging).  
-- Independent CMakeLists.txt using `find_package(libxcplite)`.  
-- Typical workflow for production deployments where libxcplite is distributed as a library package.  
-- No system installation required for development - uses local staging directory.  
 
 
 ### [silkit_demo](silkit_demo/README.md)
@@ -80,6 +79,15 @@ Builds against a pre-built libxcplite and silkit library
 ### [ptp4l_demo](ptp4l_demo/README.md)
 
 Demonstrates how to use a PTP (Precision Time Protocol) synchronized clock as XCP data acquisition timestamp source.  
+
+
+### [external_example](external_example/README.md)
+
+**Demonstrates using libxcplite as a pre-built external library** - independent from the main build system.  
+- Shows how to build against an installed libxcplite binary (system-wide or local staging).  
+- Independent CMakeLists.txt using `find_package(libxcplite)`.  
+- Typical workflow for production deployments where libxcplite is distributed as a library package.  
+- No system installation required for development - uses local staging directory.  
 
 
 ### [c_demo](c_demo/README.md)

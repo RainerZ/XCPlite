@@ -1,30 +1,31 @@
-# no_a2l_demo Demo
+# no_a2l_demo - XCPlite example
 
 Demonstrates XCPlite usage without runtime on-target A2L database generation.
 
-libxcplite can be built without A2L generation and persistence support, reducing code size
+libxcplite can be built without support for A2L generation and persistency, reducing code size
 and file system dependencies for microcontroller / RTOS targets (FreeRTOS, Zephyr, ThreadX, ...).
 The configuration is applied via `xcplib_no_a2l_cfg.h` using the `XCPLIB_CFG_OVERRIDE` mechanism —
 see the [Library Configuration Override](#library-configuration-override) section below.
 
-The A2L database is instead generated offline by the `xcpclient` tool (ELF/DWARF → A2L converter),
-which is part of this repository under `tools/xcpclient/`.
-
+The A2L database is instead generated offline by a tool.  
+The `xcpclient` test tool, which is part of this repository under `tools/xcpclient/`, includes an XCPlite-specific ELF->A2L generator that reads the ELF file and DWARF debug information to create a complete, plug&play A2L database for the application.  
 
 
 ## The XCPlite Build Time A2L Generation Concept
   
-The fundamental idea is to provide a specialized A2L database creator (ELF -> A2L converter) designed exclusively for XCPlite.  
-The XCPlite A2L creator knows implementation details of the XCPlite code instrumentation library to automate the A2L generation process as much as possible:  
-- It automatically detects all events and calibration memory segments created by the XCPlite instrumentation macros.
+The fundamental idea is to provide additional compile-time and link-time information in the ELF file, which is used by a specialized A2L database creator (ELF -> A2L converter) designed exclusively for XCPlite. The XCPlite A2L creator knows implementation details of the XCPlite code instrumentation library to automate the A2L generation process as much as possible:  
+- It automatically detects all events and calibration memory segments created by the XCPlite code instrumentation API macros.
 - It detects the code locations of the event trigger points and automatically associates local and member variables with complex types existing in each events scope.  
 - It can add metadata for calibration parameters and measurement variables, such as physical units, min/max limits, and scaling information.
 
+In addition to that, the information generated at link time is used by the XCPlite runtime to register events and calibration segments with deterministic order and indexing. Events and calibration segments may be declared anywhere in the code, the A2L file will remain stable, independent of code execution order.
 
-The test XCP client in the xcpclient tool can work with the ELF file directly, no need for a separate A2L file. 
+The test XCP client in the xcpclient tool can work with the ELF file directly, no need for a separate A2L file. The A2L file is needed for tools like CANape, which support the XCP protocol in the standard way.
 
 
-### Concept of the xcpclient A2L Creator
+
+
+### Using of the xcpclient A2L Creator
 
 An XCPlite specific A2L creator/writer with ELF/DWARF reader is built into the xcpclient tool.  
 
@@ -35,24 +36,26 @@ Option 1: A2L template generation:
 
 Option 2: Full A2L content generation:
 
-- Add calibration parameters
+- Calibration parameters
     Option 1: #undef OPTION_CAL_SEGMENTS_ABS
-        XCP configured for segment relative addressing mode
-        Detect calibration parameters by their segment number and offset.
+        XCP is configured for segment relative addressing mode
+        Address calibration parameters by their segment number and offset.
+        This is the preferred option for 64-bit microprocessors, where the calibration segments may be located anywhere in the 64-bit address space.
     Option 2: #define OPTION_CAL_SEGMENTS_ABS
         XCP configured for absolute calibration segment addressing
         This is the preferred option for microcontrollers
         The reference pages of all calibration parameters must be in addressable (4 GB - 32bit) global memory (.bss or .rodata segment must be in this range)
         Detect calibration parameters by the address of their default/reference page by naming convention and segment marker variable
 
-- Add measurement variables
-    Global or static measurements must be in addressable (4 GB - 32bit) global memory (.bss segment must be in this range)
-    Takes all global, static and local variables into account in specified compilation units
-    Try to detect an appropriate fixed event for each variable by detecting a event trigger in the same function, if not use the unsafe default event named `async` as default event
+- Measurement variables
+    Global or static measurement variables are restricted to be in a addressable (4 GB - 32bit) global memory range. A2L addresses are relative in this range
+    Local variables on stack are measured by knowing their CFA offset in the current stack frame, and variables on heap are addressed relative to explicitly given anchor addresses
+    The creator takes all global, static and local variables into account in specified compilation units
+    It tries to detect an appropriate fixed event for each variable by detecting an event trigger in the same function, if not it uses the unsafe default event named `async` as default event
 
-- Add all types required as TYPEDEF_STRUCTURE
+- Add all types required for the variables found as TYPEDEF_STRUCTURE
 
-Content generation step 2 can alternatively be done manually, with any other A2L tool from Vector or open source
+Content generation in Option 2 can alternatively be done manually, with any other A2L tool from Vector or open source tools.  
 
 
 
@@ -264,8 +267,7 @@ a2ltool  --update --measurement-regex "counter"  --characteristic-regex "params"
 
 ### TODO List and open issues
 
-- Add C++, name spaces, classes, member functions, ...
-- The A2L creator may create the BOOL conversion rule and detect the size of the bool type
+- Improve how to deal with enum size
 - Heap measurement variables
     The A2L creator can not handle heap variables yet
     Needs to detect trg__AAS or trg__AASD type and analyze the argument type of DaqTriggerEvent(), pointer to type

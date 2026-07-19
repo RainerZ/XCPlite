@@ -154,7 +154,7 @@ template <typename CounterType> struct CounterControllerParamsTemplate {
     CounterState state;
 };
 
-// Parameterized counter controller class template
+// Parameterized counter controller class template over the counter type and the parameter set type
 template <typename CounterType, typename ParamsType> class CounterController {
   public:
     using CalSegHandle = xcp::CalSegRef<const ParamsType>;
@@ -328,7 +328,7 @@ int main(int argc, char *argv[]) {
         counter_controller.step(counter);
         counter_controller.step(static_counter);
 
-        // Demonstrate calibration thread safety and consistency
+        // Demonstrate calibration thread safety and consistency (typical concern on 32 bit microcontrollers)
         {
             // Lock the global calibration parameter block gCalSeg for safe access
             auto params = params_calseg.lock();
