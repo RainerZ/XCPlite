@@ -147,7 +147,7 @@ echo "==========================================================================
 echo "Start a test measurement"
 ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./$TARGET_BUILD_DIR/$TARGET_BINARY" &
 sleep 1
-$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE" --list-mea . --list-cal . --mea counter --time 3 --verbose 2
+$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --list-cal . --list-mea . --time 1 --verbose 2
 ssh "$TARGET_USER@$TARGET_HOST" "pkill -f no_a2l_demo_cpp" 
 
 fi

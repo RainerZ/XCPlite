@@ -1,7 +1,8 @@
-﻿// no_a2l_demo XCPlite example
+﻿// no_a2l_demo - XCPlite example
 // Demonstrates XCPlite operation without runtime A2L generation
+// This concept works on microcontrollers and microprocessors without filesystem support
+// Requires manual or tool based XCPlite specific A2L file creation and update process or direct ELF support
 // See ../README.md for details
-// Requires manual or tool based XCPlite specific A2L file creation and update process
 
 #include <assert.h>  // for assert
 #include <signal.h>  // for signal handling
@@ -13,14 +14,14 @@
 
 #include "xcplib.h" // for libxcplite application programming interface
 
-// Internal libxcplite includes to simplify multi platform support
+// Internal libxcplite includes to simplify multi platform support and keep the demo code simple and readable
 #include "platform.h" // for platform abstraction - thread local, threads, mutex, sockets, sleepUs, ...
 
 static volatile bool global_running = true;
 static void sig_handler(int sig) { global_running = false; }
 
 //-----------------------------------------------------------------------------------------------------
-// XCP params
+// XCP configuration parameters
 
 #define OPTION_PROJECT_VERSION "V101" // EPK version string
 
