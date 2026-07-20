@@ -1,6 +1,6 @@
 ﻿// no_a2l_demo_cpp - XCPlite example
 // Demonstrates XCPlite operation without runtime A2L generation
-// This concept works on microcontrollers and microprocessors without filesystem support
+// This concept works on microctls and microprocessors without filesystem support
 // Requires manual or tool based XCPlite specific A2L file creation and update process or direct ELF support
 // See ../README.md for details
 
@@ -147,20 +147,20 @@ struct test_struct global_test_struct = {1, -2, 0.3f, {1, 2, 3}};
 
 enum CounterState { OFF = 0, ON = 1, RESET = 2 };
 
-// Paremeterset type for the counter controller
-template <typename CounterType> struct CounterControllerParamsTemplate {
+// Paremeterset type for the counter ctl
+template <typename CounterType> struct CounterCtlParamsTemplate {
     CounterType max;
     CounterType inc;
     CounterState state;
 };
 
-// Parameterized counter controller class template over the counter type and the parameter set type
-template <typename CounterType, typename ParamsType> class CounterController {
+// Parameterized counter ctl class template over the counter type and the parameter set type
+template <typename CounterType, typename ParamsType> class CounterControl {
   public:
     using CalSegHandle = xcp::CalSegRef<const ParamsType>;
 
     // The constructor takes a calibration segment handle
-    explicit CounterController(const CalSegHandle &calseg) : calseg_(calseg) {}
+    explicit CounterControl(const CalSegHandle &calseg) : calseg_(calseg) {}
 
     // Step the counter value, using the calibration parameters
     void step(CounterType &value) const {
@@ -179,25 +179,25 @@ template <typename CounterType, typename ParamsType> class CounterController {
 };
 
 //-----------------------------------------------------------------------------------------------------
-// Demo class instance of 'CounterController' named 'counter_controller' with calibration parameters in 'counter_controller_params'
-// A global CounterController instance with a global calibration parameters segment 'CounterControllerParams'
+// Demo class instance of 'CounterCtl' named 'counter_ctl' with calibration parameters in 'counter_ctl_params'
+// A global CounterControl instance with a global calibration parameters segment 'CounterCtlParams'
 
-// Create a template alias for the counter controller parameters for the ELF->A2L generator
+// Create a template alias for the counter ctl parameters for the ELF->A2L generator
 // The A2L generator does not yet automatically detect the template parameters and mangle type names for A2L
-using CounterControllerParams = CounterControllerParamsTemplate<uint16_t>;
+using CounterCtlParams = CounterCtlParamsTemplate<uint16_t>;
 
-// Default values for CounterControllerParams, used as default/reference page for the calibration parameter segment in A2L/XCP
+// Default values for CounterCtlParams, used as default/reference page for the calibration parameter segment in A2L/XCP
 // Note: calibration segment defaults must have static lifetime and addressable storage for A2L/XCP to work !!
-static const CounterControllerParams counter_controller_params = {.max = 1000, .inc = 1, .state = ON};
+static const CounterCtlParams counter_ctl_params = {.max = 1000, .inc = 1, .state = ON};
 
-// Create a global visibility and static lifetime calibration segment named 'counter_controller_params'
-// With the calibration parameter constants in `counter_controller_params` as default/reference page
-// The address of `counter_controller_params` will be the A2L address of the calibration segment and its instance
+// Create a global visibility and static lifetime calibration segment named 'counter_ctl_params'
+// With the calibration parameter constants in `counter_ctl_params` as default/reference page
+// The address of `counter_ctl_params` will be the A2L address of the calibration segment and its instance
 // Note: The offline A2L generator currently assumes that the struct type name and default-parameter variable name (`params`) are identical.
-CalSegDeclRef(counter_controller_params, counter_control_calseg_handle);
+CalSegDeclRef(counter_ctl_params, counter_ctl_calseg_handle);
 
-// Create a global counter controller class instance for uint16_t counters and inject the calibration parameter segment handle for its parameters
-CounterController<uint16_t, CounterControllerParams> counter_controller(counter_control_calseg_handle);
+// Create a global counter ctl class instance for uint16_t counters and inject the calibration parameter segment handle for its parameters
+CounterControl<uint16_t, CounterCtlParams> counter_ctl(counter_ctl_calseg_handle);
 
 //-----------------------------------------------------------------------------------------------------
 // Demo thread
@@ -206,18 +206,19 @@ THREAD_FUNC_RETURN task(void *p) {
     printf("Start thread %u ...\n", get_thread_id());
 
     // Create a template alias name for the ELF->A2L generator
-    using TaskCounterControllerParams = CounterControllerParamsTemplate<uint32_t>;
+    using TaskCounterCtlParams = CounterCtlParamsTemplate<uint32_t>;
 
-    // Create a local visibility, but static lifetime calibration segment named 'task_counter_controller'
-    // With the calibration parameter constants in `task_counter_controller` as default/reference page
-    // The address of `task_counter_controller` will be the A2L address of the calibration segment and its instance
+    // Create a local visibility, but static lifetime calibration segment named 'task_counter_ctl'
+    // With the calibration parameter constants in `task_counter_ctl` as default/reference page
+    // The address of `task_counter_ctl` will be the A2L address of the calibration segment and its instance
     // Note: local visibility is fine here because the object still has static storage duration.
-    // Note: The offline A2L generator assumes that the paramneter struct instance name 'task_counter_controller' and the segment name (`task_counter_controller`) are identical.
-    static const TaskCounterControllerParams task_counter_controller_params = {.max = 100, .inc = 10, .state = ON};
-    CalSegDeclRef(task_counter_controller_params, counter_control_task_calseg_handle);
+    // Note: The offline A2L generator assumes that the paramneter struct instance name 'task_counter_ctl' and the segment name (`task_counter_ctl`) are identical.
+    // NOTE: calibration segment names are limited to 25 characters
+    static const TaskCounterCtlParams task_counter_ctl_params = {.max = 100, .inc = 10, .state = ON};
+    CalSegDeclRef(task_counter_ctl_params, counter_ctl_task_calseg_handle);
 
-    // Create a task-local counter controller instance with a different counter type
-    CounterController<uint32_t, TaskCounterControllerParams> counter_controller(counter_control_task_calseg_handle);
+    // Create a task-local counter ctl instance with a different counter type
+    CounterControl<uint32_t, TaskCounterCtlParams> counter_ctl(counter_ctl_task_calseg_handle);
 
     // Static local scope measurement variable
     XCP_COMMENT(static_counter, "Static local measurement variable in function task"); // Example for meta data annotation as code
@@ -232,9 +233,9 @@ THREAD_FUNC_RETURN task(void *p) {
 
     while (gRun) {
 
-        // Operate the local counters using the local counter controller instance
-        counter_controller.step(counter);
-        counter_controller.step(static_counter);
+        // Operate the local counters using the local counter ctl instance
+        counter_ctl.step(counter);
+        counter_ctl.step(static_counter);
 
         // Trigger the measurement event "task"
         DaqTriggerEvent(task);
@@ -258,9 +259,9 @@ void foo(void) {
     // Local variable
     uint16_t counter = 0;
 
-    // Operate the local counters using the global counter controller instance
-    counter_controller.step(counter);
-    counter_controller.step(static_counter);
+    // Operate the local counters using the global counter ctl instance
+    counter_ctl.step(counter);
+    counter_ctl.step(static_counter);
 
     // More local measurement variables
     volatile float test_float = 0.001f * counter;
@@ -324,11 +325,11 @@ int main(int argc, char *argv[]) {
     printf("Start main loop...\n");
     while (gRun) {
 
-        counter_controller.step(global_counter);
-        counter_controller.step(counter);
-        counter_controller.step(static_counter);
+        counter_ctl.step(global_counter);
+        counter_ctl.step(counter);
+        counter_ctl.step(static_counter);
 
-        // Demonstrate calibration thread safety and consistency (typical concern on 32 bit microcontrollers)
+        // Demonstrate calibration thread safety and consistency (typical concern on 32 bit microctls)
         {
             // Lock the global calibration parameter block gCalSeg for safe access
             auto params = params_calseg.lock();
