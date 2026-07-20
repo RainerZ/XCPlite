@@ -39,15 +39,25 @@ extern "C" {
 
 #ifdef XCP_ENABLE_CALSEG_LIST
 
+// Calibration segment name length, must be odd for null termination
+// Fixed length to pad tXcpCalSegHeader to 64 bytes, we use all the remaining bytes
+#if defined(PLATFORM_32BIT)
+#define XCP_MAX_CALSEG_NAME (29)
+#else
+#define XCP_MAX_CALSEG_NAME (25)
+#endif
+
 #ifndef XCP_MAX_CALSEG_COUNT
 #error "Please define XCP_MAX_CALSEG_COUNT!"
 #endif
 #if XCP_MAX_CALSEG_COUNT < 1
 #error "XCP_MAX_CALSEG_COUNT must be at least 1!"
 #endif
-
 #ifndef XCP_MAX_CALSEG_NAME
-#define XCP_MAX_CALSEG_NAME 31
+#error "Please define XCP_MAX_CALSEG_NAME!"
+#endif
+#if XCP_MAX_CALSEG_NAME & 1 == 0
+#error "XCP_MAX_CALSEG_NAME must be odd for null termination"
 #endif
 
 // Calibration segment number
@@ -70,11 +80,6 @@ typedef uint16_t tXcpCalSegIndex;
 // place in POSIX shared memory without pointer fixup across processes.
 #define XCP_CALPAGE_ALIGNMENT 8   // Page alignment in bytes
 #define XCP_CALSEG_HEADER_SIZE 64 // Must be & XCP_CALPAGE_ALIGNMENT
-#if defined(PLATFORM_32BIT)
-#define XCP_CALSEG_HEADER_PAD (XCP_MAX_CALSEG_NAME + 12)
-#else
-#define XCP_CALSEG_HEADER_PAD (XCP_MAX_CALSEG_NAME + 8)
-#endif
 
 typedef struct {
 #if defined(XCP_ENABLE_ABS_ADDRESSING) && XCP_ADDR_EXT_ABS == 0x00
@@ -82,7 +87,6 @@ typedef struct {
 #else
     uint8_t *res1; // Default, there is no pointer to the default page
 #endif
-    // 8
     atomic_uint_least32_t ecu_page_next; // offset into c->b[]
     atomic_uint_least32_t free_page;     // offset into c->b[]
     uint32_t ecu_page;                   // offset into c->b[], or XCP_CALSEG_NO_PAGE
@@ -92,9 +96,7 @@ typedef struct {
 #else
     uint32_t res2;
 #endif
-    // 28
     uint16_t size;
-    // 30
     atomic_uint_least8_t ecu_access; // page number for ECU access
     atomic_uint_least8_t lock_count; // lock count for the segment, 0 = unlocked
     uint8_t xcp_access;              // page number for XCP access
@@ -107,9 +109,7 @@ typedef struct {
 #else
     uint8_t res3;
 #endif
-    // 38
     char name[XCP_MAX_CALSEG_NAME + 1];
-    uint8_t res[XCP_CALSEG_HEADER_PAD - XCP_MAX_CALSEG_NAME];
 } tXcpCalSegHeader;
 
 static_assert(sizeof(bool) == 1, "Error: bool is not 1 byte");
