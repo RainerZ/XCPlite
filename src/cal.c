@@ -88,10 +88,6 @@ extern tXcpLocalData gXcpLocalData;
 
 #ifdef XCP_ENABLE_CALSEG_LIST
 
-#if XCP_MAX_CALSEG_NAME & 1 == 0 || XCP_MAX_CALSEG_NAME >= 128
-#error "XCP_MAX_CALSEG_NAME must be <128 and odd for null termination"
-#endif
-
 /**************************************************************************/
 // Forward declarations
 
