@@ -1,5 +1,6 @@
 //--------------------------------------------------------------------------------------------------------------------------------------------------
 // Module debuginfo
+// Implements DebugData, VarInfo, TypeInfo and DbgDataType
 // Read ELF files and extract debug information
 
 // Taken from Github repository a2ltool by DanielT
@@ -149,23 +150,45 @@ impl DebugData {
     /// print the debug statistics
     pub(crate) fn print_debug_stats(&self) {
         println!("\n====================================================================================================");
-
-        println!("debug_data information summary:");
+        println!("DebugData information summary:");
         println!("  Compilation units: {} units", self.unit_names.len());
         println!("  Sections: {} sections", self.sections.len());
-        println!("  Type names: {} named types", self.typenames.len());
-        println!("  Types: {} total types", self.types.len());
-        println!("  Demangled names: {} entries", self.demangled_names.len());
-
+        print!("  Endianness: ");
+        if self.is_little_endian {
+            println!("Little Endian");
+        } else {
+            println!("Big Endian");
+        }
         let mut variable_count = 0;
         for (name, var_infos) in &self.variables {
             variable_count += var_infos.len();
         }
         println!("  Variables {} with {} unique names", variable_count, self.variables.len());
+        println!("  Demangled names: {} entries", self.demangled_names.len());
+        println!("  Type names: {} named types", self.typenames.len());
+        println!("  Types: {} total types", self.types.len());
+        println!("  CFA info: {} entries", self.cfa_info.len());
+        println!("  EPK string: `{}` at address 0x{:08X}", self.epk_string.as_deref().unwrap_or("<not found>"), self.epk_addr);
+        if let Some((addr, data)) = &self.xcp_meta_data {
+            println!("  XCP metadata section (xcp_meta) found at address 0x{:08X}, {} bytes", addr, data.len());
+        } else {
+            println!("  XCP metadata section (xcp_meta) not found");
+        }
+    }
 
-        //Print compilation units
+    // level 0 .. 5 stats, variables, variable types, demangled names, type names, types
+    // level >= 1 print variables
+    // level >= 2 print variable types
+    // level >= 3 print demangled names
+    // level >= 4 print type names
+    // level >= 5 print types
+    pub(crate) fn print_debug_info(&self, level: usize, unit_idx_limit: usize) {
+        //
+        self.print_debug_stats();
+
+        //Print all compilation units
         println!("\n====================================================================================================");
-        println!("Compilation Units in debug_data.unit_names:");
+        println!("Compilation units in debug_data.unit_names:");
         for (idx, unit_name) in self.unit_names.iter().enumerate() {
             let unit_name = self.make_simple_unit_name(idx);
             if unit_name.is_none() {
@@ -175,13 +198,6 @@ impl DebugData {
             }
         }
         println!();
-    }
-
-    // level 0 .. 5 stats, variables, variable types, demangled names, type names, types
-    pub(crate) fn print_debug_info(&self, level: usize, unit_idx_limit: usize) {
-        // level = 0
-        println!("\n====================================================================================================");
-        self.print_debug_stats();
 
         // Print sections sorted by address
         println!("\n====================================================================================================");
@@ -197,7 +213,7 @@ impl DebugData {
         if level >= 4 {
             //Print type names
             println!("\n====================================================================================================");
-            println!("Type names in debug_data.typenames)");
+            println!("Type names in debug_data.typenames:");
             for (type_name, type_refs) in &self.typenames {
                 println!("Type name '{}': {} references", type_name, type_refs.len());
                 for type_ref in type_refs {
@@ -227,7 +243,7 @@ impl DebugData {
             // Print demangled names
             if level >= 3 {
                 println!("\n====================================================================================================");
-                println!("\nDemangled Names");
+                println!("\nDemangled Names:");
                 for (mangled_name, demangled_name) in &self.demangled_names {
                     println!("  '{}' -> '{}'", mangled_name, demangled_name);
                 }
@@ -236,9 +252,14 @@ impl DebugData {
 
         // Print A2L Creator variables
         println!("\n====================================================================================================");
-        println!("A2L Creator variables in compilation unit 0..{unit_idx_limit}:");
+        println!("A2L Creator variables:");
         for (var_name, var_info) in &self.variables {
-            if var_name.starts_with("calblk__") || var_name.starts_with("calseg__") || var_name.starts_with("evt__") || var_name.starts_with("trg__") {
+            if var_name.starts_with("xcp_meta__")
+                || var_name.starts_with("calblk__")
+                || var_name.starts_with("calseg__")
+                || var_name.starts_with("evt__")
+                || var_name.starts_with("trg__")
+            {
                 print!("'{}': ", var_name);
                 assert!(var_info.len() == 1);
                 let var = &var_info[0];
@@ -253,23 +274,11 @@ impl DebugData {
             }
         }
 
-        // Print variables
-        if level >= 1 {
-            if level >= 5 {
-                println!("\n====================================================================================================");
-                println!("System variables in compilation unit 0..{unit_idx_limit}:");
-                for (var_name, var_info) in &self.variables {
-                    if var_name.starts_with("__") {
-                        println!("{}: ", var_name);
-                    }
-                }
-            }
-
+        // Print all variables
+        if level >= 2 {
             println!("\n====================================================================================================");
-            println!("Variables in compilation unit 0..{unit_idx_limit}:");
-            if level <= 1 {
-                println!("  (Skipping internal variables '__<name>' and global XCP variables 'gXcp..' and 'gA2l..')");
-            }
+            println!("Variables:");
+            println!("  (Skipping system variables '__<name>' and global XCP variables 'gXcp..' and 'gA2l..')");
 
             for (var_name, var_info) in &self.variables {
                 // Count all variable in unit_idx
@@ -287,9 +296,9 @@ impl DebugData {
                 }
 
                 // Iterate over all variable infos for this variable name in unit_idx
-                if level >= 1 {
+                if level >= 2 {
                     println!("{} {}: ", var_name, count);
-                } else if level >= 2 {
+                } else if level >= 3 {
                     if count > 1 {
                         println!("{} {}: ", var_name, count);
                     }
@@ -319,7 +328,49 @@ impl DebugData {
             }
         }
 
-        println!();
+        // Print all functions with CFA info
+        // println!("\n====================================================================================================");
+        // println!("Functions:");
+        // for (i, func) in self.cfa_info.iter().enumerate() {
+        //     println!("\nFunction #{}: {}", i + 1, func.function);
+        //     println!("  Compilation Unit: {}", func.unit_idx);
+        //     println!(
+        //         "  Address Range: 0x{:08x} - 0x{:08x} (size: {} bytes)",
+        //         func.low_pc,
+        //         func.high_pc,
+        //         func.high_pc - func.low_pc
+        //     );
+        //     match func.cfa_offset {
+        //         Some(offset) => {
+        //             println!("  CFA Offset: {} (0x{:x})", offset, offset);
+        //             println!("  Local variables are likely at: CFA + {} + variable_offset", offset);
+        //         }
+        //         None => {
+        //             println!("  CFA Offset: Unknown - may require complex DWARF expression evaluation");
+        //             println!("  Note: This might indicate a more complex frame layout");
+        //         }
+        //     }
+        // }
+
+        // Print all functions grouped by compilation unit
+        if level >= 2 {
+            println!("\n====================================================================================================");
+            println!("Functions and CFA information by compilation unit:");
+            let mut by_cu: HashMap<usize, Vec<&CfaInfo>> = HashMap::new();
+            for func in &self.cfa_info {
+                by_cu.entry(func.unit_idx).or_default().push(func);
+            }
+            for (cu_idx, cu_functions) in by_cu {
+                println!("Compilation Unit {}: {} functions", cu_idx, cu_functions.len());
+                for func in cu_functions {
+                    let cfa_info = match func.cfa_offset {
+                        Some(offset) => format!("CFA+{}", offset),
+                        None => "CFA unknown".to_string(),
+                    };
+                    println!("  {} (0x{:08x}-0x{:08x}) [{}]", func.function, func.low_pc, func.high_pc, cfa_info);
+                }
+            }
+        }
     }
 }
 

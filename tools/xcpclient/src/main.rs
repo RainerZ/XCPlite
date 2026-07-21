@@ -44,13 +44,12 @@ use clap::Parser;
 #[command(version)]
 struct Args {
     // -l --log-level
-    /// Log level (Off=0, Error=1, Warn=2, Info=3, Debug=4, Trace=5)
+    /// Program flow log level (Off=0, Error=1, Warn=2, Info=3, Debug=4, Trace=5)
     #[arg(long, default_value_t = 3)]
     log_level: u8,
 
     // -v --verbose
-    /// Verbose output
-    /// Enables additional output when reading ELF files and creating A2L files.
+    /// Content information detail verbosity level
     #[arg(long, default_value_t = 0)]
     verbose: usize,
 
@@ -623,7 +622,7 @@ async fn xcp_client(
         } else {
             return Err("^No A2L file name specified, use --a2l commandline parameter".into());
         };
-        warn!("A2L path: {}", a2l_path.display());
+        info!("A2L path: {}", a2l_path.display());
 
         //----------------------------------------------------------------
         // Upload A2L

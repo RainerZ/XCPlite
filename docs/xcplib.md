@@ -337,7 +337,7 @@ void XcpUnlockCalSeg(tXcpCalSegIndex index);
 
 #### C macros — section-registered (required for offline A2L generation)
 
-These macros emit a `tXcpCalSegDescriptor` into the `.xcp_cals` ELF section so `XcpInit()`
+These macros emit a `tXcpCalSegDescriptor` into the `xcp_cals` ELF section so `XcpInit()`
 registers the segment automatically and `xcpclient` can discover it without runtime A2L calls.
 
 ```c
