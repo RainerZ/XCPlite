@@ -1,6 +1,8 @@
 //--------------------------------------------------------------------------------------------------------------------------------------------------
 // Module elf_reader
-// Read ELF files and extract debug information
+// Defines and implements ElfReader
+// Read ELF files and extract debug information with DebugData (see copyright notice below)
+// ElfReader provides functions to fill a XCP registry with events, segments, variables and metadata
 
 #![allow(clippy::collapsible_else_if)]
 
@@ -16,57 +18,40 @@ use xcp_registry::{McAddress, McDimType, McEvent, McObjectType, McSupportData, M
 
 /*
 Which information can be detected from ELF/DWARF:
-- Events:
-    name, compilation unit, function name and CFA offset, but index is unknown
-- Memory segment name, type (naming convention name = reference page), address, length, but number is unknown
-- Variables:
-    variable name, typename, absolute address, frame offset, compilation unit, function name, namespace
-    static variables in functions get the correct event
-    local variables on stack get the correct CFA
-    name, type, compilation unit, namespace, location (register or stack)
-- Types:
-    typedefs, structs, enums
-    basic types: int8/16/32/64, uint8/16/32/64, float, double
-    arrays 1D and 2D
-    pointers (as ulong or ulonglong)
+    - Events:
+        name, compilation unit, function name and CFA offset, but index is unknown
+    - Memory segment name, type (naming convention name = reference page), address, length, but number is unknown
+    - Variables:
+        variable name, typename, absolute address, frame offset, compilation unit, function name, namespace
+        static variables in functions get the correct event
+        local variables on stack get the correct CFA
+        name, type, compilation unit, namespace, location (register or stack)
+    - Types:
+        typedefs, structs, enums
+        basic types: int8/16/32/64, uint8/16/32/64, float, double
+        arrays 1D and 2D
+        pointers (as ulong or ulonglong)
 
-    Key benefits:
+Key benefits:
     - Instance names get prefixed with function name if local stack or static variables
     - All instances get the correct fixed event id, if there is one in their scope, otherwise default event id is 0
     - Event compilation unit, function and CFA is detected to enable local variable access
 
-    Todo:
-    - test arrays and nested structs
-
-    - No DW_AT_location means optimized away
-
-Detect TLS Variables:
-
-TLS Variables:
-Check for missing DW_AT_location + thread-local context
-Look for variables referencing .tdata/.tbss sections
-Parse DW_TAG_variable with TLS-specific location expressions
-DW_OP_form_tls_address, etc
-
-
 Tools:
-dwarfdump --debug-info <filename>
-dwarfdump --debug-info --name <varname> <filename>
-objdump -h  <filename>
-objdump --syms <filename>
+    dwarfdump --debug-info <filename>
+    dwarfdump --debug-info --name <varname> <filename>
+    objdump -h  <filename>
+    objdump --syms <filename>
 
 Limitations:
-- With -o1 most stack variables are in registers, have to be manually spilled to stack or captured
-- Segment numbers and event index are not constant expressions, need to be read by XCP (current solution) or from the binary persistence file from the target
+    - With -o1 most stack variables are in registers, have to be manually spilled to stack or captured
+    - Segment numbers and event index are not constant expressions, need to be read by XCP (current solution) or from the binary persistence file from the target
 
 Possible future improvements:
-- Thread load addressing mode
-- C++ support,  this addressing support, namespaces
-- Measurement of variables and function parameters in registers
-- Just in time compilation of variable access expressions
-
-
-
+    - Thread load addressing mode
+    - C++ support,  this addressing support, namespaces
+    - Measurement of variables and function parameters in registers
+    - Just in time compilation of variable access expressions
 */
 
 // Dwarf reader
@@ -75,8 +60,6 @@ Possible future improvements:
 // Copyright (c) DanielT
 mod debuginfo;
 use debuginfo::{DbgDataType, DebugData, TypeInfo, VarInfo};
-
-//use crate::xcp_client::xcp;
 
 //------------------------------------------------------------------------
 //  ELF reader and A2L creator
@@ -196,6 +179,7 @@ impl ElfReader {
     }
 
     // Find the addressing mode marker variable (naming convention "XCPLITE__<signature>") and return the signature, if found
+    // (CASDD, ACSDD, ...)
     pub fn get_target_signature(&self) -> Option<&str> {
         // Iterate over variables and look for XCPlite addressing mode marker
         for (var_name, var_infos) in &self.debug_data.variables {
@@ -914,6 +898,7 @@ impl ElfReader {
         info!("===============================================================");
         info!("Registering metadata from xcp_meta section:");
 
+        // Get meta_base_addr and meta_end
         let (meta_base_addr, meta_data) = match &self.debug_data.xcp_meta_data {
             Some(data) => data,
             None => {
@@ -923,9 +908,12 @@ impl ElfReader {
         };
         let meta_end = meta_base_addr + meta_data.len() as u64;
         let is_le = self.debug_data.is_little_endian;
+        assert!(is_le, "Big endian is not supported for meta data registration");
 
+        // Search for metadata variables (xcp_meta__<kind>__<base_name>) in the debug data
+        // Add meta data to the registry instances
         for (var_name, var_infos) in &self.debug_data.variables {
-            // Only process metadata variables: xcp_meta__<kind>__<base_name>
+            // Only process metadata variables
             let Some(rest) = var_name.strip_prefix("xcp_meta__") else {
                 continue;
             };
@@ -933,16 +921,20 @@ impl ElfReader {
                 warn!("Unexpected xcp_meta__ variable name format: '{}'", var_name);
                 continue;
             };
-
             if var_infos.is_empty() {
                 continue;
             }
+
+            // Get the address and section offset of the metadata variable
             let var_addr = var_infos[0].address.1;
+            if var_addr == 0 {
+                warn!("Metadata variable '{}' address is 0", var_name);
+                continue;
+            }
             if var_addr < *meta_base_addr || var_addr >= meta_end {
                 warn!("Metadata variable '{}' address 0x{:08X} is outside xcp_meta section", var_name, var_addr);
                 continue;
             }
-
             let offset = (var_addr - meta_base_addr) as usize;
 
             // Decode base_name: __ is the path separator, e.g. "params__delay_us" means
@@ -969,13 +961,13 @@ impl ElfReader {
                 if let Some(inst) = reg.instance_list.get_instance_mut(name, None) {
                     apply_instance_metadata(inst, kind, meta_data, offset, is_le);
                     if verbose >= 1 {
-                        info!("  Metadata {} applied to instance '{}'", var_name, name);
+                        info!("  Metadata {} {} applied to instance '{}'", kind, var_name, name);
                     }
                 }
             }
 
             if !field_applied && names.is_empty() {
-                debug!("Metadata '{}': no matching registry entry for '{}'", var_name, dot_path);
+                warn!("Metadata '{}': no matching registry entry for '{}'", var_name, dot_path);
             }
         }
 

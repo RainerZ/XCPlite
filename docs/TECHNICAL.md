@@ -102,8 +102,7 @@ see `examples/no_a2l_demo/README.md`.
 #### `xcp_evts` section — event descriptors
 
 Every call to `DaqCreateEvent(name)` or `DaqCreateAndTriggerEvent(name)` emits a
-`tXcpEventDescriptor` constant into the `.xcp_evts` section (`.rodata` on ELF targets,
-`__DATA,xcp_evts` on macOS):
+`tXcpEventDescriptor` constant into the `xcp_evts` section (`.rodata` on ELF targets, `__DATA,xcp_evts` on macOS):
 
 ```c
 // What DaqCreateEvent(task) expands to (simplified):
@@ -117,7 +116,7 @@ firmware, regardless of whether that code path has executed at the time of A2L g
 
 #### `xcp_cals` section — calibration segment descriptors
 
-Every `CalSegDecl(name)` + `CalSegCreate(name)` pair (or `CalSegDecl(name)` at file scope) emits a `tXcpCalSegDescriptor` constant into the `.xcp_cals` section:
+Every `CalSegDecl(name)` + `CalSegCreate(name)` pair (or `CalSegDecl(name)` at file scope) emits a `tXcpCalSegDescriptor` constant into the `xcp_cals` section:
 
 ```c
 // What CalSegDecl(params) + CalSegCreate(params) expands to (simplified):
@@ -225,8 +224,8 @@ xcpclient counts them to know how many individual base addresses to expect.
 
 | ELF / DWARF source | Populated by | xcpclient use |
 |---|---|---|
-| `.xcp_evts` section | `DaqCreateEvent`, `DaqCreateEventInstance`, `DaqCreateAndTriggerEvent` | Discover all events, names, cycle times |
-| `.xcp_cals` section | `CalSegDecl` + `CalSegCreate` | Discover all calibration segments, default page addresses and sizes |
+| `xcp_evts` section | `DaqCreateEvent`, `DaqCreateEventInstance`, `DaqCreateAndTriggerEvent` | Discover all events, names, cycle times |
+| `xcp_cals` section | `CalSegDecl` + `CalSegCreate` | Discover all calibration segments, default page addresses and sizes |
 | DWARF scope of `trg__AAS__name` | `DaqTriggerEvent`, `DaqCreateAndTriggerEvent`, `DaqEventVar` (C) | Find stack-local and absolute variables — ext=0,1: Absolute, ext=2: Stack |
 | DWARF scope of `trg__AASD__name` | `DaqTriggerEventExt` | Same plus a dynamic base pointer slot — ext=3: Dynamic |
 | DWARF scope of `trg__AASDD__name` | `DaqEventVar` / `DaqEventAtVar` (C++) | Per-variable dynamic slots — ext=3+: one per measurement |

@@ -163,7 +163,7 @@ template <typename CounterType, typename ParamsType> class CounterControl {
     explicit CounterControl(const CalSegHandle &calseg) : calseg_(calseg) {}
 
     // Step the counter value, using the calibration parameters
-    void step(CounterType &value) const {
+    void step(volatile CounterType &value) const {
         auto cal = calseg_.lock();
         if (cal->state == ON) {
             value = value + cal->inc;
@@ -200,6 +200,38 @@ CalSegDeclRef(counter_ctl_params, counter_ctl_calseg_handle);
 CounterControl<uint16_t, CounterCtlParams> counter_ctl(counter_ctl_calseg_handle);
 
 //-----------------------------------------------------------------------------------------------------
+// Demo functions
+
+void foo() {
+
+    // Static local scope measurement variable
+    XCP_COMMENT(foo__static_counter, "Static local measurement variable in function foo"); // Example for meta data annotation as code
+    static uint16_t static_counter = 0;
+
+    // Operate the local static counters using the global counter ctl instance
+    counter_ctl.step(static_counter);
+
+    // Local variables
+    // volatile to prevent compiler optimization
+    XCP_COMMENT(foo__counter, "Local measurement variable in function foo"); // Example for meta data annotation as code
+    volatile uint16_t counter = static_counter;
+    volatile float test_float = 0.001f * counter;
+    volatile double test_double = 0.001 * counter;
+    volatile uint8_t test_uint8 = 1;
+    volatile uint16_t test_uint16 = 2;
+    volatile uint32_t test_uint32 = 3;
+    volatile uint64_t test_uint64 = 4;
+    volatile int8_t test_int8 = -1;
+    volatile int16_t test_int16 = -2;
+    volatile int32_t test_int32 = -3;
+    volatile uint64_t test_int64 = 1;
+    volatile struct test_struct test_struct = {1, -2, 0.001f * counter, {1, 2, 3}};
+    uint8_t test_array[3] = {1, 2, 3};
+
+    DaqCreateAndTriggerEvent(foo);
+}
+
+//-----------------------------------------------------------------------------------------------------
 // Demo thread
 
 THREAD_FUNC_RETURN task(void *p) {
@@ -221,12 +253,12 @@ THREAD_FUNC_RETURN task(void *p) {
     CounterControl<uint32_t, TaskCounterCtlParams> counter_ctl(counter_ctl_task_calseg_handle);
 
     // Static local scope measurement variable
-    XCP_COMMENT(static_counter, "Static local measurement variable in function task"); // Example for meta data annotation as code
+    XCP_COMMENT(task__static_counter, "Static local measurement variable in function task"); // Example for meta data annotation as code
     static uint32_t static_counter = 0;
 
     // Local measurement variable
-    XCP_COMMENT(counter, "Local measurement variable in function task"); // Example for meta data annotation as code
-    uint32_t counter = 0;
+    XCP_COMMENT(task__counter, "Local measurement variable in function task"); // Example for meta data annotation as code
+    volatile uint32_t counter = 0;                                             // volatile to prevent compiler optimization
 
     // Create a section registered measurement event named "task"
     DaqCreateEvent(task);
@@ -247,42 +279,6 @@ THREAD_FUNC_RETURN task(void *p) {
 
     THREAD_FUNC_END; // Exit the thread
 }
-
-//-----------------------------------------------------------------------------------------------------
-// Demo functions
-
-void foo(void) {
-
-    // Static local scope measurement variable
-    static uint16_t static_counter = 0;
-
-    // Local variable
-    uint16_t counter = 0;
-
-    // Operate the local counters using the global counter ctl instance
-    counter_ctl.step(counter);
-    counter_ctl.step(static_counter);
-
-    // More local measurement variables
-    volatile float test_float = 0.001f * counter;
-    volatile double test_double = 0.001 * counter;
-    volatile uint8_t test_uint8 = 1;
-    volatile uint16_t test_uint16 = 2;
-    volatile uint32_t test_uint32 = 3;
-    volatile uint64_t test_uint64 = 4;
-    volatile int8_t test_int8 = -1;
-    volatile int16_t test_int16 = -2;
-    volatile int32_t test_int32 = -3;
-    volatile uint64_t test_int64 = 1;
-    volatile struct test_struct test_struct = {1, -2, 0.001f * counter, {1, 2, 3}};
-    // uint8_t test_array[3] = {1, 2, 3};
-
-    DaqCreateAndTriggerEvent(foo);
-}
-
-// Never called
-// Just to demonstrate the DaqCreateAndTriggerEvent macro creates the event, without runing the code in foo
-void bar(void) { DaqCreateAndTriggerEvent(bar); }
 
 //-----------------------------------------------------------------------------------------------------
 // Demo main
@@ -313,9 +309,9 @@ int main(int argc, char *argv[]) {
     create_thread(&__t1, NULL, task, NULL);
 
     // Local measurement variables
-    XCP_COMMENT(counter, "Local measurement variable in main");
-    uint16_t counter = 0;
-    XCP_COMMENT(static_counter, "Static local measurement variable in main");
+    XCP_COMMENT(main__counter, "Local counter in main");
+    volatile uint16_t counter = 0; // volatile to prevent compiler optimization
+    XCP_COMMENT(main__static_counter, "Static local counter in main");
     static uint16_t static_counter = 0;
 
     // Create a section registered measurement event named "mainloop"
@@ -326,8 +322,8 @@ int main(int argc, char *argv[]) {
     while (gRun) {
 
         counter_ctl.step(global_counter);
-        counter_ctl.step(counter);
         counter_ctl.step(static_counter);
+        counter_ctl.step(counter);
 
         // Demonstrate calibration thread safety and consistency (typical concern on 32 bit microctls)
         {
@@ -345,7 +341,6 @@ int main(int argc, char *argv[]) {
 
         // Function calls
         foo(); // Call a function to demonstrate the DaqCreateAndTriggerEvent macro in foo
-        // bar(); // Uncomment to demonstrate that the event in bar is created, but the code is never executed, so the event exists, but is never triggered
 
         // Trigger the measurement event "mainloop"
         DaqTriggerEvent(mainloop);

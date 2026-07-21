@@ -1,7 +1,8 @@
+// Get CFA (Canonical Frame Address) information from DWARF debug data in an ELF file
+
 use anyhow::Result;
 use gimli::{AttributeValue, BaseAddresses, CieOrFde, DebugFrame, Dwarf, EhFrame, EndianSlice, LittleEndian, Unit, UnwindSection};
 use object::{Object, ObjectSection};
-use std::collections::HashMap;
 
 /// Represents CFA information for a function
 #[derive(Debug, Clone)]
@@ -18,13 +19,6 @@ pub struct CfaInfo {
     pub unit_idx: usize,
 }
 
-// pub fn get_cfa(mmap: &Mmap, cfa_info: &mut Vec<CfaInfo>, verbose: usize, unit_idx_limit: usize) -> Result<usize> {
-//     // Parse the ELF file using the object crate
-//     log::info!("CFA parser: Parsing ELF file for function CFAs ...");
-//     let object_file: object::File<'_> = object::File::parse(&mmap[..])?;
-//     get_cfa_from_object(&object_file, cfa_info, verbose, unit_idx_limit)
-// }
-
 pub fn get_cfa_from_object(object_file: &object::File<'_>, cfa_info: &mut Vec<CfaInfo>, verbose: usize, unit_idx_limit: usize) -> Result<usize> {
     // Load DWARF sections - this is where all the debug information is stored
 
@@ -38,26 +32,7 @@ pub fn get_cfa_from_object(object_file: &object::File<'_>, cfa_info: &mut Vec<Cf
         log::warn!("CFA parser: No functions found");
         return Ok(0);
     }
-    log::info!("CFA parser: Found {} functions:", n);
-
-    // Log all functions grouped by compilation unit
-    if verbose >= 2 {
-        let mut by_cu: HashMap<usize, Vec<&CfaInfo>> = HashMap::new();
-        for func in cfa_info {
-            by_cu.entry(func.unit_idx).or_default().push(func);
-        }
-        for (cu_idx, cu_functions) in by_cu {
-            println!("Compilation Unit {}: {} functions", cu_idx, cu_functions.len());
-            for func in cu_functions {
-                let cfa_info = match func.cfa_offset {
-                    Some(offset) => format!("CFA+{}", offset),
-                    None => "CFA unknown".to_string(),
-                };
-                println!("  {} (0x{:08x}-0x{:08x}) [{}]", func.function, func.low_pc, func.high_pc, cfa_info);
-            }
-        }
-    }
-
+    log::debug!("CFA parser: Found {} functions:", n);
     Ok(n)
 }
 
@@ -610,29 +585,3 @@ fn get_string_attribute(
     }
     Ok(None)
 }
-
-//
-// Print detailed information for all functions
-// fn print_all_functions(functions: &[CfaInfo]) {
-//     println!("\nAll Functions");
-//     for (i, func) in functions.iter().enumerate() {
-//         println!("\nFunction #{}: {}", i + 1, func.function);
-//         println!("  Compilation Unit: {}", func.unit_idx);
-//         println!(
-//             "  Address Range: 0x{:08x} - 0x{:08x} (size: {} bytes)",
-//             func.low_pc,
-//             func.high_pc,
-//             func.high_pc - func.low_pc
-//         );
-//         match func.cfa_offset {
-//             Some(offset) => {
-//                 println!("  CFA Offset: {} (0x{:x})", offset, offset);
-//                 println!("  Local variables are likely at: CFA + {} + variable_offset", offset);
-//             }
-//             None => {
-//                 println!("  CFA Offset: Unknown - may require complex DWARF expression evaluation");
-//                 println!("  Note: This might indicate a more complex frame layout");
-//             }
-//         }
-//     }
-// }

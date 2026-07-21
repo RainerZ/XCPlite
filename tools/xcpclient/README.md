@@ -12,11 +12,11 @@ the XCPlite instrumentation macros — no runtime A2L code is needed in the appl
 
 **Three sources of information** are combined:
 
-1. **`.xcp_evts` ELF section** — the XCPlite macros (`DaqCreateEvent`, `DaqCreateAndTriggerEvent`)
+1. **`xcp_evts` ELF section** — the XCPlite macros (`DaqCreateEvent`, `DaqCreateAndTriggerEvent`)
    emit a `tXcpEventDescriptor` constant per event into this named section. xcpclient iterates
    it to discover every event defined in the firmware, including name, cycle time, and priority.
 
-2. **`.xcp_cals` ELF section** — `CalSegDecl` emits a `tXcpCalSegDescriptor` constant per
+2. **`xcp_cals` ELF section** — `CalSegDecl` emits a `tXcpCalSegDescriptor` constant per
    calibration segment into this section, containing the segment name, address of the default
    page, and its size. xcpclient uses this to discover all calibration segments.
 

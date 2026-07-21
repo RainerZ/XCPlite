@@ -120,7 +120,10 @@ echo "==========================================================================
 echo "Creating A2L file from XCPlite ELF file ..."
 echo "========================================================================================================"
 echo ""
-$XCPCLIENT --log-level=3 --verbose=0 --dest-addr=$TARGET_HOST --udp --offline --elf "$ELFFILE" --create-a2l --a2l "$A2LFILE" >> "$LOGFILE"
+# --log-level is program flow verbosity
+# --verbose is information detail level
+echo "Command: $XCPCLIENT --log-level=3 --verbose=5 --dest-addr=$TARGET_HOST --udp --offline --elf \"$ELFFILE\" --create-a2l --a2l \"$A2LFILE\""
+$XCPCLIENT --log-level=3 --verbose=5 --dest-addr=$TARGET_HOST --udp --offline --elf "$ELFFILE" --create-a2l --a2l "$A2LFILE"  >> "$LOGFILE"
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: xcpclient returned error"
     exit 1
