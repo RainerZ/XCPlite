@@ -113,7 +113,7 @@ fn extract_function_info(
         let mut entries = unit.entries();
 
         // Skip the compilation unit DIE itself and process its children
-        if let Some((_, entry)) = entries.next_dfs()? {
+        if let Some(entry) = entries.next_dfs()? {
             if entry.tag() == gimli::DW_TAG_compile_unit {
                 if let Some(name) = get_string_attribute(dwarf, &unit, &entry, gimli::DW_AT_name)? {
                     log::debug!("Compilation unit name: {}", name);
@@ -122,7 +122,7 @@ fn extract_function_info(
         }
 
         // Process all DIEs in this compilation unit
-        while let Some((_depth, entry)) = entries.next_dfs()? {
+        while let Some(entry) = entries.next_dfs()? {
             // We're looking for subprogram DIEs (functions)
             if entry.tag() == gimli::DW_TAG_subprogram {
                 if let Some(func_info) = extract_function_from_die(dwarf, object_file, &unit, &entry, cu_index, verbose)? {
@@ -165,7 +165,7 @@ fn extract_function_from_die(
     };
 
     // Get the low PC (start address)
-    let low_pc = match entry.attr_value(gimli::DW_AT_low_pc)? {
+    let low_pc = match entry.attr_value(gimli::DW_AT_low_pc) {
         Some(AttributeValue::Addr(addr)) => addr,
         _ => {
             // if verbose {
@@ -177,7 +177,7 @@ fn extract_function_from_die(
 
     // Get the high PC (end address)
     // High PC can be either an absolute address or an offset from low PC
-    let high_pc = match entry.attr_value(gimli::DW_AT_high_pc)? {
+    let high_pc = match entry.attr_value(gimli::DW_AT_high_pc) {
         Some(AttributeValue::Addr(addr)) => addr,
         Some(AttributeValue::Udata(offset)) => low_pc + offset,
         _ => {
@@ -225,7 +225,7 @@ fn extract_function_from_die(
 fn extract_frame_base_offset(entry: &gimli::DebuggingInformationEntry<EndianSlice<LittleEndian>>) -> Result<Option<i64>> {
     // Look for DW_AT_frame_base attribute
     // This attribute describes how to compute the frame base for local variables
-    match entry.attr_value(gimli::DW_AT_frame_base)? {
+    match entry.attr_value(gimli::DW_AT_frame_base) {
         Some(AttributeValue::Exprloc(expression)) => {
             // The frame base is described by a DWARF expression
             // For simple cases, this might be something like "DW_OP_call_frame_cfa + offset"
@@ -568,7 +568,7 @@ fn get_string_attribute(
     entry: &gimli::DebuggingInformationEntry<EndianSlice<LittleEndian>>,
     attr: gimli::DwAt,
 ) -> Result<Option<String>> {
-    if let Some(attr_value) = entry.attr_value(attr)? {
+    if let Some(attr_value) = entry.attr_value(attr) {
         match attr_value {
             AttributeValue::DebugStrRef(offset) => {
                 if let Ok(s) = dwarf.string(offset) {

@@ -329,7 +329,7 @@ impl DebugDataReader<'_> {
             // get the abbreviations for the unit
             let Ok(abbreviations) = unit.abbreviations(&self.dwarf.debug_abbrev) else {
                 if self.verbose > 0 {
-                    let offset = unit.offset().as_debug_info_offset().unwrap_or(gimli::DebugInfoOffset(0)).0;
+                    let offset = unit.offset().to_debug_info_offset(&unit).unwrap_or(gimli::DebugInfoOffset(0)).0;
                     log::warn!("Error: Failed to get abbreviations for unit @{offset:x}");
                 }
                 continue;
@@ -348,7 +348,7 @@ impl DebugDataReader<'_> {
             // in functions are declared inside of DW_TAG_subprogram[/DW_TAG_lexical_block]*.
             // We can easily find all of them by using depth-first traversal of the tree
             let mut entries_cursor = unit.entries(abbreviations);
-            if let Ok(Some((_, entry))) = entries_cursor.next_dfs()
+            if let Ok(Some(entry)) = entries_cursor.next_dfs()
                 && (entry.tag() == gimli::constants::DW_TAG_compile_unit || entry.tag() == gimli::constants::DW_TAG_partial_unit)
             {
                 // @@@@ warn if unit name is missing
@@ -366,10 +366,9 @@ impl DebugDataReader<'_> {
             }
 
             // traverse all entries in depth-first order
-            let mut depth = 0;
             let mut context: Vec<(gimli::DwTag, Option<String>)> = Vec::new();
-            while let Ok(Some((depth_delta, entry))) = entries_cursor.next_dfs() {
-                depth += depth_delta;
+            while let Ok(Some(entry)) = entries_cursor.next_dfs() {
+                let depth = entry.depth();
                 debug_assert!(depth >= 1);
                 context.truncate((depth - 1) as usize);
                 let tag = entry.tag();
@@ -454,10 +453,10 @@ impl DebugDataReader<'_> {
     // Return variable information
     // returns name, type reference and address
     // address may be 0 if a local variable is requested
-    fn get_variable(
+    fn get_variable<'a>(
         &self,
-        entry: &DebuggingInformationEntry<SliceType, usize>,
-        unit: &UnitHeader<SliceType>,
+        entry: &DebuggingInformationEntry<SliceType<'a>, usize>,
+        unit: &UnitHeader<SliceType<'a>>,
         abbrev: &gimli::Abbreviations,
     ) -> Result<(String, usize, (u8, u64)), String> {
         // if debugging information entry A has a DW_AT_specification or DW_AT_abstract_origin attribute
@@ -545,7 +544,7 @@ fn demangle_cpp_varnames(input: &[&String]) -> HashMap<String, String> {
             && let Ok(sym) = cpp_demangle::Symbol::new(*varname)
         {
             // exclude useless demangled names like "typeinfo for std::type_info" or "{vtable(std::type_info)}"
-            if let Ok(demangled) = sym.demangle(&demangle_opts)
+            if let Ok(demangled) = sym.demangle_with_options(&demangle_opts)
                 && !demangled.contains(' ')
                 && !demangled.starts_with("{vtable")
             {
@@ -569,7 +568,7 @@ impl<'a> UnitList<'a> {
 
     fn get_unit(&self, itemoffset: usize) -> Option<usize> {
         for (idx, (unit, _)) in self.list.iter().enumerate() {
-            let unitoffset = unit.offset().as_debug_info_offset().unwrap().0;
+            let unitoffset = unit.offset().to_debug_info_offset(unit).unwrap().0;
             if unitoffset < itemoffset && unitoffset + unit.length_including_self() > itemoffset {
                 return Some(idx);
             }
