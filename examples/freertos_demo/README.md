@@ -249,24 +249,14 @@ Both XCP tasks currently use one tXcpCtoMessage (roughly MAX_CTO_SIZE+4 = 252 by
 - generating an A2L file from the firmware ELF
 - running simple command-line XCP connection, calibration and measurement tests
 
+
 ### Build xcpclient
 
-Build `xcpclient` from source.  
-The Rust `xcp-lite` library contains is an external dependency. It contains the A2L registry, reader and writer for the xcpclient database generator.
+Building `xcpclient` from source requires Rust and Cargo to be installed.  
+The crate xcp_registry in the Rust `xcp-lite` repository is an external dependency for xcpclient. It contains the A2L registry, reader and writer for the xcpclient database generator. Set the dependency in xcpclient/cargo.toml to the latest version of xcp_registry in the xcp-lite repository on GitHub or local path.
 
-For the current development state, use matching branches of both repositories, for example `V2.1.x` on your XCPlite fork and the corresponding `V2.1.x` branch of your `xcp-lite` fork or dependency in Cargo.toml of xcpclient.
-
-Typical workflow:
 
 ```bash
-cd git
-git clone --recursive <xcp-lite-repository-url>
-git clone  <XCPlite-repository-url>
-cd git xcp-lite
-git checkout V2.1.0
-git submodule update --init --recursive
-cd git/XCPlite
-git checkout V2.1.0
 cd tools/xcpclient
 cargo build --release
 cargo install --path .
