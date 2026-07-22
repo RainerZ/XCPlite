@@ -750,12 +750,10 @@ const char *XcpGetProjectName(void);
 const char *XcpGetEcuEpk(void); // Only in SHM mode different to XcpGetLocalEpk(), which is for the application, while XcpGetEcuEpk() is for the overall ECU
 const char *XcpGetLocalEpk(void);
 
-#ifdef OPTION_ENABLE_A2L_GENERATOR
 // A2L file name
 // Notify XCPlite there is a valid A2L with this name to be provided for upload via XCP command GET_ID
 void XcpSetA2lName(const char *name);
 const char *XcpGetA2lName(void);
-#endif // OPTION_ENABLE_A2L_GENERATOR
 
 // ELF file name
 // Notify XCPlite there is a valid ELF with this pathname to be provided for upload via XCP command GET_ID
