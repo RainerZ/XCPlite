@@ -8,6 +8,8 @@ All notable changes to XCPlite are documented in this file.
 - Added support for enums in build time A2L generation (xcpclient ELF->A2L converter)
 - New example no_a2l_demo_cpp demonstrating build time A2L generation for C++
 - Removed in code definition of _GNU_SOURCE, made it public in CMakeLists.txt
+- Updated mc_registry, gimli and object crate dependencies to latest versions
+- Cosmetic changes 
 
 
 ## [V2.1.6]
