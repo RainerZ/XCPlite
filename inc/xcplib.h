@@ -620,12 +620,14 @@ extern const uint8_t *gXcpBaseAddr;
 // #define XCP_STRINGIFY(x) XCP_STRINGIFY_INNER(x)
 // #if defined(__cplusplus) && (defined(__clang__) || defined(__GNUC__))
 // #define XCP_COMMENT(name, comment) static const char XCP_METADATA_SECTION_ATTR xcp_meta__comment__##name[] __asm__("xcp_meta__comment__" XCP_STRINGIFY(name)) = comment;
+// #define XCP_READ_WRITE(name) static const bool XCP_METADATA_SECTION_ATTR xcp_meta__read_write__##name[] __asm__("xcp_meta__read_write__" XCP_STRINGIFY(name)) = true;
 // #define XCP_UNIT(name, unit) static const char XCP_METADATA_SECTION_ATTR xcp_meta__unit__##name[] __asm__("xcp_meta__unit__" XCP_STRINGIFY(name)) = unit;
 // #define XCP_LIMITS(name, min, max) \
 //     static const double XCP_METADATA_SECTION_ATTR xcp_meta__min__##name __asm__("xcp_meta__min__" XCP_STRINGIFY(name)) = min; \ static const double XCP_METADATA_SECTION_ATTR
 //     xcp_meta__max__##name __asm__("xcp_meta__max__" XCP_STRINGIFY(name)) = max
 // #else
 #define XCP_COMMENT(name, comment) static const char XCP_METADATA_SECTION_ATTR xcp_meta__comment__##name[] = comment;
+#define XCP_READ_WRITE(name) static const bool XCP_METADATA_SECTION_ATTR xcp_meta__read_write__##name[] = true;
 #define XCP_UNIT(name, unit) static const char XCP_METADATA_SECTION_ATTR xcp_meta__unit__##name[] = unit;
 #define XCP_LIMITS(name, min, max)                                                                                                                                                 \
     static const double XCP_METADATA_SECTION_ATTR xcp_meta__min__##name = min;                                                                                                     \
