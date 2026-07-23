@@ -206,6 +206,12 @@ struct Args {
     #[arg(long, value_names = ["NAME", "VALUE"], num_args = 2)]
     cal: Vec<String>,
 
+    // --skip-vars-without-metadata
+    /// Skip variables without any metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) when creating an A2L file from an ELF file.
+    /// Only variables that have at least one metadata annotation are included in the A2L output.
+    #[arg(long, default_value_t = false)]
+    skip_vars_without_metadata: bool,
+
     /// --test
     /// Execute a test sequence on the XCP server.
     #[arg(long, default_value_t = false)]
@@ -491,6 +497,7 @@ async fn xcp_client(
     measurement_duration_ms: u64,
     cal_args: Vec<String>,
     csv_filename: String,
+    skip_vars_without_metadata: bool,
 ) -> Result<(), Box<dyn Error>> {
     // Create xcp_client
     let mut xcp_client = XcpClient::new(protocol, dest_addr, local_addr, baud_rate);
@@ -759,6 +766,15 @@ async fn xcp_client(
                     elf_reader.register_variables(&mut reg, segment_relative, verbose, elf_idx_unit_limit, &elf_var_filter, &elf_unit_filter)?;
                     // Apply metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the xcp_meta ELF section
                     elf_reader.register_metadata(&mut reg, verbose)?;
+                    // Optionally remove all variables without any metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the registry
+                    if skip_vars_without_metadata {
+                        let before = reg.instance_list.len();
+                        reg.instance_list.retain(|inst| inst.get_mc_support_data().has_metadata());
+                        let removed = before - reg.instance_list.len();
+                        if verbose > 0 || removed > 0 {
+                            info!("Removed {} variables without metadata ({} remaining)", removed, reg.instance_list.len());
+                        }
+                    }
                 }
             }
 
@@ -1188,6 +1204,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             args.time * 1000,
             args.cal,
             args.csv,
+            args.skip_vars_without_metadata,
         )
         .await;
         if let Err(e) = res {
