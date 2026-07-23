@@ -14,7 +14,7 @@ use std::ffi::OsStr;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 
-use xcp_registry::{McAddress, McDimType, McEvent, McObjectType, McSupportData, McValueType, Registry, RegistryError};
+use xcp_registry::{McAddress, McDimType, McEvent, McObjectQualifier, McObjectType, McSupportData, McValueType, Registry, RegistryError};
 
 /*
 Which information can be detected from ELF/DWARF:
@@ -1025,6 +1025,10 @@ fn apply_field_metadata(
             let sd = McSupportData::new(McObjectType::Unspecified);
             if kind == "min" { sd.set_min(Some(value)) } else { sd.set_max(Some(value)) }
         }
+        "read_write" => {
+            let sd = McSupportData::new(McObjectType::Unspecified);
+            sd.set_read_write()
+        }
         _ => {
             warn!("Unknown metadata kind '{}' in variable '{}'", kind, var_name);
             return false;
@@ -1049,6 +1053,9 @@ fn apply_field_metadata(
 // Path B helper: apply metadata directly to an McInstance's mc_support_data.
 fn apply_instance_metadata(inst: &mut xcp_registry::McInstance, kind: &str, meta_data: &[u8], offset: usize, is_le: bool) {
     match kind {
+        "read_write" => {
+            inst.mc_support_data.update_qualifier(McObjectQualifier::ReadWrite);
+        }
         "unit" | "comment" => {
             if let Some(value) = read_cstr_at(meta_data, offset) {
                 if kind == "unit" {
