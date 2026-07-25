@@ -69,6 +69,9 @@
 // Requires XCP_MAX_EVENT_COUNT * 2 bytes of memory
 #define XCP_MAX_EVENT_COUNT OPTION_DAQ_EVENT_COUNT
 
+// Enable XCP_GET_EVENT_INFO, if this is enabled, event information can be queried by the XCP client tool
+#define XCP_ENABLE_DAQ_EVENT_INFO
+
 #else
 
 #error "Please define OPTION_DAQ_EVENT_COUNT, remove this error if you want arbitrary event numbers without a maximum count"

@@ -303,19 +303,11 @@ static void A2lCreate_IF_DATA_DAQ(const char *project_name) {
     uint16_t eventCount = XcpGetEventCount();
     fprintf(gA2lFile, gA2lIfDataBeginDAQ, eventCount, XCP_TIMESTAMP_UNIT_S);
     for (uint32_t id = 0; id < eventCount; id++) {
-#if defined(XCP_ENABLE_DAQ_EVENT_LIST)
-        const tXcpEvent *event = XcpGetEvent(id);
-        uint32_t cycle_time_ns = event->cycle_time_ns;
-        uint8_t priority = (event->flags & XCP_DAQ_EVENT_FLAG_PRIORITY) ? 0xFF : 0x00;
-#else
-        const tXcpEventDescriptor *event = XcpGetEvent(id);
-        uint32_t cycle_time_ns = event->cycle_time_ns;
-        uint8_t priority = event->priority;
-#endif
+
         // Convert cycle time to ASAM XCP IF_DATA coding time cycle and time unit
         // RESOLUTION OF TIMESTAMP "UNIT_1NS" = 0, "UNIT_10NS" = 1, ...
-        uint8_t timeUnit = 0;               // timeCycle unit, 1ns=0, 10ns=1, 100ns=2, 1us=3, ..., 1ms=6, ...
-        uint32_t timeCycle = cycle_time_ns; // cycle time in units, 0 = sporadic or unknown
+        uint8_t timeUnit = 0;                          // timeCycle unit, 1ns=0, 10ns=1, 100ns=2, 1us=3, ..., 1ms=6, ...
+        uint32_t timeCycle = XcpGetEventCycleTime(id); // cycle time in units, 0 = sporadic or unknown
         while (timeCycle >= 256) {
             timeCycle /= 10;
             timeUnit++;
@@ -324,7 +316,7 @@ static void A2lCreate_IF_DATA_DAQ(const char *project_name) {
         // Long name and short name (max 8 chars)
         const char *name = XcpGetEventName(id);                 // Short name is not build with prefix
         const char *pname = A2lGetEventName_(project_name, id); // Long name with prefix
-        fprintf(gA2lFile, "/begin EVENT \"%s\" \"%.8s\" 0x%X DAQ 0xFF %u %u %u CONSISTENCY EVENT", pname, name, id, timeCycle, timeUnit, priority);
+        fprintf(gA2lFile, "/begin EVENT \"%s\" \"%.8s\" 0x%X DAQ 0xFF %u %u %u CONSISTENCY EVENT", pname, name, id, timeCycle, timeUnit, XcpGetEventPriority(id));
         fprintf(gA2lFile, " /end EVENT\n");
     }
 

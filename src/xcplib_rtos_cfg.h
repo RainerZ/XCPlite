@@ -106,8 +106,8 @@
 //-------------------------------------------------------------------------------
 // Data acquisition
 
-// Event list management
-// #undef OPTION_DAQ_EVENT_LIST
+// No dynamic event list management, use section registered events
+#undef OPTION_DAQ_EVENT_LIST
 
 // Adjust OPTION_DAQ_MEM_SIZE and OPTION_DAQ_EVENT_COUNT to your application
 // In maximum fragmentation, each measurement value needs 6 bytes DAQ list memory
@@ -139,8 +139,8 @@
 
 // Create an asynchronous, cyclic DAQ event with event ID 0 for asynchronous data acquisition
 // Global variables default to this event
+// Does not work with section registered events
 #undef OPTION_DAQ_ASYNC_EVENT
-#define OPTION_DAQ_ASYNC_EVENT
 
 //-------------------------------------------------------------------------------
 // A2L / ELF — no filesystem on embedded; generate A2L externally via xcpclient or other tools
