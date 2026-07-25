@@ -26,6 +26,8 @@ regex = "1.12.3"
 chrono = "0.4.45"
 parking_lot = "0.12.5"
 tokio = { version = "1.52", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+figment = { version = "0.10", features = ["toml"] }
 ihex = "3.0"
 
 # ELF/DWARF Debug info parsing dependencies

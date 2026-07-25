@@ -157,9 +157,6 @@ fn extract_function_from_die(
     let name = match get_string_attribute(dwarf, unit, entry, gimli::DW_AT_name)? {
         Some(name) => name,
         None => {
-            // if verbose {
-            //     println!("    Skipping unnamed function");
-            // }
             return Ok(None);
         }
     };
@@ -168,9 +165,6 @@ fn extract_function_from_die(
     let low_pc = match entry.attr_value(gimli::DW_AT_low_pc) {
         Some(AttributeValue::Addr(addr)) => addr,
         _ => {
-            // if verbose {
-            //     println!("    Function '{}' has no low_pc", name);
-            // }
             return Ok(None);
         }
     };
@@ -181,9 +175,6 @@ fn extract_function_from_die(
         Some(AttributeValue::Addr(addr)) => addr,
         Some(AttributeValue::Udata(offset)) => low_pc + offset,
         _ => {
-            // if verbose {
-            //     println!("    Function '{}' has no high_pc", name);
-            // }
             return Ok(None);
         }
     };
@@ -259,13 +250,6 @@ fn extract_frame_base_offset(entry: &gimli::DebuggingInformationEntry<EndianSlic
 /// This function parses .eh_frame or .debug_frame sections using gimli
 /// to find the CFA (Canonical Frame Address) calculation rule for a function.
 fn extract_cfa_from_cfi(file: &object::File, function_address: u64) -> Result<Option<i64>> {
-    // if verbose {
-    //     println!(
-    //         "    Searching for CFA rules at address 0x{:08x}",
-    //         function_address
-    //     );
-    // }
-
     // Try .eh_frame first (more common)
     if let Some(cfa_offset) = parse_eh_frame(file, function_address)? {
         // println!("    Found CFA offset in .eh_frame: {}", cfa_offset);
@@ -293,14 +277,6 @@ fn parse_eh_frame(file: &object::File, function_address: u64) -> Result<Option<i
 
     let eh_frame_data = eh_frame_section.data()?;
     let eh_frame_address = eh_frame_section.address();
-
-    // if verbose {
-    //     println!(
-    //         "    Found .eh_frame section with {} bytes at 0x{:08x}",
-    //         eh_frame_data.len(),
-    //         eh_frame_address
-    //     );
-    // }
 
     let eh_frame = EhFrame::new(eh_frame_data, LittleEndian);
     parse_cfi_section(&eh_frame, eh_frame_address, function_address, ".eh_frame")
@@ -352,26 +328,12 @@ fn parse_cfi_section<R: gimli::Reader>(section: &impl UnwindSection<R>, section_
 
                 // Check if this FDE covers our function
                 if function_address >= fde_start && function_address < fde_end {
-                    // if verbose {
-                    //     println!(
-                    //         "    Found FDE in {} covering 0x{:08x}-0x{:08x}",
-                    //         section_name, fde_start, fde_end
-                    //     );
-                    // }
-
                     // Parse the unwind instructions to get CFA rules
                     return parse_fde_for_cfa(&fde, section, &bases);
                 }
             }
         }
     }
-
-    // if verbose {
-    //     println!(
-    //         "    No FDE found in {} for address 0x{:08x}",
-    //         section_name, function_address
-    //     );
-    // }
 
     Ok(None)
 }
