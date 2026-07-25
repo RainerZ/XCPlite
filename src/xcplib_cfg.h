@@ -134,6 +134,7 @@
 #define OPTION_DAQ_MEM_SIZE (512 * 6)
 
 // Create an cyclic DAQ event for asynchronous data acquisition
+// Needs OPTION_DAQ_EVENT_LIST
 // #define OPTION_DAQ_ASYNC_EVENT
 
 // Transport layer queue, vectored IO, lockless with variable queue entry size

@@ -196,6 +196,9 @@ bool XcpCheckDaqLists(uint8_t daq_state, tXcpEventId event_id);
 
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
 
+// Dynamic event list
+//--------------------
+
 #ifndef XCP_MAX_EVENT_COUNT
 #error "Please define XCP_MAX_EVENT_COUNT!"
 #endif
@@ -252,6 +255,9 @@ uint8_t XcpGetEventAppId(tXcpEventId event);
 
 #else
 
+// Section registered event descriptors
+//--------------------------------------
+
 #ifdef XCP_ENABLE_DAQ_PRESCALER
 #error "XCP_ENABLE_DAQ_PRESCALER requires XCP_ENABLE_DAQ_EVENT_LIST"
 #endif
@@ -266,12 +272,16 @@ const tXcpEventDescriptor *XcpGetEvent(tXcpEventId event);
 
 // Get event name by id, returns NULL if not found
 const char *XcpGetEventName(tXcpEventId event);
+// Get event cycle time by id, returns 0 if not found
+uint32_t XcpGetEventCycleTime(tXcpEventId event);
+// Get event priority by id, returns 0 if not found
+uint8_t XcpGetEventPriority(tXcpEventId event);
 
 // Get event id by name, returns XCP_UNDEFINED_EVENT_ID if not found
 // In SHM mode, only searches within the calling process's own events (scoped by app_id)
 tXcpEventId XcpFindEvent(const char *name);
 
-// Get the number of events in the XCP event list
+// Get the number of events
 uint16_t XcpGetEventCount(void);
 
 /****************************************************************************/
@@ -325,7 +335,7 @@ typedef struct {
 #endif
 #if !defined(XCP_ENABLE_DAQ_EVENT_LIST) && defined(XCP_MAX_EVENT_COUNT)
 #if (XCP_MAX_EVENT_COUNT == 0) || (XCP_MAX_EVENT_COUNT > 1024)
-#error "XCP_MAX_EVENT_COUNT must be > 0 and <= 1024, remove this if you are sure you want this"
+#error "XCP_MAX_EVENT_COUNT must be > 0 and <= 1024, remove this if you are sure about the memory usage"
 #endif
     uint16_t daq_first[XCP_MAX_EVENT_COUNT]; // Event channel to DAQ list mapping when there is no event management
 #endif
