@@ -250,9 +250,9 @@ impl ElfReader {
 
         // Print the found segment definition markers
         if verbose >= 1 {
-            info!("Found {} segment definition marker variables:", seg_definitions.len());
+            println!("Found {} segment definition marker variables:", seg_definitions.len());
             for (seg_index, (var_name, var_infos, var_address, seg_number)) in seg_definitions.iter().enumerate() {
-                info!("{}: '{}' - number={:?}, addr={:08X}'", seg_index, var_name, seg_number, var_address);
+                println!("{}: '{}' - number={:?}, addr={:08X}'", seg_index, var_name, seg_number, var_address);
                 if verbose >= 2 {
                     let var_info = &var_infos[0];
                     let function_name = if let Some(f) = var_info.function.as_ref() { f.as_str() } else { "" };
@@ -262,7 +262,7 @@ impl ElfReader {
                     } else {
                         format!("{unit_idx}")
                     };
-                    info!("  found in {}:'{}'", unit_name, function_name);
+                    println!("  found in {}:'{}'", unit_name, function_name);
                 }
             }
         }
@@ -308,7 +308,7 @@ impl ElfReader {
                             for candidate in x {
                                 let unit_name = self.debug_data.make_simple_unit_name(candidate.unit_idx).unwrap_or_else(|| candidate.unit_idx.to_string());
                                 let function_name = candidate.function.as_deref().unwrap_or("<global>");
-                                info!(
+                                println!(
                                     "  candidate in {}:'{}', addr_class={}, addr=0x{:08X}",
                                     unit_name, function_name, candidate.address.0, candidate.address.1
                                 );
@@ -325,14 +325,14 @@ impl ElfReader {
                 // Determine segment length
                 seg_length = {
                     if let Some(type_info) = self.debug_data.types.get(&seg_var_info.typeref) {
-                        info!(
+                        println!(
                             "Calibration segment '{}' type information found, type={}, size = {}",
                             seg_name,
                             type_info.name.as_ref().map_or("<unnamed>", |s| s.as_str()),
                             type_info.get_size()
                         );
                         if verbose >= 2 {
-                            info!("  type = {}", type_info);
+                            println!("  type = {}", type_info);
                         }
                         type_info.get_size().try_into().expect("segment size exceeds 64K")
                     } else {
@@ -552,7 +552,7 @@ impl ElfReader {
                     }
 
                     if verbose >= 1 {
-                        info!("  Event '{}' trigger in function '{}', cfa = {}", evt_name, evt_function, evt_cfa);
+                        println!("  Event '{}' trigger in function '{}', cfa = {}", evt_name, evt_function, evt_cfa);
                     }
 
                     // Store the unit and function name and canonical stack frame address offset for this event trigger
@@ -806,23 +806,27 @@ impl ElfReader {
                         | DbgDataType::Double
                         | DbgDataType::Array { .. }
                         | DbgDataType::Struct { .. } => {
-                            info!(
-                                "Add {} for {}: addr = {}:0x{:08x}",
-                                if object_type == McObjectType::Characteristic { "characteristic" } else { "measurement" },
-                                a2l_name,
-                                mem_addr_ext,
-                                mem_addr
-                            );
                             if verbose >= 2 {
-                                info!("{}", type_info);
+                                print!(
+                                    "  Add {} instance for {}: addr = {}:0x{:08x}",
+                                    if object_type == McObjectType::Characteristic { "characteristic" } else { "measurement" },
+                                    a2l_name,
+                                    mem_addr_ext,
+                                    mem_addr
+                                );
+                                if verbose >= 3 {
+                                    println!(" type = {}", type_info);
+                                } else {
+                                    println!();
+                                }
                             }
                             let dim_type = self.get_dim_type(reg, type_info, object_type);
                             let res = reg.instance_list.add_instance(a2l_name.clone(), dim_type, McSupportData::new(object_type), mc_addr);
                             match res {
                                 Ok(_) => {
                                     if verbose >= 1 {
-                                        info!(
-                                            "  Registered variable '{}' with type '{}', size = {}, event id = {}",
+                                        println!(
+                                            "Registered variable '{}' type_name = '{}', size = {}, event_id = {}",
                                             a2l_name,
                                             type_name.as_ref().unwrap_or(&"<unnamed>".to_string()),
                                             type_size,
@@ -838,18 +842,22 @@ impl ElfReader {
                         // Special case for enum types, which are represented as integer types with enumerators described as special unit format "value "NAME" value "NAME" ...".
                         // We convert the enumerators to a unit string and store it in the McSupportData for the instance.
                         DbgDataType::Enum { size, signed, enumerators } => {
-                            info!(
-                                "Add {} for enum {}: addr = {}:0x{:08x}, size = {}, signed = {}, enumerators = {:?}",
-                                if object_type == McObjectType::Characteristic { "characteristic" } else { "measurement" },
-                                a2l_name,
-                                mem_addr_ext,
-                                mem_addr,
-                                size,
-                                signed,
-                                enumerators
-                            );
                             if verbose >= 2 {
-                                info!("type_info = {}", type_info);
+                                print!(
+                                    "  Add {} instance for enum {}: addr = {}:0x{:08x}, size = {}, signed = {}, enumerators = {:?}",
+                                    if object_type == McObjectType::Characteristic { "characteristic" } else { "measurement" },
+                                    a2l_name,
+                                    mem_addr_ext,
+                                    mem_addr,
+                                    size,
+                                    signed,
+                                    enumerators
+                                );
+                                if verbose >= 3 {
+                                    println!(" type = {}", type_info);
+                                } else {
+                                    println!();
+                                }
                             }
                             let dim_type = self.get_dim_type(reg, type_info, object_type);
                             let unit_string = enumerators_to_unit_string(enumerators);
@@ -863,8 +871,8 @@ impl ElfReader {
                             match res {
                                 Ok(_) => {
                                     if verbose >= 1 {
-                                        info!(
-                                            "  Registered enum variable '{}' with type '{}', size = {}, event id = {}, unit = {:?}",
+                                        println!(
+                                            "Registered enum variable '{}' with type '{}', size = {}, event id = {}, unit = {:?}",
                                             a2l_name,
                                             type_name.as_ref().unwrap_or(&"<unnamed>".to_string()),
                                             type_size,
@@ -961,7 +969,7 @@ impl ElfReader {
                 if let Some(inst) = reg.instance_list.get_instance_mut(name, None) {
                     apply_instance_metadata(inst, kind, meta_data, offset, is_le);
                     if verbose >= 1 {
-                        info!("  Metadata {} {} applied to instance '{}'", kind, var_name, name);
+                        println!("  Metadata {} {} applied to instance '{}'", kind, var_name, name);
                     }
                 }
             }
@@ -1038,7 +1046,7 @@ fn apply_field_metadata(
     match reg.set_instance_field_support_data(instance_name, field_path, support_data) {
         Ok(()) => {
             if verbose >= 1 {
-                info!("  Metadata {} applied to typedef field '{}.{}'", var_name, instance_name, field_path);
+                println!("  Metadata {} applied to typedef field '{}.{}'", var_name, instance_name, field_path);
             }
             true
         }

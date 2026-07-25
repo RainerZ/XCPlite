@@ -328,10 +328,8 @@ impl DebugDataReader<'_> {
         while let Ok(Some(unit)) = iter.next() {
             // get the abbreviations for the unit
             let Ok(abbreviations) = unit.abbreviations(&self.dwarf.debug_abbrev) else {
-                if self.verbose > 0 {
-                    let offset = unit.offset().to_debug_info_offset(&unit).unwrap_or(gimli::DebugInfoOffset(0)).0;
-                    log::warn!("Error: Failed to get abbreviations for unit @{offset:x}");
-                }
+                let offset = unit.offset().to_debug_info_offset(&unit).unwrap_or(gimli::DebugInfoOffset(0)).0;
+                log::warn!("Failed to get abbreviations for unit @{offset:x}");
                 continue;
             };
 
@@ -396,10 +394,8 @@ impl DebugDataReader<'_> {
                             });
                         }
                         Err(errmsg) => {
-                            if self.verbose > 0 {
-                                let offset = entry.offset().to_debug_info_offset(unit).unwrap_or(gimli::DebugInfoOffset(0)).0;
-                                log::warn!("Error loading variable @{offset:x}: {errmsg}");
-                            }
+                            let offset = entry.offset().to_debug_info_offset(unit).unwrap_or(gimli::DebugInfoOffset(0)).0;
+                            log::warn!("Could not load variable @{offset:x}: {errmsg}");
                         }
                     }
                 }

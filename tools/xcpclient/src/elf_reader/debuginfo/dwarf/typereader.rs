@@ -41,9 +41,7 @@ impl DebugDataReader<'_> {
 
                     // load one type and add it to the collection (always succeeds for correctly structured DWARF debug info)
                     let result = self.get_type(unit_idx, dbginfo_offset, &mut typereader_data);
-                    if let Err(errmsg) = result
-                    /*&& self.verbose>0*/
-                    {
+                    if let Err(errmsg) = result {
                         log::warn!("Error loading type info for variable {name}: {errmsg}");
                     }
                     typereader_data.wip_items.clear();
