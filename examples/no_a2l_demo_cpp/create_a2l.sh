@@ -44,9 +44,11 @@ TEST=true
 
 
 # Target connection details
-TARGET_USER="rainer"
-TARGET_HOST="192.168.0.206"
-TARGET_PATH="~/XCPlite-RainerZ"
+TARGET_USER="parallels"
+TARGET_HOST="10.211.55.4"
+#TARGET_USER="rainer"
+#TARGET_HOST="192.168.0.206"
+TARGET_PATH="~/XCPlite-Test"
 TARGET_BUILD_DIR="build-no_a2l"
 TARGET_BINARY="no_a2l_demo_cpp"
 
