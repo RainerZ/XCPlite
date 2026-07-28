@@ -204,7 +204,7 @@ int main(int argc, char *argv[]) {
 
 #ifdef OPTION_ENABLE_CALIBRATION
     // Register the enum
-    A2lCreateEnumConversion("CounterState", "3 0 \"OFF\" 1 \"ON\" 2 \"STANDBY\"");
+    A2lCreateEnumConversion(CounterState, "3 0 \"OFF\" 1 \"ON\" 2 \"STANDBY\"");
 
     // Register the ParametersT calibration segment description as a typedef and an instance in the A2L file
     A2lCreateTypedef(ParametersT, "Typedef for ParametersT",                                             //
