@@ -260,8 +260,10 @@ impl DebugData {
                 || var_name.starts_with("evt__")
                 || var_name.starts_with("trg__")
             {
-                print!("'{}': ", var_name);
-                assert!(var_info.len() == 1);
+                if var_info.len() != 1 {
+                    println!("{} instances of '{}' found, skipped", var_info.len(), var_name);
+                    continue;
+                }
                 let var = &var_info[0];
                 let unit_name = if let Some(name) = self.make_simple_unit_name(var.unit_idx) {
                     name
@@ -270,7 +272,10 @@ impl DebugData {
                 };
                 let function_name = if let Some(name) = &var.function { name } else { "<global>" };
                 let name_space = if var.namespaces.len() > 0 { var.namespaces.join("::") } else { "".to_string() };
-                println!(" {}:'{}' {}: addr={}:0x{:08X}", unit_name, function_name, name_space, var.address.0, var.address.1);
+                println!(
+                    "{}':  {}:'{}' {}: addr={}:0x{:08X}",
+                    var_name, unit_name, function_name, name_space, var.address.0, var.address.1
+                );
             }
         }
 
