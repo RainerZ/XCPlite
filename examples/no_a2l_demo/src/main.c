@@ -30,7 +30,7 @@ static void sig_handler(int sig) { global_running = false; }
 #define OPTION_SERVER_PORT 5555           // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}   // Bind addr, 0.0.0.0 = ANY
 #define OPTION_QUEUE_SIZE (1024 * 8)      // Size of the measurement queue in bytes, must be a multiple of 8
-#define OPTION_LOG_LEVEL 3                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
+#define OPTION_LOG_LEVEL 4                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
@@ -263,9 +263,9 @@ int main(int argc, char *argv[]) {
     create_thread(&__t1, NULL, task, NULL);
 
     // Demo measurement variables
-    XCP_COMMENT(counter, "Local measurement variable in main");
+    XCP_COMMENT(main__counter, "Local measurement variable in main");
     volatile uint16_t counter = 0;
-    XCP_COMMENT(static_counter, "Static local measurement variable in main");
+    XCP_COMMENT(main__static_counter, "Static local measurement variable in main");
     volatile static uint16_t static_counter = 0;
 
     // Calibration parameter counter_max
