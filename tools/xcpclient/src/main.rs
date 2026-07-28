@@ -426,7 +426,10 @@ impl XcpDaqDecoder for DaqDecoder {
                             format!("{}", f64::from_bits(value))
                         }
                     }
-                    A2lTypeEncoding::Blob => panic!("Blob not supported"),
+                    A2lTypeEncoding::Blob => {
+                        warn!("Blob not supported");
+                        String::new()
+                    }
                 };
 
                 if let Some(ref mut writer) = self.csv_writer {
