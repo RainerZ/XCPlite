@@ -72,7 +72,7 @@ Note: XCP used the term `upload` in the sense of upload to the client, which is 
 
 To avoid A2L changes on each restart, the creation order of events and segments just has to be deterministic.
 
-As a default, the A2L version identifier (EPK) is generated from build time and date. If the A2L file is not stable, it is up to the user to provide an EPK version string which reflects this, otherwise it could create undefined behavior.
+If the A2L file is not stable, it is up to the user to provide an EPK version string which reflects this, otherwise it could create undefined behavior.
 
 ### Option 2: Persistent Generation with Freeze Support
 
@@ -89,7 +89,7 @@ As a side effect, calibration segment persistence (freeze command) is supported.
 ## Offline A2L Generation 
 
 Use the XCPlite specific A2L creator tool (xcpclient), which is aware of the different addressing schemes and static markers created by the code instrumentation macros.
-See `no_a2l_demo` and in particular  `esp32_freertos_demo` for examples and instructions.
+See `no_a2l_demo` or `no_a2l_demo_cpp` and in particular  `esp32_freertos_demo` for examples and instructions.
 
 ### xcpclient — ELF/DWARF Internals
 
@@ -217,8 +217,6 @@ static tXcpEventId trg__AASDD__calc = XCP_UNDEFINED_EVENT_ID;
 // AddrExt=0,1: absolute — AddrExt=2: stack — AddrExt=3: addr(&x) — AddrExt=4: addr(&y)
 ```
 
-The number of `D` letters in the anchor name equals the number of dynamic slots in use;
-xcpclient counts them to know how many individual base addresses to expect.
 
 #### What xcpclient reads from the ELF
 
@@ -255,7 +253,7 @@ XCPlite absolute addressing: XCPLITE__CASDD (default)
 0xFE        - MTA pointer address space (XCP_ADDR_EXT_PTR)
 0xFF        - Undefined address extension (XCP_UNDEFINED_ADDR_EXT)
 
-XCPlite relative addressing: XCPLITE__ACSDD (for use case with external A2L generation)
+XCPlite relative addressing: XCPLITE__ACSDD (for use cases with external A2L generation)
 0x00        - Absolute addressing mode (XCP_ADDR_EXT_ABS)
 0x01        - Calibration segment relative addressing mode (XCP_ADDR_EXT_SEG)
 ... same as above
@@ -301,11 +299,6 @@ The flush operation for delayed calibration writes is redirected over the applic
 ```
 void ApplXcpRegisterFlushCallback(uint8_t (*cb_flush)(void));
 ```
-
-
-
-
-
 
 
 ## EPK - ECU Software Version
@@ -377,18 +370,7 @@ In XCPlite, the EPK may be specified with an API function or is generated from b
 - Indicate when polling access is not possible. CANape assumes polling access is always possible
 - Configuration for begin/end atomic calibration user defined XCP command is not default. Must be set once in a new CANape project to 0x01F1 and 0x02F1
 - EPK segment is defined with 2 readonly pages, because of CANape irritations with mixed mode calibration segment. CANape would not care for a single page EPK segment, reads active page always from segment 0 and uses only SET_CAL_PAGE ALL mode
-
-
-### Other Issues
-
 - CANape ignores address extension of `loop_histogram` in ccp_demo, when saving calibration values to a parameter file. `loop_histogram` is a CHARACTERISTIC array, but it is in a measurement group
-
-
-### TODO list
-
-- Provide a way to deactivate XCP without code changes when accessing calibration segments 
-
-
 
 
 ## 5 · Appendix

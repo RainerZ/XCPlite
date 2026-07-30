@@ -3,11 +3,15 @@
 All notable changes to XCPlite are documented in this file.
 
 
-## [V2.1.8]
+## [V2.1.9]
 
-- Added support for enums in build time A2L generation (xcpclient ELF->A2L converter)
 - New example no_a2l_demo_cpp demonstrating build time A2L generation for C++
-- Removed in code definition of _GNU_SOURCE, made it public in CMakeLists.txt
+- Added xcpclient ELF->A2L converter support for enums in build time A2L generation
+- New xcpclient options --elf_skip_no_metadata and --config <xcpclient.toml>
+- New XCP_READ_WRITE metadata macro 
+- XCP DAQ event info (#define XCP_ENABLE_DAQ_EVENT_INFO) support for disabled OPTION_DAQ_EVENT_LIST with section registered events
+- Fixed length calibration segment name
+- Removed code definition of _GNU_SOURCE, made it public in CMakeLists.txt
 - Updated mc_registry, gimli and object crate dependencies to latest versions
 - Cosmetic changes 
 
