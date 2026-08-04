@@ -176,9 +176,14 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
 // Macros to create and access calibration segments or blocks
 #ifndef __cplusplus
 
-/// Global definition of a calibration segment or block
+/// Global, lazy definition of a calibration segment or block: only registers a static tXcpCalSegDescriptor in the
+/// xcp_cals linker section. It does NOT call XcpCreateCalSeg/XcpCreateCalBlk itself - calseg_id_##name stays
+/// XCP_UNDEFINED_CALSEG until XcpInit() pre-registers all xcp_cals descriptors via XcpRegisterSectionCalSegs()
+/// (see src/xcplite.c). Because of this, the segment is only usable after XcpInit() has run, and the macro itself
+/// must be used at file/global scope, so the static descriptor exists at link time regardless of whether its call
+/// site ever executes. For the equivalent macro that also creates the segment immediately (usable inside a function
+/// or loop, without depending on XcpInit()'s section scan), see CalSegCreate below.
 /// Name given as identifier, type name and segment name must be identical
-/// Macro maybe used outside function scope
 /// @param name given as identifier, &name is expected to be the const static lifetime pointer to the default page, sizeof(name) is used as size of the calibration segment
 // calseg__##name and calblk__##name are the linker map file markers for calibration segments and blocks
 #define CalSegDecl(calseg_name)                                                                                                                                                    \
@@ -190,9 +195,16 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
     static const tXcpCalSegDescriptor calblk__##calblk_name XCP_CAL_SECTION_ATTR = {                                                                                               \
         .name = #calblk_name, .addr = (const void *)&(calblk_name), .indexp = &calblk_id_##calblk_name, .size = sizeof(calblk_name), .type = XCP_CALSEG_TYPE_BLOCK};
 
-/// Dynamic creation of a calibration segment or block
+/// Dynamic, self-sufficient creation of a calibration segment or block: registers the same xcp_cals section
+/// descriptor as CalSegDecl/CalBlkDecl above, but additionally calls XcpCreateCalSeg/XcpCreateCalBlk immediately if
+/// not already created. Whichever runs first - this call site or XcpInit()'s section scan - creates the segment;
+/// the other one then finds it already registered by name and just reuses its index (see XcpRegisterSectionCalSegs()
+/// in src/cal.c). This makes the macro usable anywhere, including inside a function body or loop, without relying
+/// on XcpInit() having run yet.
+/// Note for readers of xcplib.hpp: the C++ macro of the same name, CalSegCreate(value), is unrelated - it is an
+/// expression (not a statement) that always creates the segment immediately via xcp::CalSeg<T>'s constructor and
+/// does not register a section descriptor at all.
 /// Name given as identifier, type name and segment name must be identical
-/// Macro may be used anywhere in the code, even in loops
 /// @param name given as identifier, &name is expected to be the const static lifetime pointer to the default page, sizeof(name) is used as size of the calibration segment
 // calseg__##name and calblk__##name are the linker map file markers for calibration segments and blocks
 #define CalSegCreate(calseg_name)                                                                                                                                                  \
@@ -805,24 +817,85 @@ uint8_t ApplXcpGetClockState(void);
 bool ApplXcpGetClockInfoGrandmaster(uint8_t *client_uuid, uint8_t *grandmaster_uuid, uint8_t *epoch, uint8_t *stratum);
 
 // Register clock callbacks
+// If no callback is registered for a given hook, XCPlite falls back to its own default implementation (see src/xcpappl.c).
+
+/// Override the source of ApplXcpGetClock64()'s value.
+/// @param cb_get_clock returns the current clock in 1/CLOCK_TICKS_PER_S ticks; see ApplXcpGetClock64 above for resolution/epoch
 void ApplXcpRegisterGetClockCallback(uint64_t (*cb_get_clock)(void));
+/// Override the source of ApplXcpGetClockState()'s value.
+/// @param cb_get_clock_state returns one of the CLOCK_STATE_* values above
 void ApplXcpRegisterGetClockStateCallback(uint8_t (*cb_get_clock_state)(void));
+/// Override the source of ApplXcpGetClockInfoGrandmaster()'s value.
+/// @param cb_get_clock_info_grandmaster fills client_uuid/grandmaster_uuid/epoch/stratum as documented on
+/// ApplXcpGetClockInfoGrandmaster above; returns true if PTP is available, otherwise XCP assumes an unsynchronized clock
 void ApplXcpRegisterGetClockInfoGrandmasterCallback(bool (*cb_get_clock_info_grandmaster)(uint8_t *client_uuid, uint8_t *grandmaster_uuid, uint8_t *epoch, uint8_t *stratum));
 
 // Register XCP callbacks
+// If no callback is registered for a given hook, XCPlite falls back to its own default implementation (see src/xcpappl.c);
+// most default implementations are permissive (e.g. connect always succeeds, memory checks always pass).
+
+/// Called when an XCP client sends CONNECT.
+/// @param cb_connect mode is the CONNECT command's mode byte (0 = normal); return true to accept the connection, false to reject it
 void ApplXcpRegisterConnectCallback(bool (*cb_connect)(uint8_t mode));
+/// Called before a requested DAQ start is applied, giving the application a chance to veto it (XCP protocol layer >= 1.4 only).
+/// @param cb_prepare_daq return false to cancel the DAQ start, true to allow it
 void ApplXcpRegisterPrepareDaqCallback(uint8_t (*cb_prepare_daq)(void));
+/// Called once DAQ has actually started running (after PrepareDaq, if applicable).
+/// @param cb_start_daq no parameters, no meaningful return value
 void ApplXcpRegisterStartDaqCallback(uint8_t (*cb_start_daq)(void));
+/// Called once DAQ has stopped.
+/// @param cb_stop_daq no parameters
 void ApplXcpRegisterStopDaqCallback(void (*cb_stop_daq)(void));
+/// Reserved for persisting/clearing the DAQ list configuration (XCP SET_REQUEST command's STORE_DAQ/CLEAR_DAQ semantics,
+/// 'clear' = clear rather than store, 'config_id' = the requested configuration id); not currently invoked by the
+/// protocol layer.
+/// @param cb_freeze_daq return a CRC_CMD_xxx status code (see "XCP command Return Codes" above)
 void ApplXcpRegisterFreezeDaqCallback(uint8_t (*cb_freeze_daq)(uint8_t clear, uint16_t config_id));
+/// Get the currently active calibration page. Only invoked when XCP_ENABLE_CAL_PAGE is used WITHOUT the built-in
+/// calibration segment management (i.e. custom page handling bypassing XcpCreateCalSeg); calibration segments created
+/// via XcpCreateCalSeg manage their own page switching and never reach this callback.
+/// @param cb_get_cal_page segment is the calibration segment number (0 if only one segment is supported); mode is
+/// CAL_PAGE_MODE_ECU (0x01, page as seen by the application) or CAL_PAGE_MODE_XCP (0x02, page as seen by the XCP tool),
+/// optionally combined with CAL_PAGE_MODE_ALL (0x80, query applies to all segments); these CAL_PAGE_MODE_* values are
+/// internal (src/xcp.h) and not re-exported here. Return the active page number: 0 = working/RAM page, 1 = default/FLASH page
 void ApplXcpRegisterGetCalPageCallback(uint8_t (*cb_get_cal_page)(uint8_t segment, uint8_t mode));
+/// Set the active calibration page. Same "bypasses built-in calibration segment management" scope as
+/// ApplXcpRegisterGetCalPageCallback above.
+/// @param cb_set_cal_page segment, mode as in ApplXcpRegisterGetCalPageCallback; page is the page number to activate
+/// (0 = working/RAM page, 1 = default/FLASH page); return a CRC_CMD_xxx status code
 void ApplXcpRegisterSetCalPageCallback(uint8_t (*cb_set_cal_page)(uint8_t segment, uint8_t page, uint8_t mode));
+/// Freeze the current working page as the new default/reference page. Only invoked when XCP_ENABLE_FREEZE_CAL_PAGE is
+/// used without the built-in calibration segment management (which has its own equivalent, XcpFreeze()).
+/// @param cb_freeze_cal no parameters; return a CRC_CMD_xxx status code
 void ApplXcpRegisterFreezeCalCallback(uint8_t (*cb_freeze_cal)(void));
+/// Copy one calibration page to another (XCP COPY_CAL_PAGE). Only invoked when XCP_ENABLE_COPY_CAL_PAGE is used without
+/// the built-in calibration segment management; currently only a single calibration segment is supported for this operation.
+/// @param cb_init_cal src_page, dst_page are page numbers (0 = working/RAM page, 1 = default/FLASH page); return a CRC_CMD_xxx status code
 void ApplXcpRegisterInitCalCallback(uint8_t (*cb_init_cal)(uint8_t src_page, uint8_t dst_page));
+/// Verify memory access permissions before a Memory Transfer Address (MTA) based command (e.g. SHORT_UPLOAD/DOWNLOAD)
+/// touches a given address range - called generically for any address extension, not just XCP_ENABLE_APP_ADDRESSING below.
+/// If no callback is registered, all accesses are allowed.
+/// @param cb_check ext is the XCP address extension, addr/size describe the byte range being accessed; return
+/// CRC_CMD_OK to allow the access, or a CRC_CMD_xxx error code (e.g. CRC_ACCESS_DENIED) to deny it
 void ApplXcpRegisterCheckCallback(uint8_t (*cb_check)(uint8_t ext, uint32_t addr, uint8_t size));
+/// Read memory for XCP_ENABLE_APP_ADDRESSING: redirects asynchronous memory access to the application instead of
+/// XCPlite's own address space, for the address extension XcpAddrIsApp() matches in xcp_cfg.h (XCP_ADDR_EXT_ABS by
+/// default; see docs/TECHNICAL.md "User specific addressing mode"). If no callback is registered, access is denied.
+/// @param cb_read src/size describe the source range, dst is the destination buffer to fill; return a CRC_CMD_xxx status code
 void ApplXcpRegisterReadCallback(uint8_t (*cb_read)(uint32_t src, uint8_t size, uint8_t *dst));
+/// Write memory for XCP_ENABLE_APP_ADDRESSING (the write-side counterpart of ApplXcpRegisterReadCallback above; same
+/// address-extension scope). If no callback is registered, access is denied.
+/// @param cb_write dst/size/src describe the destination range and source bytes; delay is true while CANape is in
+/// indirect calibration mode with an atomic calibration operation in progress (CC_USER_CMD 0xF1, subcmd 0x01=begin,
+/// 0x02=end - see docs/TECHNICAL.md), signaling the write may be held back and applied consistently with the others
+/// once ApplXcpRegisterFlushCallback's callback is invoked at the end of the operation; return a CRC_CMD_xxx status code
 void ApplXcpRegisterWriteCallback(uint8_t (*cb_write)(uint32_t dst, uint8_t size, const uint8_t *src, uint8_t delay));
+/// Apply any writes held back via ApplXcpRegisterWriteCallback's delay parameter, ending an atomic calibration operation.
+/// @param cb_flush no parameters; return a CRC_CMD_xxx status code
 void ApplXcpRegisterFlushCallback(uint8_t (*cb_flush)(void));
+/// Called periodically from the XCP server's background/idle processing; use for lightweight polling work that must
+/// run on that thread (e.g. lazy calibration writes needing non-blocking socket polling, see docs/CAL_RCU.md item 8).
+/// @param cb_idle no parameters
 void ApplXcpRegisterIdleCallback(void (*cb_idle)(void));
 
 // Utility functions (from platform.c) used for the demos to keep them clean and platform-independent
