@@ -10,11 +10,18 @@ For C++ usage see [hello_xcp_cpp](../hello_xcp_cpp/README.md).
 | Feature | How it is demonstrated |
 |---|---|
 | XCP server startup | `XcpInit` + `XcpEthServerInit` with runtime A2L generation |
-| Calibration segment | `CalSegDecl` / `CalSegCreate`, safe read via `CalSegLock` / `CalSegUnlock` |
-| Global variable measurement | `DaqRegisterVar` on global variables |
-| Stack variable measurement | `DaqRegisterVar` on local variables inside a function |
-| Addressing modes | Direct address, relative-to-base, and pointer-based registration |
-| Function instrumentation | Register function parameters and local variables; trigger event inside function |
+| Calibration segment | `XcpCreateCalSeg` to create it; `A2lSetSegmentAddrMode` + `A2lCreateParameter` to describe its parameters in the A2L file; safe, wait-free (and recursive) read access via `XcpLockCalSeg` / `XcpUnlockCalSeg` |
+| Global variable measurement | `DaqEventVar` + `A2L_MEAS` / `A2L_MEAS_PHYS` on global variables |
+| Stack variable measurement | `DaqEventVar` + `A2L_MEAS` on local variables inside a function |
+| Addressing modes | Absolute (global variables), Stack frame relative (local variables) and Calibration segment relative (calibration parameters) — see `A2lSetAbsoluteAddrMode` / `A2lSetStackAddrMode` / `A2lSetSegmentAddrMode` |
+| Function instrumentation | `calc_power()` — register function parameters and local variables, trigger event `calc_power` inside the function |
+
+`src/main.c` shows two equivalent ways to create the same events and measurements, selected by `#define OPTION_USE_VARIADIC_MACROS` (enabled by default):
+
+- **Variadic macros (default)**: `DaqEventVar(event, A2L_MEAS(...), ...)` registers each variable — auto-detecting whether it needs stack or absolute addressing — and triggers the event, all in one call.
+- **Manual macros** (undefine `OPTION_USE_VARIADIC_MACROS` in `main.c` to use): separate `DaqCreateEvent`, explicit `A2lSetAbsoluteAddrMode`/`A2lSetStackAddrMode` + `A2lCreateMeasurement` calls, and `DaqTriggerEvent`.
+
+The `#ifndef OPTION_USE_VARIADIC_MACROS` blocks in `main.c` contain the manual variant and are not compiled by default.
 
 ### Files
 

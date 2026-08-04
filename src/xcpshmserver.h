@@ -16,15 +16,15 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/// Initialize the server singleton.
-/// @pre User has called XcpInit.
-/// @param measurement_queue_size Measurement queue size in bytes. Includes the bytes occupied by the queue header and some space needed for alignment.
-/// @return true on success, otherwise false.
+// Initialize the server singleton.
+// @pre User has called XcpInit.
+// @param measurement_queue_size Measurement queue size in bytes. Includes the bytes occupied by the queue header and some space needed for alignment.
+// @return true on success, otherwise false.
 bool XcpShmServerInit(uint32_t measurement_queue_size);
 
-/// Shutdown the server.
+// Shutdown the server.
 bool XcpShmServerShutdown(void);
 
-/// Get the server status.
-/// @return true if the server is running, otherwise false.
+// Get the server status.
+// @return true if the server is running, otherwise false.
 bool XcpShmServerStatus(void);

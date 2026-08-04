@@ -72,7 +72,7 @@ C and C++ Examples:
    XcpSetLogLevel(3); // (1=error, 2=warning, 3=info, 4=commands, 5=trace)
 ```
 
-3. **Initialise the XCP core** *once*:
+3. **Initialize the XCP core** *once*:
 
 ```c
    XcpInit("MyProject" /* Project name*/, "V1.0.1" /* EPK version string*/, mode /* XCP mode */);
@@ -146,15 +146,19 @@ C++ Example:
    // XcpInit() registers the segment automatically from the xcp_cals ELF section.
 
    // Register as typedef instance in A2L (Option A only):
-   {
-       A2lTypedefBegin(ParametersT, &kParameters, "Typedef for ParametersT");
-       A2lTypedefParameterComponent(min, "Minimum random number value", "", -100.0, 100.0);
-       A2lTypedefParameterComponent(max, "Maximum random number value", "", -100.0, 100.0);
-       A2lTypedefEnd();
-   }
+   A2lCreateTypedef(ParametersT, "Typedef for ParametersT",
+                    A2L_PARAMETER_COMPONENT(min, "Minimum random number value", "", -100.0, 100.0),
+                    A2L_PARAMETER_COMPONENT(max, "Maximum random number value", "", -100.0, 100.0));
    gCalSeg->CreateA2lTypedefInstance("ParametersT", "Random number generator parameters");
 
 ```
+
+> The C++ typedef-registration macros are `A2lCreateTypedef` (`inc/a2l.hpp`) together with a builder per field —
+> `A2L_PARAMETER_COMPONENT`, `A2L_MEASUREMENT_COMPONENT`, `A2L_CURVE_COMPONENT`, `A2L_MAP_COMPONENT`,
+> `A2L_AXIS_COMPONENT`, `A2L_TYPEDEF_COMPONENT`, and their `_WITH_AXIS`/`_ARRAY` variants. See the Doxygen comments on
+> each in `inc/a2l.hpp` for exact parameters. The older C-style `A2lTypedefBegin`/`A2lTypedefParameterComponent`/
+> `A2lTypedefEnd` macros (`inc/a2l.h`) also compile in C++, but are the C idiom, not the one the C++ examples use.
+
 6. **Access calibration parameters** via the calibration segment.
 
 C Example:
@@ -190,8 +194,8 @@ Basic example: Measure a local variable on stack or a global variable
 
    // Create a global measurement event named "MyEvent" and register the local variable 'temperature' for measurement on this event
    DaqCreateEvent(MyEvent);
-   A2lSetStackAddrMode(temperature);  // or SetAbsoluteAddrMode(temperature);
-   A2lCreatePhysMeasurement(temperature, "temperature", "Deg Celcius", -50, 80);
+   A2lSetStackAddrMode(MyEvent);  // or A2lSetAbsoluteAddrMode(MyEvent) if 'temperature' were a global instead of a local
+   A2lCreatePhysMeasurement(temperature, "temperature", "Deg Celsius", -50, 80);
 
    // Trigger event 'MyEvent' to measure the variable when changed
    // Creates a precise timestamp and captures consistent data
@@ -214,51 +218,58 @@ private:
       double last_time_;
 };
 
-double calc_energy(double voltage, double current) {
+double power_meter::calc_energy(double voltage, double current) {
 
-   // ... do some calcultions ...
+   // ... do some calculations ...
    double power = voltage * current; // kW
-   double energy_ += power * get_elapsed_time(); // kWh
+   energy_ += power * get_elapsed_time(); // kWh
 
-   //  Create event 'calc_energy', register individual local or member variables and trigger the event
-    DaqEventExtVar(calc_energy, this,                                               
-                   A2L_MEAS_PHYS(voltage, "Input voltage", "V", 0.0, 1000.0), // A function parameter
-                   A2L_MEAS_PHYS(current, "Input current", "A", 0.0, 500.0), // A function parameter
-                   A2L_MEAS_PHYS(power, "Current calculated energy", "kWh", 0.0, 1000.0),   // A local variable
-                   A2L_MEAS_PHYS(energy_, "Current power", "kW", 0.0, 1000.0) // A member variable accessed via 'this' pointer
-                   );
+   // Create event 'calc_energy', register individual local and member variables, and trigger the event.
+   // No base/'this' pointer argument is needed: each A2L_MEAS_PHYS captures its own variable's address, so
+   // member variables (energy_) work exactly like locals (voltage, current, power) here.
+    DaqEventVar(calc_energy,
+                A2L_MEAS_PHYS(voltage, "Input voltage", "V", 0.0, 1000.0),          // A function parameter
+                A2L_MEAS_PHYS(current, "Input current", "A", 0.0, 500.0),          // A function parameter
+                A2L_MEAS_PHYS(power, "Current calculated power", "kW", 0.0, 1000.0), // A local variable
+                A2L_MEAS_PHYS(energy_, "Current energy", "kWh", 0.0, 1000.0)        // A member variable
+                );
 
    return energy_;       
 }
 ```
+
+> `DaqEventExtVar`/`DaqEventTemplate` (the variants taking an explicit base/`this` pointer) exist in `inc/xcplib.hpp`
+> but are currently compiled out (`#ifdef USE_AUTO_ADDRESSING_MODE // not used`) - do not use them until/unless that
+> changes. The example above matches what `examples/hello_xcp_cpp` and `examples/cpp_demo` actually do today.
 
 C++ example:
 Measure an instance of a class on heap
 
 ```cpp
 
-   // In the constructor or any place where we can access private members of the class
-    if (A2lOnce()) {
-        A2lTypedefBegin(PowerMeter, this, "Typedef for PowerMeter");
-        A2lTypedefMeasurementComponent(energy_, "Current energy", "kWh", 0.0, 1000.0   );
-        A2lTypedefMeasurementComponent(last_time_, "Last calculation time", "ms"  );
-        A2lTypedefEnd();
+class PowerMeter {
+public:
+    PowerMeter() : energy_(0.0), last_time_(0.0) {
+        // Register the A2L typedef once (thread-safe), in the constructor
+        A2lCreateTypedef(PowerMeter, "Typedef for PowerMeter",
+                         A2L_MEASUREMENT_COMPONENT(energy_, "Current energy", "kWh"),
+                         A2L_MEASUREMENT_COMPONENT(last_time_, "Last calculation time", "ms"));
     }
+    double calc_energy(double voltage, double current);
+private:
+    double energy_;
+    double last_time_;
+};
 
-   // Create a heap instance of the class PowerMeter
-   PowerMeter* meter1 = new PowerMeter();
-   
-   // Some where in the code, create an event to measure the heap instance
-   // Register the complete PowerMeter instance on heap as measurement with event my_meter
-   DaqCreateEvent(my_meter);
-   A2lSetRelativeAddrMode(my_meter, meter1);
-   A2lCreateTypedefReference(meter1, PowerMeter, "Instance my_meter of PowerMeter");
+// Create a heap instance of the class PowerMeter
+auto meter1 = std::make_unique<PowerMeter>();
 
-   // Something happens in the instance
-   my_meter->calc_energy(voltage, current);
+// Something happens in the instance
+meter1->calc_energy(voltage, current);
 
-   // Trigger the event "my_meter" to measure the 'PowerMeter' heap instance 'my_meter'
-   DaqTriggerEventExt(my_meter, my_meter);
+// Somewhere in the code, trigger an event that measures the complete heap instance 'meter1'
+// A2L_MEAS_INST_PTR takes the instance's address explicitly, since a heap object has no stack frame of its own
+DaqEventVar(my_meter, A2L_MEAS_INST_PTR(meter1, meter1.get(), "PowerMeter", "Heap instance of PowerMeter"));
 
 ```
 
@@ -297,7 +308,7 @@ In inactive mode, all XCP and A2L code instrumentation remains passive, disabled
 
 #### bool XcpEthServerInit(uint8_t *address, uint16_t port, bool use_tcp, uint32_t measurement_queue_size)
 
-*Initialise the XCP server.*
+*Initialize the XCP server.*
 
 - **Preconditions**: `XcpInit()` has been called; only one server instance may be active.
 - **Parameters**
@@ -329,23 +340,28 @@ A **calibration segment** wraps a struct of tunable parameters. It maintains a r
 
 #### C API — runtime creation
 
-```c
-tXcpCalSegIndex XcpCreateCalSeg(const char *name, const void *default_page, uint32_t size);
-const void *XcpLockCalSeg(tXcpCalSegIndex index);
-void XcpUnlockCalSeg(tXcpCalSegIndex index);
-```
+`XcpCreateCalSeg`, `XcpLockCalSeg` and `XcpUnlockCalSeg` are declared and fully documented (parameters, return values,
+locking semantics) in `inc/xcplib.h` — see the Doxygen comments there rather than this guide, to avoid the signatures
+drifting out of sync with the header.
 
 #### C macros — section-registered (required for offline A2L generation)
 
-These macros emit a `tXcpCalSegDescriptor` into the `xcp_cals` ELF section so `XcpInit()`
-registers the segment automatically and `xcpclient` can discover it without runtime A2L calls.
+`CalSegDecl`/`CalBlkDecl` and `CalSegCreate`/`CalBlkCreate` (`inc/xcplib.h`) both emit a `tXcpCalSegDescriptor` into the
+`xcp_cals` ELF section so `XcpInit()` can register the segment automatically and `xcpclient` can discover it without
+runtime A2L calls - but they are **alternatives, not a pair**: pick one for a given segment, don't call both with the
+same name. `CalSegDecl` only emits the section descriptor - the segment isn't created until `XcpInit()`'s section scan
+runs, so it must be used at file scope. `CalSegCreate` also creates the segment immediately at its own call site, so it
+works anywhere (including inside a function or loop) without depending on `XcpInit()` having run yet. See the Doxygen
+comments on both macros in `inc/xcplib.h` for the full distinction.
 
 ```c
-// At file scope:
-CalSegDecl(my_params);           // emits xcp_cals descriptor + creates calseg_id_my_params
+// Option 1 - file scope only, segment created lazily when XcpInit() scans the xcp_cals section:
+CalSegDecl(my_params);
 
-// Anywhere after XcpInit():
-CalSegCreate(my_params);         // registers the segment (pairs with CalSegDecl)
+// Option 2 - usable anywhere, creates the segment immediately at this call site:
+CalSegCreate(my_params);
+
+// Either way, once created:
 CalSegLock(my_params);           // locks; returns const pointer to working page
 CalSegUnlock(my_params);         // releases the lock
 ```
@@ -379,10 +395,10 @@ Registration is done by `XcpInit()` from the section data — no `XcpCreateCalSe
 const struct parameters parameters = { .period_ms = 2, .amplitude = 1.0f };
 
 CalSegDeclRef(parameters, parameters_calseg);
-// Expands to:
+// Expands to (see the macro's Doxygen comment in inc/xcplib.hpp for the exact definition):
 //   static tXcpCalSegIndex calseg_id_parameters = XCP_UNDEFINED_CALSEG;
-//   static tXcpCalSegDescriptor calseg__parameters __attribute__((section("xcp_cals"))) = {...};
-//   static CalSegRef<parameters> parameters_calseg(&calseg_id_parameters, &parameters);
+//   static const tXcpCalSegDescriptor calseg__parameters __attribute__((section("xcp_cals"))) = {...};
+//   static const xcp::CalSegRef<decltype(parameters)> parameters_calseg(&calseg_id_parameters, &parameters);
 
 // Shorthand — handle named <value>_calseg:
 CalSegDecl(parameters);  // same as CalSegDeclRef(parameters, parameters_calseg)
@@ -456,7 +472,7 @@ Macros to create events:
 /// Thread safe global once pattern, the first call creates the event
 /// May be called multiple times in different code locations, ignored if the the event name already exists
 /// @param name Name given as identifier
-DaqCreateEvent(event_name)                                                                                                                                                       \
+DaqCreateEvent(event_name)
 ```
 
 Macros to trigger events:
@@ -477,10 +493,10 @@ Macros to trigger events:
 Macros to control events:
 ```c
 /// Enable the XCP event 'name'
-DaqEventEnable(event_name)                                                                                                                                                       \
+DaqEventEnable(event_name)
 
 /// Disable the XCP event 'name'
-DaqEventDisable(event_name)        
+DaqEventDisable(event_name)
 ```
 
 
@@ -494,24 +510,33 @@ DaqEventVar(event_name, (var1, comment1), (var2, comment, unit, min, max), ...)
 
 **C++** (`xcplib.hpp`):
 ```cpp
-/// Create event once, register measurements once (absolute/stack addressing), trigger every call.
+/// Create event once; register each measurement once with its own individual relative addressing (no shared base
+/// pointer needed - each A2L_MEAS*/A2L_MEAS_INST* captures its own variable's address, so locals, member variables
+/// and heap instances can all be mixed in one call); trigger every call.
 DaqEventVar(event_name, A2L_MEAS(var, comment), A2L_MEAS_PHYS(var, comment, unit, min, max), ...)
 
-/// Create event once, register measurements once (absolute/stack/relative addressing), trigger every call.
-/// base: pointer used as relative base for member/heap variables
-DaqEventExtVar(event_name, base, A2L_MEAS(var, comment), ...)
+/// Same as DaqEventVar, but with an explicit clock/timestamp value instead of the current time.
+DaqEventAtVar(event_name, clock, A2L_MEAS(var, comment), ...)
 
-/// C++-only: trigger an already-created event and register variables (no event creation).
-DaqTriggerEventVar(event_name, A2L_MEAS(var, comment), ...)
+/// Trigger an already-created event with one or more explicit base-address pointers, without registering any A2L
+/// measurement metadata - use when the variables were already registered elsewhere (e.g. via DaqEventVar at a
+/// different call site) and only the trigger + base addresses need repeating.
+/// @param ... one or more pointers/addresses, NOT A2L_MEAS(...) objects
+DaqTriggerEventVar(event_name, base_ptr, ...)
 ```
 
 Helper macros for measurement metadata (C++ only — `A2L_MEAS` / `A2L_MEAS_PHYS` are no-ops in C):
 ```cpp
-A2L_MEAS(var, comment)                         // basic measurement
-A2L_MEAS_PHYS(var, comment, unit, min, max)    // measurement with unit and physical limits
+A2L_MEAS(var, comment)                                    // basic measurement
+A2L_MEAS_PHYS(var, comment, unit, min, max)               // measurement with unit and physical limits
+A2L_MEAS_INST(var, type_name, comment)                    // measure a complete instance registered via A2lCreateTypedef
+A2L_MEAS_INST_PTR(var, ptr, type_name, comment)            // same, for a heap instance reached through a pointer
 ```
 
-> **Note for offline A2L workflows:** `DaqEventVar` / `DaqEventExtVar` require runtime A2L generation
+> `DaqEventExtVar`/`DaqEventTemplate` (a variant taking an explicit shared base/`this` pointer) exist in
+> `inc/xcplib.hpp` but are currently compiled out (`#ifdef USE_AUTO_ADDRESSING_MODE // not used`) - do not use them.
+>
+> **Note for offline A2L workflows:** `DaqEventVar` (and the other macros above) require runtime A2L generation
 > (`OPTION_ENABLE_A2L_GENERATOR`). For no-A2L builds use `DaqCreateEvent` + `DaqTriggerEvent` instead —
 > those macros emit the `xcp_evts` / `xcp_cals` section descriptors and DWARF anchors that `xcpclient`
 > reads to build the A2L offline.
@@ -557,7 +582,7 @@ XCPlite uses relative memory addressing. There are 4 different addressing modes.
 
 All A2L generation macros and functions are not thread safe. It is up to the user to ensure thread safety and to use once-patterns when definitions are called multiple times in nested functions or from different threads.
 The functions `A2lLock()` and `A2lUnlock()` may be used to lock sequences of A2L definitions.
-The macro `A2lOnce(name)` (C) or `A2lOnce()` / `A2lOnceLock()` (C++) may be used to create a once-execution pattern for a block of A2L definitions:
+The macro `A2lOnce(name)` / `A2lThreadOnce(name)` (C) or `A2lOnce()` / `A2lThreadOnce()` (C++) may be used to create a once-execution pattern for a block of A2L definitions:
 
 ```c
 // C: 'name' must be a unique identifier within the enclosing scope

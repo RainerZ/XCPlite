@@ -27,6 +27,7 @@ test_bintool
 
 # Other
 .vscode
+.claude
 .DS_Store
 /ptptool.obs
 /docs/CPP_TYPE_TRAITS_GUIDE.md

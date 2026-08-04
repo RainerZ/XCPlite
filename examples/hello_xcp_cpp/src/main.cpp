@@ -19,7 +19,7 @@ constexpr const char OPTION_PROJECT_VERSION[] = "109";        // EPK version str
 constexpr bool OPTION_USE_TCP = false;                        // TCP or UDP
 constexpr uint8_t OPTION_SERVER_ADDR[] = {0, 0, 0, 0};        // Bind addr, 0.0.0.0 = ANY
 constexpr uint16_t OPTION_SERVER_PORT = 5555;                 // Port
-constexpr uint16_t OPTION_QUEUE_SIZE = (1024 * 32);           // Size of the queue in bytes, should be large enough to cover at least 10ms of expected traffic
+constexpr uint32_t OPTION_QUEUE_SIZE = (1024 * 32);           // Size of the queue in bytes, should be large enough to cover at least 10ms of expected traffic
 constexpr int OPTION_LOG_LEVEL = 3;                           // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 // XCP mode:
@@ -31,8 +31,6 @@ constexpr uint8_t OPTION_XCP_MODE = (XCP_MODE_PERSISTENCE | XCP_MODE_LOCAL); // 
 
 // A2L generation mode:
 constexpr uint8_t OPTION_A2L_MODE = (A2L_MODE_WRITE_ONCE | A2L_MODE_FINALIZE_ON_CONNECT | A2L_MODE_AUTO_GROUPS);
-
-#define OPTION_ENABLE_CALIBRATION // Enable parameter tuning in the code below
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
@@ -61,22 +59,31 @@ const ParametersT kParameters = {.delay_us = 1000,
                                  .curve = {0, 10, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500},
                                  .axis = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}};
 
-// Create a global calibration parameter segment for struct 'ParametersT' to provide safe and consistent access to the calibration parameters
-// Initialized in main(), after XCP initialization with
 #define OPTION_ENABLE_CALIBRATION // Enable parameter tuning in the code below
+#ifdef OPTION_ENABLE_CALIBRATION
+
+// Create a global calibration parameter segment for struct 'ParametersT' to provide safe and consistent access to the calibration parameters
+// Initialized in main(), after XCP initialization
+
 // Option 1:
 // This calibration segment has a working page (RAM) and a reference page (FLASH), it creates a MEMORY_SEGMENT in the A2L file
 // It provides safe (thread safe against XCP modifications), lock-free and consistent access to the calibration parameters
 // It supports XCP/ECU independent page switching, checksum calculation and reinitialization (copy reference page to working page)
 std::optional<xcp::CalSeg<ParametersT>> gCalSeg;
+
 // Option 2:
 // This calibration block does not create a MEMORY_SEGMENT in the A2L file
 // It provides safe (thread safe against XCP modifications), lock-free and consistent access to the calibration parameters
 // It supports XCP/ECU page switching, but can not be explicitly controlled via XCP commands
 // std::optional<xcp::CalBlk<ParametersT>> gCalSeg;
+
+#else
+
 // Option 3:
 // Calibration disabled
 // const ParametersT *params = &kParameters; // Direct access to the calibration parameters constants
+
+#endif
 
 uint32_t kDelayUs = 1000; // Loop delay in microseconds
 
@@ -110,7 +117,7 @@ class FloatingAverage {
 FloatingAverage::FloatingAverage() : samples_{}, current_index_(0), sample_count_(0), sum_(0.0) {
 
     // Optional: For measurement of the complete instance, create an A2L typedef for this class (once executed and thread safe)
-    A2lCreateTypedef(FloatingAverage, "Typedef for FloatingAverage",                                       // @@@@ TODO: All types are wrong, fixit
+    A2lCreateTypedef(FloatingAverage, "Typedef for FloatingAverage",                                       //
                      A2L_MEASUREMENT_COMPONENT(current_index_, "Current position in the ring buffer", ""), //
                      A2L_MEASUREMENT_COMPONENT(sample_count_, "Number of samples collected so far", ""),   //
                      A2L_MEASUREMENT_COMPONENT(sum_, "Running sum of all samples", ""),                    //
