@@ -20,7 +20,7 @@ CMake-based. **Five mutually exclusive build configurations**, each with its own
 | `no_a2l` | `build-no_a2l/` | `src/xcplib_no_a2l_cfg.h` | No on-target A2L; generated externally from ELF via `xcpclient` |
 | `ptp` | `build-ptp/` | `src/xcplib_ptp_cfg.h` | Socket hardware timestamps; Linux + PTP-capable NIC |
 | `shm` | `build-shm/` | `src/xcplib_shm_cfg.h` | Shared-memory multi-application mode (`shmtool`, `xcpdaemon`) |
-| `rtos` | `build-rtos/` | `src/xcplib_rtos_cfg.h` | FreeRTOS embedded targets: reduced footprint, no filesystem, 32-bit |
+| `rtos` | `build-rtos/` | `src/xcplib_rtos_cfg.h` | FreeRTOS embedded targets: reduced footprint, no filesystem, 32-bit, no on-target A2L generation |
 
 Selected via `-DXCPLITE_CONFIGURATION=<name>` (default: `default`). Within a configuration, `XCPLITE_BUILD_EXAMPLES`, `XCPLITE_BUILD_TESTS`, `XCPLITE_BUILD_TOOLS` (all default `OFF`) control which targets get built — which targets exist depends on the active configuration (see table in `docs/BUILDING.md`). `XCPLITE_BUILD_RUST_TOOLS` builds `xcpclient`/`bintool` via cargo (any configuration). `XCPLITE_BUILD_BPF_DEMO` builds `bpf_demo` (default config, Linux only, requires libbpf).
 
@@ -114,7 +114,7 @@ XCPlite encodes *where* a measured/calibrated variable lives (global, stack, hea
 
 ### Offline A2L generation (`xcpclient`, no-A2L builds)
 
-For `no_a2l`/`rtos` configurations, no A2L is generated on-target; instead the Rust `xcpclient` tool (`tools/xcpclient/`) parses the built ELF's DWARF debug info and two marker sections:
+`no_a2l` and `rtos` are the two configurations that do not use on-target runtime A2L generation. Build-time A2L generation instead relies on information embedded in ELF file sections and DWARF markers to locate events/parameters in the code: the Rust `xcpclient` tool (`tools/xcpclient/`) parses the built ELF's DWARF debug info and two marker sections:
 - `xcp_evts` section — `tXcpEventDescriptor` constants emitted by `DaqCreateEvent`/`DaqCreateAndTriggerEvent`
 - `xcp_cals` section — `tXcpCalSegDescriptor` constants emitted by `CalSegDecl`+`CalSegCreate`
 

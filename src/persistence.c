@@ -237,14 +237,14 @@ static bool writeApp(FILE *file, uint8_t app_id, const char *project_name, const
 
 //--------------------------------------------------------------------------------------------------------------------------------
 
-/// Create the binary persistence file.
-/// This function writes the current state of the XCP events and calibration segments to a binary file.
-/// It creates a file with the specified filename and writes the header, events, and calibration segments.
-/// It is called from the A2L generator when finalizing the A2L file, so it belongs to and exactly matches the state of the A2L file
-/// @param filename The name of the file to write.
-/// @param page The page of the calibration segments to write, either default or working page, see XCP_CALPAGE_XXX
-/// @return
-/// Returns true if the file was successfully written, false otherwise.
+// Create the binary persistence file.
+// This function writes the current state of the XCP events and calibration segments to a binary file.
+// It creates a file with the specified filename and writes the header, events, and calibration segments.
+// It is called from the A2L generator when finalizing the A2L file, so it belongs to and exactly matches the state of the A2L file
+// @param filename The name of the file to write.
+// @param page The page of the calibration segments to write, either default or working page, see XCP_CALPAGE_XXX
+// @return
+// Returns true if the file was successfully written, false otherwise.
 bool XcpBinWrite(const char *epk) {
 
     if (!XcpIsActivated()) {
@@ -319,11 +319,11 @@ bool XcpBinWrite(const char *epk) {
 
 //--------------------------------------------------------------------------------------------------------------------------------
 
-/// Freeze the working page of a calibration segment.
-/// This function writes the working page of the specified calibration segment to the binary persistence file.
-/// @param calseg Calibration segment index
-/// @return
-/// Returns true if the operation was successful.
+// Freeze the working page of a calibration segment.
+// This function writes the working page of the specified calibration segment to the binary persistence file.
+// @param calseg Calibration segment index
+// @return
+// Returns true if the operation was successful.
 bool XcpBinFreezeCalSeg(tXcpCalSegIndex calseg) {
     if (calseg >= XcpGetCalSegCount()) {
         DBG_PRINTF_ERROR("Invalid calibration segment index %u\n", calseg);
