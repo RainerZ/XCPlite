@@ -26,14 +26,12 @@ if (A2lOnce()) {
     // This block executes exactly once globally across all threads
 }
 
-if (A2lOnceLock()) {
-    // Thread-safe
-    // This block executes exactly once globally AND is mutex-protected during execution
-}
-
-if (A2lOncePerThread()) {
-    // Thread-safe
-    // This block executes exactly once per thread AND is mutex-protected
+if (A2lThreadOnce()) {
+    // This block executes exactly once per thread
+    // Note: despite taking an internal mutex, the guard is a temporary whose destructor (and so the mutex unlock)
+    // runs at the end of the if-condition, before this block executes - so the mutex does not serialize the block's
+    // body across threads, only the brief once-check itself. Callers still needing that must synchronize themselves,
+    // e.g. with A2lLock()/A2lUnlock().
 }
 */
 
@@ -96,11 +94,19 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
 };
 
 // Enhanced convenience macros for C++ RAII-style once execution
+// Equivalent to the C macros A2lOnce(name)/A2lThreadOnce(name) in a2l.h, but take no name argument: the call site's
+// __LINE__ makes each A2lOnceGuard instantiation a distinct type with its own static flag, so uniqueness is automatic.
+
+/// Execute the following block exactly once, globally across all threads.
+/// Not thread-safe on its own: a concurrent second caller's std::call_once check is itself thread-safe, so exactly
+/// one caller enters the block, but nothing serializes the block's body against other, unrelated A2L registration
+/// activity on other threads - use A2lLock()/A2lUnlock() inside the block if that is needed.
 #define A2lOnce()                                                                                                                                                                  \
     xcp::a2l::A2lOnceGuard<false, false, __LINE__> {}
-#define A2lOnceLock()                                                                                                                                                              \
-    xcp::a2l::A2lOnceGuard<true, false, __LINE__> {}
-#define A2lOncePerThread()                                                                                                                                                         \
+/// Execute the following block exactly once per calling thread (unlike A2lOnce, does not block other threads and each
+/// thread runs the block independently on its first call). See the usage-example note above this section regarding
+/// the guard's internal mutex - it does not serialize the block's body.
+#define A2lThreadOnce()                                                                                                                                                            \
     xcp::a2l::A2lOnceGuard<true, true, __LINE__> {}
 
 // =============================================================================
@@ -114,8 +120,16 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
 // =============================================================================
 
 // Helper lambda-based macros used with A2lCreateTypedef
+//
+// Each expands to a lambda that A2lCreateTypedef calls with a `TypeName*` to derive the field's offset and type via
+// offsetof/decltype - so these may only be used as arguments to A2lCreateTypedef, not evaluated standalone.
+// @param field_name member of the typedef'd struct/class this component describes; its address is never taken directly,
+// only offsetof(StructType, field_name), so it is safe to use on members that are not yet initialized
+// @param comment free-text description
+// @param unit physical unit string, or a "conv.<name>" reference to a conversion (see A2lCreateLinearConversion/A2lCreateEnumConversion in a2l.h)
+// @param min_value, max_value physical value limits shown to the XCP tool
 
-// Parameters
+/// Scalar calibration parameter component
 #define A2L_PARAMETER_COMPONENT(field_name, comment, unit, min_value, max_value)                                                                                                   \
     [](auto type_ptr) {                                                                                                                                                            \
         using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
@@ -125,6 +139,9 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
 
 // Multi dimensional parameters (curve, map, axis), auto-detect array dimensions (automatic size detection from type)
 // Note: when y_dim is set to 0, it is used to identify axis
+
+/// 1-dimensional calibration curve component (field_name must be a 1D array member); x_dim is auto-detected from the
+/// field's array extent. No shared axis - the XCP tool creates a default one.
 #define A2L_CURVE_COMPONENT(field_name, comment, unit, min_value, max_value)                                                                                                       \
     [](auto type_ptr) {                                                                                                                                                            \
         using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
@@ -134,6 +151,8 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
         return xcp::a2l::A2lParameterComponentInfo<ElementType>(#field_name, (uint16_t)offsetof(StructType, field_name), x_dim, 1, comment, unit, min_value, max_value, NULL,      \
                                                                 NULL);                                                                                                             \
     }
+/// Like A2L_CURVE_COMPONENT, but shares its axis with an A2L_AXIS_COMPONENT of the same typedef.
+/// @param axis identifier of the sibling A2L_AXIS_COMPONENT field to share (stringified, not evaluated)
 #define A2L_CURVE_WITH_AXIS_COMPONENT(field_name, comment, unit, min_value, max_value, axis)                                                                                       \
     [](auto type_ptr) {                                                                                                                                                            \
         using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
@@ -143,6 +162,8 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
         return xcp::a2l::A2lParameterComponentInfo<ElementType>(#field_name, (uint16_t)offsetof(StructType, field_name), x_dim, 1, comment, unit, min_value, max_value, #axis,     \
                                                                 NULL);                                                                                                             \
     }
+/// 2-dimensional calibration map component (field_name must be a 2D array member); x_dim/y_dim are auto-detected. No
+/// shared axes - the XCP tool creates default ones.
 #define A2L_MAP_COMPONENT(field_name, comment, unit, min_value, max_value)                                                                                                         \
     [](auto type_ptr) {                                                                                                                                                            \
         using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
@@ -153,6 +174,8 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
         return xcp::a2l::A2lParameterComponentInfo<ElementType>(#field_name, (uint16_t)offsetof(StructType, field_name), x_dim, y_dim, comment, unit, min_value, max_value, NULL,  \
                                                                 NULL);                                                                                                             \
     }
+/// Like A2L_MAP_COMPONENT, but shares its axes with two A2L_AXIS_COMPONENT fields of the same typedef.
+/// @param x_axis, y_axis identifiers of the sibling A2L_AXIS_COMPONENT fields to share (stringified, not evaluated)
 #define A2L_MAP_WITH_AXIS_COMPONENT(field_name, comment, unit, min_value, max_value, x_axis, y_axis)                                                                               \
     [](auto type_ptr) {                                                                                                                                                            \
         using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
@@ -163,6 +186,9 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
         return xcp::a2l::A2lParameterComponentInfo<ElementType>(#field_name, (uint16_t)offsetof(StructType, field_name), x_dim, y_dim, comment, unit, min_value, max_value,        \
                                                                 #x_axis, #y_axis);                                                                                                 \
     }
+/// Standalone axis component (field_name must be a 1D array member), usable as the shared axis of one or more
+/// A2L_CURVE_WITH_AXIS_COMPONENT/A2L_MAP_WITH_AXIS_COMPONENT fields in the same typedef. Internally a parameter
+/// component with y_dim forced to 0, which is what marks it as an axis rather than a curve.
 #define A2L_AXIS_COMPONENT(field_name, comment, unit, min_value, max_value)                                                                                                        \
     [](auto type_ptr) {                                                                                                                                                            \
         using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
@@ -173,7 +199,10 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
                                                                 NULL);                                                                                                             \
     }
 
-// Measurement
+/// Scalar measurement component.
+/// @param field_name member of the typedef'd struct/class this component describes
+/// @param comment free-text description
+/// @param unit physical unit string, or a "conv.<name>" reference to a conversion (see A2L_PARAMETER_COMPONENT above)
 #define A2L_MEASUREMENT_COMPONENT(field_name, comment, unit)                                                                                                                       \
     [](auto type_ptr) {                                                                                                                                                            \
         using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
@@ -181,7 +210,8 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
         return xcp::a2l::A2lMeasurementComponentInfo<FieldType>(#field_name, (uint16_t)offsetof(StructType, field_name), 1, comment, unit);                                        \
     }
 
-// Multi dimensional measurement
+/// 1-dimensional array measurement component (field_name must be a 1D array member); dim is auto-detected.
+/// @param comment, unit as in A2L_MEASUREMENT_COMPONENT above
 #define A2L_MEASUREMENT_ARRAY_COMPONENT(field_name, comment, unit)                                                                                                                 \
     [](auto type_ptr) {                                                                                                                                                            \
         using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
@@ -191,7 +221,12 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
         return xcp::a2l::A2lMeasurementComponentInfo<ElementType>(#field_name, (uint16_t)offsetof(StructType, field_name), x_dim, comment, unit);                                  \
     }
 
-// Typedef
+/// Nested-typedef component: field_name's own type was itself registered as an A2L typedef via a separate
+/// A2lCreateTypedef call - use this instead of A2L_MEASUREMENT_COMPONENT for struct/class members, since the field's
+/// C++ type does not map to a single scalar A2L type id.
+/// @param field_name member of the enclosing typedef'd struct/class
+/// @param type_name name of field_name's own type, as registered with A2lCreateTypedef(type_name, ...) - not auto-detected
+/// @param dim 1 for a scalar member, or the array length for an array of that typedef - not auto-detected
 #define A2L_TYPEDEF_COMPONENT(field_name, type_name, dim)                                                                                                                          \
     [](auto type_ptr) {                                                                                                                                                            \
         using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
@@ -258,7 +293,15 @@ template <typename T> void A2lCreateTypedefComponentTemplate(const A2lMeasuremen
 // Helper template function to register a typedef component
 template <typename T> void A2lCreateTypedefComponentTemplate(const A2lTypedefComponentInfo<T> &info) { A2lTypedefComponent_(info.name, info.type_name, info.dim, info.offset); }
 
-// Main macro to create a typedef and its fields
+/// Create an A2L typedef for struct/class type_name and its fields, from a list of A2L_*_COMPONENT builders.
+/// Executes at most once per type_name (thread-safe, via std::call_once and A2lLock()/A2lUnlock() - unlike
+/// A2lOnce()/A2lThreadOnce() above, this is real mutex protection held for the whole registration, not just a check).
+/// Does nothing if XCP is not activated.
+/// @param type_name struct/class type this typedef describes; used both as the A2L type name (stringified) and to
+/// instantiate each component builder lambda with a `type_name*` for offsetof/decltype
+/// @param comment free-text description
+/// @param ... one or more A2L_PARAMETER_COMPONENT/A2L_CURVE_COMPONENT/A2L_MAP_COMPONENT/A2L_AXIS_COMPONENT/
+/// A2L_MEASUREMENT_COMPONENT/A2L_MEASUREMENT_ARRAY_COMPONENT/A2L_TYPEDEF_COMPONENT builders, one per field
 #define A2lCreateTypedef(type_name, comment, ...) xcp::a2l::A2lCreateTypedefTemplate<type_name>(#type_name, sizeof(type_name), comment, __VA_ARGS__);
 
 // Template function for typedef creation

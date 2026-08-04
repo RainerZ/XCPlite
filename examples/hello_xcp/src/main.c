@@ -20,7 +20,7 @@
 #define OPTION_SERVER_PORT 5555         // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0} // Bind addr, 0.0.0.0 = ANY
 #define OPTION_QUEUE_SIZE (1024 * 32)   // Size of the measurement queue in bytes, should be large enough to cover at least 10ms of expected traffic
-#define OPTION_LOG_LEVEL 4              // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
+#define OPTION_LOG_LEVEL 4              // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = print XCP commands
 
 // XCP mode:
 #ifdef OPTION_SHM_MODE
@@ -67,7 +67,7 @@ tXcpCalSegIndex params_calseg = XCP_UNDEFINED_CALSEG;
 //-----------------------------------------------------------------------------------------------------
 // Demo global measurement values
 
-// Temperatures are in Deg Celcius as Byte, 0 is -55 °C, 255 is +200 °C
+// Temperatures are in Deg Celsius as Byte, 0 is -55 °C, 255 is +200 °C
 uint8_t outside_temperature = -5 + 55;
 uint8_t inside_temperature = 20 + 55;
 // Heat Energy in kW
@@ -96,15 +96,25 @@ float calc_power(uint8_t t1, uint8_t t2) {
     // XCP: Create a measurement event 'calc_power' and register local measurement variables and function parameters
     DaqCreateEvent(calc_power);
     A2lOnce() {
-        A2lSetStackAddrMode(calc_power); // Set stack relative addressing mode with fixed event calc_power
+        // t1, t2, diff_temp and heat_power below only exist on the stack while calc_power() is executing, so they have no fixed
+        // address: XCP must locate them relative to the stack frame that is current when event 'calc_power' fires.
+        // A2lSetStackAddrMode(event) tells the following A2lCreate* calls to register their variables that way (address extension 2, "Stack frame relative"),
+        // instead of the plain absolute addressing used below for the truly global mainloop variables (A2lSetAbsoluteAddrMode).
+        A2lSetStackAddrMode(calc_power);
         A2lCreatePhysMeasurementInstance("calc_power", t1, "Parameter t1 in function calc_power", "conv.temperature", -55.0, 200.0);
         A2lCreatePhysMeasurementInstance("calc_power", t2, "Parameter t2 in function calc_power", "conv.temperature", -55.0, 200.0);
         A2lCreatePhysMeasurementInstance("calc_power", diff_temp, "Local variable diff temperature in function calc_power", "K", -100.0, 100.0);
         A2lCreatePhysMeasurementInstance("calc_power", heat_power, "Local variable calculated heat power in function calc_power", "W", 0.0, 10.0);
     }
+    // Note: in the OPTION_USE_VARIADIC_MACROS path below (the default), DaqEventVar/A2L_MEAS pick the correct addressing
+    // mode (stack vs. absolute) automatically per variable, so no explicit A2lSetStackAddrMode/A2lSetAbsoluteAddrMode call is needed there.
 #endif
 
     // XCP: Lock access to calibration parameters
+    // Note: calc_power() is called from main()'s mainloop while it already holds a lock on this same segment (see below) -
+    // this nested lock is safe because XcpLockCalSeg/XcpUnlockCalSeg maintain an atomic lock count per segment rather than
+    // a traditional mutex, so recursive (nested, same thread) and concurrent (other threads) locks are both wait-free and
+    // always see a consistent page. See docs/CAL_RCU.md for the underlying RCU scheme.
     const params_t *p = (params_t *)XcpLockCalSeg(params_calseg);
 
     heat_power = diff_temp * p->flow_rate * 1000.0 * 1.16; // in kWh, 1.16Wh per K per liter - calculate heat power using the flow rate calibration parameter
@@ -167,6 +177,10 @@ int main(int argc, char *argv[]) {
     assert(params_calseg != XCP_UNDEFINED_CALSEG);
 
     // XCP: Option1: Register the individual calibration parameters in the calibration segment
+    // A2lSetSegmentAddrMode(seg_index, seg_instance) must come after XcpCreateCalSeg (it needs the returned segment index) and before
+    // the A2lCreateParameter calls below: it makes them register their variables as offsets into calibration segment 'params_calseg'
+    // ("Calibration segment relative" addressing, see docs/TECHNICAL.md) instead of by absolute address, which is what lets
+    // the segment's page switching (RAM/FLASH), checksum and persistence mechanisms apply to these parameters.
     A2lSetSegmentAddrMode(params_calseg, params);
     A2lCreateParameter(params.counter_max, "Maximum counter value", "", 0, 65535);
     A2lCreateParameter(params.delay_us, "Mainloop delay time in us", "us", 0, 500000);
@@ -189,6 +203,9 @@ int main(int argc, char *argv[]) {
     DaqCreateEvent(mainloop);
 
     // XCP: Register global measurement variables on event "mainloop"
+    // outside_temperature, inside_temperature, heat_energy and global_counter are global variables: they exist at one fixed
+    // address for the whole program lifetime, so XCP can read them directly by that address ("Absolute" addressing) - no
+    // stack frame or calibration segment offset is involved, unlike the two modes used elsewhere in this file.
     A2lSetAbsoluteAddrMode(mainloop);
     A2lCreateLinearConversion(temperature, "Temperature in °C from unsigned byte", "C", 1.0, -55.0);
     A2lCreatePhysMeasurement(outside_temperature, "Temperature in °C read from outside sensor", "conv.temperature", -20, 50);
@@ -197,7 +214,9 @@ int main(int argc, char *argv[]) {
     A2lCreateMeasurement(global_counter, "Global free running counter");
 
     // XCP: Register local measurement variables on event "mainloop"
-    A2lSetStackAddrMode(mainloop); // Set stack relative addressing mode with fixed event mainloop
+    // counter is local to main()'s stack frame (like t1/t2/diff_temp/heat_power in calc_power() above), so it needs
+    // "Stack frame relative" addressing again, resolved against the stack frame current when event 'mainloop' fires.
+    A2lSetStackAddrMode(mainloop);
     A2lCreateMeasurement(counter, "Mainloop counter");
 #endif
 
@@ -208,6 +227,8 @@ int main(int argc, char *argv[]) {
         // XCP: Lock the calibration parameter segment for consistent and safe access
         // Calibration segment locking is wait-free, locks may be recursive
         // Returns a pointer to the active page (working or reference) of the calibration segment
+        // Note: calc_power(), called below while this lock is still held, locks the very same segment again - see the
+        // recursive-locking remark there for why that nested lock is safe.
         const params_t *p = (params_t *)XcpLockCalSeg(params_calseg);
 
         delay_us = p->delay_us; // Get the delay_us calibration value
@@ -233,10 +254,9 @@ int main(int argc, char *argv[]) {
         // XCP: Trigger the measurement event "mainloop"
         DaqTriggerEvent(mainloop);
 #else
+        // Register the linear conversion for temperature once
+        A2lOnce(temperature) { A2lCreateLinearConversion(temperature, "Temperature in °C from unsigned byte", "C", 1.0, -55.0); }
         // XCP: Create and trigger measurement event mainloop, register global and local measurement variables
-        {
-            A2lOnce() { A2lCreateLinearConversion(temperature, "Temperature in °C from unsigned byte", "C", 1.0, -55.0); }
-        }
         DaqEventVar(mainloop,                                                                                                       //
                     A2L_MEAS(outside_temperature, "Temperature in °C read from outside sensor", "conv.temperature", -55, 255 - 55), //
                     A2L_MEAS(inside_temperature, "Temperature in °C read from inside sensor", "conv.temperature", -55, 255 - 55),   //

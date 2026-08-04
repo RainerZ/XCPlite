@@ -11,12 +11,13 @@ and the variadic macro/template API.
 | Feature | How it is demonstrated |
 |---|---|
 | XCP server startup | `XcpInit` + `XcpEthServerInit` with runtime A2L generation |
-| C++ RAII calibration wrapper | `CalSeg<ParametersT>` — locked/unlocked via RAII on scope exit |
-| Global variable measurement | `DaqRegisterVar` on global variables |
-| Stack and heap variable measurement | Local variables and heap-allocated instances |
-| Class instance member measurement | `DaqRegisterMember` on member variables |
-| Variadic macro/template API | `XCP_VAR(...)`, `XCP_CAL(...)` — compact all-in-one registration |
-| Function instrumentation | Measure local variables and parameters inside a member function |
+| C++ RAII calibration wrapper | `xcp::CalSeg<ParametersT>` — created via `gCalSeg.emplace(...)`, locked/unlocked via the RAII guard returned by `.lock()` |
+| Global variable measurement | `DaqEventVar` + `A2L_MEAS` on global variables |
+| Stack variable measurement | `DaqEventVar` + `A2L_MEAS` / `A2L_MEAS_PHYS` on local variables (a heap-allocated instance alternative is shown commented out) |
+| Class instance member measurement | `A2lCreateTypedef` + `A2L_MEASUREMENT_COMPONENT` / `A2L_MEASUREMENT_ARRAY_COMPONENT` for the `FloatingAverage` class, plus `A2L_MEAS` on individual member variables |
+| Addressing modes | Selected automatically per variable by `DaqEventVar`/`A2L_MEAS` (stack vs. absolute) and by `A2lCreateTypedef`'s component macros (calibration segment relative) — no explicit `A2lSet*AddrMode` call needed, unlike the C example's manual code path |
+| Variadic macro/template API | `DaqEventVar` + `A2L_MEAS*` (measurements) and `A2lCreateTypedef` + `A2L_PARAMETER_COMPONENT` / `A2L_MEASUREMENT_COMPONENT` (typedefs) — compact all-in-one registration with automatic addressing and type detection |
+| Function instrumentation | Measure local variables and parameters inside `FloatingAverage::calc()` |
 
 ### Files
 

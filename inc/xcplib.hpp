@@ -123,12 +123,16 @@ template <typename T> class CalSegRef {
     tXcpCalSegIndex getIndex() const { return indexp_ != nullptr ? *indexp_ : XCP_UNDEFINED_CALSEG; }
 
     /// RAII guard class for automatic lock/unlock.
+    /// Unlike CalSeg::CalSegGuard, this tolerates index == XCP_UNDEFINED_CALSEG (e.g. when queried before XcpInit()'s
+    /// xcp_cals section scan has run - see CalSegRef above): the lock/unlock calls are simply skipped in that case,
+    /// and get()/operator->()/operator*() then return the default_params passed in, unlocked.
     class CalSegGuard {
       private:
         tXcpCalSegIndex index_;
         const T *params_ptr_;
 
       public:
+        /// Constructor - locks the calibration segment, unless index is XCP_UNDEFINED_CALSEG
         explicit CalSegGuard(tXcpCalSegIndex index, const T *default_params) : index_(index), params_ptr_(default_params) {
             if (XcpIsActivated() && index_ != XCP_UNDEFINED_CALSEG) {
                 params_ptr_ = reinterpret_cast<const T *>(XcpLockCalSeg(index_));
@@ -138,17 +142,24 @@ template <typename T> class CalSegRef {
         CalSegGuard(const CalSegGuard &) = delete;
         CalSegGuard &operator=(const CalSegGuard &) = delete;
 
+        /// Move constructor - transfers ownership of the lock, leaving 'other' with no segment to unlock
         CalSegGuard(CalSegGuard &&other) : index_(other.index_), params_ptr_(other.params_ptr_) { other.index_ = XCP_UNDEFINED_CALSEG; }
         CalSegGuard &operator=(CalSegGuard &&) = delete;
 
+        /// Destructor - unlocks the calibration segment, unless index is XCP_UNDEFINED_CALSEG
         ~CalSegGuard() {
             if (XcpIsActivated() && index_ != XCP_UNDEFINED_CALSEG) {
                 XcpUnlockCalSeg(index_);
             }
         }
 
+        /// Access the locked parameters via pointer
         const T *operator->() const { return params_ptr_; }
+
+        /// Access the locked parameters via reference
         const T &operator*() const { return *params_ptr_; }
+
+        /// Get pointer to the locked parameters
         const T *get() const { return params_ptr_; }
     };
 
@@ -243,10 +254,19 @@ template <typename T> class CalBlk {
 
 /// Convenience macro to create a calibration segment with automatic name stringification
 /// Usage: auto calseg = CalSegCreate(initial_value);
+/// Unlike the C macro of the same name (xcplib.h), this is an expression, not a statement: it always creates the
+/// segment immediately, by calling XcpCreateCalSeg in xcp::CalSeg<T>'s constructor, and does not register an
+/// xcp_cals section descriptor at all - so it cannot be pre-registered by XcpInit()'s section scan and must itself
+/// run before the segment is first used. For the lazy, section-based equivalent (matching the C CalSegDecl), see
+/// CalSegDecl/CalSegDeclRef below.
 #define CalSegCreate(value) xcp::CalSeg<decltype(value)>(#value, &value)
 
 /// Declare a section-registered global calibration segment and create a typed C++ handle.
 /// Usage: CalSegDeclRef(parameters, parameters_calseg); auto parameters = parameters_calseg.lock();
+/// Like the C macro CalSegDecl (xcplib.h), this only registers an xcp_cals section descriptor: the segment is not
+/// created until XcpInit() pre-registers it via its section scan, so 'handle' is only valid for locking after
+/// XcpInit() has run. On top of that, this also defines 'handle' as a typed, non-owning xcp::CalSegRef<T> over the
+/// section-registered index - there is no C++ equivalent of the C CalSegCreate's immediate, self-sufficient creation.
 #define CalSegDeclRef(value, handle)                                                                                                                                               \
     static tXcpCalSegIndex calseg_id_##value = XCP_UNDEFINED_CALSEG;                                                                                                               \
     static const tXcpCalSegDescriptor calseg__##value __asm__("calseg__" #value)                                                                                                   \
@@ -254,6 +274,7 @@ template <typename T> class CalBlk {
     static const xcp::CalSegRef<decltype(value)> handle(&calseg_id_##value, &value)
 
 /// Declare a section-registered global calibration segment and create a typed C++ handle named <value>_calseg.
+/// See CalSegDeclRef above for the section-based registration semantics this builds on.
 #define CalSegDecl(value) CalSegDeclRef(value, value##_calseg)
 
 /// Convenience macro to create a calibration value with automatic name stringification
