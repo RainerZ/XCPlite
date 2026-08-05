@@ -243,6 +243,8 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
 /// DAQ event id as handle
 typedef uint16_t tXcpEventId;
 
+#ifdef OPTION_DAQ_EVENT_LIST
+
 /// Add a measurement event to the event list, returns the event id  (0..XCP_MAX_EVENT_COUNT-1)
 /// If the event name already exists, returns the existing event event number
 /// Function is thread safe by using a mutex for event list access.
@@ -261,6 +263,8 @@ tXcpEventId XcpCreateEvent(const char *name, uint32_t cycle_time_ns /* ns */, ui
 /// @return The event id or XCP_UNDEFINED_EVENT_ID if out of memory.
 tXcpEventId XcpCreateEventInstance(const char *name, uint32_t cycle_time_ns /* ns */, uint8_t priority /* 0-normal, >=1 realtime*/);
 
+#endif // OPTION_DAQ_EVENT_LIST
+
 /// Get event id by name, returns XCP_UNDEFINED_EVENT_ID if not found
 /// @param name Name of the event.
 /// @return The event id or XCP_UNDEFINED_EVENT_ID if not found.
@@ -273,14 +277,9 @@ tXcpEventId XcpFindEvent(const char *name);
 uint16_t XcpGetEventIndex(tXcpEventId event);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// Dynamic DAQ event creation convenience macros with once or initialization time execution patterns
+// Dynamic or linktime named DAQ event creation
 
-// Create XCP events by 'name' given as identifier or string
-// Event cycle time is set to sporadic and priority to normal
-// Setting the cycle time would only have the benefit for the XCP client tool to estimate the expected data rate of a DAQ setup
-// To create an XCP event with increased priority or specified expected cycle time, use XcpCreateEventExt
-
-// Note on thread safety of the once patterns using static state instead of thread local state:
+// Note on thread safety of the once patterns for dynamic event creation using static state instead of thread local state:
 // The XcpCreateEventXxx functions are thread safe by using a mutex for event list access and there are atomic aquire/release operations on event count to handle event visibility
 // Using a static non atomic variable to check the once state, has no considerable risk of reading torn values on a >=32 microprocessor architecture
 // The existing race condition is irrelevant
@@ -354,21 +353,36 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 // Set the event id for an event descriptor at runtime not needed, the link-time id is already set
 #define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id)
 #else
+// With other compilers, the event id is not a compile-time constant, but a link-time constant, so it can be used as static initializer
 // Get the event id as compile-time constant for an event descriptor not possible
 #define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) XCP_UNDEFINED_EVENT_ID
 // Set the event id for an event descriptor at runtime
 #define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id) ((evt_id) = ((tXcpEventId)(&(evt_descr) - __start_xcp_evts)))
 #endif
 #else
+#ifdef OPTION_DAQ_EVENT_LIST
+// Use dynamic event creation, no compile-time or link-time event id available
 #define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) XCP_UNDEFINED_EVENT_ID
 #define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id)                                                                                                                                \
     if ((evt_id) == XCP_UNDEFINED_EVENT_ID) {                                                                                                                                      \
         (evt_id) = XcpCreateEvent((evt_descr).name, 0, 0);                                                                                                                         \
     }
+#else
+#error "This platform does not support link-time event id generation, please enable OPTION_DAQ_EVENT_LIST"
+#endif
 #endif
 
 /// Create an event
-/// Once execution pattern, a new event is created only once, subsequent calls are ignored
+/// Depending on option OPTION_DAQ_EVENT_LIST defined, events are created at runtime or otherwise at link time
+/// Dynamic event management (defined(OPTION_DAQ_EVENT_LIST)):
+///    On platforms with ELF linker, the macro emits a static const tXcpEventDescriptor in the xcp_evts section, which is scanned at runtime by XcpInit() to create the event and
+///    set the event id Otherwise the event is created at the call site with a once execution pattern
+/// Static event management (!defined(OPTION_DAQ_EVENT_LIST)):
+///    Requires a platform with ELF linker
+///    Event descriptor and event id is created at link time
+/// Event cycle time is set to sporadic and priority to normal
+/// Setting the cycle time would only have the benefit for the XCP client tool to estimate the expected data rate of a DAQ setup
+/// To create an XCP event with increased priority or specified expected cycle time, use DaqCreateEventExt
 /// @param name Name given as identifier
 #define DaqCreateEvent(event_name)                                                                                                                                                 \
     static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                          \
@@ -376,7 +390,6 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
     XCP_EVENT_SECTION_SET_ID(evt__##event_name, evt_id_##event_name);
 
 /// Create an event with given expected cycle time and priority
-/// Once execution pattern, a new event is created only once, subsequent calls are ignored
 /// @param name Name given as identifier
 /// @param cycle_time Cycle time in microseconds (0 = sporadic)
 /// @param priority Priority of the event (0 = normal, >=1 = realtime)
@@ -385,12 +398,12 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
     static tXcpEventId evt_id_##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                                 \
     XCP_EVENT_SECTION_SET_ID(evt__##event_name, evt_id_##event_name);
 
+#ifdef OPTION_DAQ_EVENT_LIST
+
 /// Create an event
 /// Thread local once execution pattern, a new event is created only once per thread, subsequent calls are ignored
-/// User is responsible to ensure that the event name is unique per thread !!
-/// The first call in a thread creates the event, must be unique per thread and per code location
-/// Name may be different per code location in different threads
-/// Calling again in the same thread is ignored, ignored if the the event name is different
+/// The first call in a thread creates the event, event must be unique per thread and per code location
+/// Calling again in the same thread is ignored, even if the the event name is different
 /// @param name Name given as string
 #define DaqCreateEvent_s(event_name)                                                                                                                                               \
     {                                                                                                                                                                              \
@@ -415,6 +428,8 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 /// Get event instance id
 /// @param name Name given as identifier
 #define DaqGetEventInstanceId(event_name) evt__##event_name
+
+#endif // OPTION_DAQ_EVENT_LIST
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // DAQ event trigger measurement instrumentation point

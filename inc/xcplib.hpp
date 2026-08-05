@@ -305,6 +305,7 @@ namespace xcp {
 // =============================================================================
 
 // @@@@ TODO: Support link time event registration
+#ifdef OPTION_DAQ_EVENT_LIST
 
 /// Trigger an event with variadic base address list
 #define DaqTriggerEventVar(event_name, ...) xcp::DaqTriggerVarTemplate(#event_name, __VA_ARGS__)
@@ -318,6 +319,8 @@ template <typename... Bases> XCPLIB_ALWAYS_INLINE void DaqTriggerVarTemplate(con
         XcpEventExt_Var(event_id, sizeof...(Bases), &bases...);
     }
 }
+
+#endif // OPTION_DAQ_EVENT_LIST
 
 // =============================================================================
 
