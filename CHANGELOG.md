@@ -2,6 +2,10 @@
 
 All notable changes to XCPlite are documented in this file.
 
+## [V2.1.10]
+
+- Documentation improvements
+
 
 ## [V2.1.9]
 
