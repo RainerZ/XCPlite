@@ -66,6 +66,8 @@ the voltage-to-pressure calibration:
 the calibration points are linearly interpolated or extrapolated. The defaults
 map 0 V to 0 bar and 1 V to 1 bar. If both sensor-voltage points are equal,
 `channel1` is set to `NaN` because the pressure calibration is invalid.
+The display shows the raw voltage as `ADS1115: x.xxx V`, or
+`ADS1115: not found` when converter initialization fails.
 
 The converter uses gain 1 (a +/-4.096 V ADC range) and 860 samples/s so a
 conversion fits the default 2 ms slow-task period. Regardless of the configured
