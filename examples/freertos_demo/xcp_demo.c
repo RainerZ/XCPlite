@@ -112,11 +112,13 @@ static bool createDemoTask(TaskFunction_t taskCode, const char *name, const uint
 
 // Global measurement values
 uint16_t global_counter = 0;
+XCP_COMMENT(global_counter,"Global measurement variable, incremented in fastTask");
 
 // Sine signal on variable channel1
 #define SLOWTASK_PHASE_STEP_RAD 0.001f
 #define SINE_PERIOD_RAD 6.28318530717958647692f
 float channel1 = 0.0f;
+XCP_COMMENT(channel1,"Global measurement variable, sine wave, calculated in slowTask");
 
 static uint32_t fastTaskOverruns = 0;
 static uint32_t slowTaskOverruns = 0;

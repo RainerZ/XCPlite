@@ -312,6 +312,7 @@ impl DebugDataReader<'_> {
             demangled_names,
             unit_names,
             sections: self.sections,
+            symbol_addresses: self.symbol_addresses,
             cfa_info: self.cfa_info,
             epk_string: self.epk_string,
             epk_addr: self.epk_addr,

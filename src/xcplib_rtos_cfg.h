@@ -86,10 +86,13 @@
 //-------------------------------------------------------------------------------
 // Calibration
 
-// Calibration segment management
+// Calibration segment management and RCU is enabled in the default configuration
+// We use that for FreeRTOS, it does not support a fully section registered approach yet
+// Calibration segments are detected in XcpInit by their static descriptors and allocated from the calibration memory bump allocator
 // #undef OPTION_CAL_SEGMENTS
 
-// Calibration segments max count and total memory size (each segment needs 3 copies of its data
+// Calibration segments max count and total memory size for the calibration memory bump allocator 
+// (each segment needs 3 copies of its data)
 #undef OPTION_CAL_SEGMENT_COUNT
 #define OPTION_CAL_SEGMENT_COUNT 8
 #undef OPTION_CAL_MEM_SIZE
@@ -98,8 +101,8 @@
 // No persistence (no filesystem on embedded)
 #undef OPTION_ENABLE_PERSISTENCE
 
-// Absolute addressing (compatible with most A2L tools and xcpclient
-// Address extension 0 is absolute addressing (linker map / elf address == XCP address))
+// Absolute addressing (compatible with most A2L tools and xcpclient)
+// Address extension 0 is absolute addressing (linker map / elf address == 32 bit XCP address)
 // Calibration segments have absolute addresses, segment relative addressing is still available on address extension 1
 #define OPTION_CAL_SEGMENTS_ABS
 
