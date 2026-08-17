@@ -44,7 +44,36 @@ Connect both probe grounds to board GND. The pins are driven high while the task
 
 ### AD Converter
 
-Todo ...
+The ESP32-specific code uses an external ADS1115 at its default I2C address
+`0x48`. Connect it to the LilyGo T-Display-S3 as follows:
+
+| ADS1115 | LilyGo T-Display-S3 |
+|---------|---------------------|
+| VDD     | 3.3 V               |
+| GND     | GND                 |
+| SDA     | GPIO18 / P1         |
+| SCL     | GPIO17 / P1         |
+| ADDR    | GND                 |
+
+ADS1115 input AIN1 reads a pressure sensor voltage. Four XCP parameters define
+the voltage-to-pressure calibration:
+
+- `(sensor_voltage_point1, pressure_point1)` in V and bar
+- `(sensor_voltage_point2, pressure_point2)` in V and bar
+
+`pressure_sensor_voltage` exposes the raw AIN1 measurement in V, while
+`channel1` contains the calibrated pressure in bar. Values between or outside
+the calibration points are linearly interpolated or extrapolated. The defaults
+map 0 V to 0 bar and 1 V to 1 bar. If both sensor-voltage points are equal,
+`channel1` is set to `NaN` because the pressure calibration is invalid.
+
+The converter uses gain 1 (a +/-4.096 V ADC range) and 860 samples/s so a
+conversion fits the default 2 ms slow-task period. Regardless of the configured
+ADC range, never drive an ADS1115 input below GND or above its supply voltage.
+
+If the ADS1115 is not detected during startup, the demo logs the condition and
+continues to generate the original sine signal. Disable `OPTION_ANALOG` in
+`platformio.ini` to build without ADS1115 support.
 
 
 

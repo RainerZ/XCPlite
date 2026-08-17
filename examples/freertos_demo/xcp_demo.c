@@ -114,11 +114,18 @@ static bool createDemoTask(TaskFunction_t taskCode, const char *name, const uint
 uint16_t global_counter = 0;
 XCP_COMMENT(global_counter,"Global measurement variable, incremented in fastTask");
 
-// Sine signal on variable channel1
+// Platform analog input when available, otherwise a generated sine signal
 #define SLOWTASK_PHASE_STEP_RAD 0.001f
 #define SINE_PERIOD_RAD 6.28318530717958647692f
 float channel1 = 0.0f;
-XCP_COMMENT(channel1,"Global measurement variable, sine wave, calculated in slowTask");
+XCP_COMMENT(channel1, "Pressure measured on analog channel 1 or generated sine wave, updated in slowTask");
+XCP_UNIT(channel1, "bar");
+
+#ifdef OPTION_ANALOG
+float pressure_sensor_voltage = NAN;
+XCP_COMMENT(pressure_sensor_voltage, "Raw pressure sensor voltage measured on analog channel 1");
+XCP_UNIT(pressure_sensor_voltage, "V");
+#endif
 
 static uint32_t fastTaskOverruns = 0;
 static uint32_t slowTaskOverruns = 0;
@@ -132,7 +139,23 @@ struct parameters {
     uint32_t slow_task_period_ms; // Period of measurement task 2 in milliseconds
     uint16_t counter_max;         // Counter wrap-around value for the global_counter incremented in fastTask
     float amplitude;              // Amplitude for the sine signal generator in slowTask
+    float sensor_voltage_point1;  // Sensor voltage at calibration point 1
+    float pressure_point1;        // Pressure at calibration point 1
+    float sensor_voltage_point2;  // Sensor voltage at calibration point 2
+    float pressure_point2;        // Pressure at calibration point 2
 };
+
+XCP_UNIT(parameters__fast_task_period_ms, "ms");
+XCP_UNIT(parameters__slow_task_period_ms, "ms");
+XCP_UNIT(parameters__amplitude, "bar");
+XCP_COMMENT(parameters__sensor_voltage_point1, "Pressure sensor voltage at two-point calibration point 1");
+XCP_UNIT(parameters__sensor_voltage_point1, "V");
+XCP_COMMENT(parameters__pressure_point1, "Pressure at two-point calibration point 1");
+XCP_UNIT(parameters__pressure_point1, "bar");
+XCP_COMMENT(parameters__sensor_voltage_point2, "Pressure sensor voltage at two-point calibration point 2");
+XCP_UNIT(parameters__sensor_voltage_point2, "V");
+XCP_COMMENT(parameters__pressure_point2, "Pressure at two-point calibration point 2");
+XCP_UNIT(parameters__pressure_point2, "bar");
 
 // Default calibration parameters (default/reference page)
 // &parameters is the A2l file address of the calibration parameter segment 'parameters'
@@ -142,6 +165,10 @@ const struct parameters parameters = {
     .slow_task_period_ms = 2, // 2 ms = 500 Hz
     .counter_max = 1000,
     .amplitude = 1.0f,
+    .sensor_voltage_point1 = 0.0f,
+    .pressure_point1 = 0.0f,
+    .sensor_voltage_point2 = 1.0f,
+    .pressure_point2 = 1.0f,
 };
 
 // Declare a calibration segment that wraps 'parameters' for thread-safe and consistent access.
@@ -278,10 +305,25 @@ static void slowTask(void *parameter) {
                 counter = 0;
             }
 
-            channel1 = params->amplitude * sinf(phase);
-            phase += SLOWTASK_PHASE_STEP_RAD;
-            if (phase >= SINE_PERIOD_RAD) {
-                phase -= SINE_PERIOD_RAD;
+#ifdef OPTION_ANALOG
+            const float analogValue = readAnalogChannel(1);
+            pressure_sensor_voltage = analogValue;
+            if (!isnan(analogValue)) {
+                const float voltageSpan = params->sensor_voltage_point2 - params->sensor_voltage_point1;
+                if (voltageSpan != 0.0f) {
+                    channel1 = params->pressure_point1 +
+                               (analogValue - params->sensor_voltage_point1) * (params->pressure_point2 - params->pressure_point1) / voltageSpan;
+                } else {
+                    channel1 = NAN;
+                }
+            } else
+#endif
+            {
+                channel1 = params->amplitude * sinf(phase);
+                phase += SLOWTASK_PHASE_STEP_RAD;
+                if (phase >= SINE_PERIOD_RAD) {
+                    phase -= SINE_PERIOD_RAD;
+                }
             }
 
 #ifndef __cplusplus
