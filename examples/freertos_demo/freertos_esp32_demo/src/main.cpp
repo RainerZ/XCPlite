@@ -20,6 +20,10 @@
 
 #include "xcp_demo.hpp"
 
+#ifdef OPTION_ANALOG
+static bool ads1115Present = false;
+#endif
+
 //----------------------------------------------------------------------------------------------------
 // Display
 
@@ -129,6 +133,17 @@ void displayUpdate(uint32_t slowTaskPeriodMs, uint16_t slowCounter, uint32_t fas
         snprintf(line, sizeof(line), "XCP Offline");
     }
     displayLine(displayLineCount() - 7, line, TFT_WHITE);
+
+#ifdef OPTION_ANALOG
+    if (!ads1115Present) {
+        snprintf(line, sizeof(line), "ADS1115: not found");
+    } else if (isnan(pressure_sensor_voltage)) {
+        snprintf(line, sizeof(line), "ADS1115: found");
+    } else {
+        snprintf(line, sizeof(line), "ADS1115: %.3f V", pressure_sensor_voltage);
+    }
+    displayLine(displayLineCount() - 5, line, ads1115Present ? TFT_CYAN : TFT_RED);
+#endif
     
     snprintf(line, sizeof(line), "slowTask: %ums %u", slowTaskPeriodMs, slowCounter);
     displayLine(displayLineCount() - 4, line, TFT_YELLOW);
@@ -329,7 +344,6 @@ void initIO( void ) {
 
 static constexpr uint8_t ADS1115_I2C_ADDRESS = 0x48;
 static Adafruit_ADS1115 ads1115;
-static bool ads1115Present = false;
 
 static void initAnalogConverter() {
     Wire.begin(SDA, SCL);

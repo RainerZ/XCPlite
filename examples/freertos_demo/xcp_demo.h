@@ -28,6 +28,9 @@ bool xcp_demo_init(void);
 // Read a platform-provided single-ended analog channel. Returns NAN when the
 // converter is unavailable or the channel is invalid.
 float readAnalogChannel(uint8_t channel);
+
+// Raw analog value exposed as an XCP measurement.
+extern float pressure_sensor_voltage;
 #endif
 
 #ifdef OPTION_DISPLAY

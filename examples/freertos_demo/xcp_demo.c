@@ -306,7 +306,7 @@ static void slowTask(void *parameter) {
             }
 
 #ifdef OPTION_ANALOG
-            const float analogValue = readAnalogChannel(1);
+            const float analogValue = readAnalogChannel(0);
             pressure_sensor_voltage = analogValue;
             if (!isnan(analogValue)) {
                 const float voltageSpan = params->sensor_voltage_point2 - params->sensor_voltage_point1;
