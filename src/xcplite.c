@@ -70,10 +70,14 @@
 #endif
 
 #include "dbg_print.h"   // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
+#ifdef OPTION_ENABLE_PERSISTENCE
 #include "persistence.h" // for XcpBinFreezeCalSeg
+#endif
 #include "platform.h"    // for atomics
 #include "queue.h"       // for QueueXxx transport queue layer interface
-#include "shm.h"         // for shared memory management
+#ifdef OPTION_SHM_MODE
+#include "shm.h" // for shared memory management, declares nothing outside SHM mode
+#endif
 #include "xcp.h"         // XCP protocol definitions
 #include "xcptl.h"       // for transport layer abstraction XcpTlWaitForTransmitQueueEmpty and XcpTlSendCrm
 
