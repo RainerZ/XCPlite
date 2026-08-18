@@ -520,6 +520,8 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
 
     // A2L name (from GET_ID)
     let mut a2l_name = String::new();
+    // EPK reported by the target, empty when offline or unsupported
+    let mut ecu_epk = String::new();
 
     // Calibration segment relative addressing mode
     let mut segment_relative = false;
@@ -597,14 +599,13 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
 
             // Get EPK
             let res = xcp_client.get_id(xcp::IDT_ASAM_EPK).await;
-            let _ecu_epk = match res {
+            match res {
                 Ok((_, Some(id))) => {
                     info!("  GET_ID IDT_EPK = {}", id);
-                    id
+                    ecu_epk = id;
                 }
                 Err(e) => {
                     warn!("GET_ID IDT_ASAM_EPK failed, Error: {}", e);
-                    "".into()
                 }
                 _ => {
                     panic!("Empty string");
@@ -823,6 +824,26 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
             xcp_client
                 .load_a2l_file_into_registry(&a2l_path, &mut reg)
                 .map_err(|e| format!("Could not load A2L file '{}'", a2l_path.display()))?;
+
+            // Check the A2L EPK against the EPK reported by the target.
+            // The EPK is the firmware version string the A2L was generated from,
+            // so a mismatch means this A2L describes different firmware and its
+            // addresses may point at the wrong variables.
+            if !ecu_epk.is_empty() {
+                let a2l_epk = reg.application.get_version();
+                if a2l_epk.is_empty() {
+                    warn!("A2L file {} has no EPK, cannot verify it matches the target", a2l_path.display());
+                } else if a2l_epk != ecu_epk {
+                    warn!(
+                        "EPK mismatch: A2L file {} has EPK '{}', target has EPK '{}'. The A2L file is outdated, addresses may be wrong.",
+                        a2l_path.display(),
+                        a2l_epk,
+                        ecu_epk
+                    );
+                } else {
+                    info!("EPK '{}' of A2L file and target match", ecu_epk);
+                }
+            }
 
             let mut event_mapping: std::collections::HashMap<u16, u16> = std::collections::HashMap::new();
             let mut seg_mapping: std::collections::HashMap<u16, u16> = std::collections::HashMap::new();
