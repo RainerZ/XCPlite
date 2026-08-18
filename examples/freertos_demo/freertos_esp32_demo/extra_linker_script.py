@@ -33,15 +33,26 @@ xcp_sections = """    __start_xcp_cals = ABSOLUTE(.);
 # xcpclient finds these sections by name when reading the ELF. Place them
 # immediately after .flash.rodata so they remain in the same mapped flash
 # region while retaining their individual ELF section identities.
+#
+# The trailing ALIGN(8) inside each output section is load bearing. esptool only
+# merges ELF sections into one image segment when they are contiguous. Without
+# the padding, xcp_epk (5 bytes) ends unaligned and the ALIGN(8) of xcp_meta
+# leaves a 7 byte hole, which splits the flash rodata into two DROM segments.
+# The ESP-IDF bootloader then maps only the last of them, leaving the real
+# rodata unmapped, and the firmware crashes and resets on every boot with:
+#   E boot: Image contains multiple DROM segments. Only the last one will be mapped.
+# Verify with: esptool --chip esp32s3 image-info firmware.bin | grep DROM
 named_sections_marker = "  _flash_rodata_align = ALIGNOF(.flash.rodata);\n"
 named_sections = """  xcp_epk : ALIGN(1)
   {
     KEEP(*(xcp_epk))
+    . = ALIGN(8);
   } > default_rodata_seg
 
   xcp_meta : ALIGN(8)
   {
     KEEP(*(xcp_meta))
+    . = ALIGN(8);
   } > default_rodata_seg
 
 """

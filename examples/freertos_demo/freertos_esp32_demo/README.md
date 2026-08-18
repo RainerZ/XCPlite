@@ -263,11 +263,7 @@ Expected static information includes:
 
 Current linker limitation: `extra_linker_script.py` retains `xcp_evts` inside
 `.flash.rodata`, so the final ELF does not contain an output section literally
-named `xcp_evts`. `xcpclient` therefore cannot derive distinct event IDs and
-currently aborts with `Duplicate("fastTask")` before it reaches calibration and
-metadata registration. Keeping `xcp_evts` as a named output section in the same
-mapped flash region resolves this; the calibration segment itself is already
-present in the ELF.
+named `xcp_evts`. Newer versions of `xcpclient` can handle this, xcpclient looks for the boundary variables `__start_xcp_evts` and `__stop_xcp_evts`, when the section itself is not found.
 
 
 ## Adapting to other ESP32 Hardware in PlatformIO
