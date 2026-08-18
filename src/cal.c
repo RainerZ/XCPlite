@@ -30,7 +30,9 @@
 #endif
 
 #include "dbg_print.h"   // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
+#ifdef OPTION_ENABLE_PERSISTENCE
 #include "persistence.h" // for XcpBinFreezeCalSeg
+#endif
 #include "platform.h"    // for atomics OS abstraction
 #include "xcp.h"         // XCP protocol definitions
 #include "xcplite.h"     // XCP protocol layer interface functions

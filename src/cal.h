@@ -27,7 +27,9 @@
 
 #ifdef XCP_ENABLE_CALSEG_LIST
 
-#include "shm.h" // for shared memory management if enabled
+#ifdef OPTION_SHM_MODE
+#include "shm.h" // for shared memory management, declares nothing outside SHM mode
+#endif
 
 #ifdef __cplusplus
 extern "C" {
