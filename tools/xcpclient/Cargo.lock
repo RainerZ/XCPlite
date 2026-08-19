@@ -964,6 +964,7 @@ dependencies = [
 [[package]]
 name = "xcp_register_type_derive"
 version = "3.0.0"
+source = "git+https://github.com/RainerZ/xcp-lite.git?branch=V3.0.9#7988701df7e51ff41c9ebb3b2e8fdada4756ed3f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -973,6 +974,7 @@ dependencies = [
 [[package]]
 name = "xcp_registry"
 version = "3.0.0"
+source = "git+https://github.com/RainerZ/xcp-lite.git?branch=V3.0.9#7988701df7e51ff41c9ebb3b2e8fdada4756ed3f"
 dependencies = [
  "a2lfile",
  "log",

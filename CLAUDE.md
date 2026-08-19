@@ -79,6 +79,7 @@ Full reference: `docs/BUILDING.md`.
 ```
 inc/xcplib.h, inc/a2l.h         C public API (instrumentation macros + functions)
 inc/xcplib.hpp, inc/a2l.hpp     C++ RAII wrappers over the C API
+
 src/xcplite.c, src/xcp.h        XCP protocol layer (command processing, DAQ list state machine)
 src/xcpappl.c                   Application callback glue (clock, addressing, read/write)
 src/xcpethserver.c/.h           XCP-on-Ethernet server (TCP/UDP), connection handling
@@ -114,11 +115,11 @@ XCPlite encodes *where* a measured/calibrated variable lives (global, stack, hea
 
 ### Offline A2L generation (`xcpclient`, no-A2L builds)
 
-`no_a2l` and `rtos` are the two configurations that do not use on-target runtime A2L generation. Build-time A2L generation instead relies on information embedded in ELF file sections and DWARF markers to locate events/parameters in the code: the Rust `xcpclient` tool (`tools/xcpclient/`) parses the built ELF's DWARF debug info and two marker sections:
+`no_a2l` and `rtos` are the two configurations that do not use on-target runtime A2L generation. Build-time A2L generation instead relies on information embedded in ELF file sections and DWARF markers to locate events and calibration parameter segments in the code: the Rust `xcpclient` tool (`tools/xcpclient/`) parses the built ELF's DWARF debug info and two marker sections:
 - `xcp_evts` section — `tXcpEventDescriptor` constants emitted by `DaqCreateEvent`/`DaqCreateAndTriggerEvent`
 - `xcp_cals` section — `tXcpCalSegDescriptor` constants emitted by `CalSegDecl`+`CalSegCreate`
 
-and DWARF scope anchors named `trg__<mode-letters>__<event-name>` (e.g. `trg__AAS__foo`, letter position = address-extension value: `A`=absolute, `C`=cal-segment-relative, `S`=stack-relative, `D`=dynamic/heap) emitted by the trigger macros, to reconstruct addressing without any runtime A2L calls. Full details, including what changes if you modify the trigger macros, are in `docs/TECHNICAL.md`.
+and DWARF scope anchors named `trg__<mode-letters>__<event-name>` (e.g. `trg__AAS__foo`, letter position = address-extension value [0..]: `A`=absolute, `C`=cal-segment-relative, `S`=stack-relative, `D`=dynamic/heap) emitted by the trigger macros, to reconstruct addressing without any runtime A2L calls. Full details, including what changes if you modify the trigger macros, are in `docs/TECHNICAL.md`.
 
 ### Shared-memory (SHM) multi-application mode (`docs/SHM.md`)
 
