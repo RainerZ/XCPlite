@@ -829,7 +829,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
             info!("Load A2L file: {}", a2l_path.display());
             xcp_client
                 .load_a2l_file_into_registry(&a2l_path, &mut reg)
-                .map_err(|e| format!("Could not load A2L file '{}'", a2l_path.display()))?;
+                .map_err(|e| format!("Could not load A2L file '{}': {}", a2l_path.display(), e))?;
 
             // Check the A2L EPK against the EPK reported by the target.
             // The EPK is the firmware version string the A2L was generated from,
