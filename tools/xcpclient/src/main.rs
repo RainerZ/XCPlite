@@ -13,7 +13,7 @@
 // xcpclient --help
 //-----------------------------------------------------------------------------
 
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::net::Ipv4Addr;
 use std::{error::Error, sync::Arc};
 
@@ -225,6 +225,11 @@ struct Args {
     /// Execute a test sequence on the XCP server.
     #[arg(long, default_value_t = false)]
     test: bool,
+
+    // --yes
+    /// Automatically confirm EPK mismatch and other safety warnings. Use in scripts to suppress interactive prompts.
+    #[arg(long, short = 'y', default_value_t = false)]
+    yes: bool,
 }
 
 //----------------------------------------------------------------------------------------------
@@ -508,6 +513,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
         time,
         cal: cal_args,
         csv: csv_filename,
+        yes,
         ..
     } = args;
     let measurement_duration_ms = time * 1000;
@@ -834,12 +840,25 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                 if a2l_epk.is_empty() {
                     warn!("A2L file {} has no EPK, cannot verify it matches the target", a2l_path.display());
                 } else if a2l_epk != ecu_epk {
-                    warn!(
-                        "EPK mismatch: A2L file {} has EPK '{}', target has EPK '{}'. The A2L file is outdated, addresses may be wrong.",
+                    error!(
+                        "EPK mismatch: A2L file '{}' has EPK '{}', target reports EPK '{}'. Addresses may be wrong.",
                         a2l_path.display(),
                         a2l_epk,
                         ecu_epk
                     );
+                    if !yes {
+                        if std::io::stdin().is_terminal() {
+                            eprint!("Continue anyway? [y/N] ");
+                            let _ = std::io::stderr().flush();
+                            let mut input = String::new();
+                            let _ = std::io::stdin().read_line(&mut input);
+                            if !input.trim().eq_ignore_ascii_case("y") {
+                                return Err("Aborted due to EPK mismatch".into());
+                            }
+                        } else {
+                            return Err("EPK mismatch: aborting. Use --yes to proceed anyway.".into());
+                        }
+                    }
                 } else {
                     info!("EPK '{}' of A2L file and target match", ecu_epk);
                 }
@@ -1193,6 +1212,7 @@ struct ConfigFile {
     cal: Option<Vec<String>>,
     elf_skip_no_metadata: Option<bool>,
     test: Option<bool>,
+    yes: Option<bool>,
 }
 
 /// Apply config file values to args.
@@ -1241,6 +1261,7 @@ fn merge_config(matches: &clap::ArgMatches, config: ConfigFile, args: &mut Args)
     apply!(cal);
     apply!(elf_skip_no_metadata);
     apply!(test);
+    apply!(yes);
 }
 
 //------------------------------------------------------------------------
