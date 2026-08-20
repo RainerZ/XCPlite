@@ -306,11 +306,9 @@ if(XCPLITE_BUILD_EXAMPLES)
         # Shared-memory multi-application mode
         add_executable(hello_xcp examples/hello_xcp/src/main.c)
         target_link_libraries(hello_xcp PRIVATE xcplite)
-        target_compile_definitions(hello_xcp PRIVATE "OPTION_SHM_MODE")
 
         add_executable(hello_xcp_cpp examples/hello_xcp_cpp/src/main.cpp)
         target_link_libraries(hello_xcp_cpp PRIVATE xcplite)
-        target_compile_definitions(hello_xcp_cpp PRIVATE "OPTION_SHM_MODE")
 
         # silkit_demo is a standalone project requiring SilKit + an installed xcplite.
         # Build it separately: cd examples/silkit_demo && cmake -B build -DSilKit_DIR=... -Dxcplite_DIR=...

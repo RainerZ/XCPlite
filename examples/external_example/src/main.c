@@ -27,7 +27,7 @@
 // XCP configuration
 
 #define OPTION_PROJECT_NAME "external_example"
-#define OPTION_PROJECT_VERSION "V100"
+#define OPTION_PROJECT_VERSION "V2.1.10"
 #define OPTION_USE_TCP true
 #define OPTION_SERVER_PORT 5555
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}
