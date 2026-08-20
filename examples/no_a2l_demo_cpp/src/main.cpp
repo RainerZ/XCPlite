@@ -27,7 +27,7 @@ void signal_handler(int signal) {
 //-----------------------------------------------------------------------------------------------------
 // XCP configuration parameters
 
-#define OPTION_PROJECT_VERSION "109" // EPK version string
+#define OPTION_PROJECT_VERSION "V2.1.10" // EPK version string
 
 constexpr const char OPTION_PROJECT_NAME[] = "no_a2l_demo_cpp"; // Project name, used to build the A2L and BIN file name
 constexpr bool OPTION_USE_TCP = false;                          // TCP or UDP

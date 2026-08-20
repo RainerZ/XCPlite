@@ -23,7 +23,7 @@ static void sig_handler(int sig) { global_running = false; }
 //-----------------------------------------------------------------------------------------------------
 // XCP configuration parameters
 
-#define OPTION_PROJECT_VERSION "V101" // EPK version string
+#define OPTION_PROJECT_VERSION "V2.1.10" // EPK version string
 
 #define OPTION_PROJECT_NAME "no_a2l_demo" // Project name, used to build the volatile and BIN file name
 #define OPTION_USE_TCP false              // TCP or UDP
