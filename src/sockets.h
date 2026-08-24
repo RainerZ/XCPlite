@@ -8,6 +8,49 @@
 | Description:
 |   Platform socket abstraction layer (Linux/Windows/macOS/QNX/FreeRTOS)
 |
+|   Requires OPTION_ENABLE_TCP and/or OPTION_ENABLE_UDP — the entire API is
+|   compiled away without them.
+|
+|   Build variants and supported functions:
+|
+|   _FREE_RTOS && !FREE_RTOS_POSIX_SIM (bare-metal FreeRTOS):
+|     OPTION_FREERTOS_LWIP defined:
+|       socketStartup, socketCleanup, socketOpen (UDP only, TCP not supported),
+|       socketBind, socketShutdown, socketClose,
+|       socketRecvFrom, socketSendTo, socketSetTimeout
+|     OPTION_FREERTOS_LWIP not defined:
+|       All functions are error stubs — the caller must provide the implementation.
+|
+|   POSIX: _LINUX / _MACOS / _QNX  (and FREE_RTOS_POSIX_SIM):
+|     Base:
+|       socketStartup (no-op), socketCleanup (no-op),
+|       socketOpen, socketBind, socketShutdown, socketClose,
+|       socketGetMAC, socketSetTimeout,
+|       socketJoin, socketRecvFrom, socketSendTo
+|     + OPTION_ENABLE_TCP:
+|       socketListen, socketAccept, socketRecv, socketSend
+|     + !_FREE_RTOS (scatter-gather via sendmsg):
+|       socketSendToV, socketSendV
+|     + OPTION_ENABLE_GET_LOCAL_ADDR:
+|       socketGetLocalAddr
+|     + _LINUX && OPTION_SOCKET_HW_TIMESTAMPS:
+|       SOCKET_HANDLE becomes struct socket* (fd + interface metadata)
+|       socketBindToDevice, socketEnableTimestamps, socketGetSendTime
+|       socketRecvFrom uses recvmsg with SO_TIMESTAMPING / SO_TIMESTAMPNS
+|       socketSendTo   uses sendmsg with per-packet timestamp request
+|
+|   _WIN (Windows / Winsock2):
+|     Base:
+|       socketStartup (WSAStartup), socketCleanup (WSACleanup),
+|       socketOpen, socketBind, socketShutdown, socketClose,
+|       socketSetTimeout, socketJoin, socketRecvFrom, socketSendTo
+|     + OPTION_ENABLE_TCP:
+|       socketListen, socketAccept, socketRecv, socketSend
+|     + OPTION_ENABLE_GET_LOCAL_ADDR:
+|       socketGetLocalAddr
+|     No scatter-gather I/O (sendmsg not available on Windows).
+|     No hardware timestamping.
+|
 | Copyright (c) Vector Informatik GmbH. All rights reserved.
 | See LICENSE file in the project root for details.
 |

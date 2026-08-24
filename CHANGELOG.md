@@ -2,9 +2,10 @@
 
 All notable changes to XCPlite are documented in this file.
 
-## [Unreleased]
+## [V2.2.0] work in progress
 
 - Split `platform.c/.h` into `platform.c/.h` (threads, mutex, clock, sleep, memory, atomics) and `sockets.c/.h` (socket abstraction for all platforms). `sockets.h` includes `platform.h`; files that use both include both explicitly (IWYU).
+
 
 ## [V2.1.10]
 
