@@ -176,7 +176,7 @@ elseif(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 # xcplite sources
-set(xcplite_SOURCES src/xcpappl.c src/xcplite.c src/xcpethserver.c src/xcpethtl.c src/queue32m.c src/queue32.c src/queue64v.c src/queue64f.c src/shm.c src/cal.c src/a2l.c src/a2l_writer.c src/persistence.c src/platform.c src/util.c )
+set(xcplite_SOURCES src/xcpappl.c src/xcplite.c src/xcpethserver.c src/xcpethtl.c src/queue32m.c src/queue32.c src/queue64v.c src/queue64f.c src/shm.c src/cal.c src/a2l.c src/a2l_writer.c src/persistence.c src/platform.c src/sockets.c src/util.c )
 
 # Create xcplite library
 add_library(xcplite ${xcplite_SOURCES})
@@ -483,6 +483,7 @@ install(DIRECTORY inc/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PA
 # Install xcplib_cfg.h (default configuration) and platform.h
 install(FILES src/xcplib_cfg.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES src/platform.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES src/sockets.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # Install the active configuration override header (if not default)
 # This documents which configuration was compiled into the installed library.

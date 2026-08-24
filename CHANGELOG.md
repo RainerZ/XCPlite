@@ -2,6 +2,10 @@
 
 All notable changes to XCPlite are documented in this file.
 
+## [Unreleased]
+
+- Split `platform.c/.h` into `platform.c/.h` (threads, mutex, clock, sleep, memory, atomics) and `sockets.c/.h` (socket abstraction for all platforms). `sockets.h` includes `platform.h`; files that use both include both explicitly (IWYU).
+
 ## [V2.1.10]
 
 - Build cleanup: `shm.h` and `persistence.h` are only included where the corresponding feature is enabled, reducing overhead for minimal embedded source subsets
@@ -129,7 +133,7 @@ All notable changes to XCPlite are documented in this file.
 ```c
 void XcpInit(const char *name, const char *epk, uint8_t mode);
 ```
-- The return value contract of `socketRecv` and `socketRecvFrom` has changed. Only code that uses these functions directly (i.e. code that includes `platform.h` is affected)
+- The return value contract of `socketRecv` and `socketRecvFrom` has changed. Only code that uses these functions directly (i.e. code that includes `socket.h` is affected)
 
 ### Experimental
 

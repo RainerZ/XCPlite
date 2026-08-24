@@ -18,9 +18,10 @@
 #include <stdint.h>   // for uintxx_t
 #include <string.h>   // for memcpy, strcmp
 
-#include "dbg_print.h" // for DBG_LEVEL, DBG_PRINT, ...
-#include "platform.h"  // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex
-#include "queue.h"
+#include "dbg_print.h"  // for DBG_LEVEL, DBG_PRINT, ...
+#include "platform.h"   // for MUTEX, THREAD_HANDLE, create_thread, sleepMs, clockGetMonotonicNs, ...
+#include "queue.h"      // for tQueueHandle, queueInitFromMemory, queuePush, queuePop, ...
+#include "sockets.h"    // for SOCKET_HANDLE, socketXxx
 #include "xcp.h"        // for CRC_XXX
 #include "xcp_cfg.h"    // for XCP_xxx
 #include "xcplib_cfg.h" // for OPTION_xxx

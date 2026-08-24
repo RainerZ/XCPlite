@@ -16,7 +16,8 @@
 #include <string.h>   // for strncpy
 
 #include "dbg_print.h"  // for DBG_PRINTF3, DBG_PRINT4, DBG_PRINTF4, DBG...
-#include "platform.h"   // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex
+#include "platform.h"   // for clockGet, SNPRINTF, STRNLEN, platform defines
+#include "sockets.h"    // for socketGetLocalAddr
 #include "xcp.h"        // for CRC_XXX
 #include "xcp_cfg.h"    // for XCP_ENABLE_xxx
 #include "xcplib_cfg.h" // for OPTION_xxx
