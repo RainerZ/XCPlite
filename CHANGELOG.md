@@ -20,14 +20,14 @@ All notable changes to XCPlite are documented in this file.
 - A2L generator declarations conditionally removed from public API headers (`inc/xcplib.h`, `inc/xcplib.hpp`) for non-A2L configurations
 - C++ namespace alias `xcplib` removed (breaking change for code using `xcplib::` instead of `xcplite::`)
 - `XcpSetA2lName` and `XcpGetA2lName` are now independent from enabling the A2L generator
-- Fixed calibration segment name length
+- Hardcoded maximum calibration segment name length limited by alignment requirements
 - Fixed `cpp_demo` shutdown issue
 - Windows build fixes
 - Removed code definition of `_GNU_SOURCE`, made it public in CMakeLists.txt
 
 - `xcpclient` related changes:
     - New `XCP_READ_WRITE` metadata macro
-    - Added enum support in ELF->A2L converter
+    - Added enum conversion support in ELF->A2L converter
     - Updated `mc_registry`, `gimli` and `object` crate dependencies to latest versions
     - New options `--elf_skip_no_metadata` and `--config <xcpclient.toml>`
     - Various bugfixes in debuginfo parsing and `no_a2l_demo` event handling
