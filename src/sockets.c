@@ -19,7 +19,7 @@
 #include "assert.h"
 #include "dbg_print.h"
 
-#if defined(OPTION_ENABLE_TCP) || defined(OPTION_ENABLE_UDP)
+#if (defined(OPTION_ENABLE_TCP) || defined(OPTION_ENABLE_UDP)) && !defined(OPTION_ENABLE_UDP_RAW)
 
 const char *socketGetErrorString(int32_t err) {
 #if !defined(_WIN)
@@ -1576,6 +1576,6 @@ bool socketGetSendTime(SOCKET_HANDLE socket, uint64_t *hw_time, uint64_t *sw_tim
 }
 #endif // defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
 
-#endif // !_WIN
+#endif // !_WIN (closes the #else of #if _FREE_RTOS && !FREE_RTOS_POSIX_SIM)
 
-#endif
+#endif // OPTION_ENABLE_TCP || OPTION_ENABLE_UDP && !OPTION_ENABLE_UDP_RAW

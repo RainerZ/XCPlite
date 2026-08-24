@@ -8,8 +8,8 @@
 | Description:
 |   Platform socket abstraction layer (Linux/Windows/macOS/QNX/FreeRTOS)
 |
-|   Requires OPTION_ENABLE_TCP and/or OPTION_ENABLE_UDP — the entire API is
-|   compiled away without them.
+|   Requires OPTION_ENABLE_TCP and/or OPTION_ENABLE_UDP, or OPTION_ENABLE_UDP_RAW
+|   (mutually exclusive) — the entire API is compiled away without one of them.
 |
 |   Build variants and supported functions:
 |
@@ -51,6 +51,17 @@
 |     No scatter-gather I/O (sendmsg not available on Windows).
 |     No hardware timestamping.
 |
+|   OPTION_ENABLE_UDP_RAW (raw Ethernet, mutually exclusive with the above):
+|     Intended for: rtos configuration (FreeRTOS bare-metal), or Windows default
+|     (Vector XLAPI). NOT for Linux/macOS default — those require vectored I/O
+|     (socketSendToV/socketSendV) which this variant does not provide.
+|     Subset only — see docs/SOCKET_RAW.md for full design:
+|       socketStartup, socketCleanup, socketGetErrorString,
+|       socketOpen, socketBind, socketShutdown, socketClose,
+|       socketRecvFrom, socketSendTo, socketSetTimeout
+|     Step 1: stubs in socket_raw.c (compile-check only).
+|     Step 2+: hand-crafted UDP/IP layer over a raw Ethernet HAL.
+|
 | Copyright (c) Vector Informatik GmbH. All rights reserved.
 | See LICENSE file in the project root for details.
 |
@@ -64,7 +75,7 @@ extern "C" {
 
 // Platform independent socket functions
 
-#if defined(OPTION_ENABLE_TCP) || defined(OPTION_ENABLE_UDP)
+#if defined(OPTION_ENABLE_TCP) || defined(OPTION_ENABLE_UDP) || defined(OPTION_ENABLE_UDP_RAW)
 
 // Note:
 // SOCKET_HANDLE is an opaque type that may wrap the OS socket handle and additional info (e.g. for Linux hardware timestamping)

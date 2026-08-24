@@ -48,8 +48,8 @@
 #endif
 #endif
 
-#if !defined(OPTION_ENABLE_TCP) && !defined(OPTION_ENABLE_UDP)
-#error "Please define OPTION_ENABLE_TCP or OPTION_ENABLE_UDP"
+#if !defined(OPTION_ENABLE_TCP) && !defined(OPTION_ENABLE_UDP) && !defined(OPTION_ENABLE_UDP_RAW)
+#error "Please define OPTION_ENABLE_TCP or OPTION_ENABLE_UDP or OPTION_ENABLE_UDP_RAW"
 #endif
 
 static THREAD_FUNC_RETURN XcpServerReceiveThread(void *par);

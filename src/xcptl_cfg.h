@@ -13,7 +13,7 @@
 
 #include "xcplib_cfg.h" // for OPTION_xxx
 
-#if defined(OPTION_ENABLE_UDP)
+#if defined(OPTION_ENABLE_UDP) || defined(OPTION_ENABLE_UDP_RAW)
 #define XCPTL_ENABLE_UDP
 #endif
 #if defined(OPTION_ENABLE_TCP)
