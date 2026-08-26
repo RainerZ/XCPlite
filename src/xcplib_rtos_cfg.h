@@ -78,9 +78,10 @@
 
 //-------------------------------------------------------------------------------
 // XCP server
-#undef OPTION_ENABLE_TCP      // TCP support stubs not implemented yet for FreeRTOS
-#undef OPTION_ENABLE_UDP      // UDP support by the stack
-#define OPTION_ENABLE_UDP_RAW // RAW UDP support via a hand-crafted UDP/IP layer over a raw Ethernet HAL
+#undef OPTION_ENABLE_TCP // TCP support stubs not implemented yet for FreeRTOS
+// OPTION_ENABLE_UDP stays enabled: FreeRTOS targets use the lwIP socket API (OPTION_FREERTOS_LWIP above),
+// the POSIX simulator uses host sockets. For targets without any IP stack, use XCPLITE_CONFIGURATION=raw
+// (OPTION_ENABLE_UDP_RAW, hand-crafted UDP/IP over a raw Ethernet HAL) - see docs/SOCKET_RAW.md
 
 #undef OPTION_MTU
 #define OPTION_MTU 1504                    // Standard Ethernet MTU: 1504 - 32 = 1472 bytes max UDP payload (%8 aligned)

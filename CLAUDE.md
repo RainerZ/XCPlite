@@ -12,7 +12,7 @@ The public C API is `inc/xcplib.h` + `inc/a2l.h`; the C++ API is `inc/xcplib.hpp
 
 ## Build system
 
-CMake-based. **Five mutually exclusive build configurations**, each with its own build directory — never mix configurations in one build dir, since compile definitions differ:
+CMake-based. **Six mutually exclusive build configurations**, each with its own build directory — never mix configurations in one build dir, since compile definitions differ:
 
 | Configuration | Build dir | Config override header | Use case |
 |---|---|---|---|
@@ -21,6 +21,7 @@ CMake-based. **Five mutually exclusive build configurations**, each with its own
 | `ptp` | `build-ptp/` | `src/xcplib_ptp_cfg.h` | Socket hardware timestamps; Linux + PTP-capable NIC |
 | `shm` | `build-shm/` | `src/xcplib_shm_cfg.h` | Shared-memory multi-application mode (`shmtool`, `xcpdaemon`) |
 | `rtos` | `build-rtos/` | `src/xcplib_rtos_cfg.h` | FreeRTOS embedded targets: reduced footprint, no filesystem, 32-bit, no on-target A2L generation |
+| `raw` | `build-raw/` | `src/xcplib_raw_cfg.h` | Raw Ethernet transport: UDP/IPv4 implemented inside xcplib, no TCP/IP stack (Linux only) |
 
 Selected via `-DXCPLITE_CONFIGURATION=<name>` (default: `default`). Within a configuration, `XCPLITE_BUILD_EXAMPLES`, `XCPLITE_BUILD_TESTS`, `XCPLITE_BUILD_TOOLS` (all default `OFF`) control which targets get built — which targets exist depends on the active configuration (see table in `docs/BUILDING.md`). `XCPLITE_BUILD_RUST_TOOLS` builds `xcpclient`/`bintool` via cargo (any configuration). `XCPLITE_BUILD_BPF_DEMO` builds `bpf_demo` (default config, Linux only, requires libbpf).
 
@@ -28,7 +29,7 @@ Selected via `-DXCPLITE_CONFIGURATION=<name>` (default: `default`). Within a con
 
 ### Common commands
 
-`build.sh` wraps CMake: `./build.sh [build_type] [configuration] [target] [options]` (any order; `build_type` = `debug`|`release`|`relwithdebinfo`, default `debug`; `configuration` = `default`|`no_a2l`|`ptp`|`shm`|`rtos`; `target` = `lib`|`examples`|`tests`|`tools`|`rust_tools`|`all`, default `examples`; `options` = `clean` `cleanall` `install` `install=<path>` `cargo_install` `tidy`).
+`build.sh` wraps CMake: `./build.sh [build_type] [configuration] [target] [options]` (any order; `build_type` = `debug`|`release`|`relwithdebinfo`, default `debug`; `configuration` = `default`|`no_a2l`|`ptp`|`shm`|`rtos`|`raw`; `target` = `lib`|`examples`|`tests`|`tools`|`rust_tools`|`all`, default `examples`; `options` = `clean` `cleanall` `install` `install=<path>` `cargo_install` `tidy`).
 
 ```bash
 ./build.sh                          # library + examples, default config, debug
@@ -89,7 +90,10 @@ src/queue*.c                    Lock-free/mutex transmit queue implementations (
 src/cal.c/.h                    Calibration segment RCU implementation (page switching, locks)
 src/a2l.c, src/a2l_writer.c     Runtime A2L file generation
 src/persistence.c/.h            Binary (.bin) parameter/event persistence across restarts
-src/platform.c/.h               OS abstraction (threads, sockets, clock, atomics) — Linux/macOS/QNX/Windows/FreeRTOS
+src/platform.c/.h               OS abstraction (threads, clock, mutex, atomics) — Linux/macOS/QNX/Windows/FreeRTOS
+src/sockets.c/.h                Socket abstraction over the OS socket API (all standard platforms)
+src/socket_raw.c                Raw-Ethernet UDP/IPv4 transport (OPTION_ENABLE_UDP_RAW), see docs/SOCKET_RAW.md
+src/socket_raw_hal.h            Raw Ethernet HAL interface; socket_raw_hal_linux.c is the AF_PACKET backend
 src/util.c/.h                   Shared helpers
 ```
 

@@ -559,6 +559,10 @@ static uint32_t openFile(const char *filename) {
     fseek(gXcpFile, 0, SEEK_END);
     gXcpFileLength = (uint32_t)ftell(gXcpFile);
     fseek(gXcpFile, 0, SEEK_SET);
+    // @@@@ TODO: This assert aborts the whole XCP server process when the file is empty, which a
+    // remote XCP client can trigger with GET_ID A2L upload (e.g. connecting before the A2L has been
+    // finalized, or after a previous run left a 0 byte A2L behind). An empty or unreadable file is a
+    // normal runtime condition, not a programming error: return 0 here and let the caller report it.
     assert(gXcpFileLength > 0);
     DBG_PRINTF4("File %s ready for upload, size=%u\n", filename, gXcpFileLength);
     return gXcpFileLength;
@@ -570,6 +574,16 @@ bool ApplXcpReadFile(uint8_t size, uint32_t addr, uint8_t *data) {
         DBG_PRINT_ERROR("File not open for reading!\n");
         return false;
     }
+    // @@@@ TODO: GET_ID A2L upload fails on every configuration (verified on UDP and on the raw
+    // Ethernet transport with xcpclient --upload-a2l). The very first block already fails:
+    //   "ApplXcpReadFile addr=0 size=247 exceeds file length=10813"
+    // Since 0+247 <= 10813, the failing clause is the fread, not the length check - the message
+    // misattributes it. Two things to fix here:
+    //  1) the diagnostic lumps "offset out of range" and "short read" into one misleading text
+    //  2) the read is purely sequential and ignores addr: it relies on the FILE* position and
+    //     closes the file at EOF, so any retry, re-set MTA or non sequential block transfer fails.
+    //     Seeking to addr before reading would make this robust.
+    // Net effect: A2L upload is unusable, and the failure surfaces to the client as CRC_ACCESS_DENIED.
     if (addr + size > gXcpFileLength || size != fread(data, 1, (uint32_t)size, gXcpFile)) {
         closeFile();
         DBG_PRINTF_ERROR("ApplXcpReadFile addr=%u size=%u exceeds file length=%u\n", addr, size, gXcpFileLength);

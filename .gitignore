@@ -36,3 +36,4 @@ test_bintool
 /docs/SUBMODULE_GUIDE.md
 /shm_*.sh
 wlan.h
+/TODO_old.md

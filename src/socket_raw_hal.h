@@ -1,0 +1,84 @@
+#pragma once
+
+/*----------------------------------------------------------------------------
+| File:
+|   socket_raw_hal.h
+|
+| Description:
+|   Raw Ethernet HAL for the OPTION_ENABLE_UDP_RAW transport (src/socket_raw.c)
+|
+|   socket_raw.c implements UDP/IPv4, ARP and ICMP on top of this interface.
+|   A port has to provide send/receive of complete Ethernet frames and the local
+|   MAC address - nothing else. Backends:
+|     socket_raw_hal_linux.c  Linux AF_PACKET (development and test)
+|     socket_raw_hal_xlapi.c  Vector XLAPI on Windows      (future)
+|     socket_raw_hal_cmp.c    ASAM CMP capture modules     (future)
+|
+|   Frame contract:
+|     Frames are complete Ethernet frames WITHOUT FCS: dst MAC, src MAC, EtherType,
+|     payload. Frames as short as 50 bytes are passed to eth_hal_send(); if the MAC
+|     of the port does not pad to the 60 byte Ethernet minimum, the port must do it.
+|     Maximum length is 14 + 1500 = 1514 bytes (no VLAN, no jumbo frames).
+|
+|   Threading contract:
+|     eth_hal_send()   always called with the transmit mutex of socket_raw.c held,
+|                      therefore it does NOT need to be reentrant
+|     eth_hal_recv()   called from the XCP receive thread only
+|     eth_hal_wakeup() may be called from any thread
+|
+|   Backend specific configuration (interface name, XLAPI channel, CMP device and
+|   stream id, ...) is passed as an opaque string to eth_hal_open() and parsed by
+|   the backend. socket_raw.c never interprets it.
+|
+| Code released into public domain, no attribution required
+ ----------------------------------------------------------------------------*/
+
+#include <stdbool.h> // for bool
+#include <stdint.h>  // for uint8_t, uint16_t, int16_t
+
+#include "platform.h" // for the platform defines (_LINUX, _WIN, ...) and OPTION_xxx
+
+#ifdef OPTION_ENABLE_UDP_RAW
+
+// Select the HAL backend
+#if defined(_LINUX)
+// socket_raw_hal_linux.c
+#else
+#error "OPTION_ENABLE_UDP_RAW has a HAL backend for Linux (AF_PACKET) only - see docs/SOCKET_RAW.md"
+#endif
+
+// Opaque per interface context of the HAL backend
+typedef struct eth_hal_ctx tEthHalCtx;
+
+// Open the Ethernet interface
+// config: backend specific selector, may be NULL when the backend needs none
+//         Linux: interface name, e.g. "eth0"
+// Returns true on success, *ctx is then valid until eth_hal_close()
+bool eth_hal_open(const char *config, tEthHalCtx **ctx);
+
+// Close the Ethernet interface and release all resources
+void eth_hal_close(tEthHalCtx *ctx);
+
+// Get the MAC address of the interface
+// mac: output buffer, must point to at least 6 bytes
+// Returns true on success
+bool eth_hal_get_mac(tEthHalCtx *ctx, uint8_t *mac);
+
+// Send one complete Ethernet frame (without FCS)
+// Returns: len on success, -1 on error
+int16_t eth_hal_send(tEthHalCtx *ctx, const uint8_t *frame, uint16_t len);
+
+// Receive one complete Ethernet frame (without FCS), blocking with timeout
+// Frames sent by this application itself must not be returned
+// timeout_ms: 0 = poll and return immediately
+// Returns:  > 0  bytes received
+//          == 0  timeout expired, no frame available
+//           < 0  fatal error
+int16_t eth_hal_recv(tEthHalCtx *ctx, uint8_t *frame, uint16_t max_len, uint32_t timeout_ms);
+
+// Abort a blocked eth_hal_recv()
+// Optional: a backend which can not do this may implement it as a no-op, socket_raw.c
+// caps each eth_hal_recv() timeout slice so shutdown still works, just less promptly
+void eth_hal_wakeup(tEthHalCtx *ctx);
+
+#endif // OPTION_ENABLE_UDP_RAW

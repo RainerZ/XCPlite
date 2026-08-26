@@ -491,6 +491,11 @@ bool XcpEthTlHandleCommands(void) {
 #ifdef TEST_ENABLE_DBG_METRICS
             gXcpRxPacketCount++;
 #endif
+            // @@@@ TODO: A single malformed datagram terminates the XCP server receive thread.
+            // Returning false here makes XcpServerReceiveThread break out of its loop (xcpethserver.c),
+            // so any host on the network can permanently kill the XCP server with one packet.
+            // Reproduced on UDP and on the raw Ethernet transport. A corrupt datagram should be
+            // counted and dropped, and only a real socket error should terminate the thread.
             if (msgBuf.dlc != n - XCPTL_TRANSPORT_LAYER_HEADER_SIZE) {
                 DBG_PRINT_ERROR("XcpEthTlHandleCommands: Corrupt message received!\n");
                 return false; // Error
@@ -636,6 +641,15 @@ bool XcpEthTlInit(const uint8_t *addr, uint16_t port, bool useTCP, tQueueHandle 
         DBG_PRINTF3("  Listening for XCP commands on UDP %u.%u.%u.%u port %u\n", bind_addr[0], bind_addr[1], bind_addr[2], bind_addr[3], port);
     }
 
+#ifdef OPTION_ENABLE_UDP_RAW
+    // The raw Ethernet transport knows both values for certain: the application supplied
+    // the IP address (0.0.0.0 is rejected by socketBind) and the Ethernet HAL supplied the
+    // MAC. Fill them unconditionally so XcpEthTlGetInfo and the A2L IF_DATA report the real
+    // address instead of the 127.0.0.1 fallback, without needing OPTION_ENABLE_GET_LOCAL_ADDR.
+    memcpy(gXcpTl.server_addr, bind_addr, 4);
+    socketRawGetLocalMac(gXcpTl.socket, gXcpTl.server_mac);
+#endif
+
 #ifdef OPTION_ENABLE_GET_LOCAL_ADDR
     {
         uint8_t addr1[4] = {0, 0, 0, 0};
@@ -712,7 +726,7 @@ void XcpEthTlGetInfo(bool *isTcp, uint8_t *mac, uint8_t *addr, uint16_t *port) {
 
     if (isTcp != NULL)
         *isTcp = gXcpTl.server_use_tcp;
-#ifdef OPTION_ENABLE_GET_LOCAL_ADDR
+#if defined(OPTION_ENABLE_GET_LOCAL_ADDR) || defined(OPTION_ENABLE_UDP_RAW)
     if (addr != NULL)
         memcpy(addr, gXcpTl.server_addr, 4);
     if (mac != NULL)

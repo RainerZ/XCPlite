@@ -20,6 +20,17 @@
 #define XCPTL_ENABLE_TCP
 #endif
 
+// Raw Ethernet transport (OPTION_ENABLE_UDP_RAW) restrictions - see docs/SOCKET_RAW.md
+#if defined(OPTION_ENABLE_UDP_RAW) && (defined(OPTION_ENABLE_UDP) || defined(OPTION_ENABLE_TCP))
+#error "OPTION_ENABLE_UDP_RAW is mutually exclusive with OPTION_ENABLE_UDP / OPTION_ENABLE_TCP"
+#endif
+#if defined(OPTION_ENABLE_UDP_RAW) && !defined(OPTION_QUEUE_32)
+#error "OPTION_ENABLE_UDP_RAW requires OPTION_QUEUE_32: the 64 bit queues use the vectored send path (socketSendToV), which the raw transport does not implement"
+#endif
+#if defined(OPTION_ENABLE_UDP_RAW) && defined(OPTION_SHM_MODE)
+#error "OPTION_ENABLE_UDP_RAW is not supported in SHM mode (queueInitFromMemory is implemented for the 64 bit queues only)"
+#endif
+
 // Transport layer version
 #define XCP_TRANSPORT_LAYER_VERSION 0x0104
 
@@ -45,6 +56,12 @@
 #else
 #error "Please define XCPTL_MAX_SEGMENT_SIZE"
 #define XCPTL_MAX_SEGMENT_SIZE (1500 - 20 - 8)
+#endif
+
+// The raw transport does not fragment IPv4: one segment must fit into one Ethernet frame
+// 1472 = 1500 (MTU) - 20 (IPv4 header) - 8 (UDP header)
+#if defined(OPTION_ENABLE_UDP_RAW) && (XCPTL_MAX_SEGMENT_SIZE > 1472)
+#error "OPTION_ENABLE_UDP_RAW does not fragment IPv4: OPTION_MTU must be <= 1504"
 #endif
 
 // Receive timeout in milliseconds (rate of periodic checks for shutdown and background tasks in the receive thread)

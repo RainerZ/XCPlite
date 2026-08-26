@@ -2,62 +2,96 @@
 
 ## Motivation
 
-XCPlite currently supports XCP-on-Ethernet via the OS socket API (`OPTION_ENABLE_UDP` /
-`OPTION_ENABLE_TCP`).  Some embedded targets have no TCP/IP stack at all and
-expose only a raw Ethernet send/receive interface (direct EMAC driver, or an
-RTOS Ethernet abstraction without lwIP).  This feature adds a build variant
-that implements the XCP UDP/IP transport entirely within XCPlite, sitting
-directly on top of raw Ethernet frames.
+XCPlite supports XCP-on-Ethernet through the OS socket API (`OPTION_ENABLE_UDP` /
+`OPTION_ENABLE_TCP`). Some embedded targets have no TCP/IP stack at all and expose
+only a raw Ethernet send/receive interface — a direct EMAC driver, or an RTOS
+Ethernet abstraction without lwIP. This build variant implements the XCP UDP/IPv4
+transport entirely inside XCPlite, directly on top of raw Ethernet frames.
 
-Future backends that motivate the abstraction design:
-- **Vector XLAPI** (Windows) — raw frame access on Vector VN-interface hardware
-- **ASAM CMP** (Capture Module Protocol) — XCP encapsulated in CMP Ethernet frames
+Two further backends motivate the HAL abstraction:
+
+- **Vector XLAPI** (Windows) — raw frame access on Vector VN interface hardware
+- **ASAM CMP** (Capture Module Protocol) — for testing XCP tools which communicate
+  through capture modules
 
 ---
 
-## Compilation Guard
+## Compilation guard
 
 `OPTION_ENABLE_UDP_RAW` is **mutually exclusive** with `OPTION_ENABLE_UDP` and
-`OPTION_ENABLE_TCP`.  Define exactly one transport option per build.
+`OPTION_ENABLE_TCP`, and **requires `OPTION_QUEUE_32`**. Both are enforced by
+`#error` in `src/xcptl_cfg.h`:
 
-**Intended build configurations:**
-- `rtos` configuration (FreeRTOS bare-metal targets, primary use case)
-- `default` configuration on **Windows** (Vector XLAPI backend, future)
+| Guard | Reason |
+|---|---|
+| not with `OPTION_ENABLE_UDP` / `OPTION_ENABLE_TCP` | exactly one transport per build |
+| requires `OPTION_QUEUE_32` | the 64 bit queues transmit with `socketSendToV` (scatter-gather), which the raw transport does not implement. Without this guard a 64 bit build fails at link time with no hint about the cause |
+| not with `OPTION_SHM_MODE` | SHM needs `queueInitFromMemory`, which exists only in `queue64v.c` / `queue64f.c` |
+| not with `XCPTL_ENABLE_MULTICAST` | `socketJoin` is not provided |
+| `XCPTL_MAX_SEGMENT_SIZE <= 1472` | no IPv4 fragmentation, one segment must fit one frame |
 
-**Not intended** for the `default` Linux/macOS configuration: those rely on
-`socketSendToV` / `socketSendV` (scatter-gather via `sendmsg`) for efficient
-DAQ transmission, which the raw variant does not and will not implement.
-
-Activate by setting in an `xcplib_*_cfg.h` override file:
-
-```c
-#undef  OPTION_ENABLE_UDP
-#undef  OPTION_ENABLE_TCP
-#define OPTION_ENABLE_UDP_RAW
-```
+The transport also asserts a **little endian host** (`src/socket_raw.c`) and the
+availability of a **HAL backend** (`src/socket_raw_hal.h`). Only the Linux AF_PACKET
+backend exists today, so a macOS or Windows build of the `raw` configuration stops
+with a clear message rather than an obscure link error.
 
 ---
 
-## API Subset
+## Build configuration
 
-Only the following functions from `sockets.h` are implemented; all others are
-absent from the build:
+RAW has its own configuration, `XCPLITE_CONFIGURATION=raw` → `src/xcplib_raw_cfg.h`,
+building into `build-raw/`:
+
+```bash
+./build.sh raw examples      # library + udp_raw_demo   (Linux only)
+./build.sh raw tests         # library + socket_raw_test (Linux only)
+```
+
+It is deliberately **not** an override inside the `rtos` configuration: `rtos` targets
+use the lwIP socket API (`OPTION_FREERTOS_LWIP`) or host sockets in the POSIX
+simulator, and both must keep working. An embedded target without an IP stack defines
+`OPTION_ENABLE_UDP_RAW` in its own external build (PlatformIO, CubeMX) and supplies its
+own HAL backend.
+
+Options in `src/xcplib_raw_cfg.h`:
+
+| Option | Default | Purpose |
+|---|---|---|
+| `OPTION_UDP_RAW_IFNAME` | `"eth0"` | default interface, overridden by `socketRawSetInterface()` |
+| `OPTION_UDP_RAW_ENABLE_ICMP_ECHO` | on | answer ping — the single most useful bring-up aid |
+| `OPTION_UDP_RAW_UDP_CHECKSUM_ZERO` | on | transmit UDP checksum 0, legal for IPv4 (RFC 768) |
+| `OPTION_UDP_RAW_UDP_CHECKSUM_COMPUTE` | off | RFC 768 software checksum |
+| `OPTION_UDP_RAW_UDP_CHECKSUM_HW` | off | leave 0, the EMAC inserts it |
+| `OPTION_UDP_RAW_VERIFY_RX_CHECKSUM` | on | verify received IPv4 header checksums |
+| `OPTION_UDP_RAW_GRATUITOUS_ARP` | off | announce our IP/MAC on bind |
+| `OPTION_UDP_RAW_ZERO_COPY` | off | reserve header space in the queue (see *Zero copy*, not implemented yet) |
+
+Note on the zero UDP checksum default: `tcpdump` and Wireshark can then not validate the
+UDP framing. Switch to `_COMPUTE` temporarily while bringing up a new target.
+
+---
+
+## API subset
+
+Only these functions from `sockets.h` exist in a RAW build; the rest are removed from
+the header, so reaching for one is a compile error rather than a link error:
 
 | Function | Notes |
 |---|---|
-| `socketStartup` | initialize raw Ethernet HAL |
-| `socketCleanup` | release HAL resources |
-| `socketGetErrorString` | human-readable error string |
-| `socketOpen` | allocate a raw socket context (UDP only) |
-| `socketBind` | set local IP address and UDP port; triggers ARP |
-| `socketShutdown` | unblock a blocked receive |
-| `socketClose` | release the socket context |
-| `socketRecvFrom` | receive one UDP datagram, strip Ethernet/IP/UDP headers |
-| `socketSendTo` | prepend Ethernet/IP/UDP headers and transmit |
-| `socketSetTimeout` | configure receive timeout |
+| `socketStartup` / `socketCleanup` | initialize / release the transport |
+| `socketGetErrorString` / `socketGetLastError` | self contained error codes, no `<errno.h>` |
+| `socketOpen` | opens the Ethernet HAL, reads the local MAC. UDP only, rejects `SOCKET_MODE_TCP` |
+| `socketBind` | stores the local IP and UDP port. Rejects `0.0.0.0` |
+| `socketRecvFrom` | receives one UDP datagram, answers ARP and ICMP on the way |
+| `socketSendTo` | builds Ethernet/IPv4/UDP headers and transmits |
+| `socketSetTimeout` | receive timeout, RX only |
+| `socketShutdown` / `socketClose` | unblock a receive / release the HAL |
+| `socketRawSetInterface` | RAW only: select the interface before `XcpEthServerInit()` |
+| `socketRawGetLocalMac` | RAW only: local MAC, used for the A2L `IF_DATA` |
 
-TCP, multicast (`socketJoin`), scatter-gather (`socketSendToV`, `socketSendV`),
-hardware timestamps, and `socketGetLocalAddr` are **not** part of this variant.
+Not provided: TCP (`socketListen`/`socketAccept`/`socketRecv`/`socketSend`), multicast
+(`socketJoin`), scatter-gather (`socketSendToV`/`socketSendV`), hardware timestamps,
+`socketGetMAC`, `socketGetLocalAddr`.
 
 ---
 
@@ -65,236 +99,259 @@ hardware timestamps, and `socketGetLocalAddr` are **not** part of this variant.
 
 ```
 xcpethtl.c / xcpethserver.c
-        │  sockets.h API
+        │  sockets.h API (subset above)
         ▼
   socket_raw.c
-    ├── UDP/IP layer   (hand-crafted IP + UDP header construction/parsing)
-    ├── ARP            (minimal: send gratuitous ARP, parse first reply for peer MAC)
-    └── Raw Ethernet HAL
-              │
-    ┌─────────┴──────────────────────────┐
-    │ Linux (testing)   Embedded target  │
-    │ AF_PACKET socket  EMAC / ETH HAL   │
-    └────────────────────────────────────┘
+    ├── UDP/IPv4 layer   (header build and parse, checksums)
+    ├── ARP              (answer requests for our IP)
+    ├── ICMP             (answer Echo Requests)
+    └── receive filter + deadline loop
+        │  socket_raw_hal.h
+        ▼
+  ┌──────────────────────────────────────────────────┐
+  │ socket_raw_hal_linux.c   AF_PACKET  (implemented) │
+  │ socket_raw_hal_xlapi.c   Vector XLAPI   (future)  │
+  │ socket_raw_hal_cmp.c     ASAM CMP       (future)  │
+  └──────────────────────────────────────────────────┘
 ```
 
-### SOCKET_HANDLE type
+### Local address
 
-**Step 1–3 (Linux / int fd):**  
-`SOCKET_HANDLE` is the same `int` raw socket fd as in the normal POSIX variant.
+There is no IP stack and no DHCP, so `socketBind(0.0.0.0)` has no meaning. The
+**application supplies the IPv4 address** through the `address` parameter of
+`XcpEthServerInit()`, which already exists; `socketBind` rejects all-zero, broadcast,
+multicast and loopback addresses with an explanatory error. The **MAC comes from the
+HAL** (`eth_hal_get_mac`) — every EMAC and every AF_PACKET interface knows its own.
 
-**Step 2+ (embedded):**  
-`SOCKET_HANDLE` becomes a pointer to `struct socket_raw` which carries all
-state needed without an OS socket API:
+Both values are also stored in `gXcpTl.server_addr` / `server_mac`, so `XcpEthTlGetInfo`
+and the A2L `IF_DATA` report the real address without needing
+`OPTION_ENABLE_GET_LOCAL_ADDR`.
 
-```c
-struct socket_raw {
-    int       fd;           // raw fd (Linux) or HAL handle
-    uint8_t   src_mac[6];   // local MAC (read from HAL or configured)
-    uint8_t   dst_mac[6];   // peer MAC (filled by ARP)
-    uint8_t   src_ip[4];    // local IP
-    uint8_t   dst_ip[4];    // peer IP (XCP master)
-    uint16_t  src_port;     // local UDP port
-    uint16_t  dst_port;     // peer UDP port
-    bool      peer_known;   // ARP completed
-};
-```
+### ARP: answer only
 
-This change is introduced in Step 2 and does not require any changes to
-callers in `xcpethtl.c` because `SOCKET_FD(s)` and `INVALID_SOCKET_HANDLE`
-keep their contracts.
+XCP is always master initiated — the tool sends `CONNECT` first — so the peer MAC, IP
+and UDP port all arrive with that first frame. Consequently:
+
+1. **ARP Requests for our IP are answered.** This is mandatory: the IP stack of the XCP
+   client resolves us before it can send anything.
+2. **The peer is learned from the accepted UDP datagram**, never from ARP. An unrelated
+   host asking for our IP must not be able to redirect the DAQ stream.
+3. **No ARP Requests are ever sent**, and ARP Replies are ignored.
+4. A gratuitous ARP announcement on bind is available but off by default.
+
+A consequence worth knowing: because the peer MAC is learned rather than resolved,
+**no netmask and no default gateway are needed**. With a client behind a router, the
+router MAC arrives as the frame source and the responses go back to it.
+
+### ICMP Echo
+
+Answering ping is enabled by default. It is the highest value bring-up milestone: a
+successful `ping <target>` proves the Ethernet HAL, the MAC filter, the ARP responder,
+the IPv4 header build and the header checksum all work, before any XCP tooling is
+involved.
+
+### Receive: filter and deadline loop
+
+A raw socket sees every frame on the wire. `socketRecvFrom` therefore **loops
+internally against an absolute deadline** computed once on entry, rather than returning
+0 for every foreign frame — otherwise the caller would run its full background task
+suite once per foreign frame, and that cadence would depend on link load instead of on
+`XCPTL_RECV_TIMEOUT_MS`.
+
+Filter order, cheapest and most discriminating first:
+
+1. EtherType — ARP goes to the responder, VLAN (`0x8100`) is dropped with a warning so a
+   trunk port is diagnosable, anything else is dropped
+2. destination MAC — ours or broadcast
+3. IPv4 sanity, **fragments rejected with a warning** (there is no reassembly),
+   destination IP, optional header checksum verification
+4. protocol — ICMP goes to the responder
+5. destination UDP port — where almost every remaining frame on a busy link dies
+6. payload size — **dropped, never truncated**: a truncated message would surface as a
+   confusing "Corrupt message received!" from the transport layer
+
+Return contract, identical to `sockets.c`: `> 0` bytes, `== 0` timeout (the caller does
+background work and loops), `< 0` closed or error (the caller exits its loop).
+`socketShutdown` sets a flag and wakes a blocked receive through the HAL.
+
+### Transmit serialization
+
+ARP and ICMP replies are generated in the **receive** thread, while command responses
+and DAQ segments are transmitted from their own paths, so `eth_hal_send` is called from
+two threads. `struct socket_raw` therefore owns a `tx_mutex` which covers header
+construction **and** the HAL call, keeping the HAL contract simple: `eth_hal_send` does
+not need to be reentrant.
+
+This mutex is deliberately **independent of `gXcpTl.ctr_mutex`**. That one happens to
+serialize transmissions today, but it exists for a different reason — XCP requires the
+message counter to increase monotonically across command responses and DAQ messages —
+and removing it is a future goal. Nothing in `socket_raw.c` depends on it.
 
 ---
 
-## Raw Ethernet HAL Interface (Step 2+)
+## Raw Ethernet HAL
 
-`socket_raw.c` depends on a minimal HAL that the application or platform port
-must provide.  The HAL is defined in `socket_raw_hal.h` (to be created in
-Step 2):
+`src/socket_raw_hal.h` — a port has to provide send and receive of complete Ethernet
+frames plus the local MAC, nothing else:
 
 ```c
-// Send one raw Ethernet frame. Returns bytes sent or -1 on error.
-int16_t eth_hal_send(const uint8_t *frame, uint16_t len);
-
-// Receive one raw Ethernet frame (blocking, with timeout).
-// Returns bytes received, 0 on timeout, -1 on error.
-int16_t eth_hal_recv(uint8_t *frame, uint16_t max_len, uint32_t timeout_ms);
-
-// Get the local MAC address.
-void eth_hal_get_mac(uint8_t mac[6]);
+bool     eth_hal_open(const char *config, tEthHalCtx **ctx);
+void     eth_hal_close(tEthHalCtx *ctx);
+bool     eth_hal_get_mac(tEthHalCtx *ctx, uint8_t *mac);
+int16_t  eth_hal_send(tEthHalCtx *ctx, const uint8_t *frame, uint16_t len);
+int16_t  eth_hal_recv(tEthHalCtx *ctx, uint8_t *frame, uint16_t max_len, uint32_t timeout_ms);
+void     eth_hal_wakeup(tEthHalCtx *ctx);   // optional, may be a no-op
 ```
 
-On Linux the HAL implementation uses `AF_PACKET` (see Step 3).  On bare-metal
-it wraps the target's EMAC driver.
+`config` is backend specific and opaque to `socket_raw.c`: the interface name on Linux,
+an application/channel selector for XLAPI, a device and stream id for CMP.
 
----
+**There is no per-frame channel parameter.** Every foreseeable backend would pass a
+constant, the backends do not share a channel type (XLAPI channel index vs. CMP device
+id + stream id + interface id vs. nothing at all for AF_PACKET), and a CMP concept must
+not leak into the core. Backend identity is configuration, not a per-frame value.
 
-## Step Plan
+Frames are complete Ethernet frames **without FCS**. Frames as short as 50 bytes are
+passed; a port whose MAC does not pad to the 60 byte Ethernet minimum must do it itself.
 
-### Step 1 — Stubs (`src/socket_raw.c`) ✓ done
+### Linux backend (`socket_raw_hal_linux.c`)
 
-- Define `#ifdef OPTION_ENABLE_UDP_RAW` guard.
-- Implement all 10 API functions as stubs: `socketStartup` returns `false`,
-  send/recv return `-1`, others are no-ops.
-- Add `socket_raw.c` to `xcplite_SOURCES` in `CMakeLists.txt`.
-- Add `OPTION_ENABLE_UDP_RAW` variant to `sockets.h` outer guard and to the
-  description comment.
-- Exclude `sockets.c` from compilation when `OPTION_ENABLE_UDP_RAW` is set.
-- Activate in `src/xcplib_rtos_cfg.h` (`#undef OPTION_ENABLE_UDP`, `#define OPTION_ENABLE_UDP_RAW`).
-
-Verified: stubs compile and link cleanly in the `rtos` configuration:
+`AF_PACKET`/`SOCK_RAW`/`ETH_P_ALL` bound to one interface. Needs `CAP_NET_RAW`:
 
 ```bash
-cmake -B build-rtos -S . -DXCPLITE_CONFIGURATION=rtos -DXCPLITE_BUILD_EXAMPLES=ON
-cmake --build build-rtos
+sudo setcap cap_net_raw+ep ./build-raw/udp_raw_demo
 ```
 
-### Step 2 — Minimal UDP/IP layer
+Two details that matter: `PACKET_IGNORE_OUTGOING` (plus a `PACKET_OUTGOING` check as the
+portable fallback) stops our own transmitted frames from coming straight back into the
+receive path; and a blocked receive is unblocked with an `eventfd` and `poll()` rather
+than `SO_RCVTIMEO`, so shutdown is immediate and an infinite timeout stays interruptible.
 
-- Introduce `struct socket_raw` as `SOCKET_HANDLE` type.
-- Implement `socketOpen`: allocate struct, open raw Ethernet HAL.
-- Implement `socketBind`: store local IP/port; send a gratuitous ARP request
-  (broadcast, announces local IP→MAC mapping).
-- Implement `socketSendTo`: build Ethernet frame (dst MAC from `dst_mac`,
-  EtherType 0x0800), IPv4 header (TTL=64, proto=17/UDP, checksum), UDP header,
-  copy payload, call `eth_hal_send`.
-- Implement `socketRecvFrom`: call `eth_hal_recv`, validate EtherType/IP/UDP
-  headers, extract source IP/port, return payload.
-- Implement ARP receive path inside `socketRecvFrom`: if EtherType == 0x0806
-  and ARP is a Reply for our IP, capture sender MAC into `dst_mac`.
-- IP/UDP checksum: compute using RFC 768 / RFC 791 algorithms.
-- No fragmentation; MTU assumed ≥ `XCPTL_MAX_SEGMENT_SIZE` + headers (≤ 1500 bytes).
+### ASAM CMP
 
-### Step 3 — Linux integration test
+CMP is a **HAL backend, fully hidden**. It exists to test XCP tools which communicate
+through capture modules, not as a feature for ECU developers, so nothing in the core is
+optimized or parameterized for it:
 
-- Create `socket_raw_hal_linux.c`: implements the HAL using
-  `socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))`.
-  Requires `CAP_NET_RAW` (`sudo` or `setcap cap_net_raw+ep`).
-- Add a test configuration (e.g. `socket_raw_linux`) to `build.sh` /
-  `CMakeLists.txt`.
-- Run `no_a2l_demo` or `hello_xcp` against this transport and connect with
-  CANape or `xcpclient`.
-- Validate: connect, upload, download, DAQ measurement.
+- the CMP backend receives a complete Ethernet/IPv4/UDP frame and applies its envelope
+  **into its own buffer**, inside the HAL
+- it does not borrow the queue headroom and does not participate in the zero copy path
+- device id, stream id and interface selection are parsed from the `config` string
 
-### Step 4 — Zero-copy queue optimization
-
-**Goal:** avoid copying the XCP payload into a separate send buffer before
-prepending the Ethernet/IP/UDP header.
-
-**Design:**  
-Reserve `SOCKET_RAW_HEADER_RESERVE` bytes (= 14 + 20 + 8 = 42 bytes for
-Ethernet + IPv4 + UDP) at the front of every queue entry in `queue32` and
-`queue32m`.  On transmit, `socketSendTo` writes the headers directly into those
-reserved bytes and calls `eth_hal_send` with a pointer to the start of the
-reservation — no memcpy of the payload.
-
-Changes required:
-- New compile-time constant `XCPTL_TRANSPORT_LAYER_HEADER_RESERVE` (default 0,
-  set to 42 when `OPTION_ENABLE_UDP_RAW`).
-- `queue32.c` / `queue32m.c`: add `XCPTL_TRANSPORT_LAYER_HEADER_RESERVE` bytes
-  before each entry's `size` field; adjust all pointer arithmetic.
-- `xcpethtl.c`: pass the raw-entry pointer to `socketSendTo`; the function
-  writes headers into `ptr - XCPTL_TRANSPORT_LAYER_HEADER_RESERVE`.
-- `socketSendTo` signature gains an optional `header_reserve` in-out
-  parameter, or the offset is baked in via the option.
-
-This optimization is **only** for `queue32` / `queue32m`.  The 64-bit
-lock-free queues (`queue64v`, `queue64f`) are not changed; `OPTION_ENABLE_UDP_RAW`
-implies a 32-bit / embedded target where those queues are not used.
+The extra copy is accepted — this is a test bench path. If a CMP driven change ever
+appears to be needed in `socket_raw.c`, the queue or the config headers, that is the
+signal that the encapsulation has leaked; fix it in the HAL.
 
 ---
 
-## ARP Design (Step 2)
+## Testing
 
-Minimal ARP sufficient for point-to-point XCP (target ↔ one PC):
+See `test/test_socket_raw.sh`. Development happens on Linux (a Raspberry Pi over ssh).
 
-1. **Gratuitous ARP** on `socketBind`: broadcast ARP Announcement
-   (sender = target IP/MAC, target = target IP/MAC).  This populates the
-   PC's ARP cache so it can reach the target immediately.
-2. **ARP reply parsing** in `socketRecvFrom`: when an ARP Reply arrives with
-   `target_ip == src_ip`, store `sender_mac` into `socket->dst_mac` and set
-   `peer_known = true`.
-3. **ARP request response**: when an ARP Request arrives asking for our IP,
-   send an ARP Reply.  This handles cases where the PC flushes its ARP cache.
-4. **Unicast fallback**: until `peer_known`, outgoing frames use broadcast
-   destination MAC `ff:ff:ff:ff:ff:ff`.  After the first ARP exchange,
-   unicast MAC is used.
+### Phase A — isolated, one machine
 
-No ARP cache table is needed; one fixed peer is tracked per socket.
-
----
-
-## Future Backends
-
-The HAL interface (`eth_hal_send` / `eth_hal_recv` / `eth_hal_get_mac`) is
-designed to be thin enough to wrap:
-
-- **Vector XLAPI** (Windows): `xlCanTransmit`-equivalent for Ethernet channels;
-  `socket_raw_hal_xlapi.c`.
-- **ASAM CMP**: CMP wraps XCP frames in a CMP header over Ethernet;
-  `socket_raw_hal_cmp.c` would add/strip the CMP envelope and route to the
-  correct channel.
-
-Both backends share the same `socket_raw.c` UDP/IP layer; only the HAL file
-differs.
-
-
-
-## TODO
-
-- SHM does not compile without OPTION_ENABLE_TCP
-- RAW is not intended to be used with SHM, but the build system still tries to compile it.
-
----
-
-## Current Code State (after Step 1)
-
-### Files created
-| File | Purpose |
-|---|---|
-| `src/socket_raw.c` | Stub implementations, all wrapped in `#ifdef OPTION_ENABLE_UDP_RAW` |
-| `docs/SOCKET_RAW.md` | This document |
-
-### Files modified
-| File | Change |
-|---|---|
-| `src/sockets.h` | Outer guard extended to `\|\| defined(OPTION_ENABLE_UDP_RAW)`; description comment updated |
-| `src/sockets.c` | Outer guard changed to `&& !defined(OPTION_ENABLE_UDP_RAW)` so the normal socket implementation compiles away when raw is selected |
-| `CMakeLists.txt` | `src/socket_raw.c` added to `xcplite_SOURCES` |
-
-### How OPTION_ENABLE_UDP_RAW is activated
-
-Set in `src/xcplib_rtos_cfg.h`:
-
-```c
-#undef  OPTION_ENABLE_TCP
-#undef  OPTION_ENABLE_UDP
-#define OPTION_ENABLE_UDP_RAW
-```
-
-The stubs in `socket_raw.c` are therefore active and linked in the `rtos`
-configuration build.  The build was verified clean:
+The kernel IP stack sees every frame on an interface, so if the target IP were a host
+address the kernel would answer the ARP itself and send ICMP port unreachable for the XCP
+UDP port. A network namespace avoids that. `lo` cannot be used — it is `ARPHRD_LOOPBACK`
+and has no Ethernet header.
 
 ```bash
-cmake -B build-rtos -S . -DXCPLITE_CONFIGURATION=rtos -DXCPLITE_BUILD_EXAMPLES=ON
-cmake --build build-rtos
+./build.sh raw examples
+sudo ./test/test_socket_raw.sh          # ARP, ping and XCP CONNECT checks
+sudo ./test/test_socket_raw.sh --keep   # leave it running for manual tests
 ```
 
-### SOCKET_HANDLE type (current)
+The script creates a veth pair with the target in namespace `xcpraw` and **no kernel IP
+on the target side**, so `socket_raw.c` alone owns `192.168.90.2`. This phase needs only
+`ping`, `arping` and `tcpdump` — no XCP tooling has to be built on the target machine.
 
-For the rtos/POSIX-simulator path, `SOCKET_HANDLE` is still the plain `int` fd
-type defined by the `#if !defined(_WIN) && !defined(OPTION_SOCKET_HW_TIMESTAMPS)`
-branch in `sockets.h`.  Step 2 will replace this with `struct socket_raw *`
-under an `#elif defined(OPTION_ENABLE_UDP_RAW)` branch in `sockets.h`.
+### Phase B — real LAN
 
-### Codebase context
+```bash
+sudo setcap cap_net_raw+ep ./build-raw/udp_raw_demo
+./build-raw/udp_raw_demo --if eth0 --ip 192.168.1.240   # spare, outside the DHCP pool
+```
 
-`socket_raw.c` was introduced as part of a larger refactor that split
-`platform.c/.h` into:
-- `platform.c/.h` — threads, mutex, clock, sleep, memory, atomics
-- `sockets.c/.h` — socket abstraction for all standard platforms
+The address must be outside the DHCP pool and not otherwise in use. The kernel does not
+own it, so it drops the datagrams at the IP layer while AF_PACKET still hands us a copy
+at the link layer — which is why this works without a namespace. Drive it with
+`xcpclient` and CANape from another machine. Expect `PACKET_IGNORE_OUTGOING` to matter
+much more here, and the receive filter to be exercised by real background traffic.
 
-`socket_raw.c` is the third peer alongside `sockets.c`, activated exclusively
-by `OPTION_ENABLE_UDP_RAW`.
+### Bring-up order
 
+1. `ping <target>` — HAL, MAC filter, ARP responder, IPv4 header and checksum, in one shot
+2. `arping -I veth0 <target>` — isolates ARP from IP
+3. `tcpdump -i veth0 -nn -e -vv` alongside everything: it prints `bad ip cksum` explicitly.
+   Build with `OPTION_UDP_RAW_UDP_CHECKSUM_COMPUTE` for this step so the UDP checksum can
+   be validated too. Confirm full segments are exactly 1514 bytes
+4. `xcpclient` CONNECT / GET_STATUS — source address and port extraction, peer MAC
+   learning, and the `socketSendTo` return value contract
+5. UPLOAD / DOWNLOAD — larger command responses
+6. DAQ measurement, long enough to wrap the transmit queue ring
+7. Shutdown — the receive thread must exit within ~100 ms, and the idle receive loop must
+   not burn CPU (watch `top`; that is the symptom of a broken deadline loop)
+8. Adversarial receive: `ping -s 3000` (fragments dropped, not parsed), UDP to the wrong
+   port, broadcast UDP, and an oversized datagram (dropped, not truncated)
 
+### Unit tests
+
+`test/socket_raw_test` covers everything that does not need a network — checksums against
+the RFC 1071 reference vector, wire struct packing, the frame build, the receive filter
+and the ARP and ICMP responders — by compiling `socket_raw.c` with a fake HAL that
+captures the transmitted frame:
+
+```bash
+./build.sh raw tests && ./build-raw/socket_raw_test
+```
+
+---
+
+## Not implemented yet
+
+### Zero copy transmit (`OPTION_UDP_RAW_ZERO_COPY`)
+
+`socketSendTo` currently copies the payload into a frame buffer to prepend the 42 byte
+header. The plan is to reserve headroom in front of every transmit queue segment so the
+header can be written in place.
+
+This is far cheaper than it looks: a `queue32`/`queue32m` entry is a whole segment
+(`tXcpSegmentBuffer.msg_buffer[XCPTL_MAX_SEGMENT_SIZE]`), so it is **one added field**
+in each of the two files and no pointer arithmetic changes — every access is
+`msg_buffer` relative, and `queuePop` already returns `&msg_buffer`. With a 48 byte
+reservation `msg_buffer` stays 8 byte aligned and the IPv4 header lands 4 byte aligned.
+
+Two things it needs: the command response path builds its message on the stack
+(`XcpTlSendCrm`) and has no headroom, so it keeps the copying `socketSendTo` while the
+DAQ segment path gets a separate in-place entry point; and the 64 bit queues are not
+changed, which the `OPTION_QUEUE_32` guard already enforces.
+
+Deferred until the transport is validated on hardware.
+
+### Command path latency
+
+`GET_DAQ_CLOCK` is used for time synchronization, so jitter in handling it degrades
+synchronization quality. The current design optimizes for throughput, not latency. Known
+raw specific jitter sources, for a later optimization pass:
+
+1. **inline ARP/ICMP replies** — an ARP burst or ping flood delays the command behind it.
+   Largest controllable source; could be deferred or rate limited
+2. **filter work per foreign frame** — small, but scales with link load
+3. **`tx_mutex` contention** — a command response can wait behind a DAQ segment send.
+   Should be short, but on AF_PACKET `eth_hal_send` is a `write()` syscall, so measure
+
+A further optimization would remove the header build from the lock entirely: almost the
+whole 42 byte header is constant per client and could be prepared once on connect, with
+only `total_length`, the UDP length and the IPv4 checksum patched per send. Fixing the
+IPv4 `ident` at 0 (legal for atomic datagrams with DF set, RFC 6864) removes the last
+shared mutable state. Note the lengths do vary: `queuePop` flushes partial segments.
+
+If the jitter turns out to be unsatisfactory, the better answer is not a transport
+optimization at all — XCP allows telling the client that the `GET_DAQ_CLOCK` timestamp is
+sampled close to **response transmission** rather than command reception, which makes the
+receive path jitter largely irrelevant. That is not implemented today.
+
+### Other
+
+- VLAN (802.1Q) is out of scope; tagged frames are dropped with a warning
+- Vector XLAPI and ASAM CMP backends

@@ -6,6 +6,16 @@ All notable changes to XCPlite are documented in this file.
 
 - Split `platform.c/.h` into `platform.c/.h` (threads, mutex, clock, sleep, memory, atomics) and `sockets.c/.h` (socket abstraction for all platforms). `sockets.h` includes `platform.h`; files that use both include both explicitly (IWYU).
 
+- New raw Ethernet transport `OPTION_ENABLE_UDP_RAW`: XCP on UDP/IPv4 implemented inside xcplib on top of a thin raw Ethernet HAL, for targets without a TCP/IP stack. See `docs/SOCKET_RAW.md`.
+    - New build configuration `raw` (`src/xcplib_raw_cfg.h`, `build-raw/`) with the new example `udp_raw_demo` and the unit test `socket_raw_test` (Linux only)
+    - `src/socket_raw.c` — UDP/IPv4 layer, answer-only ARP, ICMP Echo responder, receive filter with an absolute-deadline loop
+    - `src/socket_raw_hal.h` — raw Ethernet HAL interface, `src/socket_raw_hal_linux.c` — AF_PACKET backend (requires `CAP_NET_RAW`)
+    - `test/test_socket_raw.sh` — isolated veth/netns test setup with ARP, ping and XCP CONNECT checks
+    - Mutually exclusive with `OPTION_ENABLE_UDP`/`OPTION_ENABLE_TCP` and requires `OPTION_QUEUE_32`; both enforced by `#error` in `xcptl_cfg.h`, together with the SHM, multicast and MTU restrictions
+    - The `rtos` configuration keeps using the lwIP socket API - the raw transport is a separate configuration, not an override
+- Fixed `PLATFORM_32_BIT` typo in `xcplib_cfg.h`, which prevented the automatic selection of `OPTION_QUEUE_32` on 32 bit platforms
+- Fixed missing `#include <errno.h>` in `shm.c`, which broke the `shm` configuration build on macOS
+
 
 ## [V2.1.10]
 

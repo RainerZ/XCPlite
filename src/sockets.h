@@ -52,15 +52,17 @@
 |     No hardware timestamping.
 |
 |   OPTION_ENABLE_UDP_RAW (raw Ethernet, mutually exclusive with the above):
-|     Intended for: rtos configuration (FreeRTOS bare-metal), or Windows default
-|     (Vector XLAPI). NOT for Linux/macOS default — those require vectored I/O
-|     (socketSendToV/socketSendV) which this variant does not provide.
-|     Subset only — see docs/SOCKET_RAW.md for full design:
+|     A hand-crafted UDP/IPv4 layer over a raw Ethernet HAL, for targets without
+|     any TCP/IP stack. Implemented in socket_raw.c, HAL in socket_raw_hal*.c.
+|     Requires OPTION_QUEUE_32 - the 64 bit queues use the vectored send path,
+|     which this variant does not provide. Enforced in xcptl_cfg.h.
+|     Supported subset - see docs/SOCKET_RAW.md for the full design:
 |       socketStartup, socketCleanup, socketGetErrorString,
 |       socketOpen, socketBind, socketShutdown, socketClose,
 |       socketRecvFrom, socketSendTo, socketSetTimeout
-|     Step 1: stubs in socket_raw.c (compile-check only).
-|     Step 2+: hand-crafted UDP/IP layer over a raw Ethernet HAL.
+|     Not provided: TCP (socketListen/Accept/Recv/Send), multicast (socketJoin),
+|       vectored I/O (socketSendToV/socketSendV), hardware timestamps,
+|       socketGetMAC, socketGetLocalAddr.
 |
 | Copyright (c) Vector Informatik GmbH. All rights reserved.
 | See LICENSE file in the project root for details.
@@ -82,7 +84,31 @@ extern "C" {
 // INVALID_SOCKET_HANDLE is the invalid value for SOCKET_HANDLE
 // SOCKET_FD(s) extracts the raw OS socket fd from a SOCKET_HANDLE (which may be a struct socket pointer on Linux with HW timestamps)
 
-#if !defined(_WIN) // Non-Windows platform sockets
+#if defined(OPTION_ENABLE_UDP_RAW) // Raw Ethernet transport (no OS socket API)
+
+// SOCKET_HANDLE is an opaque context defined in socket_raw.c
+// There is no OS socket fd, therefore SOCKET_FD() is deliberately not defined
+struct socket_raw;
+typedef struct socket_raw *SOCKET_HANDLE;
+#define INVALID_SOCKET_HANDLE NULL
+
+// Self contained error codes - no <errno.h> on bare metal targets
+#define SOCKET_ERROR_NONE 0
+#define SOCKET_ERROR_TIMEDOUT 1
+#define SOCKET_ERROR_BADF 2
+#define SOCKET_ERROR_NOTCONN 3
+#define SOCKET_ERROR_HAL 4
+#define SOCKET_ERROR_TOOBIG 5
+#define SOCKET_ERROR_NOPEER 6
+
+// Last error of the calling context, set by the raw socket functions
+int32_t socketGetLastError(void);
+
+#define socketIsClosed(err) ((err) == SOCKET_ERROR_BADF || (err) == SOCKET_ERROR_NOTCONN)
+#define socketWouldBlock(err) ((err) == SOCKET_ERROR_TIMEDOUT)
+#define socketTimeout(err) ((err) == SOCKET_ERROR_TIMEDOUT)
+
+#elif !defined(_WIN) // Non-Windows platform sockets
 
 #if !defined(_WIN) && !defined(_FREE_RTOS)
 #include "queue.h" // for tQueueBuffer
@@ -218,6 +244,8 @@ bool socketBindToDevice(SOCKET_HANDLE socket, const char *ifname);
 bool socketEnableTimestamps(SOCKET_HANDLE socket, bool ptpOnly);
 #endif
 
+#if !defined(OPTION_ENABLE_UDP_RAW) // not provided by the raw Ethernet transport
+
 // Join an IPv4 multicast group on a UDP socket
 // maddr: multicast group address (network byte order)
 // Interface selection priority: ifname > ifaddr > INADDR_ANY (kernel routing)
@@ -240,6 +268,8 @@ SOCKET_HANDLE socketAccept(SOCKET_HANDLE socket, uint8_t *addr);
 //                 < 0  socket closed (graceful or reset) or error — check with socketIsClosed(socketGetLastError()) and exit the receive loop
 int16_t socketRecv(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSize, bool waitAll);
 
+#endif // !OPTION_ENABLE_UDP_RAW
+
 // Receive a UDP datagram (blocking)
 // srcAddr / srcPort: filled with sender's address/port if non-NULL
 // time: optional receive timestamp (NULL to skip); hardware or software depending on socket flags
@@ -255,11 +285,13 @@ int16_t socketRecvFrom(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSiz
 // Returns: bytes sent, 0 on closed socket, -1 on error
 int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t bufferSize, const uint8_t *addr, uint16_t port, uint64_t *time);
 
+#if !defined(OPTION_ENABLE_UDP_RAW) // not provided by the raw Ethernet transport
 // Send data on a TCP socket (blocking; loops internally on partial sends)
 // Returns: bytes sent, 0 on closed socket, -1 on error
 int16_t socketSend(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t bufferSize);
+#endif
 
-#if !defined(_WIN) && !defined(_FREE_RTOS)
+#if !defined(_WIN) && !defined(_FREE_RTOS) && !defined(OPTION_ENABLE_UDP_RAW)
 // Send multiple buffers as a single UDP datagram (scatter-gather I/O via sendmsg, POSIX only)
 // Returns: total bytes sent, 0 on closed socket, -1 on error (partial UDP sends treated as error)
 int16_t socketSendToV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t count, const uint8_t *addr, uint16_t port);
@@ -279,6 +311,19 @@ int16_t socketSendV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t count
 bool socketGetSendTime(SOCKET_HANDLE socket, uint64_t *txHwTime, uint64_t *txSwTime);
 #endif
 
+#if defined(OPTION_ENABLE_UDP_RAW)
+// Select the Ethernet interface used by the raw Ethernet transport
+// config: backend specific and opaque, e.g. the interface name "eth0" for the Linux
+//         AF_PACKET backend. NULL restores the OPTION_UDP_RAW_IFNAME default.
+// Must be called before XcpEthServerInit(); the string is not copied and must stay valid.
+void socketRawSetInterface(const char *config);
+
+// Get the local MAC address of the raw Ethernet transport, as reported by its HAL
+// mac: output buffer, must point to at least 6 bytes
+// Returns true on success
+bool socketRawGetLocalMac(SOCKET_HANDLE socket, uint8_t *mac);
+#endif
+
 // Set receive timeout on a blocking socket
 // timeoutMs: timeout in milliseconds; 0 = restore infinite blocking
 // With a timeout set, socketRecv/socketRecvFrom return 0 on expiry instead of blocking indefinitely,
@@ -295,10 +340,12 @@ bool socketShutdown(SOCKET_HANDLE socket);
 // Returns true on success
 bool socketClose(SOCKET_HANDLE *socketp);
 
+#if !defined(OPTION_ENABLE_UDP_RAW) // the raw transport reads the MAC from its Ethernet HAL
 // Get the MAC address of a network interface by name (e.g. "eth0")
 // mac: output buffer, must point to at least 6 bytes
 // Returns true on success
 bool socketGetMAC(char *ifname, uint8_t *mac);
+#endif
 
 #ifdef OPTION_ENABLE_GET_LOCAL_ADDR
 // Get the IPv4 address and MAC of the first non-loopback Ethernet interface
