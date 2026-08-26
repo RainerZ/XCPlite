@@ -18,6 +18,7 @@
 
 #include "assert.h"
 #include "dbg_print.h"
+#include "xcptl_cfg.h" // for OPTION_MTU and XCPTL_MAX_SEGMENT_SIZE in the EMSGSIZE diagnostic
 
 #if (defined(OPTION_ENABLE_TCP) || defined(OPTION_ENABLE_UDP)) && !defined(OPTION_ENABLE_UDP_RAW)
 
@@ -304,6 +305,34 @@ bool socketOpen(SOCKET_HANDLE *socketp, uint16_t flags) {
         } else {
             DBG_PRINT5("SO_REUSEADDR enabled on socket\n");
         }
+    }
+
+    // Never fragment outgoing datagrams.
+    // IPv4 fragmentation is actively harmful for DAQ: losing one fragment loses the whole
+    // datagram, reassembly adds jitter and the reassembly buffers can overflow at DAQ rates.
+    // Without this, an OPTION_MTU larger than the path MTU degrades measurement quality
+    // silently and indefinitely. With it, socketSendTo fails with EMSGSIZE on the first
+    // oversized segment, which is the diagnostic the user actually needs.
+    // This also makes the socket transport behave like the raw Ethernet transport, which
+    // cannot fragment at all (see docs/SOCKET_RAW.md).
+    if (!useTCP) { // TCP does its own path MTU handling
+#if defined(_LINUX)
+        int pmtu = IP_PMTUDISC_DO; // always set DF, honour the discovered path MTU
+        if (setsockopt(sock, IPPROTO_IP, IP_MTU_DISCOVER, &pmtu, sizeof(pmtu)) < 0) {
+            DBG_PRINTF_WARNING("Failed to enable IP_MTU_DISCOVER on socket (errno=%d,%s), datagrams may be fragmented\n", errno, socketGetErrorString(errno));
+        } else {
+            DBG_PRINT5("IP_MTU_DISCOVER=IP_PMTUDISC_DO enabled, datagrams will not be fragmented\n");
+        }
+#elif defined(IP_DONTFRAG) // macOS, QNX and other BSD derived platforms
+        int yes = 1;
+        if (setsockopt(sock, IPPROTO_IP, IP_DONTFRAG, &yes, sizeof(yes)) < 0) {
+            DBG_PRINTF_WARNING("Failed to enable IP_DONTFRAG on socket (errno=%d,%s), datagrams may be fragmented\n", errno, socketGetErrorString(errno));
+        } else {
+            DBG_PRINT5("IP_DONTFRAG enabled, datagrams will not be fragmented\n");
+        }
+#else
+        DBG_PRINT5("Don't fragment not supported on this platform, datagrams may be fragmented\n");
+#endif
     }
 
 #if defined(_LINUX) && defined(OPTION_SOCKET_HW_TIMESTAMPS)
@@ -692,6 +721,15 @@ bool socketOpen(SOCKET_HANDLE *socketp, uint16_t flags) {
         uint32_t one = 1;
         if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&one, sizeof(one)) < 0) {
             DBG_PRINTF_WARNING("socketOpen failed (errno=%d,%s) - could not enable SO_REUSEADDR on socket\n", socketGetLastError(), socketGetErrorString(socketGetLastError()));
+        }
+    }
+
+    // Never fragment outgoing datagrams - see the comment in the POSIX socketOpen above
+    if (!useTCP) {
+        DWORD one = 1;
+        if (setsockopt(sock, IPPROTO_IP, IP_DONTFRAGMENT, (const char *)&one, sizeof(one)) < 0) {
+            DBG_PRINTF_WARNING("socketOpen failed (errno=%d,%s) - could not enable IP_DONTFRAGMENT, datagrams may be fragmented\n", socketGetLastError(),
+                               socketGetErrorString(socketGetLastError()));
         }
     }
 
@@ -1312,6 +1350,14 @@ int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t size,
             DBG_PRINTF6("socketSendTo: socket closed (errno=%d,%s)\n", err, socketGetErrorString(err));
             return 0; // Transmit socket closed
         }
+        // EMSGSIZE means the datagram exceeds the path MTU and the DF bit set in socketOpen
+        // forbids fragmenting it. That is a configuration problem, not a transient error.
+        if (err == SOCKET_ERROR_MSGSIZE) {
+            DBG_PRINTF_ERROR("socketSendTo: segment of %u bytes exceeds the path MTU and must not be fragmented.\n"
+                             "  Reduce OPTION_MTU (currently %u, giving XCPTL_MAX_SEGMENT_SIZE=%u) to fit the link.\n",
+                             (unsigned)size, (unsigned)OPTION_MTU, (unsigned)XCPTL_MAX_SEGMENT_SIZE);
+            return -1;
+        }
         DBG_PRINTF_ERROR("socketSendTo: sendto failed with errno=%d,%s!\n", err, socketGetErrorString(err));
         return -1;
     }
@@ -1397,6 +1443,12 @@ int16_t socketSendToV(SOCKET_HANDLE socket, tQueueBuffer buffers[], uint16_t cou
         if (socketIsClosed(err)) {
             DBG_PRINTF6("socketSendToV: socket closed (errno=%d,%s)\n", err, socketGetErrorString(err));
             return 0; // Transmit socket closed
+        }
+        if (err == SOCKET_ERROR_MSGSIZE) {
+            DBG_PRINTF_ERROR("socketSendToV: segment of %" PRIu32 " bytes exceeds the path MTU and must not be fragmented.\n"
+                             "  Reduce OPTION_MTU (currently %u, giving XCPTL_MAX_SEGMENT_SIZE=%u) to fit the link.\n",
+                             total, (unsigned)OPTION_MTU, (unsigned)XCPTL_MAX_SEGMENT_SIZE);
+            return -1;
         }
         DBG_PRINTF_ERROR("socketSendToV: sendmsg failed with errno=%d,%s!\n", err, socketGetErrorString(err));
         return -1;

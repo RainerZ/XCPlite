@@ -40,10 +40,13 @@
 #include "dbg_print.h"
 #include "socket_raw_hal.h"
 
+#define ETH_HDR_LEN 14 // Ethernet header, not covered by the interface MTU
+
 struct eth_hal_ctx {
     int fd;                // AF_PACKET socket
     int wakeup_fd;         // eventfd used by eth_hal_wakeup()
     int ifindex;           // interface index
+    unsigned int mtu;      // interface MTU, i.e. the largest IP packet, excluding the Ethernet header
     uint8_t mac[6];        // interface MAC address
     char ifname[IFNAMSIZ]; // interface name
 };
@@ -98,6 +101,17 @@ bool eth_hal_open(const char *config, tEthHalCtx **ctxp) {
     }
     memcpy(ctx->mac, ifr.ifr_hwaddr.sa_data, 6);
 
+    // Interface MTU, used to explain an EMSGSIZE on send. The MTU is the largest IP packet,
+    // the 14 byte Ethernet header comes on top of it.
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, ctx->ifname, IFNAMSIZ - 1);
+    if (ioctl(ctx->fd, SIOCGIFMTU, &ifr) < 0) {
+        DBG_PRINTF_WARNING("eth_hal_open: SIOCGIFMTU for '%s' failed (errno=%d, %s)\n", ctx->ifname, errno, strerror(errno));
+        ctx->mtu = 1500; // assume standard Ethernet, only used for diagnostics
+    } else {
+        ctx->mtu = (unsigned int)ifr.ifr_mtu;
+    }
+
     // Bind to this interface only
     struct sockaddr_ll sll;
     memset(&sll, 0, sizeof(sll));
@@ -126,8 +140,8 @@ bool eth_hal_open(const char *config, tEthHalCtx **ctxp) {
         goto error;
     }
 
-    DBG_PRINTF3("  Raw Ethernet HAL on %s (index %d), MAC=%02X:%02X:%02X:%02X:%02X:%02X\n", ctx->ifname, ctx->ifindex, ctx->mac[0], ctx->mac[1], ctx->mac[2], ctx->mac[3],
-                ctx->mac[4], ctx->mac[5]);
+    DBG_PRINTF3("  Raw Ethernet HAL on %s (index %d), MAC=%02X:%02X:%02X:%02X:%02X:%02X, MTU=%u (max frame %u bytes)\n", ctx->ifname, ctx->ifindex, ctx->mac[0], ctx->mac[1],
+                ctx->mac[2], ctx->mac[3], ctx->mac[4], ctx->mac[5], ctx->mtu, ctx->mtu + ETH_HDR_LEN);
 
     *ctxp = ctx;
     return true;
@@ -168,12 +182,19 @@ int16_t eth_hal_send(tEthHalCtx *ctx, const uint8_t *frame, uint16_t len) {
         if (n < 0) {
             if (errno == EINTR)
                 continue; // interrupted before sending, retry
+            // The frame is larger than MTU + 14 for this interface. Report it separately and
+            // name the interface MTU: only the HAL knows that, and it is what has to be fixed.
+            if (errno == EMSGSIZE) {
+                DBG_PRINTF_ERROR("eth_hal_send: frame of %u bytes is too large for interface %s (MTU %u, so at most %u bytes per frame)\n", len, ctx->ifname, ctx->mtu,
+                                 ctx->mtu + ETH_HDR_LEN);
+                return ETH_HAL_ERROR_SIZE;
+            }
             DBG_PRINTF_ERROR("eth_hal_send: write failed (errno=%d, %s)\n", errno, strerror(errno));
-            return -1;
+            return ETH_HAL_ERROR;
         }
         if (n != (ssize_t)len) {
             DBG_PRINTF_ERROR("eth_hal_send: partial write %zd of %u bytes\n", n, len);
-            return -1;
+            return ETH_HAL_ERROR;
         }
         return (int16_t)len;
     }
@@ -197,7 +218,7 @@ int16_t eth_hal_recv(tEthHalCtx *ctx, uint8_t *frame, uint16_t max_len, uint32_t
         if (errno == EINTR)
             return 0; // treat as timeout, the caller re-evaluates its deadline
         DBG_PRINTF_ERROR("eth_hal_recv: poll failed (errno=%d, %s)\n", errno, strerror(errno));
-        return -1;
+        return ETH_HAL_ERROR;
     }
     if (r == 0)
         return 0; // timeout
@@ -222,7 +243,7 @@ int16_t eth_hal_recv(tEthHalCtx *ctx, uint8_t *frame, uint16_t max_len, uint32_t
         if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
             return 0;
         DBG_PRINTF_ERROR("eth_hal_recv: recvfrom failed (errno=%d, %s)\n", errno, strerror(errno));
-        return -1;
+        return ETH_HAL_ERROR;
     }
 
     // Portable fallback for PACKET_IGNORE_OUTGOING: drop our own transmitted frames

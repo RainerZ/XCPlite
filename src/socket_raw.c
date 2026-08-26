@@ -182,6 +182,8 @@ const char *socketGetErrorString(int32_t err) {
         return "frame too large";
     case SOCKET_ERROR_NOPEER:
         return "peer MAC unknown";
+    case SOCKET_ERROR_MSGSIZE:
+        return "frame too large for the link MTU";
     default:
         return "unknown socket error";
     }
@@ -258,7 +260,7 @@ static int16_t sendFrame(const uint8_t *frame, uint16_t len) {
     int16_t r = eth_hal_send(sSocketRaw.hal, frame, len);
     mutexUnlock(&sSocketRaw.tx_mutex);
     if (r < 0) {
-        sLastError = SOCKET_ERROR_HAL;
+        sLastError = (r == ETH_HAL_ERROR_SIZE) ? SOCKET_ERROR_MSGSIZE : SOCKET_ERROR_HAL;
     }
     return r;
 }
@@ -779,7 +781,17 @@ int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t buffe
     mutexUnlock(&socket->tx_mutex);
 
     if (r < 0) {
-        sLastError = SOCKET_ERROR_HAL;
+        // The HAL reports a frame too large for the link separately: like the socket transport
+        // with IP_MTU_DISCOVER, this surfaces as a distinct error rather than silent truncation.
+        // There is no IPv4 fragmentation here, so this is always a configuration problem.
+        if (r == ETH_HAL_ERROR_SIZE) {
+            sLastError = SOCKET_ERROR_MSGSIZE;
+            DBG_PRINTF_ERROR("socketSendTo: segment of %u bytes does not fit into one Ethernet frame on this link.\n"
+                             "  Reduce OPTION_MTU (currently %u, giving XCPTL_MAX_SEGMENT_SIZE=%u), see the interface MTU reported above.\n",
+                             bufferSize, (unsigned)OPTION_MTU, (unsigned)XCPTL_MAX_SEGMENT_SIZE);
+        } else {
+            sLastError = SOCKET_ERROR_HAL;
+        }
         return -1;
     }
     return (int16_t)bufferSize; // the payload size, as the transport layer expects

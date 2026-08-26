@@ -58,11 +58,16 @@
 #define XCPTL_MAX_SEGMENT_SIZE (1500 - 20 - 8)
 #endif
 
-// The raw transport does not fragment IPv4: one segment must fit into one Ethernet frame
-// 1472 = 1500 (MTU) - 20 (IPv4 header) - 8 (UDP header)
-#if defined(OPTION_ENABLE_UDP_RAW) && (XCPTL_MAX_SEGMENT_SIZE > 1472)
-#error "OPTION_ENABLE_UDP_RAW does not fragment IPv4: OPTION_MTU must be <= 1504"
-#endif
+// Note on OPTION_MTU:
+// OPTION_MTU is the link MTU rounded up to a multiple of 8, the Ethernet header is NOT part of it.
+// XCPTL_MAX_SEGMENT_SIZE = OPTION_MTU - 32 reserves 28 bytes for the IPv4 and UDP headers plus the
+// 4 bytes of that round-up (1500 -> 1504), so the resulting IP packet is OPTION_MTU - 4 bytes.
+// The invariant is therefore: OPTION_MTU <= link MTU + 4.
+// An OPTION_MTU too large for the link is NOT caught at compile time - the link MTU is a runtime
+// property that only the target knows. It is reported at runtime instead:
+//   - socket transport: DF is set in socketOpen, so sendto fails with EMSGSIZE
+//   - raw transport:    eth_hal_send reports ETH_HAL_ERROR_SIZE
+// Neither transport fragments IPv4.
 
 // Receive timeout in milliseconds (rate of periodic checks for shutdown and background tasks in the receive thread)
 #define XCPTL_RECV_TIMEOUT_MS 100

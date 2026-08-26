@@ -100,6 +100,7 @@ typedef struct socket_raw *SOCKET_HANDLE;
 #define SOCKET_ERROR_HAL 4
 #define SOCKET_ERROR_TOOBIG 5
 #define SOCKET_ERROR_NOPEER 6
+#define SOCKET_ERROR_MSGSIZE 7 // frame exceeds what the link can carry, no fragmentation
 
 // Last error of the calling context, set by the raw socket functions
 int32_t socketGetLastError(void);
@@ -154,6 +155,7 @@ typedef SOCKET SOCKET_HANDLE;
 #define SOCKET_ERROR_PIPE EPIPE         // 32
 #define SOCKET_ERROR_BADF EBADF         // 9
 #define SOCKET_ERROR_NOTCONN ENOTCONN   // 107 (57 macOS) Socket is not connected
+#define SOCKET_ERROR_MSGSIZE EMSGSIZE   // 90 (40 macOS) Datagram too large for the path MTU (DF is set, see socketOpen)
 
 #define socketGetLastError(void) errno
 #define socketIsClosed(err) ((err) == ENOTCONN || (err) == ECONNABORTED || (err) == EBADF || (err) == ECONNRESET)
@@ -182,6 +184,7 @@ int32_t socketGetLastError(void);
 #define SOCKET_ERROR_PIPE WSAESHUTDOWN     // 10058
 #define SOCKET_ERROR_BADF WSAEBADF         // 10009
 #define SOCKET_ERROR_NOTCONN WSAENOTCONN   // 10057
+#define SOCKET_ERROR_MSGSIZE WSAEMSGSIZE   // 10040 Datagram too large for the path MTU (DF is set, see socketOpen)
 #define socketIsClosed(err) ((err) == WSAECONNABORTED || (err) == WSAEBADF || (err) == WSAECONNRESET || (err) == WSAEINTR)
 #define socketWouldBlock(err) ((err) == WSAEWOULDBLOCK)
 #define socketTimeout(err) ((err) == WSAETIMEDOUT)

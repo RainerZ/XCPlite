@@ -28,7 +28,34 @@ Two further backends motivate the HAL abstraction:
 | requires `OPTION_QUEUE_32` | the 64 bit queues transmit with `socketSendToV` (scatter-gather), which the raw transport does not implement. Without this guard a 64 bit build fails at link time with no hint about the cause |
 | not with `OPTION_SHM_MODE` | SHM needs `queueInitFromMemory`, which exists only in `queue64v.c` / `queue64f.c` |
 | not with `XCPTL_ENABLE_MULTICAST` | `socketJoin` is not provided |
-| `XCPTL_MAX_SEGMENT_SIZE <= 1472` | no IPv4 fragmentation, one segment must fit one frame |
+
+### MTU and frame size
+
+There is deliberately **no compile-time MTU guard**. The link MTU is a runtime property that only
+the target knows, so hard-coding a limit would bake a "standard Ethernet" assumption into
+`xcptl_cfg.h` and would wrongly forbid a jumbo-capable link.
+
+Note what `OPTION_MTU` means: it is the link MTU rounded up to a multiple of 8, and the 14 byte
+**Ethernet header is not part of it**. `XCPTL_MAX_SEGMENT_SIZE = OPTION_MTU - 32` reserves 28 bytes
+for the IPv4 and UDP headers plus the 4 bytes of that round-up (1500 -> 1504), so the resulting IP
+packet is `OPTION_MTU - 4` bytes. The invariant is `OPTION_MTU <= link MTU + 4`.
+
+An `OPTION_MTU` too large for the link is reported at runtime, and both transports behave the same
+way because **neither fragments IPv4**:
+
+| Transport | Mechanism |
+|---|---|
+| socket (UDP) | `socketOpen` sets DF (`IP_PMTUDISC_DO` / `IP_DONTFRAG` / `IP_DONTFRAGMENT`), so `sendto` fails with `EMSGSIZE` |
+| raw Ethernet | `eth_hal_send` returns `ETH_HAL_ERROR_SIZE`, mapped to `SOCKET_ERROR_MSGSIZE` |
+
+Both print the segment size and the `OPTION_MTU` to reduce; the raw HAL additionally names the
+interface and its MTU, since only the backend knows that. Observed on a link forced to MTU 1000:
+
+```
+ERROR: eth_hal_send: frame of 1242 bytes is too large for interface veth1 (MTU 1000, so at most 1014 bytes per frame)
+ERROR: socketSendTo: segment of 1200 bytes does not fit into one Ethernet frame on this link.
+  Reduce OPTION_MTU (currently 1504, giving XCPTL_MAX_SEGMENT_SIZE=1472), see the interface MTU reported above.
+```
 
 The transport also asserts a **little endian host** (`src/socket_raw.c`) and the
 availability of a **HAL backend** (`src/socket_raw_hal.h`). Only the Linux AF_PACKET

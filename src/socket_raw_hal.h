@@ -47,6 +47,12 @@
 #error "OPTION_ENABLE_UDP_RAW has a HAL backend for Linux (AF_PACKET) only - see docs/SOCKET_RAW.md"
 #endif
 
+// Error returns of eth_hal_send() / eth_hal_recv()
+// ETH_HAL_ERROR_SIZE is reported separately because it is a configuration problem, not a
+// transient error: the frame is larger than the link can carry and there is no fragmentation.
+#define ETH_HAL_ERROR (-1)
+#define ETH_HAL_ERROR_SIZE (-2)
+
 // Opaque per interface context of the HAL backend
 typedef struct eth_hal_ctx tEthHalCtx;
 
@@ -65,7 +71,9 @@ void eth_hal_close(tEthHalCtx *ctx);
 bool eth_hal_get_mac(tEthHalCtx *ctx, uint8_t *mac);
 
 // Send one complete Ethernet frame (without FCS)
-// Returns: len on success, -1 on error
+// Returns: len on success
+//          ETH_HAL_ERROR_SIZE if the frame exceeds what this interface can carry
+//          ETH_HAL_ERROR on any other error
 int16_t eth_hal_send(tEthHalCtx *ctx, const uint8_t *frame, uint16_t len);
 
 // Receive one complete Ethernet frame (without FCS), blocking with timeout
