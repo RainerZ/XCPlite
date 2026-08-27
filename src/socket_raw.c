@@ -111,6 +111,10 @@ typedef struct {
 // One XCP segment must fit into one Ethernet frame, enforced in xcptl_cfg.h
 #define RAW_MAX_FRAME (RAW_HDR_LEN + XCPTL_MAX_SEGMENT_SIZE)
 
+#if XCPTL_TX_HEADROOM > 0 && (XCPTL_TX_HEADROOM < RAW_HDR_LEN)
+#error "XCPTL_TX_HEADROOM must be at least 42 bytes to hold the Ethernet, IPv4 and UDP header"
+#endif
+
 #define ETHERTYPE_IPV4 0x0800
 #define ETHERTYPE_ARP 0x0806
 #define ETHERTYPE_VLAN 0x8100
@@ -710,48 +714,22 @@ int16_t socketRecvFrom(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSiz
     }
 }
 
-// Send one UDP datagram to addr:port.
-// Returns: bytes sent (the PAYLOAD size, not the frame size - XcpEthTlSend compares the
-//          result against the payload size), 0 on closed socket, -1 on error
-int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t bufferSize, const uint8_t *addr, uint16_t port, uint64_t *time) {
+// Build the Ethernet/IPv4/UDP header for a payload of payload_len bytes into hdr[0..41].
+// Precondition: tx_mutex held - ip_ident is incremented and peer_mac is read here.
+// If the UDP checksum is computed, the payload must already be contiguous behind the header.
+static void buildFrameHeader(struct socket_raw *socket, uint8_t *hdr, uint16_t payload_len, const uint8_t *addr, uint16_t port) {
 
-    assert(socket != INVALID_SOCKET_HANDLE);
-    assert(buffer != NULL);
-    assert(addr != NULL);
-
-    if (!socket->is_open) {
-        sLastError = SOCKET_ERROR_BADF;
-        return 0; // closed socket
-    }
-    if (bufferSize == 0 || bufferSize > XCPTL_MAX_SEGMENT_SIZE) {
-        DBG_PRINTF_ERROR("socketSendTo: payload of %u bytes exceeds the maximum segment size of %u\n", bufferSize, (uint16_t)XCPTL_MAX_SEGMENT_SIZE);
-        sLastError = SOCKET_ERROR_TOOBIG;
-        return -1;
-    }
-    // The peer MAC is learned from the received datagram, and the transport layer only
-    // sends after it has received something, so this cannot normally happen
-    if (!socket->peer_mac_valid) {
-        DBG_PRINT_ERROR("socketSendTo: peer MAC unknown, nothing has been received yet\n");
-        sLastError = SOCKET_ERROR_NOPEER;
-        return -1;
-    }
-
-    // Build header and payload into one contiguous frame.
-    // The payload copy is removed by the zero copy variant (OPTION_UDP_RAW_ZERO_COPY).
-    static uint8_t tx_frame[RAW_MAX_FRAME];
-
-    mutexLock(&socket->tx_mutex);
-
-    tEthHdr *eth = (tEthHdr *)tx_frame;
+    tEthHdr *eth = (tEthHdr *)hdr;
     memcpy(eth->dst, socket->peer_mac, 6);
     memcpy(eth->src, socket->local_mac, 6);
     eth->ethertype = BE16(ETHERTYPE_IPV4);
 
-    tIp4Hdr *ip = (tIp4Hdr *)(tx_frame + ETH_HDR_LEN);
+    tIp4Hdr *ip = (tIp4Hdr *)(hdr + ETH_HDR_LEN);
     memset(ip, 0, IP4_HDR_LEN);
     ip->ver_ihl = 0x45;
-    ip->total_length = BE16((uint16_t)(IP4_HDR_LEN + UDP_HDR_LEN + bufferSize));
-    ip->ident = BE16(socket->ip_ident++);
+    ip->total_length = BE16((uint16_t)(IP4_HDR_LEN + UDP_HDR_LEN + payload_len));
+    ip->ident = BE16(socket->ip_ident);
+    socket->ip_ident++;
     ip->flags_frag = BE16(0x4000); // DF, never fragment
     ip->ttl = 64;
     ip->protocol = IP_PROTO_UDP;
@@ -759,27 +737,45 @@ int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t buffe
     memcpy(ip->dst, addr, 4);
     ip->checksum = BE16(ipHeaderChecksum(ip));
 
-    tUdpHdr *udp = (tUdpHdr *)(tx_frame + ETH_HDR_LEN + IP4_HDR_LEN);
+    tUdpHdr *udp = (tUdpHdr *)(hdr + ETH_HDR_LEN + IP4_HDR_LEN);
     udp->src_port = BE16(socket->local_port);
     udp->dst_port = BE16(port);
-    udp->length = BE16((uint16_t)(UDP_HDR_LEN + bufferSize));
+    udp->length = BE16((uint16_t)(UDP_HDR_LEN + payload_len));
     udp->checksum = 0;
-
-    memcpy(tx_frame + RAW_HDR_LEN, buffer, bufferSize);
-
 #ifdef OPTION_UDP_RAW_UDP_CHECKSUM_COMPUTE
-    udp->checksum = BE16(udpChecksum(ip, (const uint8_t *)udp, (uint16_t)(UDP_HDR_LEN + bufferSize)));
+    udp->checksum = BE16(udpChecksum(ip, (const uint8_t *)udp, (uint16_t)(UDP_HDR_LEN + payload_len)));
 #endif
     // OPTION_UDP_RAW_UDP_CHECKSUM_ZERO: 0 is legal for IPv4 and means "no checksum" (RFC 768)
     // OPTION_UDP_RAW_UDP_CHECKSUM_HW:   0 as well, the EMAC inserts the checksum
+}
 
-    if (time != NULL)
-        *time = clockGet();
+// Common checks for both send paths, returns false and sets sLastError when the send must not happen
+static bool checkSend(SOCKET_HANDLE socket, uint16_t bufferSize, int16_t *result) {
 
-    int16_t r = eth_hal_send(socket->hal, tx_frame, (uint16_t)(RAW_HDR_LEN + bufferSize));
+    if (!socket->is_open) {
+        sLastError = SOCKET_ERROR_BADF;
+        *result = 0; // closed socket
+        return false;
+    }
+    if (bufferSize == 0 || bufferSize > XCPTL_MAX_SEGMENT_SIZE) {
+        DBG_PRINTF_ERROR("socketSendTo: payload of %u bytes exceeds the maximum segment size of %u\n", bufferSize, (uint16_t)XCPTL_MAX_SEGMENT_SIZE);
+        sLastError = SOCKET_ERROR_TOOBIG;
+        *result = -1;
+        return false;
+    }
+    // The peer MAC is learned from the received datagram, and the transport layer only
+    // sends after it has received something, so this cannot normally happen
+    if (!socket->peer_mac_valid) {
+        DBG_PRINT_ERROR("socketSendTo: peer MAC unknown, nothing has been received yet\n");
+        sLastError = SOCKET_ERROR_NOPEER;
+        *result = -1;
+        return false;
+    }
+    return true;
+}
 
-    mutexUnlock(&socket->tx_mutex);
-
+// Map an eth_hal_send result to the socket API return value
+static int16_t mapSendResult(int16_t r, uint16_t bufferSize) {
     if (r < 0) {
         // The HAL reports a frame too large for the link separately: like the socket transport
         // with IP_MTU_DISCOVER, this surfaces as a distinct error rather than silent truncation.
@@ -796,5 +792,63 @@ int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t buffe
     }
     return (int16_t)bufferSize; // the payload size, as the transport layer expects
 }
+
+// Send one UDP datagram to addr:port.
+// The payload is copied into a frame buffer behind the header. Used for command responses, which
+// are built on the stack and therefore have no headroom in front of them.
+// Returns: bytes sent (the PAYLOAD size, not the frame size - XcpEthTlSend compares the result
+//          against the payload size), 0 on closed socket, -1 on error
+int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t bufferSize, const uint8_t *addr, uint16_t port, uint64_t *time) {
+
+    assert(socket != INVALID_SOCKET_HANDLE);
+    assert(buffer != NULL);
+    assert(addr != NULL);
+
+    int16_t early;
+    if (!checkSend(socket, bufferSize, &early))
+        return early;
+
+    static uint8_t tx_frame[RAW_MAX_FRAME];
+
+    mutexLock(&socket->tx_mutex);
+    memcpy(tx_frame + RAW_HDR_LEN, buffer, bufferSize);
+    buildFrameHeader(socket, tx_frame, bufferSize, addr, port);
+    if (time != NULL)
+        *time = clockGet();
+    int16_t r = eth_hal_send(socket->hal, tx_frame, (uint16_t)(RAW_HDR_LEN + bufferSize));
+    mutexUnlock(&socket->tx_mutex);
+
+    return mapSendResult(r, bufferSize);
+}
+
+#if XCPTL_TX_HEADROOM > 0
+// Send one UDP datagram from a buffer which has XCPTL_TX_HEADROOM writable bytes in front
+// of it, so the header is written in place and the payload is not copied at all.
+// Used for the DAQ transmit path, where the buffer is a transmit queue segment.
+// Returns: as socketSendTo
+int16_t socketSendToReserved(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t bufferSize, const uint8_t *addr, uint16_t port, uint64_t *time) {
+
+    assert(socket != INVALID_SOCKET_HANDLE);
+    assert(buffer != NULL);
+    assert(addr != NULL);
+
+    int16_t early;
+    if (!checkSend(socket, bufferSize, &early))
+        return early;
+
+    // The caller guarantees the reservation, see the contract in sockets.h. The header is written
+    // right justified into it, which is why the reservation may be larger than RAW_HDR_LEN.
+    uint8_t *frame = (uint8_t *)(uintptr_t)buffer - RAW_HDR_LEN;
+
+    mutexLock(&socket->tx_mutex);
+    buildFrameHeader(socket, frame, bufferSize, addr, port);
+    if (time != NULL)
+        *time = clockGet();
+    int16_t r = eth_hal_send(socket->hal, frame, (uint16_t)(RAW_HDR_LEN + bufferSize));
+    mutexUnlock(&socket->tx_mutex);
+
+    return mapSendResult(r, bufferSize);
+}
+#endif // XCPTL_TX_HEADROOM > 0
 
 #endif // OPTION_ENABLE_UDP_RAW

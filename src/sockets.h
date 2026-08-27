@@ -88,6 +88,8 @@ extern "C" {
 
 // SOCKET_HANDLE is an opaque context defined in socket_raw.c
 // There is no OS socket fd, therefore SOCKET_FD() is deliberately not defined
+#include "xcptl_cfg.h" // for XCPTL_TX_HEADROOM
+
 struct socket_raw;
 typedef struct socket_raw *SOCKET_HANDLE;
 #define INVALID_SOCKET_HANDLE NULL
@@ -325,6 +327,16 @@ void socketRawSetInterface(const char *config);
 // mac: output buffer, must point to at least 6 bytes
 // Returns true on success
 bool socketRawGetLocalMac(SOCKET_HANDLE socket, uint8_t *mac);
+
+#if XCPTL_TX_HEADROOM > 0
+// Send a UDP datagram from a buffer which has writable headroom in front of it (zero copy).
+// PRECONDITION: buffer must have XCPTL_TX_HEADROOM writable bytes immediately before it.
+// The Ethernet/IPv4/UDP header is written there in place and the payload is not copied.
+// Used for the DAQ transmit path, where the buffer is a transmit queue segment (see queue.h).
+// Command responses are built on the stack, have no headroom, and use socketSendTo instead.
+// Returns: bytes sent (the payload size), 0 on closed socket, -1 on error
+int16_t socketSendToReserved(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t bufferSize, const uint8_t *addr, uint16_t port, uint64_t *time);
+#endif
 #endif
 
 // Set receive timeout on a blocking socket

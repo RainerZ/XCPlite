@@ -72,8 +72,31 @@
 // Receive timeout in milliseconds (rate of periodic checks for shutdown and background tasks in the receive thread)
 #define XCPTL_RECV_TIMEOUT_MS 100
 
-// Alignment for packet concatenation
-#define XCPTL_PACKET_ALIGNMENT 4 // Packet alignment for multiple XCP transport layer packets in a XCP transport layer message
+// Size granularity of the protocol layer packet inside a transport layer message
+// A message is: WORD len + WORD ctr + protocol layer packet + fill.
+// The packet size is rounded up to this alignment (that is the "fill"), so that the messages
+// concatenated into a segment all start aligned - the message header (len+ctr) is word accessed.
+// Also used as QUEUE_PAYLOAD_SIZE_ALIGNMENT by all queue variants, see queue.h.
+// Only 4 is supported and queue.h enforces that with an #error - do not change this value.
+#define XCPTL_PACKET_ALIGNMENT 4
+
+// Transmit headroom: space reserved in front of a complete transmit segment, so the transport can
+// prepend its link headers in place instead of copying the payload into a separate frame buffer.
+// Used by the raw Ethernet transport for the 42 byte Ethernet + IPv4 + UDP header.
+// 48 instead of 42 keeps the segment payload 8 byte aligned; the header is written right justified
+// at (segment - 42), which also lands the IPv4 header on a 4 byte boundary.
+#if defined(OPTION_ENABLE_UDP_RAW) && defined(OPTION_UDP_RAW_ZERO_COPY)
+#define XCPTL_TX_HEADROOM 48
+#else
+#define XCPTL_TX_HEADROOM 0
+#endif
+
+// Only the segment accumulating queues (queue32.c, queue32m.c) reserve segment headroom.
+// This cannot be violated today because OPTION_ENABLE_UDP_RAW already requires OPTION_QUEUE_32,
+// but check it explicitly so a future transport cannot silently lose the reservation.
+#if (XCPTL_TX_HEADROOM > 0) && !defined(OPTION_QUEUE_32)
+#error "XCPTL_TX_HEADROOM requires OPTION_QUEUE_32: only the segment accumulating queues reserve segment headroom"
+#endif
 
 // Transport layer message header size
 // This is fixed, no other options supported yet

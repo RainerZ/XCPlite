@@ -127,13 +127,18 @@ static int handleXcpMulticastCommand(int n, tXcpCtoMessage *p, uint8_t *dstAddr,
 
 // Transmit a UDP datagram or TCP segment (contains multiple XCP DTO messages or a single CRM message (len+ctr+packet+fill))
 // Must be thread safe, because it is called from CMD and from DAQ thread
+// has_headroom: true if XCPTL_TX_HEADROOM writable bytes precede data, which lets the raw Ethernet
+//               transport write its header in place instead of copying the payload (zero copy).
+//               Only the transmit queue segments have that headroom, CRM messages are built on the
+//               stack and do not. Ignored unless XCPTL_TX_HEADROOM > 0.
 // Returns false on error
-static bool XcpEthTlSend(const uint8_t *data, uint16_t size, const uint8_t *addr, uint16_t port) {
+static bool XcpEthTlSend(const uint8_t *data, uint16_t size, const uint8_t *addr, uint16_t port, bool has_headroom) {
 
     int r;
 
     assert(size > 0 && size <= XCPTL_MAX_SEGMENT_SIZE);
     assert(data != NULL);
+    (void)has_headroom; // unused unless the zero copy transmit path is enabled
     DBG_PRINTF5("XcpEthTlSend: msg_len = %u\n", size);
 
 #ifdef TEST_ENABLE_DBG_METRICS
@@ -154,7 +159,14 @@ static bool XcpEthTlSend(const uint8_t *data, uint16_t size, const uint8_t *addr
                 DBG_PRINT_ERROR("XcpEthTlSend: invalid master address!\n");
                 return false;
             }
-            r = socketSendTo(gXcpTl.socket, data, size, gXcpTl.master_addr, gXcpTl.master_port, NULL);
+#if XCPTL_TX_HEADROOM > 0
+            if (has_headroom) { // zero copy: the transport writes its header into the headroom
+                r = socketSendToReserved(gXcpTl.socket, data, size, gXcpTl.master_addr, gXcpTl.master_port, NULL);
+            } else
+#endif
+            {
+                r = socketSendTo(gXcpTl.socket, data, size, gXcpTl.master_addr, gXcpTl.master_port, NULL);
+            }
         }
     }
 #endif // UDP
@@ -236,6 +248,8 @@ void XcpTlSendCrm(const uint8_t *data, uint8_t size) {
     mutexLock(&gXcpTl.ctr_mutex);
 
     // Build XCP CTO message (ctr+dlc+packet)
+    // Note: dlc is the exact packet size here, command responses are NOT padded to
+    // XCPTL_PACKET_ALIGNMENT, unlike DAQ messages built in queueAcquire - see the TODO there
     tXcpCtoMessage msg; // @@@@ STACK buffer for tXcpCtoMessage
     msg.dlc = size;
     msg.ctr = gXcpTl.ctr++; // Get next response packet counter
@@ -248,7 +262,7 @@ void XcpTlSendCrm(const uint8_t *data, uint8_t size) {
     tQueueBuffer buf = {.buffer = (uint8_t *)&msg, .size = (uint16_t)(size + XCPTL_TRANSPORT_LAYER_HEADER_SIZE)};
     XcpEthTlSendV(&buf, 1);
 #else
-    XcpEthTlSend((const uint8_t *)&msg, (uint16_t)(size + XCPTL_TRANSPORT_LAYER_HEADER_SIZE), NULL, 0);
+    XcpEthTlSend((const uint8_t *)&msg, (uint16_t)(size + XCPTL_TRANSPORT_LAYER_HEADER_SIZE), NULL, 0, false); // stack buffer, no headroom
 #endif
 
     mutexUnlock(&gXcpTl.ctr_mutex);
@@ -268,7 +282,7 @@ void XcpEthTlSendMulticastCrm(const uint8_t *packet, uint16_t packet_size, const
     memcpy(msg.packet, packet, packet_size);
 
     // No error handling, loosing a CRM message will lead to a timeout in the XCP client
-    XcpEthTlSend((uint8_t *)&msg, (uint16_t)(packet_size + XCPTL_TRANSPORT_LAYER_HEADER_SIZE), addr, port);
+    XcpEthTlSend((uint8_t *)&msg, (uint16_t)(packet_size + XCPTL_TRANSPORT_LAYER_HEADER_SIZE), addr, port, false); // stack buffer, no headroom
 }
 #endif
 
@@ -939,7 +953,8 @@ int32_t XcpTlHandleTransmitQueue(void) {
                 break; // queue is empty, break inner loop and sleep a bit
             } else {
                 // Send this frame (blocking)
-                bool r = XcpEthTlSend(b, l, NULL, 0);
+                // A transmit queue segment has QUEUE_SEGMENT_HEADER_SIZE headroom in front of it
+                bool r = XcpEthTlSend(b, l, NULL, 0, true);
                 mutexUnlock(&gXcpTl.ctr_mutex);
 
                 // Free this buffer

@@ -357,6 +357,33 @@ In XCPlite, the EPK may be specified with an API function or is generated from b
 
 ## Known Issues
 
+### Transport Layer Message Padding — LEN includes the fill
+
+A transport layer message is `WORD len + WORD ctr + protocol layer packet + fill`. For **DAQ
+messages**, `queueAcquire` rounds the packet size up to `XCPTL_PACKET_ALIGNMENT` (4) and stores the
+**padded** size in `dlc`, so the LEN field on the wire is larger than the actual XCP packet content
+and the client sees trailing filler bytes. `queuePop` walks the concatenated messages with
+`dlc + 4`, so the fill has to be inside LEN for message packing to work.
+
+Two consequences that have surprised users:
+
+- **A single message datagram is padded for no reason.** The alignment exists only so the *next*
+  message in a segment starts aligned. If a datagram carries one message there is no next message,
+  so the fill is pure overhead and pure confusion.
+- **The behaviour is asymmetric.** Command responses are *not* padded: `XcpTlSendCrm` builds the
+  message itself and sets `dlc` to the exact packet size. Only DAQ messages, which go through the
+  transmit queue, carry fill.
+
+Why the padding exists at all: the message header (`dlc`, `ctr`) is accessed as 16 bit words while
+walking a segment, so each message must start aligned.
+
+**Open:** whether a LEN larger than the packet content is legal, and whether XCP on Ethernet requires
+any alignment, has **not** been verified against ASAM XCP Part 3. Unlike XCP on CAN, where padding to
+the CAN DLC is a defined concept, the Ethernet transport layer header appears to be only LEN + CTR
+with LEN = the packet length. Trimming the fill from the last message in a datagram would require
+keeping the true unpadded length per message, which is not stored today. Marked with `@@@@ TODO` in
+`queue32.c` / `queue32m.c`.
+
 ### CANape-Specific Issues
 
 - **COPY_CAL_PAGE:** CANape initialize RAM is executed only on the first memory segment. **Workaround:** always copy all segments

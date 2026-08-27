@@ -13,6 +13,10 @@ All notable changes to XCPlite are documented in this file.
     - `test/test_socket_raw.sh` — isolated veth/netns test setup with ARP, ping and XCP CONNECT checks
     - Mutually exclusive with `OPTION_ENABLE_UDP`/`OPTION_ENABLE_TCP` and requires `OPTION_QUEUE_32`; both enforced by `#error` in `xcptl_cfg.h`, together with the SHM, multicast and MTU restrictions
     - The `rtos` configuration keeps using the lwIP socket API - the raw transport is a separate configuration, not an override
+- Optional zero copy transmit for the raw Ethernet transport (`OPTION_UDP_RAW_ZERO_COPY`, on by default): headroom is reserved in front of every transmit queue3/queue32 segment so the Ethernet/IPv4/UDP header is written in place instead of copying the payload into a frame buffer.
+    - New generic queue concept `QUEUE_SEGMENT_HEADER_SIZE` in `queue.h` - reserved once per *segment*, as opposed to the existing per-*message* `QUEUE_ENTRY_USER_HEADER_SIZE`
+    - `queue32.c`/`queue32m.c` gain one guarded field; with the option off the queue entry layout is byte identical to before
+    - Command responses keep the copying path, they are built on the stack and are not hot
 - IPv4 fragmentation is now prevented on the socket transport: `socketOpen` sets the DF bit on UDP sockets (`IP_MTU_DISCOVER`/`IP_PMTUDISC_DO` on Linux, `IP_DONTFRAG` on macOS/BSD, `IP_DONTFRAGMENT` on Windows, no-op on lwIP). Fragmentation is harmful for DAQ - one lost fragment loses the whole datagram and reassembly adds jitter - and an `OPTION_MTU` larger than the path MTU previously degraded measurement silently. Oversized segments now fail with `EMSGSIZE` and a message naming the segment size and the `OPTION_MTU` to reduce. **Behaviour change:** a setup that relied on fragmentation will now report an error instead of silently fragmenting.
 - Fixed `PLATFORM_32_BIT` typo in `xcplib_cfg.h`, which prevented the automatic selection of `OPTION_QUEUE_32` on 32 bit platforms
 - Fixed missing `#include <errno.h>` in `shm.c`, which broke the `shm` configuration build on macOS

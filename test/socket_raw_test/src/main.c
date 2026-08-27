@@ -8,6 +8,7 @@
 // the socket context without a HAL. src/stubs.c provides a fake Ethernet HAL which
 // captures the transmitted frame instead of sending it.
 
+#include <stddef.h> // for offsetof
 #include <stdio.h>
 #include <string.h>
 
@@ -355,6 +356,92 @@ static void test_arp_icmp(void) {
 }
 
 //-----------------------------------------------------------------------------------------------------
+// Zero copy transmit (OPTION_UDP_RAW_ZERO_COPY)
+
+#if XCPTL_TX_HEADROOM > 0
+
+// Mimics a transmit queue segment: XCPTL_TX_HEADROOM writable bytes in front of the payload, laid
+// out so the payload start has the same alignment as tXcpSegmentBuffer::msg_buffer.
+// At file scope because a function local typedef is not portable inside offsetof (GCC rejects it).
+typedef struct {
+    uint32_t magic;
+    uint16_t uncommitted;
+    uint16_t size;
+    uint8_t headroom[XCPTL_TX_HEADROOM];
+    uint8_t msg_buffer[XCPTL_MAX_SEGMENT_SIZE];
+} tTestSegment;
+
+static void test_zero_copy(void) {
+
+    const uint8_t payload[] = {0x02, 0x00, 0x00, 0x00, 0xFF, 0x00};
+
+    static tTestSegment seg;
+
+    CHECK("ZC: test fixture matches the queue layout", (offsetof(tTestSegment, msg_buffer) % XCPTL_PACKET_ALIGNMENT) == 0);
+
+    setupSocket();
+    memcpy(sSocketRaw.peer_mac, PEER_MAC, 6);
+    sSocketRaw.peer_mac_valid = true;
+    memset(&seg, 0, sizeof(seg));
+    memcpy(seg.msg_buffer, payload, sizeof(payload));
+
+    // Poison the headroom so we can see exactly which bytes the transport writes
+    memset(seg.headroom, 0xCD, sizeof(seg.headroom));
+
+    int16_t sent = socketSendToReserved(&sSocketRaw, seg.msg_buffer, sizeof(payload), PEER_IP, PEER_PORT, NULL);
+    CHECK("ZC: returns the payload size", sent == (int16_t)sizeof(payload));
+    CHECK("ZC: one frame handed to the HAL", gTxCount == 1);
+    CHECK("ZC: frame length is 42 + payload", gTxLen == RAW_HDR_LEN + sizeof(payload));
+
+    // The header must be written right justified, i.e. ending exactly where the payload starts
+    const uint8_t *frame = seg.msg_buffer - RAW_HDR_LEN;
+    CHECK("ZC: header written at payload - 42", frame == &seg.headroom[XCPTL_TX_HEADROOM - RAW_HDR_LEN]);
+    CHECK("ZC: the 6 bytes before the header are untouched", seg.headroom[0] == 0xCD && seg.headroom[XCPTL_TX_HEADROOM - RAW_HDR_LEN - 1] == 0xCD);
+
+    // The frame the HAL received must be the segment itself, header + payload contiguous
+    CHECK("ZC: HAL frame equals segment header + payload", memcmp(gTxFrame, frame, gTxLen) == 0);
+    CHECK("ZC: payload NOT copied, still in place", memcmp(seg.msg_buffer, payload, sizeof(payload)) == 0);
+
+    const tEthHdr *eth = (const tEthHdr *)frame;
+    const tIp4Hdr *ip = (const tIp4Hdr *)(frame + ETH_HDR_LEN);
+    const tUdpHdr *udp = (const tUdpHdr *)(frame + ETH_HDR_LEN + IP4_HDR_LEN);
+    CHECK("ZC: destination MAC is the peer", memcmp(eth->dst, PEER_MAC, 6) == 0);
+    CHECK("ZC: ethertype IPv4", BE16(eth->ethertype) == ETHERTYPE_IPV4);
+    CHECK("ZC: IPv4 header checksum valid", checksum16((const uint8_t *)ip, IP4_HDR_LEN, 0) == 0);
+    CHECK("ZC: IPv4 header is 4 byte aligned", (((uintptr_t)ip) % 4) == 0);
+    CHECK("ZC: total length field", BE16(ip->total_length) == IP4_HDR_LEN + UDP_HDR_LEN + sizeof(payload));
+    CHECK("ZC: UDP ports and length", BE16(udp->src_port) == LOCAL_PORT && BE16(udp->dst_port) == PEER_PORT && BE16(udp->length) == UDP_HDR_LEN + sizeof(payload));
+
+    // A full size segment must still produce exactly one frame of the expected length
+    setupSocket();
+    memcpy(sSocketRaw.peer_mac, PEER_MAC, 6);
+    sSocketRaw.peer_mac_valid = true;
+    memset(seg.msg_buffer, 0x5A, XCPTL_MAX_SEGMENT_SIZE);
+    sent = socketSendToReserved(&sSocketRaw, seg.msg_buffer, XCPTL_MAX_SEGMENT_SIZE, PEER_IP, PEER_PORT, NULL);
+    CHECK("ZC: full segment accepted", sent == (int16_t)XCPTL_MAX_SEGMENT_SIZE);
+    CHECK("ZC: full frame is 42 + max segment", gTxLen == RAW_HDR_LEN + XCPTL_MAX_SEGMENT_SIZE);
+
+    // Same datagram built by both paths must be byte identical apart from the IPv4 identification
+    setupSocket();
+    memcpy(sSocketRaw.peer_mac, PEER_MAC, 6);
+    sSocketRaw.peer_mac_valid = true;
+    socketSendTo(&sSocketRaw, payload, sizeof(payload), PEER_IP, PEER_PORT, NULL);
+    static uint8_t copy_frame[TEST_BUF_SIZE];
+    uint16_t copy_len = gTxLen;
+    memcpy(copy_frame, gTxFrame, copy_len);
+    sSocketRaw.ip_ident = 0; // both paths start from the same identification
+    gTxCount = 0;
+    memcpy(seg.msg_buffer, payload, sizeof(payload));
+    socketSendToReserved(&sSocketRaw, seg.msg_buffer, sizeof(payload), PEER_IP, PEER_PORT, NULL);
+    CHECK("ZC: copy and zero copy produce the same length", copy_len == gTxLen);
+    // zero the identification in both before comparing
+    ((tIp4Hdr *)(copy_frame + ETH_HDR_LEN))->ident = 0;
+    ((tIp4Hdr *)(gTxFrame + ETH_HDR_LEN))->ident = 0;
+    CHECK("ZC: copy and zero copy produce identical frames", memcmp(copy_frame, gTxFrame, copy_len) == 0);
+}
+#endif // XCPTL_TX_HEADROOM > 0
+
+//-----------------------------------------------------------------------------------------------------
 
 int main(void) {
     printf("\nsocket_raw_test - raw Ethernet transport unit tests\n");
@@ -364,6 +451,12 @@ int main(void) {
     test_frames();
     printf("\n--- ARP and ICMP responders ---\n");
     test_arp_icmp();
+#if XCPTL_TX_HEADROOM > 0
+    printf("\n--- zero copy transmit ---\n");
+    test_zero_copy();
+#else
+    printf("\n--- zero copy transmit: skipped (OPTION_UDP_RAW_ZERO_COPY off) ---\n");
+#endif
     printf("\n%s (%d failures)\n\n", fails ? "FAILED" : "ALL PASSED", fails);
     return fails != 0;
 }

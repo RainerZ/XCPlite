@@ -85,4 +85,4 @@
 
 // Zero copy transmit: reserve XCPTL_TX_HEADROOM bytes in front of every transmit queue
 // segment so the Ethernet/IPv4/UDP header can be written in place (see xcptl_cfg.h).
-// #define OPTION_UDP_RAW_ZERO_COPY
+#define OPTION_UDP_RAW_ZERO_COPY

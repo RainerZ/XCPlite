@@ -91,7 +91,7 @@ Options in `src/xcplib_raw_cfg.h`:
 | `OPTION_UDP_RAW_UDP_CHECKSUM_HW` | off | leave 0, the EMAC inserts it |
 | `OPTION_UDP_RAW_VERIFY_RX_CHECKSUM` | on | verify received IPv4 header checksums |
 | `OPTION_UDP_RAW_GRATUITOUS_ARP` | off | announce our IP/MAC on bind |
-| `OPTION_UDP_RAW_ZERO_COPY` | off | reserve header space in the queue (see *Zero copy*, not implemented yet) |
+| `OPTION_UDP_RAW_ZERO_COPY` | on | reserve header space in the queue, avoid copy payload |
 
 Note on the zero UDP checksum default: `tcpdump` and Wireshark can then not validate the
 UDP framing. Switch to `_COMPUTE` temporarily while bringing up a new target.
@@ -335,26 +335,78 @@ captures the transmitted frame:
 
 ---
 
+## Zero copy transmit (`OPTION_UDP_RAW_ZERO_COPY`)
+
+Optional, default on, headroom is reserved in front of every transmit queue
+segment so `socketSendTo` writes the 42 byte Ethernet/IPv4/UDP header directly in place instead of
+copying the payload into a separate frame buffer.
+
+### The queue concept
+
+`queue.h` defines two distinct header reservations, easy to confuse:
+
+| Constant | Scope | Purpose |
+|---|---|---|
+| `QUEUE_ENTRY_USER_HEADER_SIZE` | per **message** | the 4 byte XCP transport layer header (ctr+len) that every accumulated message carries |
+| `QUEUE_SEGMENT_HEADER_SIZE` | per **segment** | reserved once, in front of the whole segment, for a consumer which prepends a header to the complete segment |
+
+Zero copy needs the second. A segment is one Ethernet frame, so its link header is needed exactly
+once, in front. Reserving it per message instead would put the space *inside* the datagram payload
+and multiply it by the number of accumulated messages — measured accumulation is ~61 messages per
+1464 byte datagram, so a 42 byte per-message reservation would need 2562 bytes of header for a
+1464 byte datagram and cut accumulation efficiency by about two thirds.
+
+`QUEUE_SEGMENT_HEADER_SIZE` is meaningful only for the segment accumulating queues
+(`queue32.c`, `queue32m.c`); `xcptl_cfg.h` enforces that with an `#error` against `OPTION_QUEUE_32`.
+
+### Implementation
+
+| File | Change |
+|---|---|
+| `xcptl_cfg.h` | `XCPTL_TX_HEADROOM` (48, or 0 when the option is off) |
+| `queue.h` | `QUEUE_SEGMENT_HEADER_SIZE` plus an alignment precondition |
+| `queue32.c`, `queue32m.c` | one `#if` guarded `segment_header[]` field and a `static_assert` on payload alignment |
+| `xcpethtl.c` | `has_headroom` parameter on the **static** `XcpEthTlSend`, set at its three call sites |
+| `socket_raw.c` | `socketSendToReserved`, sharing the header build with `socketSendTo` |
+
+That is the whole change outside the socket layer. Every use of `tXcpSegmentBuffer` is `sizeof()`,
+array indexing or member access, so no pointer arithmetic needed adjusting. With the option off,
+`XCPTL_TX_HEADROOM` is 0 and the queue entry layout is byte identical to before.
+
+48 rather than 42 keeps the segment payload 8 byte aligned. The header is written **right
+justified**, ending exactly where the payload starts, which also lands the IPv4 header on a 4 byte
+boundary. Verified layout with the option on: `offsetof(msg_buffer)` = 56, frame start at offset 14,
+IPv4 header at offset 28, entry stride 1528.
+
+The command response path keeps copying: `XcpTlSendCrm` builds its message on the stack, so there is
+no headroom in front of it. That path is not hot (one response per request, at most
+`XCPTL_MAX_CTO_SIZE` bytes), so a second in-place path there would not pay for itself.
+
+### Not done: preinitialized headers
+
+Preparing the header once per connection and only patching it per send was considered and rejected.
+The length changes on every send and is embedded in the IPv4 `total_length`, the UDP `length` **and**
+the IPv4 checksum, so even a prepared template still needs three fields written each time. The saving
+would be a 42 byte header build reduced to a 6 byte patch — roughly 2% on top of the ~97% that
+removing the payload copy already achieves. Not worth the complexity.
+
+### Where the benefit is
+
+The removed copy is up to `XCPTL_MAX_SEGMENT_SIZE` bytes per datagram. At a saturated 100 Mbit/s
+(~8000 frames/s) that is ~12 MB/s of memory bandwidth: negligible on a Linux host, a meaningful
+fraction of a core on a microcontroller. The optimization therefore pays off on the embedded targets
+the raw transport exists for, not on the Linux test vehicle — do not expect the Pi to show a
+difference.
+
+Validated on a Raspberry Pi 5 with the option enabled: `ping` still answered, 14247 DAQ samples over
+15 s with a strictly consecutive counter (no loss), full size 1464 byte datagrams, ~61 messages
+accumulated per datagram, zero errors, and a full `xcpclient` measurement (9475 events, 934 event/s).
+`test/socket_raw_test` additionally checks that the copy and zero copy paths produce **byte identical
+frames** apart from the IPv4 identification.
+
+---
+
 ## Not implemented yet
-
-### Zero copy transmit (`OPTION_UDP_RAW_ZERO_COPY`)
-
-`socketSendTo` currently copies the payload into a frame buffer to prepend the 42 byte
-header. The plan is to reserve headroom in front of every transmit queue segment so the
-header can be written in place.
-
-This is far cheaper than it looks: a `queue32`/`queue32m` entry is a whole segment
-(`tXcpSegmentBuffer.msg_buffer[XCPTL_MAX_SEGMENT_SIZE]`), so it is **one added field**
-in each of the two files and no pointer arithmetic changes — every access is
-`msg_buffer` relative, and `queuePop` already returns `&msg_buffer`. With a 48 byte
-reservation `msg_buffer` stays 8 byte aligned and the IPv4 header lands 4 byte aligned.
-
-Two things it needs: the command response path builds its message on the stack
-(`XcpTlSendCrm`) and has no headroom, so it keeps the copying `socketSendTo` while the
-DAQ segment path gets a separate in-place entry point; and the 64 bit queues are not
-changed, which the `OPTION_QUEUE_32` guard already enforces.
-
-Deferred until the transport is validated on hardware.
 
 ### Command path latency
 
