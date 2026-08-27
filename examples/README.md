@@ -28,6 +28,7 @@ Note that examples targets may need different XCPlite library build configuratio
    cmake -B build-ptp    -S . -DXCPLITE_CONFIGURATION=ptp       # for ptp4l_demo
    cmake -B build-shm    -S . -DXCPLITE_CONFIGURATION=shm       # for silkit_demo
    cmake -B build-rtos   -S . -DXCPLITE_CONFIGURATION=rtos      # for freertos_demo with the FreeRTOS POSIX simulator
+   cmake -B build-raw    -S . -DXCPLITE_CONFIGURATION=raw       # for udp_raw_demo with the raw Ethernet transport
 ```
 
 
@@ -79,6 +80,16 @@ Builds against a pre-built libxcplite and silkit library
 ### [ptp4l_demo](ptp4l_demo/README.md)
 
 Demonstrates how to use a PTP (Precision Time Protocol) synchronized clock as XCP data acquisition timestamp source.  
+
+
+### [udp_raw_demo](udp_raw_demo/README.md)
+
+**Demonstrates XCP on UDP/IPv4 without any TCP/IP stack** - the transport is implemented inside xcplib on top of a thin raw Ethernet HAL.  
+- For targets with no IP stack at all: a bare metal EMAC driver, or an RTOS Ethernet abstraction without lwIP.  
+- xcplib answers ARP and ICMP itself, so the target is pingable without a stack.  
+- Needs an explicit local IPv4 address, there is no DHCP and `0.0.0.0` (ANY) has no meaning.  
+- Linux and FreeRTOS only, the HAL backend uses `AF_PACKET` and requires `CAP_NET_RAW`. See [docs/SOCKET_RAW.md](../docs/SOCKET_RAW.md).  
+- ASAM CMP driver planned, for all operating systems.
 
 
 ### [external_example](external_example/README.md)

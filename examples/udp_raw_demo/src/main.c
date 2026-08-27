@@ -40,7 +40,7 @@
 
 // Defaults, overridden by --if and --ip
 #define DEFAULT_IFNAME "eth0"
-#define DEFAULT_IP {192, 168, 90, 2}
+#define DEFAULT_IP {192, 168, 0, 220}
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
@@ -122,7 +122,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("\nXCP on raw Ethernet udp_raw_demo C demo%u V%s\n", (uint32_t)(sizeof(void *) * 8), OPTION_PROJECT_VERSION);
+    printf("\nXCP on raw Ethernet udp_raw_demo %uBit %s\n", (uint32_t)(sizeof(void *) * 8), OPTION_PROJECT_VERSION);
     printf("  Interface : %s\n", ifname);
     printf("  Address   : %u.%u.%u.%u:%u\n\n", addr[0], addr[1], addr[2], addr[3], port);
 

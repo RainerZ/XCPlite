@@ -1301,7 +1301,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         env!("CARGO_PKG_VERSION_PATCH")
     );
 
-    info!("{:#?}", args);
+    debug!("{:#?}", args);
 
     // Protocol, IP addresses, port, baudrate
     let dest_addr: std::net::SocketAddr = parse_dest_addr(&args.dest_addr, args.port)?;
