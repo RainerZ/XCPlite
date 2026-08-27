@@ -12,7 +12,7 @@
 |   XCP on UDP/IPv4 implemented inside xcplib (src/socket_raw.c) on top of a thin
 |   raw Ethernet HAL (src/socket_raw_hal.h), for targets which have no TCP/IP stack.
 |   This configuration is the Linux development and test vehicle for that transport,
-|   and the template for embedded ports (FreeRTOS/bare metal, Vector XLAPI, ASAM CMP).
+|   and the template for embedded ports (FreeRTOS/bare metal) or Vector XLAPI, ASAM CMP.
 |
 |   Key differences in overrides from the defaults in xcplib_cfg.h:
 |     - OPTION_ENABLE_UDP_RAW instead of OPTION_ENABLE_UDP / OPTION_ENABLE_TCP
@@ -25,8 +25,6 @@
 |     Linux with CAP_NET_RAW (AF_PACKET). See docs/SOCKET_RAW.md for the test setup.
 |   Examples:
 |     udp_raw_demo
-|   Tools:
-|     xcpclient
 |   Tests:
 |     test/test_socket_raw.sh
  ----------------------------------------------------------------------------*/

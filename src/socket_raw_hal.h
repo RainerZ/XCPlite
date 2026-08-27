@@ -18,7 +18,13 @@
 |     Frames are complete Ethernet frames WITHOUT FCS: dst MAC, src MAC, EtherType,
 |     payload. Frames as short as 50 bytes are passed to eth_hal_send(); if the MAC
 |     of the port does not pad to the 60 byte Ethernet minimum, the port must do it.
-|     Maximum length is 14 + 1500 = 1514 bytes (no VLAN, no jumbo frames).
+|     The largest frame socket_raw.c will ever pass, and the max_len it offers to
+|     eth_hal_recv(), is 42 + XCPTL_MAX_SEGMENT_SIZE, which is OPTION_MTU + 10
+|     (1514 bytes with the default OPTION_MTU of 1504). Jumbo frames are therefore
+|     supported by configuring OPTION_MTU accordingly. 802.1Q VLAN tags are not.
+|     Whether the link can actually carry that frame is a RUNTIME property that only
+|     the backend knows: if it cannot, eth_hal_send() returns ETH_HAL_ERROR_SIZE.
+|     There is deliberately no compile time frame size limit, see docs/SOCKET_RAW.md.
 |
 |   Threading contract:
 |     eth_hal_send()   always called with the transmit mutex of socket_raw.c held,

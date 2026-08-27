@@ -10,9 +10,12 @@
 
 #include "platform.h"
 #include "socket_raw_hal.h"
+#include "xcptl_cfg.h" // for XCPTL_MAX_SEGMENT_SIZE, the capture buffer is sized from the configuration
+
+#define TEST_BUF_SIZE (42 + XCPTL_MAX_SEGMENT_SIZE + 64)
 
 // Captured transmit frame, see test/socket_raw_test/src/main.c
-extern uint8_t gTxFrame[2048];
+extern uint8_t gTxFrame[TEST_BUF_SIZE];
 extern uint16_t gTxLen;
 extern int gTxCount;
 

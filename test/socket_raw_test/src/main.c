@@ -28,8 +28,11 @@ static void expect16(const char *what, uint16_t got, uint16_t want) {
         fails++;
 }
 
+// Buffers are sized from the configuration, not hardcoded: OPTION_MTU may select jumbo frames
+#define TEST_BUF_SIZE (RAW_MAX_FRAME + 64)
+
 // Fake HAL capture, filled by eth_hal_send() in src/stubs.c
-uint8_t gTxFrame[2048];
+uint8_t gTxFrame[TEST_BUF_SIZE];
 uint16_t gTxLen;
 int gTxCount;
 
@@ -166,7 +169,10 @@ static void test_checksums(void) {
 
     CHECK("wire struct packing (14/20/8/28/4)", sizeof(tEthHdr) == 14 && sizeof(tIp4Hdr) == 20 && sizeof(tUdpHdr) == 8 && sizeof(tArpHdr) == 28 && sizeof(tIcmpHdr) == 4);
     CHECK("RAW_HDR_LEN is 42", RAW_HDR_LEN == 42);
-    CHECK("max frame fits standard Ethernet", RAW_MAX_FRAME <= 1514);
+    // MTU independent: the frame is the 42 byte header plus one full segment.
+    // With the default OPTION_MTU of 1504 that is 1514 bytes, but jumbo configurations are valid.
+    CHECK("max frame == 42 + max segment", RAW_MAX_FRAME == RAW_HDR_LEN + XCPTL_MAX_SEGMENT_SIZE);
+    CHECK("max frame == OPTION_MTU + 10", RAW_MAX_FRAME == OPTION_MTU + 10);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -174,7 +180,7 @@ static void test_checksums(void) {
 
 static void test_frames(void) {
 
-    uint8_t rx[2048], out[2048];
+    static uint8_t rx[TEST_BUF_SIZE], out[TEST_BUF_SIZE];
     uint8_t srcAddr[4];
     uint16_t srcPort;
     const uint8_t payload[] = {0x02, 0x00, 0x00, 0x00, 0xFF, 0x00}; // XCP CONNECT message
@@ -248,7 +254,7 @@ static void test_frames(void) {
     CHECK("TX: payload copied intact", memcmp(gTxFrame + RAW_HDR_LEN, payload, sizeof(payload)) == 0);
 
     // Round trip: our own frame, addresses swapped, must parse back to the payload
-    uint8_t rt[2048];
+    static uint8_t rt[TEST_BUF_SIZE];
     uint16_t rt_len = gTxLen;
     memcpy(rt, gTxFrame, rt_len);
     setupSocket();
@@ -273,7 +279,7 @@ static void test_frames(void) {
     memset(maxp, 0x5A, sizeof(maxp));
     sent = socketSendTo(&sSocketRaw, maxp, sizeof(maxp), PEER_IP, PEER_PORT, NULL);
     CHECK("TX: maximum segment accepted", sent == (int16_t)sizeof(maxp));
-    CHECK("TX: maximum frame is exactly 1514 bytes", gTxLen == 1514);
+    CHECK("TX: maximum frame is 42 + max segment", gTxLen == RAW_HDR_LEN + XCPTL_MAX_SEGMENT_SIZE);
 
     // No peer learned yet -> must not send
     setupSocket();
@@ -285,7 +291,7 @@ static void test_frames(void) {
 
 static void test_arp_icmp(void) {
 
-    uint8_t f[2048], out[2048];
+    static uint8_t f[TEST_BUF_SIZE], out[TEST_BUF_SIZE];
     uint8_t srcAddr[4];
     uint16_t srcPort;
     uint16_t n;
@@ -341,7 +347,9 @@ static void test_arp_icmp(void) {
     CHECK("ICMP: large echo checksum valid", checksum16(ic, (uint16_t)(BE16(ii->total_length) - IP4_HDR_LEN), 0) == 0);
 
     setupSocket();
-    n = buildIcmpEcho(f, 1600); // would not fit into one frame
+    // handleIcmp drops the request when it would not fit the reply buffer, i.e. when the echo
+    // data exceeds one full segment. Derive it so this holds for a jumbo OPTION_MTU as well.
+    n = buildIcmpEcho(f, (uint16_t)(XCPTL_MAX_SEGMENT_SIZE + 1));
     handleFrame(f, n, out, sizeof(out), srcAddr, &srcPort);
     CHECK("ICMP: oversized echo dropped, no reply", gTxCount == 0);
 }

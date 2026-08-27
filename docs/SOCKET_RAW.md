@@ -311,7 +311,8 @@ much more here, and the receive filter to be exercised by real background traffi
 2. `arping -I veth0 <target>` — isolates ARP from IP
 3. `tcpdump -i veth0 -nn -e -vv` alongside everything: it prints `bad ip cksum` explicitly.
    Build with `OPTION_UDP_RAW_UDP_CHECKSUM_COMPUTE` for this step so the UDP checksum can
-   be validated too. Confirm full segments are exactly 1514 bytes
+   be validated too. Confirm full segments are `OPTION_MTU + 10` bytes on the wire
+   (1514 with the default `OPTION_MTU` of 1504)
 4. `xcpclient` CONNECT / GET_STATUS — source address and port extraction, peer MAC
    learning, and the `socketSendTo` return value contract
 5. UPLOAD / DOWNLOAD — larger command responses
