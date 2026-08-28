@@ -154,8 +154,10 @@ static struct socket_raw sSocketRaw;
 // Backend specific interface selector, see socketRawSetInterface()
 static const char *sInterfaceConfig = NULL;
 
-// Receive buffer, with the NET_IP_ALIGN lead pad so the IPv4 header lands 4 byte aligned.
-// The packed structs make access alignment safe in any case, this is only a codegen win.
+// Receive buffer with the NET_IP_ALIGN lead pad: if the compiler places sRxBuf on a 4 byte
+// boundary, which it does in practice for a static array, the IPv4 header lands 4 byte aligned too.
+// This is deliberately not enforced with an alignment attribute: it is only a codegen hint, and the
+// packed wire structs make every access alignment safe regardless.
 static uint8_t sRxBuf[2 + RAW_MAX_FRAME + 4];
 #define RX_FRAME (&sRxBuf[2])
 
