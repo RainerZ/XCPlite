@@ -153,25 +153,30 @@ either: there is no IP route to the ECU, it lives behind the tunnel. Send an ICM
 bytes to every captured frame, and the outer IPv4/UDP headers add 28 more, so on a 1500-byte
 path the largest inner frame is **1438 bytes**.
 
-xcplite's `raw` configuration uses `OPTION_MTU 1504`, which produces frames of up to 1514
-bytes. Small transfers are unaffected, but a saturated DAQ stream will hit the limit and
-report `SOCKET_ERROR_MSGSIZE`. The demo reports the budget and the remedy at startup:
+This is why xcplite's `raw` configuration sets **`OPTION_MTU 1424`** rather than the 1504 a
+standard Ethernet link would allow:
+
+| | |
+|---|---|
+| `OPTION_MTU` | 1424 |
+| `XCPTL_MAX_SEGMENT_SIZE` | 1392 (`OPTION_MTU - 32`, `%8`) |
+| Largest inner Ethernet frame | 1434 (`42 + segment`) |
+| As a CMP message | 1468 (`+ 34` envelope) |
+| As an IP packet | 1496 (`+ 28`) — fits 1500 with 4 bytes to spare |
+
+At 1504 a full segment is already 1514 bytes and fills a 1500-byte path on its own, leaving
+the envelope nothing: small transfers still work, but a saturated DAQ stream hits the limit
+and reports `SOCKET_ERROR_MSGSIZE`. The demo checks this at startup and warns, naming the
+budget and the remedy, so a mismatched configuration is visible before it bites:
 
 ```
   CMP frame budget: 1438 bytes per inner frame (1472 byte CMP message - 34 byte envelope)
-WARNING: xcplib can produce frames of up to 1514 bytes, but only 1438 fit into one
-         un-fragmented CMP message on this path. ...
 ```
 
-Two ways out:
+If you raise `OPTION_MTU` again, either lower the envelope's share with a jumbo-capable path
+(`--mtu 9000`, allowed explicitly by §6.4) or expect that warning back.
 
-- **Raise the outer MTU.** `--mtu 9000` on a jumbo-capable path; §6.4 allows this explicitly.
-- **Reduce `OPTION_MTU`.** `OPTION_MTU 1424` in `src/xcplib_raw_cfg.h` fits a 1500-byte path
-  exactly (segment 1392, inner frame 1434, IP packet 1496). This is a **library build-config
-  decision**, not a code change, and it means the demo no longer consumes a stock `raw` install
-  — so it is left open rather than made silently.
-
-Either way, an oversized frame is refused with `ETH_HAL_ERROR_SIZE` rather than fragmented.
+Either way an oversized frame is refused with `ETH_HAL_ERROR_SIZE` rather than fragmented.
 That is exactly what the HAL contract designed that error for: whether a frame fits is a
 runtime property only the backend knows.
 

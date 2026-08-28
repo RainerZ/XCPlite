@@ -18,7 +18,8 @@
 |     - OPTION_ENABLE_UDP_RAW instead of OPTION_ENABLE_UDP / OPTION_ENABLE_TCP
 |     - OPTION_QUEUE_32 is MANDATORY (the 64 bit queues use the vectored send path
 |       socketSendToV, which the raw transport does not implement)
-|     - Standard Ethernet MTU, no jumbo frames (the raw transport does not fragment IPv4)
+|     - Standard Ethernet MTU less encapsulation headroom, no jumbo frames
+|       (the raw transport does not fragment IPv4), see OPTION_MTU below
 |   Addressing scheme:
 |     Default (segment relative addressing on address extension 0)
 |   Platform requirements:
@@ -42,10 +43,17 @@
 // its implementation against libxcplite. See docs/SOCKET_RAW.md.
 // #define OPTION_UDP_RAW_HAL_EXTERNAL
 
-// Standard Ethernet MTU: 1504 - 32 = 1472 bytes max UDP payload (%8 aligned)
-// The raw transport does not fragment IPv4, so one segment must fit into one frame
+// 1424 - 32 = 1392 bytes max UDP payload (%8 aligned), so the largest frame on the wire is
+// 42 + 1392 = 1434 bytes. The raw transport does not fragment IPv4, so one segment must fit
+// into one frame and an oversized frame can only be refused, never split.
+//
+// This is deliberately below the 1504 a standard Ethernet link would allow. The 70 bytes of
+// headroom are for a HAL backend which ENCAPSULATES the frame before putting it on the wire:
+// an out of tree backend (OPTION_UDP_RAW_HAL_EXTERNAL) may add a header of its own, and with
+// 1504 a full segment would already fill a 1500 byte path, leaving it nothing. Raise this to
+// 1504 to use the full standard Ethernet MTU when the backend adds nothing.
 #undef OPTION_MTU
-#define OPTION_MTU 1504
+#define OPTION_MTU 1424
 
 //-------------------------------------------------------------------------------
 // Transmit queue

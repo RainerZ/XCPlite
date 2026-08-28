@@ -249,7 +249,10 @@ for path in "/asam-cmp/version-info" \
     body=$(curl -s -m 5 -w '\n%{http_code}' "http://$TARGET_HOST:$REST_PORT$path")
     code=$(echo "$body" | tail -1)
     json=$(echo "$body" | sed '$d')
-    if [ "$code" != "200" ]; then
+    if [ "$code" = "000" ]; then
+        step_failed "GET $path: could not connect to $TARGET_HOST:$REST_PORT at all"
+        continue
+    elif [ "$code" != "200" ]; then
         step_failed "GET $path returned HTTP $code"
         continue
     fi
@@ -393,7 +396,16 @@ for off in range(0, len(message), 24):
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.settimeout(5.0)
-sock.sendto(message, target)
+try:
+    sock.sendto(message, target)
+except OSError as exc:
+    # EHOSTUNREACH/ENETUNREACH here mean the datagram never left this machine: the route
+    # lookup or the ARP for the target failed. That is a plain connectivity problem, not a
+    # CMP one, so say so rather than letting it surface as a traceback.
+    print("  -> could not send to %s:%u: %s" % (target[0], target[1], exc))
+    print("     The datagram never left this machine. Check that the target is reachable")
+    print("     (ping %s) and that nothing filters UDP to port %u." % (target[0], target[1]))
+    sys.exit(1)
 print("  -> sent to %s:%u from UDP port %u" % (target[0], target[1], sock.getsockname()[1]))
 
 # --- the response, a Captured Data Message (7.2.1) --------------------------------
@@ -401,6 +413,12 @@ try:
     response, sender = sock.recvfrom(65535)
 except socket.timeout:
     print("  <- TIMEOUT: no CMP message came back within 5s")
+    sys.exit(1)
+except OSError as exc:
+    # A cached ICMP port unreachable arrives here: the target answered, but nothing is
+    # listening on the CMP port.
+    print("  <- no response: %s" % exc)
+    print("     The target is reachable but did not accept the message on UDP port %u." % target[1])
     sys.exit(1)
 
 if len(response) < 8 + 16:

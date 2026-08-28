@@ -54,7 +54,7 @@ interface and its MTU, since only the backend knows that. Observed on a link for
 ```
 ERROR: eth_hal_send: frame of 1242 bytes is too large for interface veth1 (MTU 1000, so at most 1014 bytes per frame)
 ERROR: socketSendTo: segment of 1200 bytes does not fit into one Ethernet frame on this link.
-  Reduce OPTION_MTU (currently 1504, giving XCPTL_MAX_SEGMENT_SIZE=1472), see the interface MTU reported above.
+  Reduce OPTION_MTU (currently 1424, giving XCPTL_MAX_SEGMENT_SIZE=1392), see the interface MTU reported above.
 ```
 
 The transport also asserts a **little endian host** (`src/socket_raw.c`) and the
@@ -344,7 +344,7 @@ much more here, and the receive filter to be exercised by real background traffi
 3. `tcpdump -i veth0 -nn -e -vv` alongside everything: it prints `bad ip cksum` explicitly.
    Build with `OPTION_UDP_RAW_UDP_CHECKSUM_COMPUTE` for this step so the UDP checksum can
    be validated too. Confirm full segments are `OPTION_MTU + 10` bytes on the wire
-   (1514 with the default `OPTION_MTU` of 1504)
+   (1434 with the `OPTION_MTU` of 1424 this configuration uses)
 4. `xcpclient` CONNECT / GET_STATUS — source address and port extraction, peer MAC
    learning, and the `socketSendTo` return value contract
 5. UPLOAD / DOWNLOAD — larger command responses
