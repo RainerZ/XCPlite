@@ -36,6 +36,12 @@
 #undef OPTION_ENABLE_UDP
 #define OPTION_ENABLE_UDP_RAW
 
+// This configuration uses the built in Linux AF_PACKET backend (src/socket_raw_hal_linux.c).
+// A project which supplies its own Ethernet HAL out of tree - for example an ASAM CMP backend -
+// defines OPTION_UDP_RAW_HAL_EXTERNAL in ITS OWN configuration override header instead, and links
+// its implementation against libxcplite. See docs/SOCKET_RAW.md.
+// #define OPTION_UDP_RAW_HAL_EXTERNAL
+
 // Standard Ethernet MTU: 1504 - 32 = 1472 bytes max UDP payload (%8 aligned)
 // The raw transport does not fragment IPv4, so one segment must fit into one frame
 #undef OPTION_MTU
@@ -51,8 +57,14 @@
 #undef OPTION_QUEUE_64_FIX_SIZE
 #define OPTION_QUEUE_32
 
+// Zero copy transmit: reserve XCPTL_TX_HEADROOM bytes in front of every transmit queue
+// segment so the Ethernet/IPv4/UDP header can be written in place (see xcptl_cfg.h).
+#define OPTION_UDP_RAW_ZERO_COPY
+
 //-------------------------------------------------------------------------------
 // Raw Ethernet transport parameters
+// Note: apart from OPTION_UDP_RAW_IFNAME these configure the shared UDP/IPv4/ARP/ICMP layer in
+// socket_raw.c, not the Ethernet backend, so they apply whichever backend is selected.
 
 // Default network interface, used when the application does not select one.
 // The udp_raw_demo overrides this with its --if command line option.
@@ -82,7 +94,3 @@
 // Send a gratuitous ARP announcement on bind, to prime switch MAC tables and the
 // ARP cache of the XCP client. Not required: ARP Requests for our IP are always answered.
 // #define OPTION_UDP_RAW_GRATUITOUS_ARP
-
-// Zero copy transmit: reserve XCPTL_TX_HEADROOM bytes in front of every transmit queue
-// segment so the Ethernet/IPv4/UDP header can be written in place (see xcptl_cfg.h).
-#define OPTION_UDP_RAW_ZERO_COPY

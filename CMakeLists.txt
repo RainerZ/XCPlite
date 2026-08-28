@@ -522,6 +522,9 @@ install(DIRECTORY inc/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PA
 install(FILES src/xcplib_cfg.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES src/platform.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES src/sockets.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+# Raw Ethernet HAL interface, needed by applications which provide their own backend
+# (OPTION_UDP_RAW_HAL_EXTERNAL), e.g. an ASAM CMP implementation
+install(FILES src/socket_raw_hal.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # Install the active configuration override header (if not default)
 # This documents which configuration was compiled into the installed library.

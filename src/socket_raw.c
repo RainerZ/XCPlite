@@ -430,8 +430,11 @@ static int16_t handleFrame(const uint8_t *frame, uint16_t len, uint8_t *buffer, 
         return 0;
     }
 
-    // Our unicast MAC or broadcast only. On a raw socket this is what filters out
-    // the unicast traffic of every other host on the link.
+    // Our unicast MAC or broadcast only.
+    // Normally redundant: the socket is not put into promiscuous mode, so the NIC hardware filter
+    // already drops the unicast traffic of other hosts. It becomes load bearing as soon as anything
+    // else enables promiscuous mode on the interface - running tcpdump on it while debugging is
+    // enough - because then foreign unicast frames do arrive and must not enter the XCP path.
     if (!isOurMac(eth->dst) && !isBroadcastMac(eth->dst))
         return 0;
 

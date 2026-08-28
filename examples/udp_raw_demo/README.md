@@ -205,10 +205,14 @@ Two notes:
 
 ## Porting to a target without an IP stack
 
-Implement the five functions of [src/socket_raw_hal.h](../../src/socket_raw_hal.h) for your EMAC —
+Implement the functions of [src/socket_raw_hal.h](../../src/socket_raw_hal.h) for your EMAC —
 open/close, get MAC, send and receive one complete Ethernet frame, plus an optional wakeup.
 [src/socket_raw_hal_linux.c](../../src/socket_raw_hal_linux.c) is the reference backend; everything
 above it (UDP/IPv4, ARP, ICMP, the receive filter) is shared and needs no porting.
+
+A backend can also live outside this repository: define `OPTION_UDP_RAW_HAL_EXTERNAL` and xcplib
+selects none, leaving the `eth_hal_*` symbols for your application to link. See
+[docs/SOCKET_RAW.md](../../docs/SOCKET_RAW.md).
 
 ---
 

@@ -254,6 +254,38 @@ portable fallback) stops our own transmitted frames from coming straight back in
 receive path; and a blocked receive is unblocked with an `eventfd` and `poll()` rather
 than `SO_RCVTIMEO`, so shutdown is immediate and an infinite timeout stays interruptible.
 
+### Providing a backend out of tree (`OPTION_UDP_RAW_HAL_EXTERNAL`)
+
+A backend does not have to live in this repository. Define `OPTION_UDP_RAW_HAL_EXTERNAL` in the
+configuration override header and xcplib selects **no** backend: the `eth_hal_*` symbols stay
+undefined in `libxcplite`, and the application links its own implementation against it. This is the
+route for backends which do not belong in the library — ASAM CMP for testing XCP tools through
+capture modules, or a vendor specific interface.
+
+Three things make it work:
+
+- `socket_raw_hal.h` is installed with the library, so the out of tree backend can implement the
+  interface without a source checkout
+- `socket_raw_hal_linux.c` is excluded when the option is set, so the built in AF_PACKET backend
+  does not collide with the supplied one
+- `libxcplite` is a **static** library, so the undefined `eth_hal_*` symbols resolve at application
+  link time with no indirection in the transmit path
+
+The option also lifts the "Linux only" restriction: with an external backend the raw transport
+builds on any platform, since the `#error` only fires when no backend has been selected.
+
+See `examples/external_example/` for the `find_package(xcplite)` pattern to build against an
+installed library.
+
+```c
+// in your configuration override header
+#undef  OPTION_ENABLE_TCP
+#undef  OPTION_ENABLE_UDP
+#define OPTION_ENABLE_UDP_RAW
+#define OPTION_UDP_RAW_HAL_EXTERNAL   // we supply socket_raw_hal_cmp.c ourselves
+#define OPTION_QUEUE_32
+```
+
 ### ASAM CMP
 
 CMP is a **HAL backend, fully hidden**. It exists to test XCP tools which communicate

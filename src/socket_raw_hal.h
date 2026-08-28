@@ -47,10 +47,19 @@
 #ifdef OPTION_ENABLE_UDP_RAW
 
 // Select the HAL backend
-#if defined(_LINUX)
+//
+// OPTION_UDP_RAW_HAL_EXTERNAL lets an application provide its own backend out of tree: xcplib then
+// selects none, and the eth_hal_* symbols stay undefined in libxcplite until the application links
+// its own implementation against it. Use this for backends which do not belong in the library, for
+// example ASAM CMP for testing XCP tools through capture modules, or a vendor specific interface.
+// The application implements the functions declared below, compiles its own source file, and
+// defines OPTION_UDP_RAW_HAL_EXTERNAL in its configuration override header.
+#if defined(OPTION_UDP_RAW_HAL_EXTERNAL)
+// The application provides the backend, nothing is selected here
+#elif defined(_LINUX)
 // socket_raw_hal_linux.c
 #else
-#error "OPTION_ENABLE_UDP_RAW has a HAL backend for Linux (AF_PACKET) only - see docs/SOCKET_RAW.md"
+#error "OPTION_ENABLE_UDP_RAW has a HAL backend for Linux (AF_PACKET) only, or define OPTION_UDP_RAW_HAL_EXTERNAL to supply your own - see docs/SOCKET_RAW.md"
 #endif
 
 // Error returns of eth_hal_send() / eth_hal_recv()

@@ -20,7 +20,8 @@
 
 #include "platform.h" // for the platform defines (_LINUX) and OPTION_xxx via xcplib_cfg.h
 
-#if defined(OPTION_ENABLE_UDP_RAW) && defined(_LINUX)
+// Not compiled when the application supplies its own backend, see OPTION_UDP_RAW_HAL_EXTERNAL
+#if defined(OPTION_ENABLE_UDP_RAW) && defined(_LINUX) && !defined(OPTION_UDP_RAW_HAL_EXTERNAL)
 
 #include <arpa/inet.h>       // for htons
 #include <errno.h>           // for errno
@@ -261,4 +262,4 @@ void eth_hal_wakeup(tEthHalCtx *ctx) {
     (void)n;
 }
 
-#endif // OPTION_ENABLE_UDP_RAW && _LINUX
+#endif // OPTION_ENABLE_UDP_RAW && _LINUX && !OPTION_UDP_RAW_HAL_EXTERNAL
