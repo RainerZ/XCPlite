@@ -92,6 +92,15 @@ Demonstrates how to use a PTP (Precision Time Protocol) synchronized clock as XC
 - ASAM CMP driver planned, for all operating systems.
 
 
+### [cmp_demo](cmp_demo/README.md)
+
+**Demonstrates supplying your own Ethernet HAL backend from outside the library** - a standalone project consuming an installed xcplite, like external_example.  
+- Prepares XCP over ASAM CMP, for testing XCP tools which communicate through capture modules.  
+- Implements the six `eth_hal_*` functions of `src/socket_raw_hal.h` in the application; the built in AF_PACKET backend is then never pulled from the static library.  
+- The CMP envelope itself is not implemented yet and is a pass through, so the HAL plumbing is testable on its own.  
+- Linux only, needs `CAP_NET_RAW`. Not built from the root CMakeLists.  
+
+
 ### [external_example](external_example/README.md)
 
 **Demonstrates using libxcplite as a pre-built external library** - independent from the main build system.  
