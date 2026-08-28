@@ -90,7 +90,8 @@ Two caveats worth knowing:
 | `src/main.c` | Demo application — command line, server setup, calibration segment, event |
 | `test/cmp_codec_test.c` | Codec unit test against the specification's own sample files |
 | `test/fake_sink.py` | A minimal Data Sink — plays the tool's half |
-| `test/test.sh` | End-to-end test |
+| `test.sh` | On-target test: syncs to the target, builds, runs and checks it |
+| `test/test_local.sh` | The same end-to-end check, on this machine over loopback |
 
 ---
 
@@ -210,13 +211,42 @@ discovery (§12.2.2) and XCP-based discovery (§12.1) are **not** implemented �
 
 ## Testing
 
+Two scripts, same checks, different place to run them:
+
 ```bash
-./test/test.sh
+./test.sh              # on the target: sync, build, run and check over the network
+./test/test_local.sh   # on this machine, over loopback
 ```
 
-Runs the codec unit test, then starts `cmp_demo` and drives it with `fake_sink.py`. No `veth`
-pair and no network namespace are needed, unlike the plain raw Ethernet transport: the outer
-transport is an ordinary UDP socket and loopback is enough. Nothing needs root.
+Neither needs `veth`, a network namespace or root, unlike the plain raw Ethernet transport:
+the outer transport is an ordinary UDP socket, and the emulated ECU address only ever appears
+inside the CMP payload.
+
+**`test.sh`** is the on-target one, modelled on
+[udp_raw_demo/test.sh](https://github.com/RainerZ/XCPlite/blob/master/examples/udp_raw_demo/test.sh). Set `TARGET_USER`
+and `TARGET_HOST` at the top of it, then it:
+
+1. rsyncs the library sources and this example to the target;
+2. builds and installs the `raw` configuration of xcplite there, then builds `cmp_demo`
+   against that install — the two-stage build a standalone project needs;
+3. checks that the built-in AF_PACKET backend was **not** linked into the binary, by looking
+   for a string only it contains. Checking the archive would prove nothing: on Linux
+   `socket_raw_hal_linux.o` is in `libxcplite.a` either way, and it is the static-library link
+   rule that keeps it out of the executable;
+4. runs the codec unit test on the target, which is also the check that the big-endian
+   packing is right on aarch64;
+5. starts the capture module and queries all four REST endpoints, asserting that the
+   `Transmitter` object advertises transmission;
+6. reports the CMP endpoint status and confirms the UDP port is open;
+7. sends a hardcoded XCP CONNECT tunnelled through CMP and decodes the response, printing
+   the exact bytes of the `TX_DATA_MSG` it puts on the wire.
+
+The CONNECT frame is assembled from the parameters at the top of the script rather than
+pasted in as a fixed hex blob, so that changing e.g. `ECU_IP` cannot leave a stale IPv4
+header checksum behind. The XCP command itself — `FF 00` — is the hardcoded part.
+
+**`test/test_local.sh`** runs the codec test and then drives `cmp_demo` with `fake_sink.py`
+over loopback, for a full CONNECT / GET_STATUS / DISCONNECT exchange.
 
 **`test/cmp_codec_test.c`** is the strongest check. Its golden vectors are lifted byte for byte
 from the sample PCAPNG files shipped with the specification, so it pins the wire format against
@@ -255,9 +285,11 @@ stops at `0x03`, so it predates CMP 1.1 and does not know `TX_DATA_MSG`.
 | xcplite | https://github.com/RainerZ/XCPlite, `raw` configuration |
 | Library version | 2.1.2 (as reported by `find_package`) |
 | Specification | ASAM CMP Protocol Layer Specification V1.1.0, 2026-01-31 |
-| Host | macOS 15 / arm64 / Apple clang, library built with `OPTION_UDP_RAW_HAL_EXTERNAL` |
-| Checked | `nm` confirms all six `eth_hal_*` are undefined in `libxcplite.a`; codec test 74/74 against the specification's sample files; XCP CONNECT, GET_STATUS and DISCONNECT tunnelled end to end through CMP; REST endpoints answered; emitted messages re-decoded from the pcap |
-| **Not** yet checked | Linux and the Raspberry Pi 5 target; Wireshark dissection (no Wireshark on the verification host); DAQ under load, which is where the MTU limit bites; CANape |
+| Target | Raspberry Pi 5 Model B Rev 1.1 (`pi6`), Debian, aarch64, GCC, `RelWithDebInfo` — via `./test.sh` |
+| Host | macOS 15 / arm64 / Apple clang, library built with `OPTION_UDP_RAW_HAL_EXTERNAL` — via `./test/test_local.sh` |
+| Checked on both | codec test 74/74 against the specification's sample files; XCP CONNECT tunnelled end to end through CMP; all four REST endpoints answered, with the `Transmitter` object advertising transmission; the built-in AF_PACKET backend confirmed absent from the linked binary |
+| Checked on the host | GET_STATUS and DISCONNECT as well; emitted messages re-decoded from the pcap |
+| **Not** yet checked | Wireshark dissection (no Wireshark on either machine); DAQ under load, which is where the MTU limit bites; CANape |
 
 ---
 

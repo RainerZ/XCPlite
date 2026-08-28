@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# test.sh - end to end test of the cmp_demo capture module
+# test_local.sh - end to end test of the cmp_demo capture module, on this machine
 #
 # Runs the envelope codec unit test, then starts cmp_demo and drives it with fake_sink.py,
 # which plays the part of the XCP tool: it queries the REST interface and tunnels XCP
@@ -11,7 +11,9 @@
 # emulated ECU address only ever appears inside the CMP payload, and loopback is enough.
 # Nothing here needs root.
 #
-# Usage:  ./test/test.sh [build_dir]        (default: build)
+# For the on-target (Raspberry Pi) variant see ../test.sh in the example root.
+#
+# Usage:  ./test/test_local.sh [build_dir]        (default: build)
 
 set -u
 
