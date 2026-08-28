@@ -1,4 +1,4 @@
-// cmp_demo - XCP over an ASAM CMP capture module, using an out of tree Ethernet HAL
+// cmp_demo - XCP tunnelled through an emulated ASAM CMP capture module
 //
 // Demonstrates supplying your own backend for the xcplib raw Ethernet transport
 // (OPTION_ENABLE_UDP_RAW) from OUTSIDE the library. xcplib is used as installed and
@@ -8,21 +8,25 @@
 // CMP serves testing of XCP tools which communicate through capture modules. It is not an
 // ECU developer feature, so nothing about it lives in libxcplite.
 //
-// STATUS: the CMP envelope in cmp.c is not implemented yet and is currently a pass
-// through, so this behaves exactly like the plain raw Ethernet transport. That makes the
-// out of tree HAL plumbing testable on its own. See README.md.
+// The demo emulates a Capture Module with one interface, behind which sits one XCP ECU:
+//
+//   ECU  -> tool   frames xcplib builds leave as CMP Captured Data Messages (0x01)
+//   tool -> ECU    CMP Transmit Data Messages (0x04, new in CMP 1.1) are unwrapped and
+//                  their inner frame handed to xcplib, which answers the XCP command
+//
+// The tool therefore never talks IP to the ECU directly - everything is tunnelled inside
+// CMP over UDP. See README.md.
 //
 // Build and run (xcplite must be installed with the raw configuration first, see README):
 //   cmake -B build -S . -Dxcplite_DIR=<install>/lib/cmake/xcplite
 //   cmake --build build
-//   sudo setcap cap_net_raw+ep ./build/cmp_demo
-//   ./build/cmp_demo --if eth0 --ip 192.168.0.220
+//   ./build/cmp_demo --sink 192.168.0.10:55555
 
 #include <assert.h>  // for assert
 #include <signal.h>  // for signal handling
 #include <stdbool.h> // for bool
 #include <stdint.h>  // for uintxx_t
-#include <stdio.h>   // for printf
+#include <stdio.h>   // for printf, sscanf
 #include <stdlib.h>  // for strtoul
 #include <string.h>  // for strcmp
 
@@ -30,9 +34,8 @@
 #include <a2l.h>    // for A2l generation
 #include <xcplib.h> // for application programming interface
 
-#include "sockets.h" // for socketRawSetInterface
-
-#include "cmp.h" // for the CMP envelope configuration
+#include "cmp_backend.h" // for the CMP backend configuration
+#include "cmp_rest.h"    // for the REST interface of the emulated capture module
 
 //-----------------------------------------------------------------------------------------------------
 // XCP params
@@ -46,9 +49,21 @@
 #define OPTION_XCP_MODE (XCP_MODE_PERSISTENCE | XCP_MODE_LOCAL)
 #define OPTION_A2L_MODE (A2L_MODE_WRITE_ONCE | A2L_MODE_FINALIZE_ON_CONNECT | A2L_MODE_AUTO_GROUPS)
 
-// Defaults, overridden by --if and --ip
-#define DEFAULT_IFNAME "eth0"
-#define DEFAULT_IP {192, 168, 0, 220}
+// Address of the emulated ECU. It only ever appears INSIDE the CMP payload, so unlike the
+// plain raw transport it does not have to be free on any real network - but it must not
+// collide with the address the Data Sink uses to reach us.
+#define DEFAULT_ECU_IP {192, 168, 0, 220}
+
+// UDP port we listen on for CMP Transmit Data and Control Messages. 55555 is the port the
+// specification uses in its DNS-SD examples (12.2.2.2).
+#define DEFAULT_CMP_PORT 55555
+
+#define DEFAULT_REST_PORT 8080 // 12.3 says "should" be 80, which would need privileges
+#define DEFAULT_OUTER_MTU 1500
+
+#define DEFAULT_DEVICE_ID 1
+#define DEFAULT_STREAM_ID 0
+#define DEFAULT_INTERFACE_ID 1
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
@@ -73,17 +88,30 @@ double demo_signal = 0.0;
 // Command line
 
 static void usage(const char *argv0) {
-    printf("\nUsage: %s [--if <interface>] [--ip <a.b.c.d>] [--port <port>]\n"
+    printf("\nUsage: %s [options]\n"
            "\n"
-           "  --if    Ethernet interface for the raw transport (default: %s)\n"
-           "  --ip    local IPv4 address of this target (default: 192.168.90.2)\n"
-           "          There is no IP stack and no DHCP, so a concrete address is required.\n"
-           "          It must NOT be an address owned by the kernel of this machine.\n"
-           "  --port  XCP UDP port (default: %u)\n"
+           "Data Sink (the XCP tool) and the CMP transport:\n"
+           "  --sink <a.b.c.d:port>  Data Sink address for Captured Data Messages.\n"
+           "                         Default: learned from the first CMP message received.\n"
+           "  --listen <port>        UDP port to listen on for CMP messages (default: %u)\n"
+           "  --mtu <bytes>          MTU of the path to the Data Sink (default: %u, max %u).\n"
+           "                         CMP messages must not be IP fragmented, so this bounds\n"
+           "                         the largest ECU frame that can be carried.\n"
+           "  --rest-port <port>     REST interface port (default: %u, 0 disables it)\n"
            "\n"
-           "Needs CAP_NET_RAW:  sudo setcap cap_net_raw+ep %s\n"
-           "See docs/SOCKET_RAW.md for the test network setup.\n\n",
-           argv0, DEFAULT_IFNAME, (unsigned)OPTION_SERVER_PORT, argv0);
+           "Capture module identity:\n"
+           "  --device-id <n>        CMP DeviceId (default: %u)\n"
+           "  --stream-id <n>        CMP StreamId (default: %u)\n"
+           "  --interface-id <n>     CMP InterfaceId of the emulated ECU link (default: %u)\n"
+           "  --ecu-mac <xx:..:xx>   MAC of the emulated ECU (default: derived from DeviceId)\n"
+           "\n"
+           "Emulated ECU, seen only inside the CMP payload:\n"
+           "  --ip <a.b.c.d>         IPv4 address of the ECU (default: 192.168.0.220)\n"
+           "  --port <port>          XCP UDP port of the ECU (default: %u)\n"
+           "\n"
+           "Needs no privileges: the CMP transport is an ordinary UDP socket.\n\n",
+           argv0, (unsigned)DEFAULT_CMP_PORT, (unsigned)DEFAULT_OUTER_MTU, (unsigned)CMP_MAX_OUTER_MTU, (unsigned)DEFAULT_REST_PORT, (unsigned)DEFAULT_DEVICE_ID,
+           (unsigned)DEFAULT_STREAM_ID, (unsigned)DEFAULT_INTERFACE_ID, (unsigned)OPTION_SERVER_PORT);
 }
 
 // Parse "a.b.c.d" into 4 bytes, returns false on a malformed address
@@ -99,6 +127,44 @@ static bool parseIp(const char *s, uint8_t *addr) {
     return true;
 }
 
+// Parse "a.b.c.d:port" into a dotted quad string and a port
+static bool parseEndpoint(const char *s, char *ip, size_t ip_size, uint16_t *port) {
+    unsigned v[4], p;
+    if (sscanf(s, "%u.%u.%u.%u:%u", &v[0], &v[1], &v[2], &v[3], &p) != 5)
+        return false;
+    for (int i = 0; i < 4; i++) {
+        if (v[i] > 255)
+            return false;
+    }
+    if (p == 0 || p > 65535)
+        return false;
+    snprintf(ip, ip_size, "%u.%u.%u.%u", v[0], v[1], v[2], v[3]);
+    *port = (uint16_t)p;
+    return true;
+}
+
+// Parse "xx:xx:xx:xx:xx:xx", returns false on a malformed or unusable address
+static bool parseMac(const char *s, uint8_t *mac) {
+    unsigned v[6];
+    if (sscanf(s, "%x:%x:%x:%x:%x:%x", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]) != 6)
+        return false;
+    for (int i = 0; i < 6; i++) {
+        if (v[i] > 255)
+            return false;
+        mac[i] = (uint8_t)v[i];
+    }
+    // socket_raw.c rejects both of these when it reads the MAC back from the HAL
+    if ((mac[0] & 0x01) != 0) {
+        printf("ERROR: '%s' is a multicast MAC address\n", s);
+        return false;
+    }
+    if ((mac[0] | mac[1] | mac[2] | mac[3] | mac[4] | mac[5]) == 0) {
+        printf("ERROR: the MAC address must not be all zero\n");
+        return false;
+    }
+    return true;
+}
+
 //-----------------------------------------------------------------------------------------------------
 // Demo main
 
@@ -110,13 +176,56 @@ static void sig_handler(int sig) {
 
 int main(int argc, char *argv[]) {
 
-    const char *ifname = DEFAULT_IFNAME;
-    uint8_t addr[4] = DEFAULT_IP;
+    // Line buffer stdout so the log stays readable and in order when it is redirected to a
+    // file or a pipe, which is how the test script and any CI run it.
+    setvbuf(stdout, NULL, _IOLBF, 0);
+
+    uint8_t addr[4] = DEFAULT_ECU_IP;
     uint16_t port = OPTION_SERVER_PORT;
+    uint16_t rest_port = DEFAULT_REST_PORT;
+
+    char sink_ip[16] = {0};
+    uint16_t sink_port = 0;
+
+    tCmpBackendConfig cmp = {
+        .device_id = DEFAULT_DEVICE_ID,
+        .stream_id = DEFAULT_STREAM_ID,
+        .interface_id = DEFAULT_INTERFACE_ID,
+        .local_port = DEFAULT_CMP_PORT,
+        .sink_ip = NULL,
+        .sink_port = 0,
+        .outer_mtu = DEFAULT_OUTER_MTU,
+        .ecu_mac = {0, 0, 0, 0, 0, 0},
+    };
 
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--if") && i + 1 < argc) {
-            ifname = argv[++i];
+        if (!strcmp(argv[i], "--sink") && i + 1 < argc) {
+            if (!parseEndpoint(argv[++i], sink_ip, sizeof(sink_ip), &sink_port)) {
+                printf("Invalid Data Sink endpoint '%s', expected a.b.c.d:port\n", argv[i]);
+                return 1;
+            }
+        } else if (!strcmp(argv[i], "--listen") && i + 1 < argc) {
+            cmp.local_port = (uint16_t)strtoul(argv[++i], NULL, 10);
+        } else if (!strcmp(argv[i], "--mtu") && i + 1 < argc) {
+            unsigned long mtu = strtoul(argv[++i], NULL, 10);
+            if (mtu < 576 || mtu > CMP_MAX_OUTER_MTU) {
+                printf("Invalid MTU '%s', expected 576..%u\n", argv[i], (unsigned)CMP_MAX_OUTER_MTU);
+                return 1;
+            }
+            cmp.outer_mtu = (uint16_t)mtu;
+        } else if (!strcmp(argv[i], "--rest-port") && i + 1 < argc) {
+            rest_port = (uint16_t)strtoul(argv[++i], NULL, 10);
+        } else if (!strcmp(argv[i], "--device-id") && i + 1 < argc) {
+            cmp.device_id = (uint16_t)strtoul(argv[++i], NULL, 0);
+        } else if (!strcmp(argv[i], "--stream-id") && i + 1 < argc) {
+            cmp.stream_id = (uint8_t)strtoul(argv[++i], NULL, 0);
+        } else if (!strcmp(argv[i], "--interface-id") && i + 1 < argc) {
+            cmp.interface_id = (uint32_t)strtoul(argv[++i], NULL, 0);
+        } else if (!strcmp(argv[i], "--ecu-mac") && i + 1 < argc) {
+            if (!parseMac(argv[++i], cmp.ecu_mac)) {
+                printf("Invalid MAC address '%s', expected xx:xx:xx:xx:xx:xx\n", argv[i]);
+                return 1;
+            }
         } else if (!strcmp(argv[i], "--ip") && i + 1 < argc) {
             if (!parseIp(argv[++i], addr)) {
                 printf("Invalid IPv4 address '%s'\n", argv[i]);
@@ -130,9 +239,13 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("\nXCP over ASAM CMP cmp_demo %uBit %s\n", (uint32_t)(sizeof(void *) * 8), OPTION_PROJECT_VERSION);
-    printf("  Interface : %s\n", ifname);
-    printf("  Address   : %u.%u.%u.%u:%u\n\n", addr[0], addr[1], addr[2], addr[3], port);
+    if (sink_ip[0] != 0) {
+        cmp.sink_ip = sink_ip; // not copied by the backend, and sink_ip outlives it
+        cmp.sink_port = sink_port;
+    }
+
+    printf("\nXCP over ASAM CMP - cmp_demo %uBit %s\n", (uint32_t)(sizeof(void *) * 8), OPTION_PROJECT_VERSION);
+    printf("  Emulated ECU: %u.%u.%u.%u:%u (inside the CMP payload only)\n", addr[0], addr[1], addr[2], addr[3], port);
 
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
@@ -145,23 +258,26 @@ int main(int argc, char *argv[]) {
     }
     XcpSetElfName(argv[0]);
 
-    // Configure the CMP envelope of our own HAL backend, before starting the server
-    tCmpConfig cmp_config = {.device_id = 1, .stream_id = 0};
-    cmpInit(&cmp_config);
-
-    // XCP: Select the Ethernet interface for the raw transport, before starting the server
-    // The string is passed through to eth_hal_open() of our backend, xcplib does not interpret it
-    socketRawSetInterface(ifname);
+    // Configure our own HAL backend before starting the server, which is what opens it.
+    // socketRawSetInterface() is deliberately not called: its opaque string cannot carry
+    // this much, so the backend takes a typed configuration instead.
+    cmpBackendConfigure(&cmp);
 
     // XCP: Initialize the XCP Server.
     // The address is mandatory here: the raw transport rejects 0.0.0.0 (ANY), there is no
     // IP stack which could resolve it. useTCP is false, the raw transport is UDP only.
     if (!XcpEthServerInit(addr, port, false, OPTION_QUEUE_SIZE)) {
         printf("Failed to start the XCP server.\n"
-               "  Check that the interface exists, that this binary has CAP_NET_RAW\n"
-               "  (sudo setcap cap_net_raw+ep %s) and that the address is not owned by the kernel.\n",
-               argv[0]);
+               "  Check that UDP port %u is free for the CMP transport.\n",
+               cmp.local_port);
         return 1;
+    }
+
+    // The REST interface is how a Data Sink discovers that this capture module supports
+    // transmission (7.2.2), so start it once the backend can report its status.
+    if (rest_port != 0 && !cmpRestStart(rest_port)) {
+        printf("WARNING: the REST interface is not available. A Data Sink which relies on it\n"
+               "         to detect transmission support will not send us anything.\n");
     }
 
     if (!A2lInit(addr, port, false, OPTION_A2L_MODE)) {
@@ -188,8 +304,13 @@ int main(int argc, char *argv[]) {
         A2lCreateMeasurement(counter, "Mainloop counter");
     }
 
-    printf("XCP server running. Connect with CANape or xcpclient to %u.%u.%u.%u:%u\n", addr[0], addr[1], addr[2], addr[3], port);
-    printf("Try 'ping %u.%u.%u.%u' first - it proves the Ethernet HAL, ARP and the IPv4 header build.\n\n", addr[0], addr[1], addr[2], addr[3]);
+    printf("\nCapture module running.\n");
+    printf("  The XCP tool is a CMP Data Sink: it reaches the ECU by sending Transmit Data\n");
+    printf("  Messages to our CMP port, not by addressing %u.%u.%u.%u directly.\n", addr[0], addr[1], addr[2], addr[3]);
+    if (cmp.sink_ip == NULL) {
+        printf("  No --sink given, so nothing is captured until the Data Sink speaks first.\n");
+    }
+    printf("\n");
 
     // Mainloop
     uint32_t delay_us = 1000;
@@ -214,6 +335,7 @@ int main(int argc, char *argv[]) {
     }
 
     printf("\nShutting down...\n");
+    cmpRestStop();          // Stop the REST interface
     XcpDisconnect();        // Force disconnect the XCP client
     A2lFinalize();          // Finalize A2L generation, if not done yet
     XcpEthServerShutdown(); // Stop the XCP server
