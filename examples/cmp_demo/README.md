@@ -81,7 +81,9 @@ built-in backend is never pulled in and there is no clash.
 | `src/cmp_rest.h` / `src/cmp_rest.c` | The read-only REST interface (§12.3) |
 | `src/main.c` | Demo application — command line, server setup, calibration segment, event |
 | `test/cmp_codec_test.c` | Codec unit test against the specification's own sample files |
+| `src/cmp_discovery.c` | CMP_CM_DISCOVERY responder (12.1.1), multicast |
 | `test/fake_sink.py` | A minimal Data Sink — plays the tool's half |
+| `test/discovery_probe.py` | A Data Sink looking for capture modules |
 | `test.sh` | On-target test: syncs to the target, builds, runs and checks it |
 | `test/test_local.sh` | The same end-to-end check, on this machine over loopback |
 
@@ -177,6 +179,67 @@ If you raise `OPTION_MTU` again, either lower the envelope's share with a jumbo-
 Either way an oversized frame is refused with `ETH_HAL_ERROR_SIZE` rather than fragmented.
 That is exactly what the HAL contract designed that error for: whether a frame fits is a
 runtime property only the backend knows.
+
+---
+
+## Discovery
+
+§12 requires a capture module to support **at least one** of three approaches to address
+configuration and discovery — and one of them is "static configuration without Capture Module
+Discovery", so implementing none of it conforms. This demo implements the second:
+
+| Approach | §  | Here |
+|---|---|---|
+| Static, no discovery | 12 | still works, `--no-discovery` |
+| XCP-based, IP multicast | 12.1 | **implemented**, `src/cmp_discovery.c` |
+| mDNS / DNS-SD | 12.2 | not implemented — needs a full mDNS responder or a dependency on Avahi |
+
+§12.1 is titled "XCP-based approach" and means it literally: the request is an ordinary XCP
+packet in the ordinary XCP-on-Ethernet transport header, with command code `0xF2`
+(`CC_TRANSPORT_LAYER_CMD`) and sub-command `0x10`, multicast to `239.255.0.0:5556`. XCP uses
+the same mechanism for its own discovery — see the repository
+[docs/XCP_DISCOVERY.md](../../docs/XCP_DISCOVERY.md) for what XCPlite has there today and the
+options for it. Nothing about XCP discovery is decided by this demo.
+
+```bash
+./test/discovery_probe.py
+```
+
+```
+  reply to the group (12.1.1)     : 0 answer(s)
+  reply to us directly            : 1 answer(s)
+
+  capture module cmp_demo-0001
+    description  XCPlite cmp_demo, emulated ASAM CMP capture module
+    MAC          2C:CF:67:EF:F6:78
+    reachable at 192.168.0.206   -> http://192.168.0.206:8080/asam-cmp/version-info
+    prefix /24   gateway 0.0.0.0
+    answered via unicast
+```
+
+The point of the exchange is the **HTTP port**: discovery hands the tool the REST interface it
+then configures the module through. The reply address and port come from the request, so the
+responder never needs to know anything about the network it is on.
+
+It runs on the REST thread, not a thread of its own — that thread is already in a `poll()`
+loop and already knows the HTTP port the response has to advertise.
+
+**The multicast return path is filtered more often than the request path.** In the run above
+the request reached the Pi over Wi-Fi and was answered, and the multicast answer never came
+back: an access point does not normally forward group traffic to a wireless client. §12.1 is
+explicit that "the IP destination address and UDP destination port of the response are given
+by the request", so `discovery_probe.py` makes two passes — one asking to be answered on the
+group as §12.1.1 describes, one asking to be answered directly — and reports which worked.
+The responder simply honours whatever address the request carries. On loopback both work; on
+Wi-Fi typically only the direct one does.
+
+**Two things worth knowing if you touch the socket code.** Joining with
+`imr_interface = INADDR_ANY` does *not* mean "all interfaces": it lets the stack pick one, and
+on macOS it receives nothing at all. `cmpDiscoveryStart()` therefore enumerates interfaces and
+joins the group on each — loopback included, which is what makes the same-host test work,
+since a process does not see its own multicast sent via a LAN interface. And a multicast reply
+needs `IP_MULTICAST_IF` set per response, or it leaves through the default route and the tool
+that asked never sees it.
 
 ---
 

@@ -36,6 +36,7 @@ add_executable(cmp_demo
     src/socket_raw_hal_cmp.c
     src/cmp_transport_udp.c
     src/cmp_rest.c
+    src/cmp_discovery.c
     src/cmp.c
 )
 
