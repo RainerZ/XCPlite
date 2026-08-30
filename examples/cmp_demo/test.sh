@@ -338,7 +338,22 @@ fi
 
 echo ""
 echo "========================================================================================================"
-echo "4. XCP CONNECT through the capture module"
+echo "4. Multicast discovery (12.1.1)"
+echo "========================================================================================================"
+
+# Sends CMP_CM_DISCOVERY to 239.255.0.0:5556 from THIS machine and decodes the answer, so it
+# also proves multicast crosses the link to the target. Unlike the local run, the module
+# reports a real LAN address, prefix length and MAC here.
+"$SCRIPT_DIR/test/discovery_probe.py" --expect-http "$REST_PORT"
+if [ $? -ne 0 ]; then
+    step_failed "the capture module did not answer CMP_CM_DISCOVERY"
+    echo "   If every other check passes, multicast is most likely not forwarded between this"
+    echo "   machine and the target, rather than the responder being broken."
+fi
+
+echo ""
+echo "========================================================================================================"
+echo "5. XCP CONNECT through the capture module"
 echo "========================================================================================================"
 
 # The XCP command is the hardcoded constant FF 00 (CONNECT, normal mode), wrapped in the XCP

@@ -105,12 +105,19 @@ python3 "$DEMO_DIR/test/fake_sink.py" \
     --rest "127.0.0.1:$REST_PORT" \
     --pcap "$WORK_DIR/cmp.pcap" || fail "fake_sink.py reported a problem"
 
+echo
+echo "=============================================================="
+echo "3. Multicast discovery (12.1.1)"
+echo "=============================================================="
+"$DEMO_DIR/test/discovery_probe.py" --expect-http "$REST_PORT" \
+    || fail "the capture module did not answer CMP_CM_DISCOVERY"
+
 cleanup
 DEMO_PID=""
 
 echo
 echo "=============================================================="
-echo "3. Capture module counters"
+echo "4. Capture module counters"
 echo "=============================================================="
 grep -E "^  CMP: " demo.log || fail "no summary line in the cmp_demo log"
 

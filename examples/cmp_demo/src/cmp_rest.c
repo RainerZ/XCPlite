@@ -22,6 +22,7 @@
 
 #include "cmp.h"
 #include "cmp_backend.h"
+#include "cmp_discovery.h"
 #include "cmp_rest.h"
 
 #define REST_REQUEST_MAX 2048
@@ -218,19 +219,36 @@ static void handleRequest(int fd) {
     }
 }
 
+// This thread services the whole control plane of the capture module: the HTTP listener
+// and, when it is running, the CMP discovery socket (12.1.1). Discovery gets no thread of
+// its own because it is stateless, answers one datagram at a time, and has to advertise
+// the very HTTP port this thread serves.
 static void *restThread(void *arg) {
     (void)arg;
     while (!sStop) {
-        struct pollfd pfd = {.fd = sListenFd, .events = POLLIN, .revents = 0};
-        int r = poll(&pfd, 1, REST_ACCEPT_POLL_MS);
+        struct pollfd pfd[2];
+        pfd[0] = (struct pollfd){.fd = sListenFd, .events = POLLIN, .revents = 0};
+        nfds_t nfds = 1;
+        int discovery_fd = cmpDiscoveryFd();
+        if (discovery_fd >= 0) {
+            pfd[1] = (struct pollfd){.fd = discovery_fd, .events = POLLIN, .revents = 0};
+            nfds = 2;
+        }
+        int r = poll(pfd, nfds, REST_ACCEPT_POLL_MS);
         if (r < 0) {
             if (errno == EINTR) {
                 continue;
             }
             break;
         }
-        if (r == 0 || (pfd.revents & POLLIN) == 0) {
+        if (r == 0) {
             continue; // timeout, re-check sStop
+        }
+        if (nfds == 2 && (pfd[1].revents & POLLIN) != 0) {
+            cmpDiscoveryService();
+        }
+        if ((pfd[0].revents & POLLIN) == 0) {
+            continue; // nothing to accept
         }
         int fd = accept(sListenFd, NULL, NULL);
         if (fd < 0) {

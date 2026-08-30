@@ -34,8 +34,9 @@
 #include <a2l.h>    // for A2l generation
 #include <xcplib.h> // for application programming interface
 
-#include "cmp_backend.h" // for the CMP backend configuration
-#include "cmp_rest.h"    // for the REST interface of the emulated capture module
+#include "cmp_backend.h"   // for the CMP backend configuration
+#include "cmp_discovery.h" // for the multicast discovery responder
+#include "cmp_rest.h"      // for the REST interface of the emulated capture module
 
 //-----------------------------------------------------------------------------------------------------
 // XCP params
@@ -98,6 +99,9 @@ static void usage(const char *argv0) {
            "                         CMP messages must not be IP fragmented, so this bounds\n"
            "                         the largest ECU frame that can be carried.\n"
            "  --rest-port <port>     REST interface port (default: %u, 0 disables it)\n"
+           "  --no-discovery         Do not answer CMP_CM_DISCOVERY on %s:%u (12.1.1).\n"
+           "                         Without it the module has to be configured statically,\n"
+           "                         which section 12 permits.\n"
            "\n"
            "Capture module identity:\n"
            "  --device-id <n>        CMP DeviceId (default: %u)\n"
@@ -110,7 +114,7 @@ static void usage(const char *argv0) {
            "  --port <port>          XCP UDP port of the ECU (default: %u)\n"
            "\n"
            "Needs no privileges: the CMP transport is an ordinary UDP socket.\n\n",
-           argv0, (unsigned)DEFAULT_CMP_PORT, (unsigned)DEFAULT_OUTER_MTU, (unsigned)CMP_MAX_OUTER_MTU, (unsigned)DEFAULT_REST_PORT, (unsigned)DEFAULT_DEVICE_ID,
+           argv0, (unsigned)DEFAULT_CMP_PORT, (unsigned)DEFAULT_OUTER_MTU, (unsigned)CMP_MAX_OUTER_MTU, (unsigned)DEFAULT_REST_PORT, CMP_DISCOVERY_GROUP, (unsigned)CMP_DISCOVERY_PORT, (unsigned)DEFAULT_DEVICE_ID,
            (unsigned)DEFAULT_STREAM_ID, (unsigned)DEFAULT_INTERFACE_ID, (unsigned)OPTION_SERVER_PORT);
 }
 
@@ -183,6 +187,7 @@ int main(int argc, char *argv[]) {
     uint8_t addr[4] = DEFAULT_ECU_IP;
     uint16_t port = OPTION_SERVER_PORT;
     uint16_t rest_port = DEFAULT_REST_PORT;
+    bool discovery = true;
 
     char sink_ip[16] = {0};
     uint16_t sink_port = 0;
@@ -215,6 +220,8 @@ int main(int argc, char *argv[]) {
             cmp.outer_mtu = (uint16_t)mtu;
         } else if (!strcmp(argv[i], "--rest-port") && i + 1 < argc) {
             rest_port = (uint16_t)strtoul(argv[++i], NULL, 10);
+        } else if (!strcmp(argv[i], "--no-discovery")) {
+            discovery = false;
         } else if (!strcmp(argv[i], "--device-id") && i + 1 < argc) {
             cmp.device_id = (uint16_t)strtoul(argv[++i], NULL, 0);
         } else if (!strcmp(argv[i], "--stream-id") && i + 1 < argc) {
@@ -271,6 +278,22 @@ int main(int argc, char *argv[]) {
                "  Check that UDP port %u is free for the CMP transport.\n",
                cmp.local_port);
         return 1;
+    }
+
+    // Discovery must be opened BEFORE the REST thread starts, because that thread is what
+    // polls its socket. It exists to advertise the REST port, so it is pointless without one.
+    static char serial_number[32]; // static: cmpDiscoveryStart keeps the pointer
+    snprintf(serial_number, sizeof(serial_number), "cmp_demo-%04X", cmp.device_id);
+    if (discovery && rest_port != 0) {
+        tCmpDiscoveryConfig discovery_config = {
+            .http_port = rest_port,
+            .description = "XCPlite cmp_demo, emulated ASAM CMP capture module",
+            .serial = serial_number,
+        };
+        if (!cmpDiscoveryStart(&discovery_config)) {
+            printf("WARNING: discovery is not available, the capture module has to be configured\n"
+                   "         statically. Section 12 permits exactly that.\n");
+        }
     }
 
     // The REST interface is how a Data Sink discovers that this capture module supports
@@ -337,7 +360,8 @@ int main(int argc, char *argv[]) {
     }
 
     printf("\nShutting down...\n");
-    cmpRestStop();          // Stop the REST interface
+    cmpRestStop();          // Stop the REST interface, joins the thread that polls discovery
+    cmpDiscoveryStop();     // Safe only once that thread is gone
     XcpDisconnect();        // Force disconnect the XCP client
     A2lFinalize();          // Finalize A2L generation, if not done yet
     XcpEthServerShutdown(); // Stop the XCP server
