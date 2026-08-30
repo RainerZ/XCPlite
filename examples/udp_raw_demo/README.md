@@ -156,7 +156,7 @@ List what the target offers, and run a short measurement:
 # list all measurement and calibration variables (the argument is a regex, "." matches everything)
 xcpclient --dest-addr 192.168.0.220:5555 --udp --a2l ./udp_raw_demo.a2l --list-mea . --list-cal .
 
-# measure one signal for 2 seconds
+# measure for 2 seconds  (the argument is a regex, "counter" matches counter and global_counter)
 xcpclient --dest-addr 192.168.0.220:5555 --udp --a2l ./udp_raw_demo.a2l --mea counter --time 2
 ```
 

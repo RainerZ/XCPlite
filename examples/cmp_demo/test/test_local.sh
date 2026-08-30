@@ -52,6 +52,18 @@ echo
 echo "=============================================================="
 echo "2. cmp_demo end to end, driven by fake_sink.py"
 echo "=============================================================="
+
+# Refuse to start when something already holds the ports. Both sockets are opened with
+# SO_REUSEADDR, so a leftover cmp_demo from an aborted run does not necessarily make the
+# bind fail - it can instead leave the exchange talking to the STALE process while the one
+# started here has already exited. That produces a confusing failure much further down.
+for port in "$CMP_PORT" "$REST_PORT"; do
+    holder=$(lsof -nP -iTCP:"$port" -iUDP:"$port" 2>/dev/null | awk 'NR>1 {print $2" ("$1")"}' | sort -u | tr '\n' ' ')
+    [ -z "$holder" ] || fail "port $port is already in use by: $holder
+  A cmp_demo from an earlier run is probably still alive. Stop it with:
+    pkill -x cmp_demo"
+done
+
 cd "$WORK_DIR" || fail "cannot enter $WORK_DIR"
 
 "$DEMO" --listen "$CMP_PORT" --rest-port "$REST_PORT" > demo.log 2>&1 &
@@ -76,6 +88,13 @@ PY
 wait_for_port "$REST_PORT" || {
     echo "--- cmp_demo log ---"; cat demo.log
     fail "cmp_demo did not start listening on port $REST_PORT within 10s"
+}
+
+# The port answering does not prove OUR process is the one answering it.
+kill -0 "$DEMO_PID" 2>/dev/null || {
+    echo "--- cmp_demo log ---"; cat demo.log
+    fail "the cmp_demo started here has already exited, yet port $REST_PORT answers.
+  Something else is serving these ports - see the log above."
 }
 
 grep -E "CMP capture module:|CMP transport:|CMP frame budget:" demo.log

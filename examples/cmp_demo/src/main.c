@@ -304,6 +304,8 @@ int main(int argc, char *argv[]) {
         A2lCreateMeasurement(counter, "Mainloop counter");
     }
 
+    A2lFinalize(); // @@@@ TEST: finalize now, before the first connect
+
     printf("\nCapture module running.\n");
     printf("  The XCP tool is a CMP Data Sink: it reaches the ECU by sending Transmit Data\n");
     printf("  Messages to our CMP port, not by addressing %u.%u.%u.%u directly.\n", addr[0], addr[1], addr[2], addr[3]);

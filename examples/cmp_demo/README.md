@@ -28,8 +28,7 @@ tool never addresses the ECU over IP — everything is tunnelled:
 ```
 
 Transmission — `TX_DATA_MSG`, message type `0x04` — is what CMP **1.1** added, and it is what
-makes XCP possible at all here: without it a capture module could only carry DAQ one way and
-XCP could never even CONNECT.
+makes XCP communication with an ECU possible.  
 
 | Direction | What happens |
 |---|---|
@@ -69,13 +68,6 @@ Not used, and advertised as unsupported over REST: aggregation (§6.3.2), segmen
 archive member in to resolve an *undefined* symbol — and these are already defined here, so a
 built-in backend is never pulled in and there is no clash.
 
-Two caveats worth knowing:
-
-- **It depends on xcplite being a static library.** A shared build would resolve `eth_hal_*`
-  internally and the override would not take.
-- **On macOS or Windows** the library additionally has to be built with
-  `OPTION_UDP_RAW_HAL_EXTERNAL`, because there is no built-in backend on those platforms and the
-  raw configuration would not compile at all. On Linux that option is not needed.
 
 ### Files
 
@@ -101,13 +93,20 @@ xcplite has to be installed from the `raw` configuration first:
 
 ```bash
 cd <xcplite>
-cmake -B build-raw -S . -DXCPLITE_CONFIGURATION=raw -DCMAKE_BUILD_TYPE=Debug \
-      -DCMAKE_INSTALL_PREFIX=$HOME/xcplite-install
+cmake -B build-raw -S . -DXCPLITE_CONFIGURATION=raw -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=$HOME/xcplite-install
 cmake --build build-raw --target install
 ```
 
 On macOS or Windows add `-DCMAKE_C_FLAGS="-DOPTION_UDP_RAW_HAL_EXTERNAL"` to that first
-command. Then build this project against the install:
+command.  
+
+```bash
+cd <xcplite>
+cmake -B build-raw -S . -DXCPLITE_CONFIGURATION=raw -DCMAKE_C_FLAGS="-DOPTION_UDP_RAW_HAL_EXTERNAL" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=$HOME/xcplite-install
+cmake --build build-raw --target install
+```
+
+Then build this project against the install:
 
 ```bash
 cd examples/cmp_demo
@@ -126,7 +125,6 @@ repository of its own, that install is the whole dependency.
 ./build/cmp_demo --sink 192.168.0.10:55555
 ```
 
-**No privileges are needed** — the CMP transport is an ordinary UDP socket, not `AF_PACKET`.
 `--sink` may be omitted, in which case the Data Sink address is learned from the first CMP
 message received, the same way `socket_raw.c` learns the peer MAC.
 

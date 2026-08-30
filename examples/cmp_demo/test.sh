@@ -200,6 +200,11 @@ fi
 echo ""
 echo "Start $TARGET_BINARY on the target ..."
 
+# Clear any leftover from an aborted run first. Both sockets use SO_REUSEADDR, so a stale
+# process does not reliably make the bind fail - it can instead answer in place of the one
+# started here, and every check below would then be testing the wrong process.
+ssh "$TARGET_USER@$TARGET_HOST" "pkill -x $TARGET_BINARY" 2> /dev/null
+
 # No --sink: the Data Sink address is learned from the first CMP message we send, which
 # avoids having to know this machine's address on the target's network.
 ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_ABS/$TARGET_DEMO_DIR \
