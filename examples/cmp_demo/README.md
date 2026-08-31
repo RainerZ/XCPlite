@@ -312,7 +312,10 @@ pasted in as a fixed hex blob, so that changing e.g. `ECU_IP` cannot leave a sta
 header checksum behind. The XCP command itself — `FF 00` — is the hardcoded part.
 
 **`test/test_local.sh`** runs the codec test and then drives `cmp_demo` with `fake_sink.py`
-over loopback, for a full CONNECT / GET_STATUS / DISCONNECT exchange.
+over loopback, for a full CONNECT / GET_STATUS / DISCONNECT exchange. It leaves `cmp.pcap` in
+the folder it was started from — open it in Wireshark, whose ASAM CMP dissector keys on
+EtherType 0x99FE. Everything else the demo writes (`demo.log`, the `.a2l` and the `.bin`)
+stays in a temporary directory and is discarded.
 
 **`test/cmp_codec_test.c`** is the strongest check. Its golden vectors are lifted byte for byte
 from the sample PCAPNG files shipped with the specification, so it pins the wire format against

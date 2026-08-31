@@ -25,6 +25,11 @@ CODEC_TEST="$BUILD_DIR/cmp_codec_test"
 CMP_PORT=55555
 REST_PORT=8080
 WORK_DIR="$(mktemp -d)"
+# The pcap goes to the folder the script was started from, not into WORK_DIR: it is the
+# one artifact meant to be opened afterwards. Everything else the demo writes - demo.log,
+# the .a2l and the .bin - stays in WORK_DIR and is thrown away with it.
+OUT_DIR="$(pwd)"
+PCAP="$OUT_DIR/cmp.pcap"
 DEMO_PID=""
 
 cleanup() {
@@ -103,7 +108,7 @@ echo
 python3 "$DEMO_DIR/test/fake_sink.py" \
     --target "127.0.0.1:$CMP_PORT" \
     --rest "127.0.0.1:$REST_PORT" \
-    --pcap "$WORK_DIR/cmp.pcap" || fail "fake_sink.py reported a problem"
+    --pcap "$PCAP" || fail "fake_sink.py reported a problem"
 
 echo
 echo "=============================================================="
@@ -128,7 +133,7 @@ if grep -qE "dropped [1-9]|refused" demo.log; then
 fi
 
 echo
-echo "Capture file for Wireshark: $WORK_DIR/cmp.pcap"
+echo "Capture file for Wireshark: $PCAP"
 echo "  (its ASAM CMP dissector keys on EtherType 0x99FE)"
 echo
 echo "PASSED"

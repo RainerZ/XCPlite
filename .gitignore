@@ -26,6 +26,7 @@ RecycleBin.ini
 test_bintool
 *.bak
 *.log
+*.pcap
 
 # Other
 .vscode
