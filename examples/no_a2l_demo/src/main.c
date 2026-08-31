@@ -107,6 +107,7 @@ XCP_UNIT(params__delay_us, "us");
 // Modified in function foo
 // Measuring it in main or task, is possible, but asynchronous and may give inconsistent results
 XCP_COMMENT(global_counter, "Global measurement variable"); // Example for meta data annotation as code
+XCP_READ_WRITE(global_counter);                             // Example for meta data annotation as code
 uint16_t global_counter = 0;
 
 // A2L Creator code parser annotation

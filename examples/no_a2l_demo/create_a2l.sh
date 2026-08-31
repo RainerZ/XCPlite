@@ -44,10 +44,10 @@ TEST=true
 
 
 # Target connection details
-TARGET_USER="parallels"
-TARGET_HOST="10.211.55.4"
-#TARGET_USER="rainer"
-#TARGET_HOST="192.168.0.206"
+#TARGET_USER="parallels"
+#TARGET_HOST="10.211.55.4"
+TARGET_USER="rainer"
+TARGET_HOST="192.168.0.206"
 TARGET_PATH="~/XCPlite-Test"
 TARGET_BUILD_DIR="build-no_a2l"
 TARGET_BINARY="no_a2l_demo"
@@ -122,8 +122,8 @@ echo "==========================================================================
 echo "Creating A2L file from XCPlite ELF file ..."
 echo "========================================================================================================"
 echo ""
-echo "Command: $XCPCLIENT --log-level=3 --verbose=0 --dest-addr=$TARGET_HOST --udp --offline --elf \"$ELFFILE\" --create-a2l --a2l \"$A2LFILE\""
-$XCPCLIENT --log-level=3 --verbose=0 --dest-addr=$TARGET_HOST --udp --offline --elf "$ELFFILE" --create-a2l --a2l "$A2LFILE" >> "$LOGFILE"
+echo "Command: $XCPCLIENT --log-level=3 --verbose=2 --dest-addr=$TARGET_HOST --udp --offline --elf \"$ELFFILE\" --create-a2l --a2l \"$A2LFILE\""
+$XCPCLIENT --log-level=3 --verbose=2 --dest-addr=$TARGET_HOST --udp --offline --elf "$ELFFILE" --create-a2l --a2l "$A2LFILE" >> "$LOGFILE"
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: xcpclient returned error"
     exit 1

@@ -654,11 +654,11 @@ extern const uint8_t *gXcpBaseAddr;
 //     static const double XCP_METADATA_SECTION_ATTR xcp_meta__max__##name __asm__("xcp_meta__max__" XCP_STRINGIFY(name)) = max
 // #else
 #define XCP_COMMENT(name, comment) static const char XCP_METADATA_SECTION_ATTR xcp_meta__comment__##name[] = comment;
-#define XCP_READ_WRITE(name) static const bool XCP_METADATA_SECTION_ATTR xcp_meta__read_write__##name[] = true;
+#define XCP_READ_WRITE(name) static const bool XCP_METADATA_SECTION_ATTR xcp_meta__read_write__##name = true;
 #define XCP_UNIT(name, unit) static const char XCP_METADATA_SECTION_ATTR xcp_meta__unit__##name[] = unit;
 #define XCP_LIMITS(name, min, max)                                                                                                                                                 \
     static const double XCP_METADATA_SECTION_ATTR xcp_meta__min__##name = min;                                                                                                     \
-    static const double XCP_METADATA_SECTION_ATTR xcp_meta__max__##name = max
+    static const double XCP_METADATA_SECTION_ATTR xcp_meta__max__##name = max;
 // #endif
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
