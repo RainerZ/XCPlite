@@ -191,8 +191,8 @@ void eth_hal_close(tEthHalCtx *ctx) {
     if (ctx == NULL) {
         return;
     }
-    printf("  CMP: %llu frames captured, %llu transmit requests delivered, %llu messages dropped", (unsigned long long)ctx->codec.n_wrapped, (unsigned long long)ctx->codec.n_unwrapped,
-           (unsigned long long)ctx->codec.n_dropped);
+    printf("  CMP: %llu frames captured, %llu transmit requests delivered, %llu messages dropped", (unsigned long long)ctx->codec.n_wrapped,
+           (unsigned long long)ctx->codec.n_unwrapped, (unsigned long long)ctx->codec.n_dropped);
     if (ctx->codec.n_seq_jumps != 0) {
         printf(", %llu sequence counter gaps", (unsigned long long)ctx->codec.n_seq_jumps);
     }

@@ -49,11 +49,11 @@
 #define CMP_PAYLOAD_RAW_ETHERNET 0x0D // as 0x08 but with preamble and SFD, not used here
 
 // Header lengths, fixed by the specification
-#define CMP_HDR_LEN 8              // CMP header (6.2.1)
-#define CMP_CAP_DATA_HDR_LEN 16    // Captured Data Message header (7.2.1)
-#define CMP_TX_DATA_HDR_LEN 24     // Transmit Data Message header (7.2.2)
-#define CMP_ETH_PAYLOAD_HDR_LEN 6  // Ethernet payload flags/reserved/data_length (7.3.8)
-#define CMP_FCS_LEN 4              // FCS, part of the Ethernet payload DATA
+#define CMP_HDR_LEN 8             // CMP header (6.2.1)
+#define CMP_CAP_DATA_HDR_LEN 16   // Captured Data Message header (7.2.1)
+#define CMP_TX_DATA_HDR_LEN 24    // Transmit Data Message header (7.2.2)
+#define CMP_ETH_PAYLOAD_HDR_LEN 6 // Ethernet payload flags/reserved/data_length (7.3.8)
+#define CMP_FCS_LEN 4             // FCS, part of the Ethernet payload DATA
 
 // Bytes the envelope adds to one inner Ethernet frame, per direction.
 // The HAL needs these to size its buffers and to compute the MTU budget: the CMP message
@@ -70,7 +70,7 @@
 #define CMP_CAP_FLAG_ERROR 0x40     // error detected in the captured message
 
 // Transmit Data Message header common flags (7.2.2, Table 13)
-#define CMP_TX_FLAG_RELATIVE 0x01  // timestamp is a minimum distance to the previous frame
+#define CMP_TX_FLAG_RELATIVE 0x01 // timestamp is a minimum distance to the previous frame
 #define CMP_TX_FLAG_SEG_MASK 0x0C
 
 // Ethernet Data Message payload flags (7.3.8, Table 35)
@@ -94,15 +94,15 @@ typedef struct {
 // Why a received message was not delivered. Diagnostics only - a drop is never fatal.
 typedef enum {
     CMP_OK = 0,
-    CMP_DROP_TOO_SHORT,      // shorter than the mandatory headers
-    CMP_DROP_VERSION,        // version 0 (that is TECMP/PLP) or unknown
-    CMP_DROP_MESSAGE_TYPE,   // not a TX_DATA_MSG
-    CMP_DROP_PAYLOAD_TYPE,   // not an Ethernet payload
-    CMP_DROP_INTERFACE_ID,   // addressed to a different interface
-    CMP_DROP_SEGMENTED,      // segmentation not supported, see 6.3.3
-    CMP_DROP_MALFORMED,      // length fields inconsistent
-    CMP_DROP_NO_FCS,         // Ethernet payload too short to hold the 4 byte FCS
-    CMP_DROP_TOO_LARGE,      // inner frame does not fit the caller's buffer
+    CMP_DROP_TOO_SHORT,    // shorter than the mandatory headers
+    CMP_DROP_VERSION,      // version 0 (that is TECMP/PLP) or unknown
+    CMP_DROP_MESSAGE_TYPE, // not a TX_DATA_MSG
+    CMP_DROP_PAYLOAD_TYPE, // not an Ethernet payload
+    CMP_DROP_INTERFACE_ID, // addressed to a different interface
+    CMP_DROP_SEGMENTED,    // segmentation not supported, see 6.3.3
+    CMP_DROP_MALFORMED,    // length fields inconsistent
+    CMP_DROP_NO_FCS,       // Ethernet payload too short to hold the 4 byte FCS
+    CMP_DROP_TOO_LARGE,    // inner frame does not fit the caller's buffer
 } tCmpResult;
 
 // Codec state. One instance per link; not thread safe by itself, but the HAL contract

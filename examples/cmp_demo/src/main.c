@@ -114,8 +114,8 @@ static void usage(const char *argv0) {
            "  --port <port>          XCP UDP port of the ECU (default: %u)\n"
            "\n"
            "Needs no privileges: the CMP transport is an ordinary UDP socket.\n\n",
-           argv0, (unsigned)DEFAULT_CMP_PORT, (unsigned)DEFAULT_OUTER_MTU, (unsigned)CMP_MAX_OUTER_MTU, (unsigned)DEFAULT_REST_PORT, CMP_DISCOVERY_GROUP, (unsigned)CMP_DISCOVERY_PORT, (unsigned)DEFAULT_DEVICE_ID,
-           (unsigned)DEFAULT_STREAM_ID, (unsigned)DEFAULT_INTERFACE_ID, (unsigned)OPTION_SERVER_PORT);
+           argv0, (unsigned)DEFAULT_CMP_PORT, (unsigned)DEFAULT_OUTER_MTU, (unsigned)CMP_MAX_OUTER_MTU, (unsigned)DEFAULT_REST_PORT, CMP_DISCOVERY_GROUP,
+           (unsigned)CMP_DISCOVERY_PORT, (unsigned)DEFAULT_DEVICE_ID, (unsigned)DEFAULT_STREAM_ID, (unsigned)DEFAULT_INTERFACE_ID, (unsigned)OPTION_SERVER_PORT);
 }
 
 // Parse "a.b.c.d" into 4 bytes, returns false on a malformed address

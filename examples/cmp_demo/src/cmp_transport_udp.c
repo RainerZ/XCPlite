@@ -33,8 +33,8 @@
 #define IP4_UDP_HDR_LEN 28
 
 struct cmp_transport {
-    int fd;           // the UDP socket
-    int wakeup_rd;    // self pipe, portable equivalent of an eventfd
+    int fd;        // the UDP socket
+    int wakeup_rd; // self pipe, portable equivalent of an eventfd
     int wakeup_wr;
     uint16_t local_port;
     uint16_t max_message; // largest CMP message this path can carry

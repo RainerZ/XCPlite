@@ -33,12 +33,12 @@
 // length, the ports and the string lengths are little endian. The address and MAC fields
 // are byte arrays in "descending byte significance", i.e. 192.168.0.1 is 192,168,0,1.
 
-#define XCP_HEADER_LEN 4    // A_UINT16 length + A_UINT16 reserved
-#define XCP_CMD_TL 0xF2     // CC_TRANSPORT_LAYER_CMD
+#define XCP_HEADER_LEN 4 // A_UINT16 length + A_UINT16 reserved
+#define XCP_CMD_TL 0xF2  // CC_TRANSPORT_LAYER_CMD
 #define XCP_SUB_DISCOVERY 0x10
 #define XCP_PID_RESPONSE 0xFF
 
-#define REQUEST_LEN 0x15 // 21 bytes after the XCP header, fixed by Table 78
+#define REQUEST_LEN 0x15  // 21 bytes after the XCP header, fixed by Table 78
 #define RESPONSE_FIXED 47 // bytes 0..46 of the response, before the two strings
 
 #define DISCOVERY_BUF_MAX 512
@@ -70,7 +70,7 @@ static size_t appendString(uint8_t *out, size_t out_max, size_t off, const char 
     if (s == NULL) {
         s = "";
     }
-    size_t len = strlen(s) + 1;  // include the zero termination
+    size_t len = strlen(s) + 1; // include the zero termination
     if (len % 2 != 0) {
         len++; // pad to 16 bit
     }

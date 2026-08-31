@@ -13,12 +13,13 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <poll.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+#include <platform.h> // for THREAD_HANDLE, create_thread, join_thread, sleepMs
 
 #include "cmp.h"
 #include "cmp_backend.h"
@@ -56,8 +57,9 @@
 
 //-------------------------------------------------------------------------------
 
-static pthread_t sThread;
+static THREAD_HANDLE sThread;
 static bool sRunning = false;
+static volatile bool sThreadUp = false;
 static volatile bool sStop = false;
 static int sListenFd = -1;
 
@@ -134,7 +136,8 @@ static int bodyMeasurement(char *buf, size_t size, const tCmpBackendStatus *s) {
                     "\"Message\":\"captured %llu, transmitted %llu, dropped %llu\","
                     "\"StateOfStreams\":[{\"StreamId\":%u,\"State\":\"%s\"}]"
                     "}",
-                    (unsigned long long)s->n_wrapped, (unsigned long long)s->n_unwrapped, (unsigned long long)s->n_dropped, s->stream_id, s->sink_known ? "transmitting" : "inactive");
+                    (unsigned long long)s->n_wrapped, (unsigned long long)s->n_unwrapped, (unsigned long long)s->n_dropped, s->stream_id,
+                    s->sink_known ? "transmitting" : "inactive");
 }
 
 //-------------------------------------------------------------------------------
@@ -223,8 +226,9 @@ static void handleRequest(int fd) {
 // and, when it is running, the CMP discovery socket (12.1.1). Discovery gets no thread of
 // its own because it is stateless, answers one datagram at a time, and has to advertise
 // the very HTTP port this thread serves.
-static void *restThread(void *arg) {
+static THREAD_FUNC_RETURN restThread(void *arg) {
     (void)arg;
+    sThreadUp = true;
     while (!sStop) {
         struct pollfd pfd[2];
         pfd[0] = (struct pollfd){.fd = sListenFd, .events = POLLIN, .revents = 0};
@@ -260,7 +264,7 @@ static void *restThread(void *arg) {
         handleRequest(fd);
         close(fd);
     }
-    return NULL;
+    THREAD_FUNC_END;
 }
 
 //-------------------------------------------------------------------------------
@@ -301,8 +305,20 @@ bool cmpRestStart(uint16_t port) {
         return false;
     }
 
-    if (pthread_create(&sThread, NULL, restThread, NULL) != 0) {
-        printf("ERROR: cmpRestStart: could not create the REST thread\n");
+    // create_thread() returns 0 on success on POSIX and Windows alike, but it still cannot
+    // be tested PORTABLY: the FreeRTOS variant is a statement which asserts, so
+    // "if (create_thread(...))" does not compile there. Wait for the thread to announce
+    // itself instead - portable, and it proves the thread is running rather than merely
+    // created. That matters here because the listen socket is already bound at this point,
+    // so a thread that never starts would still accept connections at the kernel backlog
+    // and then answer none of them, which looks like a hang rather than an error.
+    sThreadUp = false;
+    create_thread(&sThread, NULL, restThread, NULL);
+    for (int i = 0; i < 100 && !sThreadUp; i++) {
+        sleepMs(2);
+    }
+    if (!sThreadUp) {
+        printf("ERROR: cmpRestStart: the REST thread did not start\n");
         close(sListenFd);
         sListenFd = -1;
         return false;
@@ -318,7 +334,7 @@ void cmpRestStop(void) {
         return;
     }
     sStop = true;
-    pthread_join(sThread, NULL);
+    join_thread(sThread);
     if (sListenFd >= 0) {
         close(sListenFd);
         sListenFd = -1;

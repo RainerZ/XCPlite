@@ -344,6 +344,38 @@ stops at `0x03`, so it predates CMP 1.1 and does not know `TX_DATA_MSG`.
 
 ---
 
+## Platform dependencies
+
+Runs on Linux and macOS. Threads go through the library's own abstraction; sockets do not:
+
+| | |
+|---|---|
+| Threads | `platform.h` — `THREAD_HANDLE`, `create_thread`, `join_thread`, `THREAD_FUNC_RETURN` |
+| Mutexes | none needed |
+| Sockets | **direct POSIX**, in `cmp_transport_udp.c`, `cmp_rest.c` and `cmp_discovery.c` |
+
+The sockets are deliberately not routed through `sockets.h`, and that is not an oversight —
+it is not possible. In the `raw` configuration `sockets.c` is compiled out entirely
+(`#if (TCP || UDP) && !defined(OPTION_ENABLE_UDP_RAW)`), and `sockets.h` does not even
+*declare* `socketJoin`, `socketListen`, `socketAccept` or `socketRecv` when
+`OPTION_ENABLE_UDP_RAW` is set, so discovery has no multicast call and the REST interface has
+no TCP listener to use. `socket_raw.c` implements a UDP-datagram subset and has no TCP at all.
+
+There is a deeper reason. In the `raw` configuration the socket API **is the emulated
+ECU-side stack** — UDP/IPv4 over the Ethernet HAL. This project's sockets are real host
+sockets on the *other* side of that HAL. Different layer, different network: calling
+`socketOpen()` for the REST listener would open it on the emulated ECU's network.
+
+**On Windows** the port is about 54 lines of socket code across those three files, plus
+`getifaddrs` → `GetAdaptersAddresses` and `WSAStartup` (the raw transport's `socketStartup()`
+does not call it). All of it additive `#ifdef`, no effect on Linux. It is not currently done:
+a Windows XCP tool can already drive this on a Linux target over the network, which is what
+`test.sh` does. Before attempting it, check that Windows' `IP_MULTICAST_LOOP` — a
+receive-side option there, send-side on BSD and Linux — still allows a same-machine discovery
+test, since "everything on one box" is the only thing the port would buy.
+
+---
+
 ## Verified against
 
 | | |
