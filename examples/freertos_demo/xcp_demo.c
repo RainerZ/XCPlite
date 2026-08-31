@@ -112,7 +112,8 @@ static bool createDemoTask(TaskFunction_t taskCode, const char *name, const uint
 
 // Global measurement values
 uint16_t global_counter = 0;
-XCP_COMMENT(global_counter,"Global measurement variable, incremented in fastTask");
+XCP_COMMENT(global_counter, "Global measurement variable, incremented in fastTask");
+XCP_READ_WRITE(global_counter);
 
 // Platform analog input when available, otherwise a generated sine signal
 #define SLOWTASK_PHASE_STEP_RAD 0.001f
@@ -204,7 +205,7 @@ static void fastTask(void *parameter) {
     // Volatile keeps this local measurement variable visible in optimized builds,
     // The offline A2L generator can discover it in the ELF file and associate it to the functions DAQ event trigger.
     volatile uint16_t counter = 0;
-    static volatile uint16_t static_counter = 0; 
+    static volatile uint16_t static_counter = 0;
 
     printf("fastTask started\n");
     printf("  frameaddr = %p\n", xcp_get_frame_addr());
@@ -255,7 +256,7 @@ static void fastTask(void *parameter) {
         // Trigger the DAQ event 'fastTask'
         DaqTriggerEvent(fastTask);
         // Trigger the event a second time to measure runtime of the DaqTriggerEvent function
-        // XcpEventExt_Var(trg__AAS__fastTask, 1, xcp_get_frame_addr()); 
+        // XcpEventExt_Var(trg__AAS__fastTask, 1, xcp_get_frame_addr());
 
 #ifdef OPTION_IO
         rstPin1();
@@ -311,8 +312,7 @@ static void slowTask(void *parameter) {
             if (!isnan(analogValue)) {
                 const float voltageSpan = params->sensor_voltage_point2 - params->sensor_voltage_point1;
                 if (voltageSpan != 0.0f) {
-                    channel1 = params->pressure_point1 +
-                               (analogValue - params->sensor_voltage_point1) * (params->pressure_point2 - params->pressure_point1) / voltageSpan;
+                    channel1 = params->pressure_point1 + (analogValue - params->sensor_voltage_point1) * (params->pressure_point2 - params->pressure_point1) / voltageSpan;
                 } else {
                     channel1 = NAN;
                 }
