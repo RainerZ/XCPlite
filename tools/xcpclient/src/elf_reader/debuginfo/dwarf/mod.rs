@@ -587,28 +587,28 @@ impl<'a> Index<usize> for UnitList<'a> {
 mod test {
     use super::*;
 
-    static ELF_FILE_NAMES: [&str; 1] = [concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/no_a2l_demo/CANape/no_a2l_demo.out")];
+    // C++ type test fixture, see fixtures/cpp_types.cpp
+    static ELF_FILE_NAMES: [&str; 1] = [concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_types.elf")];
 
     #[test]
     fn test_load_data() {
         for filename in ELF_FILE_NAMES {
-            let debugdata = DebugData::load_dwarf(OsStr::new(filename), 1, 0).unwrap();
-            assert_eq!(debugdata.variables.len(), 49);
-            assert!(debugdata.variables.get("counter").is_some());
+            let debugdata = DebugData::load_dwarf(OsStr::new(filename), 1, usize::MAX).unwrap();
+            // 14 globals in cpp_types.cpp, compilers may add a few more (e.g. static members)
+            assert!(debugdata.variables.len() >= 14, "only {} variables found", debugdata.variables.len());
+            assert!(debugdata.variables.get("g_sink").is_some());
 
             for (_, varinfo) in &debugdata.variables {
                 assert!(debugdata.types.contains_key(&varinfo[0].typeref));
             }
 
-            let varinfo = debugdata.variables.get("params").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            assert!(matches!(
-                typeinfo,
-                TypeInfo {
-                    datatype: DbgDataType::Struct { .. },
-                    ..
-                }
-            ));
+            let datatype_of = |name: &str| -> &DbgDataType {
+                let varinfo = debugdata.variables.get(name).unwrap_or_else(|| panic!("variable {name} not found"));
+                &debugdata.types.get(&varinfo[0].typeref).unwrap().datatype
+            };
+            assert!(matches!(datatype_of("g_plain"), DbgDataType::Struct { is_class: false, .. }));
+            assert!(matches!(datatype_of("g_pubclass"), DbgDataType::Struct { is_class: true, .. }));
+            assert!(matches!(datatype_of("g_bigenum"), DbgDataType::Enum { signed: true, .. }));
 
             /*
             if let TypeInfo {
