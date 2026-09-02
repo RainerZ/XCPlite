@@ -2,6 +2,16 @@
 
 All notable changes to XCPlite are documented in this file.
 
+## [V2.1.11]
+
+* Allow custom memory attributes for queue32m
+* Avoid mutex allocation when queue32m uses critical sections
+* Support optional recursive FreeRTOS mutexes
+* Fix typos in FreeRTOS documentation and comments
+* Fix UDP segment size calculation from MTU
+* Make FreeRTOS queue segment count configurable
+
+
 ## [V2.1.10]
 
 - Build cleanup: `shm.h` and `persistence.h` are only included where the corresponding feature is enabled, reducing overhead for minimal embedded source subsets
