@@ -81,7 +81,7 @@ Arguments can be given in any order. Unrecognised arguments cause an error.
 >
 > **`install` and `cargo_install` are independent:**
 > - `install` runs `cmake --install` — copies the xcplite library headers and cmake config to the install prefix. Never touches Rust tools.
-> - `cargo_install` runs `cargo install --path` for `xcpclient` and `bintool` — installs their binaries to `~/.cargo/bin`. Only meaningful with the `rust_tools` or `all` target. Requires the Rust toolchain.
+> - `cargo_install` runs `cargo install --path --locked` for `xcpclient` and `bintool` (the dependency versions from `Cargo.lock` are used) — installs their binaries to `~/.cargo/bin`. Only meaningful with the `rust_tools` or `all` target. Requires the Rust toolchain.
 
 ```bash
 ./build.sh --help

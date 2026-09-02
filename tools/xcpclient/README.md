@@ -190,7 +190,7 @@ Options:
 
 ```bash
 cd tools/xcpclient
-cargo install --path .
+cargo install --path . --locked
 ```
 
 ## Test

@@ -57,7 +57,7 @@ bintool input.bin --apply-hex changes.hex
 cd tools/bintool
 cargo build --release
 # Optional, install to ~/.cargo/bin/bintool or use the compiled binary will be in `target/release/bintool`
-cargo install --path .  
+cargo install --path . --locked  
 ```
 
 ### Examples
