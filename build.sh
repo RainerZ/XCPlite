@@ -45,7 +45,7 @@ show_usage() {
     echo "  cleanall           Clean all build directories and exit"
     echo "  install            Install xcplite library to <build_dir>/install"
     echo "  install=<path>     Install xcplite library to custom path"
-    echo "  cargo_install      Run 'cargo install' for xcpclient and bintool to ~/.cargo/bin"
+    echo "  cargo_install      Run 'cargo install --locked' for xcpclient and bintool to ~/.cargo/bin"
     echo "                     (only meaningful with rust_tools or all target)"
     echo "  tidy               Run clang-tidy on library sources"
     echo ""
@@ -235,13 +235,13 @@ if [[ "$CARGO_INSTALL" == true && "$BUILD_SUCCESS" == true ]]; then
         echo "  Install destination: $CARGO_BIN_DIR"
         CARGO_INSTALL_FLAG=""
         [[ "$BUILD_TYPE" == "Release" || "$BUILD_TYPE" == "RelWithDebInfo" ]] && CARGO_INSTALL_FLAG="" || true
-        if cargo install --path "$SCRIPT_DIR/tools/xcpclient" ${CARGO_INSTALL_FLAG:+$CARGO_INSTALL_FLAG} --force; then
+        if cargo install --path "$SCRIPT_DIR/tools/xcpclient" --locked ${CARGO_INSTALL_FLAG:+$CARGO_INSTALL_FLAG} --force; then
             echo "  xcpclient installed to $CARGO_BIN_DIR/xcpclient"
         else
             echo "  xcpclient cargo install failed"
             BUILD_SUCCESS=false
         fi
-        if cargo install --path "$SCRIPT_DIR/tools/bintool" ${CARGO_INSTALL_FLAG:+$CARGO_INSTALL_FLAG} --force; then
+        if cargo install --path "$SCRIPT_DIR/tools/bintool" --locked ${CARGO_INSTALL_FLAG:+$CARGO_INSTALL_FLAG} --force; then
             echo "  bintool installed to $CARGO_BIN_DIR/bintool"
         else
             echo "  bintool cargo install failed"
