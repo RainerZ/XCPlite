@@ -18,6 +18,7 @@ RecycleBin.ini
 # Examples .a2l, *.elf and .bin files
 /*.a2l
 *.elf
+!/tools/xcpclient/fixtures/*.elf
 *.bin
 
 # Temporary files
