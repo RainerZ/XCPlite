@@ -37,6 +37,34 @@ For the full technical specification — ELF section layouts, the `trg__` anchor
 convention, and the `AddrExt` encoding — see
 [docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation--elfdwarf-internals).
 
+### Supported types and known limitations
+
+The DWARF type information is mapped to A2L objects as follows:
+
+| C/C++ type | A2L representation |
+|---|---|
+| `bool`, integer and floating point types | `MEASUREMENT` or `CHARACTERISTIC` of the matching A2L data type |
+| `enum` | integer of the enum's size; for variables the enumerators become a verbal conversion table, enum struct members are plain integers |
+| one- and two-dimensional arrays | `MEASUREMENT` / `CHARACTERISTIC` with `MATRIX_DIM` (`VAL_BLK`, `CURVE`, `MAP`); arrays of structs become arrays of typedef instances |
+| `struct`, `class`, template instantiations | `TYPEDEF_STRUCTURE` + `INSTANCE`; nested structs and classes become nested typedefs; private members are included; base class members are flattened into the derived type for all combinations of `struct`/`class` bases; `static`/`constexpr` members are skipped |
+| pointers as struct or class members | the address value as unsigned integer of the target's pointer size, the pointee is not followed |
+
+Type names which are not valid A2L identifiers (template instantiations such as `TplStruct<float>`) are sanitized to `TplStruct_float_`.
+The `TYPEDEF_MEASUREMENT`/`TYPEDEF_CHARACTERISTIC` of a struct field is named after the field; if another structure has a field with
+the same name but a different type or metadata, the name is qualified with the structure name (`TplStruct_float_.value`).
+
+Not supported, skipped and reported as warnings (log level 2 and above):
+
+- Variables of pointer type (measure the pointed-to variable instead).
+- Unions, bitfields and function pointers. A struct member of such a type is written as a one byte `UBYTE` placeholder
+  so that the remaining members of the structure keep their offsets.
+- Arrays with more than two dimensions (written as a one byte placeholder).
+- C++ pointer-to-member types (`DW_TAG_ptr_to_member_type`): a struct or class containing one cannot be read at all,
+  so it and every class deriving from it end up without members. This is a limitation of the a2ltool DWARF reader
+  this code is based on.
+- C++ library containers (`std::vector`, `std::string`, smart pointers, ...) are read as the structs they are;
+  the heap data behind them is not reachable.
+
 
 
 
@@ -256,16 +284,3 @@ cargo r --  --dest-addr 192.168.0.206  --elf no_a2l_demo.out --elf-unit-limit 10
 cargo r --  --dest-addr 192.168.0.206  --elf no_a2l_demo.out --elf-unit-limit 1000 --log-level 3  --create-a2l --a2l no_a2l_demo.a2l --mea 'counter'  --time 5 --verbose 2
 
 ```
-
-
-
-## TODO
-
-- The A2L writer names the per-field `TYPEDEF_MEASUREMENT`/`TYPEDEF_CHARACTERISTIC` objects by bare field name and de-duplicates them globally. So `TplStruct<uint16_t>::value` and `TplStruct<float>::value` currently share the `UWORD` typedef of whichever instantiation is registered first, and the same happens for any two struct types with a same-named field of a different type. That is a separate issue in the A2L writer and will be fixed next.
-
-- Classes containing a C++ pointer-to-member (`DW_TAG_ptr_to_member_type`) are not handled by the DWARF reader, which also drops the inherited members of classes deriving from them. This is a limitation of the a2ltool reader as well; I will look into it separately.
-
-- Unions and bitfields are still not supported by the A2L generator.
-
-- Clippy warning cosmetics
-
