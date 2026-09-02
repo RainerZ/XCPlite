@@ -477,8 +477,25 @@ impl ElfReader {
 
         info!("Registering event information:");
 
-        // Get the address of the XCP event descriptor memory section
+        // Get the address range of the XCP event descriptor memory section (start is 0 if not found)
         let xcp_event_section_addr = self.debug_data.get_event_section_addr();
+        let xcp_event_section_end = self
+            .debug_data
+            .sections
+            .get("xcp_evts")
+            .map(|(_, end)| *end)
+            .or_else(|| self.debug_data.symbol_addresses.get("__stop_xcp_evts").copied());
+
+        // Placeholder ids for events whose id can not be determined from the event descriptor section
+        // They must be unique in the registry, counting down from 0xFFFF keeps them out of the range of real event ids
+        // The ids are corrected from the XCP server event information when connected (see --fix-a2l)
+        let mut next_undefined_event_id: u16 = 0xFFFF;
+
+        // Location "unit:function" of a marker variable for messages
+        let location = |v: &VarInfo| -> String {
+            let unit_name = self.debug_data.make_simple_unit_name(v.unit_idx).unwrap_or_else(|| v.unit_idx.to_string());
+            format!("{}:{}", unit_name, v.function.as_deref().unwrap_or(""))
+        };
 
         // Iterate over variables
         for (var_name, var_infos) in &self.debug_data.variables {
@@ -490,35 +507,68 @@ impl ElfReader {
 
             // Event definitions (by markers from DaqCreateEvent macro)
             // (thread local) static evt__<name>, name is event name
-            if var_name.starts_with("evt__") {
-                // remove the "evt__" prefix
-                let evt_name = var_name.strip_prefix("evt__").unwrap_or("unnamed");
-                let evt_unit_idx = var_infos[0].unit_idx;
-                let evt_unit_name = if let Some(name) = self.debug_data.make_simple_unit_name(evt_unit_idx) {
-                    name
-                } else {
-                    format!("{evt_unit_idx}")
+            if let Some(evt_name) = var_name.strip_prefix("evt__") {
+                let Some(first) = var_infos.first() else {
+                    continue;
                 };
 
-                let evt_function = if let Some(f) = var_infos[0].function.as_ref() { f.as_str() } else { "" };
+                // The DaqCreateEvent macro emits one event descriptor per call site. If the same event is created in several
+                // functions or compilation units, the target creates the event once for the first descriptor in the section
+                // (XcpInit scans the section in address order), so the definition with the lowest address is used here as well
+                let var_info = var_infos.iter().filter(|v| v.address.1 != 0).min_by_key(|v| v.address.1).unwrap_or(first);
                 info!(
-                    "Event definition for event '{}' found in {}:{}, addr = {:#x}",
-                    evt_name, evt_unit_name, evt_function, var_infos[0].address.1
+                    "Event definition for event '{}' found in {}, addr = {:#x}",
+                    evt_name,
+                    location(var_info),
+                    var_info.address.1
                 );
-                // Find the event already exists in the registry
-                if let Some(_evt) = reg.event_list.find_event(evt_name, 0) {
-                    continue; // event already exists
+                if var_infos.len() > 1 {
+                    let others: Vec<String> = var_infos.iter().filter(|v| !std::ptr::eq(*v, var_info)).map(|v| location(v)).collect();
+                    warn!(
+                        "Event '{}' is defined {} times, using the definition in {} (also defined in {})",
+                        evt_name,
+                        var_infos.len(),
+                        location(var_info),
+                        others.join(", ")
+                    );
                 }
-                // Create a new event and try to determine the event number from the event memory section
-                else {
-                    if xcp_event_section_addr > 0 {
-                        let event_id: u16 = ((var_infos[0].address.1 - xcp_event_section_addr) / 16) as u16; // @@@@ size of tXcpEventDescriptor hardcoded
-                        reg.event_list.add_event(McEvent::new(evt_name.to_string(), 0, event_id, 0)).unwrap();
-                        info!("New event '{}' found: event id = {}", evt_name, event_id);
-                        continue; // event id has to be fixed later, for now we just create it with a unique id based on the address of the event marker variable
+
+                // Skip if the event already exists in the registry (e.g. from the XCP server event information)
+                if reg.event_list.find_event(evt_name, 0).is_some() {
+                    continue;
+                }
+
+                // Determine the event id from the position of the event descriptor in the event descriptor section
+                let addr = var_info.address.1;
+                let mut event_id: Option<u16> = None;
+                if xcp_event_section_addr > 0 && addr >= xcp_event_section_addr && xcp_event_section_end.is_none_or(|end| addr < end) {
+                    let id = ((addr - xcp_event_section_addr) / 16) as u16; // @@@@ size of tXcpEventDescriptor hardcoded
+                    if let Some(other) = reg.event_list.find_event_id(id) {
+                        warn!("Event id {} of event '{}' is already used by event '{}'", id, evt_name, other.get_name());
                     } else {
-                        reg.event_list.add_event(McEvent::new(evt_name.to_string(), 0, 0xFFFF, 0)).unwrap();
-                        warn!("New event '{}' found, created with undefined event id 0xFFFF", evt_name);
+                        event_id = Some(id);
+                    }
+                } else if xcp_event_section_addr > 0 {
+                    warn!("Event definition marker of event '{}' at {:#x} is outside the event descriptor section", evt_name, addr);
+                }
+
+                match event_id {
+                    Some(id) => {
+                        reg.event_list.add_event(McEvent::new(evt_name.to_string(), 0, id, 0))?;
+                        info!("New event '{}' found: event id = {}", evt_name, id);
+                    }
+                    None => {
+                        // Use a unique placeholder id, it has to be corrected later from the XCP server event information
+                        let mut id = next_undefined_event_id;
+                        while reg.event_list.find_event_id(id).is_some() {
+                            id = id.saturating_sub(1);
+                        }
+                        next_undefined_event_id = id.saturating_sub(1);
+                        reg.event_list.add_event(McEvent::new(evt_name.to_string(), 0, id, 0))?;
+                        warn!(
+                            "New event '{}' found, created with undefined event id {:#06x}, correct it with the XCP server event information",
+                            evt_name, id
+                        );
                     }
                 }
             }
@@ -543,8 +593,17 @@ impl ElfReader {
             // trg__<event_name> (thread local static, name is event name)
             // Event definitions (thread local static variables)
             if var_name.starts_with("trg__") {
-                assert!(var_infos.len() == 1); // Only one definition allowed
-                let var_info = &var_infos[0];
+                // One trigger location per event is expected, the location is used to resolve stack relative variables
+                if var_infos.len() > 1 {
+                    warn!(
+                        "Event trigger marker '{}' is defined {} times, only the first definition is used to locate stack variables",
+                        var_name,
+                        var_infos.len()
+                    );
+                }
+                let Some(var_info) = var_infos.first() else {
+                    continue;
+                };
 
                 // Get the event name from format  "trg__<tag>__<eventname>" prefix
                 let s = var_name.strip_prefix("trg__").unwrap_or("unnamed");
@@ -1212,5 +1271,88 @@ mod test {
         let inner_tpl = outer.find_field("inner_tpl").expect("field Outer.inner_tpl");
         assert_eq!(inner_tpl.dim_type.value_type, McValueType::new_typedef("TplStruct_short_unsigned_int_"));
         assert_eq!(inner_tpl.offset, 8);
+    }
+
+    // Build an ElfReader from hand-made debug data containing only event definition (evt__) and trigger (trg__) marker variables
+    fn elf_reader_with_markers(markers: &[(&str, u64, &str)], event_section: Option<(u64, u64)>) -> ElfReader {
+        use std::collections::HashMap;
+        let mut variables: IndexMap<String, Vec<VarInfo>> = IndexMap::new();
+        for (name, addr, function) in markers {
+            variables.entry(name.to_string()).or_default().push(VarInfo {
+                address: (0, *addr),
+                typeref: 0,
+                unit_idx: 0,
+                function: Some(function.to_string()),
+                namespaces: Vec::new(),
+            });
+        }
+        let mut sections = HashMap::new();
+        if let Some(range) = event_section {
+            sections.insert("xcp_evts".to_string(), range);
+        }
+        ElfReader {
+            debug_data: DebugData {
+                variables,
+                types: HashMap::new(),
+                typenames: HashMap::new(),
+                demangled_names: HashMap::new(),
+                unit_names: vec![Some("main.c".to_string())],
+                sections,
+                symbol_addresses: HashMap::new(),
+                cfa_info: Vec::new(),
+                epk_string: None,
+                epk_addr: 0,
+                xcp_meta_data: None,
+                is_little_endian: true,
+            },
+        }
+    }
+
+    // An event created in several functions has several definition markers, the first descriptor in the section wins,
+    // duplicate trigger markers must not panic either
+    #[test]
+    fn test_register_events_duplicate_definitions() {
+        let elf = elf_reader_with_markers(
+            &[
+                ("evt__foo", 0x1010, "task_b"),
+                ("evt__foo", 0x1000, "task_a"),
+                ("evt__bar", 0x1020, "main"),
+                ("trg__AAS__foo", 0x2000, "task_a"),
+                ("trg__AAS__foo", 0x2004, "task_b"),
+            ],
+            Some((0x1000, 0x1030)),
+        );
+        let mut reg = Registry::new();
+        elf.register_events(&mut reg, 0).unwrap();
+        assert_eq!(reg.event_list.find_event("foo", 0).unwrap().get_id(), 0);
+        assert_eq!(reg.event_list.find_event("bar", 0).unwrap().get_id(), 2);
+        assert!(reg.event_list.find_event_id(1).is_none());
+        elf.register_event_locations(&mut reg, 0).unwrap();
+        assert!(reg.event_list.find_event_by_location(0, "task_a").is_some());
+    }
+
+    // Without an event descriptor section every event gets a unique placeholder id (previously all got 0xFFFF and the second one panicked)
+    #[test]
+    fn test_register_events_without_descriptor_section() {
+        let elf = elf_reader_with_markers(&[("evt__foo", 0x1000, "main"), ("evt__bar", 0x1010, "main"), ("evt__baz", 0, "main")], None);
+        let mut reg = Registry::new();
+        elf.register_events(&mut reg, 0).unwrap();
+        let ids: Vec<u16> = ["foo", "bar", "baz"].iter().map(|n| reg.event_list.find_event(n, 0).unwrap().get_id()).collect();
+        assert_eq!(ids, vec![0xFFFF, 0xFFFE, 0xFFFD]);
+    }
+
+    // Markers outside the descriptor section, without address or with an id which is already taken get placeholder ids
+    #[test]
+    fn test_register_events_marker_outside_section() {
+        let elf = elf_reader_with_markers(
+            &[("evt__foo", 0x1000, "main"), ("evt__out", 0x5000, "main"), ("evt__zero", 0, "main")],
+            Some((0x1000, 0x1010)),
+        );
+        let mut reg = Registry::new();
+        reg.event_list.add_event(McEvent::new("srv", 0, 0, 0)).unwrap(); // id 0 is taken, e.g. by the XCP server event information
+        elf.register_events(&mut reg, 0).unwrap();
+        assert_eq!(reg.event_list.find_event("foo", 0).unwrap().get_id(), 0xFFFF);
+        assert_eq!(reg.event_list.find_event("out", 0).unwrap().get_id(), 0xFFFE);
+        assert_eq!(reg.event_list.find_event("zero", 0).unwrap().get_id(), 0xFFFD);
     }
 }
