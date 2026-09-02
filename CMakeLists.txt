@@ -306,11 +306,9 @@ if(XCPLITE_BUILD_EXAMPLES)
         # Shared-memory multi-application mode
         add_executable(hello_xcp examples/hello_xcp/src/main.c)
         target_link_libraries(hello_xcp PRIVATE xcplite)
-        target_compile_definitions(hello_xcp PRIVATE "OPTION_SHM_MODE")
 
         add_executable(hello_xcp_cpp examples/hello_xcp_cpp/src/main.cpp)
         target_link_libraries(hello_xcp_cpp PRIVATE xcplite)
-        target_compile_definitions(hello_xcp_cpp PRIVATE "OPTION_SHM_MODE")
 
         # silkit_demo is a standalone project requiring SilKit + an installed xcplite.
         # Build it separately: cd examples/silkit_demo && cmake -B build -DSilKit_DIR=... -Dxcplite_DIR=...
@@ -341,12 +339,12 @@ if(XCPLITE_BUILD_TESTS)
 
     if(XCPLITE_CONFIGURATION STREQUAL "default")
 
-        # Type detection tests (no xcplite link needed)
+        # Type detection tests
         add_executable(type_detection_test_c test/type_detection_test/src/main.c test/type_detection_test/src/c_version_test.c)
-        target_include_directories(type_detection_test_c PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inc")
+        target_link_libraries(type_detection_test_c PRIVATE xcplite)
 
         add_executable(type_detection_test_cpp test/type_detection_test/src/main.cpp test/type_detection_test/src/cpp_version_test.cpp)
-        target_include_directories(type_detection_test_cpp PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inc")
+        target_link_libraries(type_detection_test_cpp PRIVATE xcplite)
 
         add_executable(a2l_test test/a2l_test/src/main.c)
         target_link_libraries(a2l_test PRIVATE xcplite)

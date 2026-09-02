@@ -4,23 +4,36 @@ All notable changes to XCPlite are documented in this file.
 
 ## [V2.1.10]
 
-- Documentation improvements
+- Build cleanup: `shm.h` and `persistence.h` are only included where the corresponding feature is enabled, reducing overhead for minimal embedded source subsets
+
+- `xcpclient` related changes: 
+    - EPK validation — A2L file EPK is now compared against the EPK reported by the target; mismatch prints a warning and aborts unless overridden with `--yes`
+    - dependency on `mc_registry` switched to public `RainerZ/xcp-lite` 3.0.9
+    - improved error message when AML file is not found
+    - uses ELF section boundary variables as fallback event detection when `xcp_evts` section is absent
 
 
 ## [V2.1.9]
 
-- New example no_a2l_demo_cpp demonstrating build time A2L generation for C++
-- Added xcpclient ELF->A2L converter support for enums in build time A2L generation
-- New xcpclient options --elf_skip_no_metadata and --config <xcpclient.toml>
-- New XCP_READ_WRITE metadata macro 
 - XCP DAQ event info (#define XCP_ENABLE_DAQ_EVENT_INFO) support for disabled OPTION_DAQ_EVENT_LIST with section registered events
-- Fixed length calibration segment name
-- Removed code definition of _GNU_SOURCE, made it public in CMakeLists.txt
-- Updated mc_registry, gimli and object crate dependencies to latest versions
-- Cosmetic changes 
+- New example `no_a2l_demo_cpp` demonstrating build-time A2L generation for C++
+- A2L generator declarations conditionally removed from public API headers (`inc/xcplib.h`, `inc/xcplib.hpp`) for non-A2L configurations
+- C++ namespace alias `xcplib` removed (breaking change for code using `xcplib::` instead of `xcplite::`)
+- `XcpSetA2lName` and `XcpGetA2lName` are now independent from enabling the A2L generator
+- Hardcoded maximum calibration segment name length limited by alignment requirements
+- Fixed `cpp_demo` shutdown issue
+- Windows build fixes
+- Removed code definition of `_GNU_SOURCE`, made it public in CMakeLists.txt
+
+- `xcpclient` related changes:
+    - New `XCP_READ_WRITE` metadata macro
+    - Added enum conversion support in ELF->A2L converter
+    - Updated `mc_registry`, `gimli` and `object` crate dependencies to latest versions
+    - New options `--elf_skip_no_metadata` and `--config <xcpclient.toml>`
+    - Various bugfixes in debuginfo parsing and `no_a2l_demo` event handling
 
 
-## [V2.1.6]
+## [V2.1.6] 
 
 - Critical bugfix in ´XcpEventExt_´, undefined behaviour when DAQ is not running 
 - Optimizations for microcontroller/RTOS builds, optimized locking (critical section instead of mutex) and static allocated queue (new ´queue32m.c´)

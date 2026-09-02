@@ -988,7 +988,7 @@ dependencies = [
 
 [[package]]
 name = "xcpclient"
-version = "3.0.1"
+version = "3.0.9"
 dependencies = [
  "anyhow",
  "byteorder",
