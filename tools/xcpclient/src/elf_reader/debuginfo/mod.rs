@@ -3,7 +3,15 @@
 // Implements DebugData, VarInfo, TypeInfo and DbgDataType
 // Read ELF files and extract debug information
 
-// Taken from Github repository a2ltool by DanielT
+// Based on Github repository a2ltool by DanielT: https://github.com/DanielT/a2ltool
+
+/* 
+Note on V2.1.10:
+Updated to typereader.rs from a2ltool v3.4.1 (commit 0b61aa5, 2026-08-04).
+The Class variant is gone. 
+Struct now carries is_class and inheritance, and the size and Display code follow.
+*/
+
 
 use indexmap::IndexMap;
 use std::collections::HashMap;
@@ -54,12 +62,11 @@ pub(crate) enum DbgDataType {
         bit_size: u16,
     },
     Pointer(u64, usize),
+    /// A struct or a class. There is no practical difference between them, both can have base classes in C++;
+    /// `is_class` only affects the displayed name. Inherited members are also copied into `members` with adjusted offsets.
     Struct {
         size: u64,
-        members: IndexMap<String, (TypeInfo, u64)>,
-    },
-    Class {
-        size: u64,
+        is_class: bool,
         inheritance: IndexMap<String, (TypeInfo, u64)>,
         members: IndexMap<String, (TypeInfo, u64)>,
     },
@@ -414,7 +421,6 @@ impl TypeInfo {
             DbgDataType::Pointer(size, _)
             | DbgDataType::Other(size)
             | DbgDataType::Struct { size, .. }
-            | DbgDataType::Class { size, .. }
             | DbgDataType::Union { size, .. }
             | DbgDataType::Enum { size, .. }
             | DbgDataType::Array { size, .. }
@@ -506,18 +512,12 @@ impl Display for TypeInfo {
             DbgDataType::Pointer(_, _) => write!(f, "Pointer(...)"),
             DbgDataType::Other(osize) => write!(f, "Other({osize})"),
             DbgDataType::FuncPtr(osize) => write!(f, "function pointer({osize})"),
-            DbgDataType::Struct { members, .. } => {
+            DbgDataType::Struct { members, is_class, .. } => {
+                let kind = if *is_class { "Class" } else { "Struct" };
                 if let Some(name) = &self.name {
-                    write!(f, "Struct {name}({} members)", members.len())
+                    write!(f, "{kind} {name}({} members)", members.len())
                 } else {
-                    write!(f, "Struct <anonymous>({} members)", members.len())
-                }
-            }
-            DbgDataType::Class { members, .. } => {
-                if let Some(name) = &self.name {
-                    write!(f, "Class {name}({} members)", members.len())
-                } else {
-                    write!(f, "Class <anonymous>({} members)", members.len())
+                    write!(f, "{kind} <anonymous>({} members)", members.len())
                 }
             }
             DbgDataType::Union { members, .. } => {

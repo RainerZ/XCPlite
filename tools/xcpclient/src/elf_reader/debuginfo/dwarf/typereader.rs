@@ -1,4 +1,20 @@
-// Taken from Github repository a2ltool by DanielT
+// Taken from Github repository a2ltool by DanielT: https://github.com/DanielT/a2ltool, src/debuginfo/dwarf/typereader.rs
+// Base version: a2ltool v3.4.1 (commit 0b61aa5, 2026-08-04). Local changes: errors via log::warn instead of println, rustfmt max_width=180.
+
+/*
+Claude note on XCPlite version V2.1.10 :-):
+3-way merge of a2ltool upstream v3.2.0 to v3.4.1 onto V2.1.9 was conflict-free. 
+Local edits survived unchanged.
+The header now records the base version and commit so the next sync does not need archaeology. 
+Brings:
+- struct/class unification
+- inheritance on struct-tagged types
+- skipping of static members
+- zero-stride guard,
+- derived-member precedence
+- 64-bit enum signedness
+With unit test, and the "double" typo fix.
+*/
 
 use super::{DbgDataType, TypeInfo, VarInfo};
 use super::{DebugDataReader, attributes::*};
@@ -7,6 +23,10 @@ use indexmap::IndexMap;
 use object::Endianness;
 use std::collections::HashMap;
 use std::num::Wrapping;
+
+/// maps the name of a struct member or base class to its type and its offset
+/// inside the containing type
+type MemberMap = IndexMap<String, (TypeInfo, u64)>;
 
 #[derive(Debug)]
 struct WipItemInfo {
@@ -144,15 +164,11 @@ impl DebugDataReader<'_> {
             }
             gimli::constants::DW_TAG_array_type => self.get_array_type(entry, current_unit, offset, typereader_data)?,
             gimli::constants::DW_TAG_enumeration_type => (self.get_enumeration_type(current_unit, offset, typereader_data)?, None),
-            gimli::constants::DW_TAG_structure_type => {
-                let size = get_byte_size_attribute(entry).ok_or_else(|| "missing struct byte size attribute".to_string())?;
-                let members = self.get_struct_or_union_members(entries_tree_node, current_unit, typereader_data)?;
-                (DbgDataType::Struct { size, members }, None)
-            }
-            gimli::constants::DW_TAG_class_type => (self.get_class_type(current_unit, offset, typereader_data)?, None),
+            gimli::constants::DW_TAG_structure_type => (self.get_struct_or_class_type(false, current_unit, offset, typereader_data)?, None),
+            gimli::constants::DW_TAG_class_type => (self.get_struct_or_class_type(true, current_unit, offset, typereader_data)?, None),
             gimli::constants::DW_TAG_union_type => {
                 let size = get_byte_size_attribute(entry).ok_or_else(|| "missing union byte size attribute".to_string())?;
-                let members = self.get_struct_or_union_members(entries_tree_node, current_unit, typereader_data)?;
+                let (members, _) = self.get_struct_or_union_members(entries_tree_node, current_unit, typereader_data)?;
                 (DbgDataType::Union { size, members }, None)
             }
             gimli::constants::DW_TAG_typedef => {
@@ -293,6 +309,8 @@ impl DebugDataReader<'_> {
             dim[0] = count;
         }
         let size = maybe_size.unwrap_or_else(|| dim.iter().fold(stride, |acc, num| acc * num));
+        // other code will fail with divide by zero if stride is zero, so set it to 1 in that case
+        let stride = stride.max(1);
         Ok((
             DbgDataType::Array {
                 dim,
@@ -336,7 +354,7 @@ impl DebugDataReader<'_> {
 
         // The enumeration type entry may have a DW_AT_type attribute which refers to the underlying
         // data type used to implement the enumeration
-        let (mut signed, opt_ut_size) = if let Ok(Some((utype_unit, utype_dbginfo_offset))) = get_type_attribute(entry, &self.units, current_unit)
+        let (signed, opt_ut_size) = if let Ok(Some((utype_unit, utype_dbginfo_offset))) = get_type_attribute(entry, &self.units, current_unit)
             && let Ok(utype) = self.get_type(utype_unit, utype_dbginfo_offset, typereader_data)
         {
             // get size and signedness of the underlying type
@@ -363,58 +381,77 @@ impl DebugDataReader<'_> {
             }
         }
 
-        // some compilers will claim that an enum is unsigned, but then have negative values in it
-        let min_val = enumerators.iter().map(|(_, val)| *val).min().unwrap_or(0);
-        let max_val = enumerators.iter().map(|(_, val)| *val).max().unwrap_or(0);
-        let signed_limit = 1i64.checked_shl(size as u32 * 8 - 1).unwrap_or(i64::MAX);
-        // if there is a negative value and the largest value is still valid in a signed type of this size, treat the enum as signed
-        if !signed && min_val < 0 && max_val < signed_limit {
-            signed = true;
-        }
+        let signed = enum_is_signed(signed, size, &enumerators);
 
         Ok(DbgDataType::Enum { size, signed, enumerators })
     }
 
-    fn get_class_type(&self, current_unit: usize, offset: UnitOffset, typereader_data: &mut TypeReaderData) -> Result<DbgDataType, String> {
+    /// Read a struct or class type.
+    /// Structs and classes are handled identically: in C++ both can have base classes
+    /// and members, and the debug info describes them in the same way. Only the wording
+    /// of messages differs, which is what `is_class` is used for.
+    fn get_struct_or_class_type(&self, is_class: bool, current_unit: usize, offset: UnitOffset, typereader_data: &mut TypeReaderData) -> Result<DbgDataType, String> {
+        let kind = if is_class { "class" } else { "struct" };
         let (unit, abbrev) = &self.units[current_unit];
         let mut entries_tree = unit.entries_tree(abbrev, Some(offset)).map_err(|err| err.to_string())?;
         let entries_tree_node = entries_tree.root().map_err(|err| err.to_string())?;
         let entry = entries_tree_node.entry();
 
-        let size = get_byte_size_attribute(entry).ok_or_else(|| "missing class byte size attribute".to_string())?;
-        let (unit, abbrev) = &self.units[current_unit];
-        let mut entries_tree2 = unit.entries_tree(abbrev, Some(entries_tree_node.entry().offset())).unwrap();
-        let entries_tree_node2 = entries_tree2.root().unwrap();
-        let inheritance = self.get_class_inheritance(entries_tree_node2, current_unit, typereader_data).unwrap_or_default();
-        let mut members = self.get_struct_or_union_members(entries_tree_node, current_unit, typereader_data)?;
+        let size = get_byte_size_attribute(entry).ok_or_else(|| format!("missing {kind} byte size attribute"))?;
+        let (mut members, inheritance) = self.get_struct_or_union_members(entries_tree_node, current_unit, typereader_data)?;
         // copy all inherited members from the base classes
         // this allows the inherited members ot be accessed without naming the base class
         for (baseclass_type, baseclass_offset) in inheritance.values() {
-            if let DbgDataType::Class { members: baseclass_members, .. } = &baseclass_type.datatype {
+            if let DbgDataType::Struct { members: baseclass_members, .. } = &baseclass_type.datatype {
                 for (name, (m_type, m_offset)) in baseclass_members {
-                    members.insert(name.to_owned(), (m_type.clone(), m_offset + baseclass_offset));
+                    if !members.contains_key(name) {
+                        // if the derived class has a member with the same name as an inherited member, the derived class member takes precedence
+                        members.insert(name.to_owned(), (m_type.clone(), m_offset + baseclass_offset));
+                    }
                 }
             }
         }
-        Ok(DbgDataType::Class { size, inheritance, members })
+        Ok(DbgDataType::Struct {
+            size,
+            is_class,
+            inheritance,
+            members,
+        })
     }
 
-    // get all the members of a struct or union or class
+    /// get all the members and base classes of a struct or union or class
+    /// Unions never have base classes, so the returned inheritance map is empty for them.
     fn get_struct_or_union_members(
         &self,
         entries_tree: EntriesTreeNode<EndianSlice<RunTimeEndian>>,
         current_unit: usize,
         typereader_data: &mut TypeReaderData,
-    ) -> Result<IndexMap<String, (TypeInfo, u64)>, String> {
+    ) -> Result<(MemberMap, MemberMap), String> {
         let (unit, _) = &self.units[current_unit];
-        let mut members = IndexMap::<String, (TypeInfo, u64)>::new();
+        let mut members = MemberMap::new();
+        let mut inheritance = MemberMap::new();
         let mut iter = entries_tree.children();
         while let Ok(Some(child_node)) = iter.next() {
             let child_entry = child_node.entry();
-            if child_entry.tag() == gimli::constants::DW_TAG_member {
-                // the name can be missing if this struct/union contains an anonymous struct/union
-                let opt_name = get_name_attribute(child_entry, &self.dwarf, unit).map_err(|_| "missing struct/union member name".to_string());
+            if child_entry.tag() == gimli::constants::DW_TAG_inheritance {
+                // failing to read one base class should not make the whole type unusable,
+                // so errors are silently ignored here
+                if let Ok((name, baseclass_type, baseclass_offset)) = self.get_inherited_class(child_entry, current_unit, typereader_data) {
+                    inheritance.insert(name, (baseclass_type, baseclass_offset));
+                }
+            } else if child_entry.tag() == gimli::constants::DW_TAG_member {
+                // Static and constexpr data members are only declared inside the struct: they have
+                // no storage of their own and are not part of the struct's layout, so skip them.
+                if get_declaration_attribute(child_entry).unwrap_or(false) {
+                    continue;
+                }
 
+                // the name can be missing if this struct/union contains an anonymous struct/union
+                let opt_name = get_name_attribute(child_entry, &self.dwarf, unit).ok();
+
+                // Union members and Dwarf 4/5 bitfields have no DW_AT_data_member_location.
+                // Zero is the correct default for union members; for bitfields the byte offset is
+                // derived from DW_AT_data_bit_offset in get_bitfield_entry() below.
                 let mut offset = get_data_member_location_attribute(self, child_entry, unit.encoding(), current_unit).unwrap_or(0);
 
                 // get the type of the member
@@ -425,15 +462,12 @@ impl DebugDataReader<'_> {
                     if let Some(bit_size) = get_bit_size_attribute(child_entry) {
                         membertype = self.get_bitfield_entry(unit, child_entry, &mut offset, bit_size, membertype);
                     }
-                    if let Ok(name) = opt_name {
+                    if let Some(name) = opt_name {
                         // in bitfields it's actually possible for the name to be empty!
                         // "int :31;" is valid C!
                         if !name.is_empty() {
                             // refer to the loaded type instead of duplicating it in the members
-                            if matches!(membertype.datatype, DbgDataType::Struct { .. })
-                                || matches!(membertype.datatype, DbgDataType::Union { .. })
-                                || matches!(membertype.datatype, DbgDataType::Class { .. })
-                            {
+                            if matches!(membertype.datatype, DbgDataType::Struct { .. } | DbgDataType::Union { .. }) {
                                 membertype.datatype = DbgDataType::TypeRef(new_dbginfo_offset.0, membertype.get_size());
                             }
                             members.insert(name, (membertype, offset));
@@ -442,9 +476,7 @@ impl DebugDataReader<'_> {
                         // no name: the member is an anon struct / union
                         // In this case, the contained members are transferred
                         match membertype.datatype {
-                            DbgDataType::Class { members: anon_members, .. }
-                            | DbgDataType::Struct { members: anon_members, .. }
-                            | DbgDataType::Union { members: anon_members, .. } => {
+                            DbgDataType::Struct { members: anon_members, .. } | DbgDataType::Union { members: anon_members, .. } => {
                                 for (am_name, (am_type, am_offset)) in anon_members {
                                     members.insert(am_name, (am_type, offset + am_offset));
                                 }
@@ -455,7 +487,7 @@ impl DebugDataReader<'_> {
                 }
             }
         }
-        Ok(members)
+        Ok((members, inheritance))
     }
 
     fn get_bitfield_entry(
@@ -532,42 +564,35 @@ impl DebugDataReader<'_> {
         }
     }
 
-    // get all the members of a struct or union or class
-    fn get_class_inheritance(
+    /// read one `DW_TAG_inheritance` entry, i.e. one base class of a struct or class,
+    /// and return its name, type and offset inside the derived type
+    fn get_inherited_class(
         &self,
-        entries_tree: EntriesTreeNode<EndianSlice<RunTimeEndian>>,
+        child_entry: &gimli::DebuggingInformationEntry<EndianSlice<RunTimeEndian>, usize>,
         current_unit: usize,
         typereader_data: &mut TypeReaderData,
-    ) -> Result<IndexMap<String, (TypeInfo, u64)>, String> {
+    ) -> Result<(String, TypeInfo, u64), String> {
         let (unit, _) = &self.units[current_unit];
-        let mut inheritance = IndexMap::<String, (TypeInfo, u64)>::new();
-        let mut iter = entries_tree.children();
-        while let Ok(Some(child_node)) = iter.next() {
-            let child_entry = child_node.entry();
-            if child_entry.tag() == gimli::constants::DW_TAG_inheritance {
-                let data_location =
-                    get_data_member_location_attribute(self, child_entry, unit.encoding(), current_unit).ok_or_else(|| "missing byte offset for inherited class".to_string())?;
+        let data_location =
+            get_data_member_location_attribute(self, child_entry, unit.encoding(), current_unit).ok_or_else(|| "missing byte offset for inherited class".to_string())?;
 
-                let Some((new_cur_unit, new_dbginfo_offset)) = get_type_attribute(child_entry, &self.units, current_unit)? else {
-                    // a member whose type is "nothing"? Skip it
-                    continue;
-                };
+        let Some((new_cur_unit, new_dbginfo_offset)) = get_type_attribute(child_entry, &self.units, current_unit)? else {
+            // a base class whose type is "nothing"?
+            return Err("missing type for inherited class".to_string());
+        };
 
-                let (unit, abbrev) = &self.units[new_cur_unit];
-                let new_unit_offset = new_dbginfo_offset
-                    .to_unit_offset(unit)
-                    .ok_or_else(|| format!("invalid type offset 0x{:X} for unit {}", new_dbginfo_offset.0, new_cur_unit))?;
-                let mut baseclass_tree = unit.entries_tree(abbrev, Some(new_unit_offset)).map_err(|err| err.to_string())?;
-                let baseclass_tree_node = baseclass_tree.root().map_err(|err| err.to_string())?;
-                let baseclass_entry = baseclass_tree_node.entry();
-                let baseclass_name = get_name_attribute(baseclass_entry, &self.dwarf, unit)?;
+        let (unit, abbrev) = &self.units[new_cur_unit];
+        let new_unit_offset = new_dbginfo_offset
+            .to_unit_offset(unit)
+            .ok_or_else(|| format!("invalid type offset 0x{:X} for unit {}", new_dbginfo_offset.0, new_cur_unit))?;
+        let mut baseclass_tree = unit.entries_tree(abbrev, Some(new_unit_offset)).map_err(|err| err.to_string())?;
+        let baseclass_tree_node = baseclass_tree.root().map_err(|err| err.to_string())?;
+        let baseclass_entry = baseclass_tree_node.entry();
+        let baseclass_name = get_name_attribute(baseclass_entry, &self.dwarf, unit)?;
 
-                let baseclass_type = self.get_type(new_cur_unit, new_dbginfo_offset, typereader_data)?;
+        let baseclass_type = self.get_type(new_cur_unit, new_dbginfo_offset, typereader_data)?;
 
-                inheritance.insert(baseclass_name, (baseclass_type, data_location));
-            }
-        }
-        Ok(inheritance)
+        Ok((baseclass_name, baseclass_type, data_location))
     }
 }
 
@@ -599,6 +624,24 @@ fn fix_bitfield_container_type(membertype: &mut TypeInfo, offset: u64, bit_size:
     }
 }
 
+/// Decide whether an enum should be treated as signed.
+///
+/// Some compilers claim that an enum is unsigned, but then put negative values in it.
+/// Such an enum is treated as signed, as long as every value still fits into a signed
+/// integer of the enum's size.
+fn enum_is_signed(underlying_signed: bool, size: u64, enumerators: &[(String, i64)]) -> bool {
+    if underlying_signed {
+        return true;
+    }
+
+    let min_val = enumerators.iter().map(|(_, val)| *val).min().unwrap_or(0);
+    let max_val = enumerators.iter().map(|(_, val)| *val).max().unwrap_or(0);
+    // i128 is required here: for size == 8 the bound is 2^63, which does not fit in an i64
+    let signed_limit = 1i128 << (size.clamp(1, 8) * 8 - 1);
+
+    min_val < 0 && i128::from(max_val) < signed_limit
+}
+
 fn get_base_type(entry: &gimli::DebuggingInformationEntry<EndianSlice<RunTimeEndian>, usize>, unit: &gimli::UnitHeader<EndianSlice<RunTimeEndian>>) -> (DbgDataType, String) {
     let byte_size = get_byte_size_attribute(entry).unwrap_or(1u64);
     let encoding = get_encoding_attribute(entry).unwrap_or(gimli::constants::DW_ATE_unsigned);
@@ -620,7 +663,7 @@ fn get_base_type(entry: &gimli::DebuggingInformationEntry<EndianSlice<RunTimeEnd
             2 => (DbgDataType::Sint16, "sint16".to_string()),
             4 => (DbgDataType::Sint32, "sint32".to_string()),
             8 => (DbgDataType::Sint64, "sint64".to_string()),
-            _ => (DbgDataType::Other(byte_size), "double".to_string()),
+            _ => (DbgDataType::Other(byte_size), "other".to_string()),
         },
         gimli::constants::DW_ATE_boolean | gimli::constants::DW_ATE_unsigned | gimli::constants::DW_ATE_unsigned_char => match byte_size {
             1 => (DbgDataType::Uint8, "uint8".to_string()),
@@ -663,5 +706,41 @@ impl TypeReaderData {
             nameidx += 1;
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn enumerators(values: &[i64]) -> Vec<(String, i64)> {
+        values.iter().map(|val| (format!("item_{val}"), *val)).collect()
+    }
+
+    #[test]
+    fn test_enum_is_signed() {
+        // a signed underlying type always wins, even for an enum with no negative values
+        assert!(enum_is_signed(true, 4, &enumerators(&[0, 1, 2])));
+
+        // no negative values: the enum stays unsigned
+        assert!(!enum_is_signed(false, 1, &enumerators(&[0, 255])));
+        assert!(!enum_is_signed(false, 8, &enumerators(&[0, 1])));
+        assert!(!enum_is_signed(false, 4, &[]));
+
+        // negative values in an "unsigned" enum: treat it as signed for every size.
+        // Previously this failed for size == 8, because the limit 2^63 was computed in an
+        // i64 and overflowed to i64::MIN, making the comparison always false.
+        for size in 1..=8 {
+            assert!(enum_is_signed(false, size, &enumerators(&[-1, 5])), "size {size} was not detected as signed");
+        }
+        assert!(enum_is_signed(false, 8, &enumerators(&[i64::MIN, 0, i64::MAX])));
+
+        // negative values, but the largest value does not fit into a signed type of this
+        // size, so the enum cannot be represented as signed and stays unsigned
+        assert!(!enum_is_signed(false, 1, &enumerators(&[-1, 200])));
+        assert!(!enum_is_signed(false, 2, &enumerators(&[-1, 40000])));
+        // the value exactly at the limit is out of range, the one below it is not
+        assert!(!enum_is_signed(false, 1, &enumerators(&[-1, 128])));
+        assert!(enum_is_signed(false, 1, &enumerators(&[-1, 127])));
     }
 }

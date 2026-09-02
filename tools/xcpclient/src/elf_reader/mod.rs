@@ -4,6 +4,21 @@
 // Read ELF files and extract debug information with DebugData (see copyright notice below)
 // ElfReader provides functions to fill a XCP registry with events, segments, variables and metadata
 
+// Based on Github repository a2ltool by DanielT: https://github.com/DanielT/a2ltool
+
+/* 
+Note on V2.1.10:
+Updated to typereader.rs from a2ltool v3.4.1 (commit 0b61aa5, 2026-08-04).
+The Class variant is gone. 
+Struct now carries is_class and inheritance, and the size and Display code follow.
+The two Class match arms from the previous fix are collapsed into the Struct arms, and a new test asserts that base members arrive for all four struct/class inheritance combinations.
+*/
+
+
+
+
+
+
 #![allow(clippy::collapsible_else_if)]
 
 use indexmap::IndexMap;
@@ -96,12 +111,12 @@ impl ElfReader {
             DbgDataType::Sint64 => McValueType::Slonglong,
             DbgDataType::Float => McValueType::Float32Ieee,
             DbgDataType::Double => McValueType::Float64Ieee,
-            DbgDataType::Struct { size, members } | DbgDataType::Class { size, members, .. } => {
+            DbgDataType::Struct { size, members, .. } => {
                 if let Some(type_name) = &type_info.name {
                     // Register a typedef for the struct/class type (no-op if it already exists).
                     // The identifier is sanitized once (e.g. "TplStruct<short unsigned int>" -> "TplStruct_short_unsigned_int_")
                     // and used for the typedef, its fields and the McValueType::TypeDef reference.
-                    // Inherited members of classes are already flattened into `members` by the DWARF reader.
+                    // Inherited members of structs and classes are already flattened into `members` by the DWARF reader.
                     let type_id = McIdentifier::from(type_name.clone());
                     if let Err(e) = self.register_struct(reg, object_type, type_id, *size as usize, members) {
                         error!("Failed to register typedef '{}' for struct/class type '{}': {}", type_id, type_name, e);
@@ -818,8 +833,7 @@ impl ElfReader {
                         | DbgDataType::Float
                         | DbgDataType::Double
                         | DbgDataType::Array { .. }
-                        | DbgDataType::Struct { .. }
-                        | DbgDataType::Class { .. } => {
+                        | DbgDataType::Struct { .. } => {
                             if verbose >= 2 {
                                 print!(
                                     "  Add {} instance for {}: addr = {}:0x{:08x}",
@@ -1129,6 +1143,8 @@ mod test {
             ("g_tpl_class", "TplClass_long_unsigned_int_"),
             ("g_derived_cc", "DerivedCC"),
             ("g_derived_cs", "DerivedCS"),
+            ("g_derived_ss", "DerivedSS"),
+            ("g_derived_sc", "DerivedSC"),
         ] {
             let inst = reg
                 .instance_list
@@ -1152,6 +1168,28 @@ mod test {
         let inner_class = outer.find_field("inner_class").expect("field Outer.inner_class");
         assert_eq!(inner_class.dim_type.value_type, McValueType::new_typedef("PubClass"));
         assert_eq!(inner_class.offset, 0);
+    }
+
+    // Base class members are flattened into the derived type for all struct/class combinations
+    #[test]
+    fn test_register_inherited_members() {
+        let reg = load_cpp_types();
+
+        for (typedef_name, base_member, derived_member) in [
+            ("DerivedSS", "base_a", "derived_b"),
+            ("DerivedCC", "cbase_a", "cderived_b"),
+            ("DerivedCS", "base_a", "cs_b"),
+            ("DerivedSC", "cbase_a", "sc_b"),
+        ] {
+            let typedef = reg
+                .typedef_list
+                .find_typedef(typedef_name)
+                .unwrap_or_else(|| panic!("typedef '{typedef_name}' not registered"));
+            assert_eq!(typedef.size, 8, "{typedef_name}");
+            assert_eq!(typedef.fields.len(), 2, "{typedef_name} member count");
+            assert_eq!(typedef.find_field(base_member).map(|f| f.offset), Some(0), "{typedef_name}.{base_member}");
+            assert_eq!(typedef.find_field(derived_member).map(|f| f.offset), Some(4), "{typedef_name}.{derived_member}");
+        }
     }
 
     // Typedef names which are sanitized (template instantiations) get their members and a matching reference
