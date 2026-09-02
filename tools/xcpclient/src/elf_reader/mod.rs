@@ -138,7 +138,7 @@ impl ElfReader {
                 }
             }
 
-            DbgDataType::Pointer(pointee, size) => {
+            DbgDataType::Pointer(size, _pointee) => {
                 if *size == 4 {
                     McValueType::Ulong
                 } else if *size == 8 {
