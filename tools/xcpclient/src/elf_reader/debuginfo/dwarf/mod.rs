@@ -587,13 +587,13 @@ impl<'a> Index<usize> for UnitList<'a> {
 mod test {
     use super::*;
 
-    static ELF_FILE_NAMES: [&str; 1] = ["fixtures/no_a2l_demo.out"];
+    static ELF_FILE_NAMES: [&str; 1] = [concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/no_a2l_demo/CANape/no_a2l_demo.out")];
 
     #[test]
     fn test_load_data() {
         for filename in ELF_FILE_NAMES {
             let debugdata = DebugData::load_dwarf(OsStr::new(filename), 1, 0).unwrap();
-            assert_eq!(debugdata.variables.len(), 28);
+            assert_eq!(debugdata.variables.len(), 49);
             assert!(debugdata.variables.get("counter").is_some());
 
             for (_, varinfo) in &debugdata.variables {

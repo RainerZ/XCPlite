@@ -14,7 +14,7 @@ use std::ffi::OsStr;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 
-use xcp_registry::{McAddress, McDimType, McEvent, McObjectQualifier, McObjectType, McSupportData, McValueType, Registry, RegistryError};
+use xcp_registry::{McAddress, McDimType, McEvent, McIdentifier, McObjectQualifier, McObjectType, McSupportData, McValueType, Registry, RegistryError};
 
 /*
 Which information can be detected from ELF/DWARF:
@@ -96,15 +96,19 @@ impl ElfReader {
             DbgDataType::Sint64 => McValueType::Slonglong,
             DbgDataType::Float => McValueType::Float32Ieee,
             DbgDataType::Double => McValueType::Float64Ieee,
-            DbgDataType::Struct { size, members } => {
+            DbgDataType::Struct { size, members } | DbgDataType::Class { size, members, .. } => {
                 if let Some(type_name) = &type_info.name {
-                    // Register the typedef struct for the value type typedef
-                    if let Some(name) = type_info.name.as_ref() {
-                        let _ = self.register_struct(reg, object_type, name.clone(), *size as usize, members);
+                    // Register a typedef for the struct/class type (no-op if it already exists).
+                    // The identifier is sanitized once (e.g. "TplStruct<short unsigned int>" -> "TplStruct_short_unsigned_int_")
+                    // and used for the typedef, its fields and the McValueType::TypeDef reference.
+                    // Inherited members of classes are already flattened into `members` by the DWARF reader.
+                    let type_id = McIdentifier::from(type_name.clone());
+                    if let Err(e) = self.register_struct(reg, object_type, type_id, *size as usize, members) {
+                        error!("Failed to register typedef '{}' for struct/class type '{}': {}", type_id, type_name, e);
                     }
-                    McValueType::new_typedef(type_name.clone())
+                    McValueType::new_typedef(type_id)
                 } else {
-                    warn!("Struct type without name in get_field_type");
+                    warn!("Struct/class type without name in get_value_type");
                     McValueType::Ubyte
                 }
             }
@@ -130,8 +134,8 @@ impl ElfReader {
                 }
             }
 
-            // These type are not a supported value type
-            // DbgDataType::Bitfield | DbgDataType::Pointer | DbgDataType::FuncPtr | DbgDataType::Class | DbgDataType::Union | DbgDataType::Enum  | DbgDataType::Other =>
+            // These types are not a supported value type (arrays are handled in get_dim_type)
+            // DbgDataType::Bitfield | DbgDataType::Union | DbgDataType::FuncPtr | DbgDataType::Other | DbgDataType::Array =>
             _ => {
                 warn!("Unsupported type in get_field_type: {:?}", &type_info.datatype);
                 //assert!(false, "Unsupported type in get_field_type: {:?}", &type_info.datatype);
@@ -160,20 +164,29 @@ impl ElfReader {
         }
     }
 
-    // Register a struct type in the registry, including its members
+    // Register a struct/class type as typedef in the registry, including its members.
+    // type_id is the sanitized identifier which is also used for the McValueType::TypeDef reference.
+    // Ok(()) if the typedef was created or already exists (same type used by several variables or fields).
     fn register_struct(
         &self,
         reg: &mut Registry,
         object_type: McObjectType,
-        type_name: String,
+        type_id: McIdentifier,
         size: usize,
         members: &IndexMap<String, (TypeInfo, u64)>,
-    ) -> Result<(), Box<dyn Error>> {
-        let typedef = reg.add_typedef(type_name.clone(), size)?;
+    ) -> Result<(), RegistryError> {
+        match reg.add_typedef(type_id, size) {
+            Ok(_) => {}
+            Err(RegistryError::Duplicate(_)) => return Ok(()), // already registered, keep the existing definition
+            Err(e) => return Err(e),
+        }
         for (field_name, (type_info, field_offset)) in members {
-            let field_dim_type = self.get_dim_type(reg, type_info, object_type);
-            let field_mc_support_data = McSupportData::new(object_type);
-            reg.add_typedef_field(&type_name, field_name.clone(), field_dim_type, field_mc_support_data, (*field_offset).try_into().unwrap())?;
+            let Ok(offset) = u16::try_from(*field_offset) else {
+                warn!("Field '{}.{}' skipped, offset {} exceeds the supported range", type_id, field_name, field_offset);
+                continue;
+            };
+            let field_dim_type = self.get_dim_type(reg, type_info, object_type); // may recursively register nested typedefs
+            reg.add_typedef_field(type_id.as_str(), field_name.clone(), field_dim_type, McSupportData::new(object_type), offset)?;
         }
         Ok(())
     }
@@ -805,7 +818,8 @@ impl ElfReader {
                         | DbgDataType::Float
                         | DbgDataType::Double
                         | DbgDataType::Array { .. }
-                        | DbgDataType::Struct { .. } => {
+                        | DbgDataType::Struct { .. }
+                        | DbgDataType::Class { .. } => {
                             if verbose >= 2 {
                                 print!(
                                     "  Add {} instance for {}: addr = {}:0x{:08x}",
@@ -1085,5 +1099,80 @@ fn apply_instance_metadata(inst: &mut xcp_registry::McInstance, kind: &str, meta
             }
         }
         _ => {}
+    }
+}
+
+//------------------------------------------------------------------------
+// Tests
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    // C++ type test fixture, see fixtures/cpp_types.cpp (GCC 12.3 arm-none-eabi, DWARF 5)
+    const CPP_TYPES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_types.elf");
+
+    fn load_cpp_types() -> Registry {
+        let elf_reader = ElfReader::new(CPP_TYPES_ELF, 0, usize::MAX).expect("failed to load fixtures/cpp_types.elf");
+        let mut reg = Registry::new();
+        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "").expect("register_variables failed");
+        reg
+    }
+
+    // Variables and struct members of C++ class type are registered like structs
+    #[test]
+    fn test_register_class_types() {
+        let reg = load_cpp_types();
+
+        for (var_name, typedef_name) in [
+            ("g_pubclass", "PubClass"),
+            ("g_tpl_class", "TplClass_long_unsigned_int_"),
+            ("g_derived_cc", "DerivedCC"),
+            ("g_derived_cs", "DerivedCS"),
+        ] {
+            let inst = reg
+                .instance_list
+                .get_instance(var_name, McObjectType::Measurement, None)
+                .unwrap_or_else(|| panic!("instance '{var_name}' not registered"));
+            assert_eq!(inst.dim_type.value_type, McValueType::new_typedef(typedef_name), "{var_name}");
+        }
+
+        let pub_class = reg.typedef_list.find_typedef("PubClass").expect("typedef PubClass");
+        assert_eq!(pub_class.size, 8);
+        assert_eq!(pub_class.find_field("x").map(|f| f.offset), Some(0));
+        assert_eq!(pub_class.find_field("y").map(|f| f.offset), Some(4));
+
+        // Inherited members of a class derived from a class are flattened by the DWARF reader
+        let derived_cc = reg.typedef_list.find_typedef("DerivedCC").expect("typedef DerivedCC");
+        assert_eq!(derived_cc.find_field("cbase_a").map(|f| f.offset), Some(0));
+        assert_eq!(derived_cc.find_field("cderived_b").map(|f| f.offset), Some(4));
+
+        // A class typed struct member references the class typedef instead of degrading to UBYTE
+        let outer = reg.typedef_list.find_typedef("Outer").expect("typedef Outer");
+        let inner_class = outer.find_field("inner_class").expect("field Outer.inner_class");
+        assert_eq!(inner_class.dim_type.value_type, McValueType::new_typedef("PubClass"));
+        assert_eq!(inner_class.offset, 0);
+    }
+
+    // Typedef names which are sanitized (template instantiations) get their members and a matching reference
+    #[test]
+    fn test_register_template_struct_members() {
+        let reg = load_cpp_types();
+
+        for typedef_name in ["TplStruct_short_unsigned_int_", "TplStruct_float_", "TplClass_long_unsigned_int_"] {
+            let typedef = reg
+                .typedef_list
+                .find_typedef(typedef_name)
+                .unwrap_or_else(|| panic!("typedef '{typedef_name}' not registered"));
+            assert_eq!(typedef.size, 8, "{typedef_name}");
+            assert_eq!(typedef.fields.len(), 2, "{typedef_name} has no members");
+            assert_eq!(typedef.find_field("value").map(|f| f.offset), Some(0), "{typedef_name}.value");
+            assert_eq!(typedef.find_field("count").map(|f| f.offset), Some(4), "{typedef_name}.count");
+        }
+
+        let outer = reg.typedef_list.find_typedef("Outer").unwrap();
+        let inner_tpl = outer.find_field("inner_tpl").expect("field Outer.inner_tpl");
+        assert_eq!(inner_tpl.dim_type.value_type, McValueType::new_typedef("TplStruct_short_unsigned_int_"));
+        assert_eq!(inner_tpl.offset, 8);
     }
 }
