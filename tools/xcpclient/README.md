@@ -165,6 +165,14 @@ cd tools/xcpclient
 cargo install --path .
 ```
 
+## Test
+
+```bash
+cd tools/xcpclient
+cargo test
+```
+
+
 ## Examples
 
 ### List all calibration or measurement variables
@@ -248,3 +256,16 @@ cargo r --  --dest-addr 192.168.0.206  --elf no_a2l_demo.out --elf-unit-limit 10
 cargo r --  --dest-addr 192.168.0.206  --elf no_a2l_demo.out --elf-unit-limit 1000 --log-level 3  --create-a2l --a2l no_a2l_demo.a2l --mea 'counter'  --time 5 --verbose 2
 
 ```
+
+
+
+## TODO
+
+- The A2L writer names the per-field `TYPEDEF_MEASUREMENT`/`TYPEDEF_CHARACTERISTIC` objects by bare field name and de-duplicates them globally. So `TplStruct<uint16_t>::value` and `TplStruct<float>::value` currently share the `UWORD` typedef of whichever instantiation is registered first, and the same happens for any two struct types with a same-named field of a different type. That is a separate issue in the A2L writer and will be fixed next.
+
+- Classes containing a C++ pointer-to-member (`DW_TAG_ptr_to_member_type`) are not handled by the DWARF reader, which also drops the inherited members of classes deriving from them. This is a limitation of the a2ltool reader as well; I will look into it separately.
+
+- Unions and bitfields are still not supported by the A2L generator.
+
+- Clippy warning cosmetics
+
