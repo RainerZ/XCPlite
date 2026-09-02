@@ -23,7 +23,7 @@ static void sig_handler(int sig) { global_running = false; }
 //-----------------------------------------------------------------------------------------------------
 // XCP configuration parameters
 
-#define OPTION_PROJECT_VERSION "V101" // EPK version string
+#define OPTION_PROJECT_VERSION "V2.1.10" // EPK version string
 
 #define OPTION_PROJECT_NAME "no_a2l_demo" // Project name, used to build the volatile and BIN file name
 #define OPTION_USE_TCP false              // TCP or UDP
@@ -107,6 +107,7 @@ XCP_UNIT(params__delay_us, "us");
 // Modified in function foo
 // Measuring it in main or task, is possible, but asynchronous and may give inconsistent results
 XCP_COMMENT(global_counter, "Global measurement variable"); // Example for meta data annotation as code
+XCP_READ_WRITE(global_counter);                             // Example for meta data annotation as code
 uint16_t global_counter = 0;
 
 // A2L Creator code parser annotation

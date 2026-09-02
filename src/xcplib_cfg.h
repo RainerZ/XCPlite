@@ -18,7 +18,7 @@
 // XCPlite version, currently V2.1.x
 #define OPTION_VERSION_MAJOR 2
 #define OPTION_VERSION_MINOR 1
-#define OPTION_VERSION_PATCH 2
+#define OPTION_VERSION_PATCH 10
 
 // CANape version compatibility
 // Disable workarounds for CANape versions < 24SP2
