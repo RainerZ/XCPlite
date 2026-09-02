@@ -13,6 +13,10 @@ All notable changes to XCPlite are documented in this file.
     - Fixed ESP32 image containing multiple DROM segments.
     - Handle C++ class types and fix empty typedefs for template structs in offline A2L generation
     - The DWARF type reader was merged up to a2ltool 3.4.1.
+    - Unique names for field typedefs in the A2L writer (`xcp_registry` update)
+    - Fixed the size of pointer members in structs and classes
+    - No panic on ELF files without `xcp_evts` section or with duplicate event markers
+    - README section on supported types and limitations, unit tests with a C++ type fixture
     - Fixed free_rtos_esp32_demo linker map section based event detection when dynamic event management is disabled.
 - Documentation improvements.
 - Fixed metadata macros XCP_LIMITS (missing ;) and XCP_READ_WRITE ([])
