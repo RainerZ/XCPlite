@@ -5,12 +5,18 @@ All notable changes to XCPlite are documented in this file.
 ## [V2.1.10]
 
 - Build cleanup: `shm.h` and `persistence.h` are only included where the corresponding feature is enabled, reducing overhead for minimal embedded source subsets
-
 - `xcpclient` related changes: 
     - EPK validation — A2L file EPK is now compared against the EPK reported by the target; mismatch prints a warning and aborts unless overridden with `--yes`
-    - dependency on `mc_registry` switched to public `RainerZ/xcp-lite` 3.0.9
-    - improved error message when AML file is not found
-    - uses ELF section boundary variables as fallback event detection when `xcp_evts` section is absent
+    - Dependency on `mc_registry` switched to public `RainerZ/xcp-lite` 3.0.9
+    - Improved error message when AML file is not found
+    - Uses ELF section boundary variables as fallback event detection when `xcp_evts` section is absent
+    - Fixed ESP32 image containing multiple DROM segments.
+    - Handle C++ class types and fix empty typedefs for template structs in offline A2L generation
+    - The DWARF type reader was merged up to a2ltool 3.4.1.
+    - Fixed free_rtos_esp32_demo linker map section based event detection when dynamic event management is disabled.
+- Documentation improvements.
+- Fixed metadata macros XCP_LIMITS (missing ;) and XCP_READ_WRITE ([])
+- Fixed link type_detection_test against xcplite for XCPLITE_CONFIGURATION define
 
 
 ## [V2.1.9]
