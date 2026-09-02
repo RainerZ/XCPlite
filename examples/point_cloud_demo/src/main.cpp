@@ -98,13 +98,13 @@ struct Point {
 template <uint16_t N> class PointCloud {
 
   private:
-    xcplib::CalSeg<ParametersT> params_; // XCP: Calibration parameter segment RAII wrapper for the ParametersT struct
-    double boundary_;                    // Current boundary_ box size in m
-    uint32_t step_counter_;              // Global step counter
-    uint64_t simulation_time_;           // Last simulation step time a s
-    uint64_t real_time_;                 // Current real time
-    uint16_t count_;                     // Current number of points in the cloud
-    std::array<Point, N> points_;        // Array of points
+    xcp::CalSeg<ParametersT> params_; // XCP: Calibration parameter segment RAII wrapper for the ParametersT struct
+    double boundary_;                 // Current boundary_ box size in m
+    uint32_t step_counter_;           // Global step counter
+    uint64_t simulation_time_;        // Last simulation step time a s
+    uint64_t real_time_;              // Current real time
+    uint16_t count_;                  // Current number of points in the cloud
+    std::array<Point, N> points_;     // Array of points
 
   private:
     // XCP: Register A2L typedefs

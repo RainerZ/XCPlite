@@ -18,7 +18,7 @@
 // XCPlite version, currently V2.1.x
 #define OPTION_VERSION_MAJOR 2
 #define OPTION_VERSION_MINOR 1
-#define OPTION_VERSION_PATCH 2
+#define OPTION_VERSION_PATCH 10
 
 // CANape version compatibility
 // Disable workarounds for CANape versions < 24SP2
@@ -134,6 +134,7 @@
 #define OPTION_DAQ_MEM_SIZE (512 * 6)
 
 // Create an cyclic DAQ event for asynchronous data acquisition
+// Needs OPTION_DAQ_EVENT_LIST
 // #define OPTION_DAQ_ASYNC_EVENT
 
 // Transport layer queue, vectored IO, lockless with variable queue entry size

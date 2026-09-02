@@ -1,6 +1,7 @@
 
 build*
 clang_tidy
+TODO.md
 
 
 # CANape artefacts
@@ -18,6 +19,7 @@ RecycleBin.ini
 # Examples .a2l, *.elf and .bin files
 /*.a2l
 *.elf
+!/tools/xcpclient/fixtures/*.elf
 *.bin
 
 # Temporary files
@@ -27,6 +29,7 @@ test_bintool
 
 # Other
 .vscode
+.claude
 .DS_Store
 /ptptool.obs
 /docs/CPP_TYPE_TRAITS_GUIDE.md

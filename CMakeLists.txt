@@ -64,7 +64,7 @@ endif()
 #   XCPLITE_BUILD_EXAMPLES
 #     default  -> hello_xcp, hello_xcp_cpp, c_demo, cpp_demo, point_cloud_demo,
 #                 struct_demo, multi_thread_demo, ptp4l_demo (Linux)
-#     no_a2l   -> no_a2l_demo
+#     no_a2l   -> no_a2l_demo, no_a2l_demo_cpp
 #     ptp      -> ptp4l_demo (Linux)
 #     shm      -> hello_xcp (SHM mode), hello_xcp_cpp (SHM mode)
 #                Note: silkit_demo is a standalone project (requires SilKit + installed xcplite);
@@ -181,9 +181,13 @@ set(xcplite_SOURCES src/xcpappl.c src/xcplite.c src/xcpethserver.c src/xcpethtl.
 # Create xcplite library
 add_library(xcplite ${xcplite_SOURCES})
 
+# Publish the selected build configuration to consumers of xcplite::xcplite.
+# This becomes a preprocessor define for downstream C/C++ targets.
+target_compile_definitions(xcplite PUBLIC "XCPLITE_CONFIGURATION=\"${XCPLITE_CONFIGURATION}\"")
+
 # Apply configuration override (empty = use default xcplib_cfg.h)
 if(_xcplib_cfg_override)
-    target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"${_xcplib_cfg_override}\"")
+    target_compile_definitions(xcplite PUBLIC "XCPLIB_CFG_OVERRIDE=\"${_xcplib_cfg_override}\"")
 endif()
 
 # Set include directories using generator expressions for proper installation
@@ -205,8 +209,10 @@ if(WIN32)
     # Define _CRT_SECURE_NO_WARNINGS for Windows to suppress secure CRT warnings
     target_compile_definitions(xcplite PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
-    # Define _GNU_SOURCE for Linux/Unix to make POSIX/BSD extensions available
-    target_compile_definitions(xcplite PRIVATE _GNU_SOURCE)
+    # _GNU_SOURCE: Linux only, propagated PUBLIC so CMake consumers of xcplite::xcplite
+    # get it automatically without having to set it themselves.
+    # macOS/QNX do not need it; Windows is already excluded by the if(WIN32) above.
+    target_compile_definitions(xcplite PUBLIC $<$<PLATFORM_ID:Linux>:_GNU_SOURCE>)
 endif()
 
 # Link threads library to xcplite (needed for pthread usage in platform.h)
@@ -280,6 +286,10 @@ if(XCPLITE_BUILD_EXAMPLES)
         target_link_libraries(no_a2l_demo PRIVATE xcplite)
         message(STATUS "no_a2l_demo: building with XCPLIB_CFG_OVERRIDE=\"xcplib_no_a2l_cfg.h\"")
 
+        add_executable(no_a2l_demo_cpp examples/no_a2l_demo_cpp/src/main.cpp)
+        target_link_libraries(no_a2l_demo_cpp PRIVATE xcplite)
+        message(STATUS "no_a2l_demo_cpp: building with XCPLIB_CFG_OVERRIDE=\"xcplib_no_a2l_cfg.h\"")
+
     elseif(XCPLITE_CONFIGURATION STREQUAL "ptp")
 
         # Requires Linux with a PTP-capable network interface and ptp4l running
@@ -296,11 +306,9 @@ if(XCPLITE_BUILD_EXAMPLES)
         # Shared-memory multi-application mode
         add_executable(hello_xcp examples/hello_xcp/src/main.c)
         target_link_libraries(hello_xcp PRIVATE xcplite)
-        target_compile_definitions(hello_xcp PRIVATE "OPTION_SHM_MODE")
 
         add_executable(hello_xcp_cpp examples/hello_xcp_cpp/src/main.cpp)
         target_link_libraries(hello_xcp_cpp PRIVATE xcplite)
-        target_compile_definitions(hello_xcp_cpp PRIVATE "OPTION_SHM_MODE")
 
         # silkit_demo is a standalone project requiring SilKit + an installed xcplite.
         # Build it separately: cd examples/silkit_demo && cmake -B build -DSilKit_DIR=... -Dxcplite_DIR=...
@@ -331,12 +339,12 @@ if(XCPLITE_BUILD_TESTS)
 
     if(XCPLITE_CONFIGURATION STREQUAL "default")
 
-        # Type detection tests (no xcplite link needed)
+        # Type detection tests
         add_executable(type_detection_test_c test/type_detection_test/src/main.c test/type_detection_test/src/c_version_test.c)
-        target_include_directories(type_detection_test_c PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inc")
+        target_link_libraries(type_detection_test_c PRIVATE xcplite)
 
         add_executable(type_detection_test_cpp test/type_detection_test/src/main.cpp test/type_detection_test/src/cpp_version_test.cpp)
-        target_include_directories(type_detection_test_cpp PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inc")
+        target_link_libraries(type_detection_test_cpp PRIVATE xcplite)
 
         add_executable(a2l_test test/a2l_test/src/main.c)
         target_link_libraries(a2l_test PRIVATE xcplite)

@@ -25,13 +25,13 @@
 //-----------------------------------------------------------------------------------------------------
 // XCP parameters
 
-#define OPTION_PROJECT_NAME "cal_test"  // A2L project name
-#define OPTION_PROJECT_VERSION "V2.1.0" // EPK version string
-#define OPTION_USE_TCP false            // TCP or UDP
-#define OPTION_SERVER_PORT 5555         // Port
-#define OPTION_SERVER_ADDR {0, 0, 0, 0} // Bind addr, 0.0.0.0 = ANY
-#define OPTION_QUEUE_SIZE (1024 * 256)  // Size of the measurement queue in bytes, must be a multiple of 8
-#define OPTION_LOG_LEVEL 3              // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
+#define OPTION_PROJECT_NAME "cal_test"   // A2L project name
+#define OPTION_PROJECT_VERSION "V2.1.10" // EPK version string
+#define OPTION_USE_TCP false             // TCP or UDP
+#define OPTION_SERVER_PORT 5555          // Port
+#define OPTION_SERVER_ADDR {0, 0, 0, 0}  // Bind addr, 0.0.0.0 = ANY
+#define OPTION_QUEUE_SIZE (1024 * 256)   // Size of the measurement queue in bytes, must be a multiple of 8
+#define OPTION_LOG_LEVEL 3               // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 // #define TEST_CALBLK                 // Use CalBlk instead of CalSeg
 #define TEST_THREAD_COUNT 4         // Number of threads
@@ -72,9 +72,9 @@ static ParametersT kParameters = {.run = true, .check = 0, .data = {0}};
 
 // Global calibration segment handle
 #ifdef TEST_CALBLK
-static xcplib::CalBlk<ParametersT> *calseg = nullptr; // Pointer to the calibration segment wrapper
+static xcp::CalBlk<ParametersT> *calseg = nullptr; // Pointer to the calibration segment wrapper
 #else
-static xcplib::CalSeg<ParametersT> *calseg = nullptr; // Pointer to the calibration segment wrapper
+static xcp::CalSeg<ParametersT> *calseg = nullptr; // Pointer to the calibration segment wrapper
 #endif
 
 //-----------------------------------------------------------------------------------------------------
@@ -393,9 +393,9 @@ int main(int argc, char *argv[]) {
 
 // Create the test calibration segment
 #ifdef TEST_CALBLK
-    auto calseg1 = xcplib::CalBlk("kParameters", &kParameters);
+    auto calseg1 = xcp::CalBlk("kParameters", &kParameters);
 #else
-    auto calseg1 = xcplib::CalSeg("kParameters", &kParameters);
+    auto calseg1 = xcp::CalSeg("kParameters", &kParameters);
 #endif
 
     // Add the calibration segment description as a typedef instance to the A2L file

@@ -12,11 +12,11 @@ the XCPlite instrumentation macros — no runtime A2L code is needed in the appl
 
 **Three sources of information** are combined:
 
-1. **`.xcp_evts` ELF section** — the XCPlite macros (`DaqCreateEvent`, `DaqCreateAndTriggerEvent`)
+1. **`xcp_evts` ELF section** — the XCPlite macros (`DaqCreateEvent`, `DaqCreateAndTriggerEvent`)
    emit a `tXcpEventDescriptor` constant per event into this named section. xcpclient iterates
    it to discover every event defined in the firmware, including name, cycle time, and priority.
 
-2. **`.xcp_cals` ELF section** — `CalSegDecl` emits a `tXcpCalSegDescriptor` constant per
+2. **`xcp_cals` ELF section** — `CalSegDecl` emits a `tXcpCalSegDescriptor` constant per
    calibration segment into this section, containing the segment name, address of the default
    page, and its size. xcpclient uses this to discover all calibration segments.
 
@@ -36,6 +36,34 @@ the XCPlite instrumentation macros — no runtime A2L code is needed in the appl
 For the full technical specification — ELF section layouts, the `trg__` anchor naming
 convention, and the `AddrExt` encoding — see
 [docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation--elfdwarf-internals).
+
+### Supported types and known limitations
+
+The DWARF type information is mapped to A2L objects as follows:
+
+| C/C++ type | A2L representation |
+|---|---|
+| `bool`, integer and floating point types | `MEASUREMENT` or `CHARACTERISTIC` of the matching A2L data type |
+| `enum` | integer of the enum's size; for variables the enumerators become a verbal conversion table, enum struct members are plain integers |
+| one- and two-dimensional arrays | `MEASUREMENT` / `CHARACTERISTIC` with `MATRIX_DIM` (`VAL_BLK`, `CURVE`, `MAP`); arrays of structs become arrays of typedef instances |
+| `struct`, `class`, template instantiations | `TYPEDEF_STRUCTURE` + `INSTANCE`; nested structs and classes become nested typedefs; private members are included; base class members are flattened into the derived type for all combinations of `struct`/`class` bases; `static`/`constexpr` members are skipped |
+| pointers as struct or class members | the address value as unsigned integer of the target's pointer size, the pointee is not followed |
+
+Type names which are not valid A2L identifiers (template instantiations such as `TplStruct<float>`) are sanitized to `TplStruct_float_`.
+The `TYPEDEF_MEASUREMENT`/`TYPEDEF_CHARACTERISTIC` of a struct field is named after the field; if another structure has a field with
+the same name but a different type or metadata, the name is qualified with the structure name (`TplStruct_float_.value`).
+
+Not supported, skipped and reported as warnings (log level 2 and above):
+
+- Variables of pointer type (measure the pointed-to variable instead).
+- Unions, bitfields and function pointers. A struct member of such a type is written as a one byte `UBYTE` placeholder
+  so that the remaining members of the structure keep their offsets.
+- Arrays with more than two dimensions (written as a one byte placeholder).
+- C++ pointer-to-member types (`DW_TAG_ptr_to_member_type`): a struct or class containing one cannot be read at all,
+  so it and every class deriving from it end up without members. This is a limitation of the a2ltool DWARF reader
+  this code is based on.
+- C++ library containers (`std::vector`, `std::string`, smart pointers, ...) are read as the structs they are;
+  the heap data behind them is not reachable.
 
 
 
@@ -162,8 +190,16 @@ Options:
 
 ```bash
 cd tools/xcpclient
-cargo install --path .
+cargo install --path . --locked
 ```
+
+## Test
+
+```bash
+cd tools/xcpclient
+cargo test
+```
+
 
 ## Examples
 

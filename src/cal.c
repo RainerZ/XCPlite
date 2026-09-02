@@ -30,7 +30,9 @@
 #endif
 
 #include "dbg_print.h"   // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
+#ifdef OPTION_ENABLE_PERSISTENCE
 #include "persistence.h" // for XcpBinFreezeCalSeg
+#endif
 #include "platform.h"    // for atomics OS abstraction
 #include "xcp.h"         // XCP protocol definitions
 #include "xcplite.h"     // XCP protocol layer interface functions
@@ -87,10 +89,6 @@ extern tXcpLocalData gXcpLocalData;
 /**************************************************************************/
 
 #ifdef XCP_ENABLE_CALSEG_LIST
-
-#if XCP_MAX_CALSEG_NAME & 1 == 0 || XCP_MAX_CALSEG_NAME >= 128
-#error "XCP_MAX_CALSEG_NAME must be <128 and odd for null termination"
-#endif
 
 /**************************************************************************/
 // Forward declarations
@@ -167,13 +165,17 @@ uint16_t XcpRegisterSectionCalSegs(void) {
         DBG_PRINT_WARNING("(MacOS): No xcp_cals section found\n");
     }
 #else
-// #error "Unsupported platform for section calibration segment registration"
+#ifndef _WIN
+#error "Unsupported platform for section calibration segment registration"
+#endif
 #endif
 
     if (count > 0)
         DBG_PRINTF3(ANSI_COLOR_GREEN "Preregistered %u new calibration segments or blocks from descriptor section\n" ANSI_COLOR_RESET, count);
+#ifndef _WIN
     else
         DBG_PRINT3("No new calibration segment descriptors found in section xcp_cals\n");
+#endif
     return count;
 }
 

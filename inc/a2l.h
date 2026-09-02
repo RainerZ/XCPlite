@@ -291,7 +291,7 @@ static inline tA2lTypeId A2lGetTypeIdFromPtr_bool(const bool *p) {
         double *: A2L_TYPE_DOUBLE,                                                                                                                                                 \
         const bool *: A2L_TYPE_UINT8,                                                                                                                                              \
         bool *: A2L_TYPE_UINT8,                                                                                                                                                    \
-        default: A2L_TYPE_UNDEFINED)
+        default: A2L_TYPE_UINT8)
 
 #endif // !__cplusplus
 
@@ -322,94 +322,149 @@ static inline tA2lTypeId A2lGetTypeIdFromPtr_bool(const bool *p) {
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Addressing mode convenience macros
+//
+// Exactly one of these should be set before the A2lCreateParameter/A2lCreateMeasurement (or typedef component) macros that
+// should use it; the mode stays active for all such calls until the next A2lSet*AddrMode call. See the "Four addressing
+// modes" summary at the top of this file, and docs/TECHNICAL.md for how they map to the XCP address extension.
+// Each mode has an `_s` variant taking the event/segment name as a plain string (event_name/seg_name) and an `_i` variant
+// taking its numeric id/index (event_id/seg_index, e.g. as returned by DaqCreateEvent/XcpCreateCalSeg) - useful when the
+// name isn't available as a bare identifier for the `#event_name` stringification the unsuffixed macro uses.
 
-// Set segment relative address mode
-// Error if the segment index does not exist
+/// Set Segment addressing mode: subsequent A2lCreateParameter/A2lCreateCurve/A2lCreateAxis/A2lCreateMap calls register their
+/// variables as offsets within calibration segment 'seg_index'/'seg_name' (or as absolute addresses, depending on the
+/// CASDD/ACSDD build configuration, see docs/TECHNICAL.md) - this is what makes the segment's page switching, checksum and
+/// persistence apply to them. Must be called after the segment has been created (e.g. via XcpCreateCalSeg).
+/// @param seg_index, seg_name the calibration segment to address into, by index or by name; error if it does not exist
+/// @param seg_instance the segment's instance variable in scope, used to compute member offsets
 #define A2lSetSegmentAddrMode(seg_index, seg_instance) A2lSetSegmentAddrMode__i(seg_index, (const uint8_t *)&(seg_instance));
 #define A2lSetSegmentAddrMode_s(seg_name, seg_instance) A2lSetSegmentAddrMode__s(seg_name, (const uint8_t *)&(seg_instance));
 
-// Set addressing mode to relative for a given event 'event_name' and base address
-// Error if the event does not exist
+/// Set Relative addressing mode: subsequent A2lCreateMeasurement-family calls register their variables as offsets from
+/// 'base_addr', re-evaluated each time event 'event_name' triggers - use this for heap-allocated objects or class members
+/// reached through a pointer, where the address is not a stack frame. Uses address-extension slot 1 (slot 0 is reserved for
+/// A2lSetStackAddrMode's stack frame pointer, so the two can be combined on the same event without clashing).
+/// @param event_name, event_id the event this addressing mode applies to; error if it does not exist
+/// @param base_addr pointer the registered variables are relative to
 #define A2lSetRelativeAddrMode(event_name, base_addr) A2lSetRelativeAddrMode__s(#event_name, 1, (const uint8_t *)(base_addr));
 #define A2lSetRelativeAddrMode_s(event_name, base_addr) A2lSetRelativeAddrMode__s(event_name, 1, (const uint8_t *)(base_addr));
 #define A2lSetRelativeAddrMode_i(event_id, base_addr) A2lSetRelativeAddrMode__i(event_id, 1, (const uint8_t *)(base_addr));
 
-// Set addressing mode to auto (stack or base address) and event 'event_name'
-// Error if the event does not exist
+/// Set Automatic addressing mode: like Relative, but decides for each variable individually, at generation time, whether its
+/// address falls inside the stack frame given by xcp_get_frame_addr() - if so, Stack addressing is used, otherwise Relative
+/// addressing against 'base_addr' is used. Useful for registering a mix of stack-local and heap/pointer-based variables under
+/// one event without switching addressing mode explicitly between groups.
+/// @param event_name, event_id the event this addressing mode applies to; error if it does not exist
+/// @param base_addr pointer used for variables whose address is not within the current stack frame
 void A2lSetAutoAddrMode(tXcpEventId event_id, const uint8_t *frame_ptr, const uint8_t *base_ptr);
 #define A2lSetAutomaticAddrMode(event_name, base_addr) A2lSetAutoAddrMode__s(#event_name, xcp_get_frame_addr(), base_addr);
 #define A2lSetAutomaticAddrMode_s(event_name_string, base_addr) A2lSetAutoAddrMode__s(event_name_string, xcp_get_frame_addr(), base_addr);
 #define A2lSetAutomaticAddrMode_i(event_id, base_addr) A2lSetAutoAddrMode__i(event_id, xcp_get_frame_addr(), base_addr);
 
-// Set addressing mode to stack and event 'event_name'
-// Error if the event does not exist
+/// Set Stack addressing mode: subsequent A2lCreateMeasurement-family calls register their variables as offsets from the
+/// stack frame active when event 'event_name' fires - use this for local variables of the function that triggers the event.
+/// @param event_name, event_id the event this addressing mode applies to; error if it does not exist
 #define A2lSetStackAddrMode(event_name) A2lSetStackAddrMode__s(#event_name, xcp_get_frame_addr());
 #define A2lSetStackAddrMode_s(event_name_string) A2lSetStackAddrMode__s(event_name_string, xcp_get_frame_addr());
 #define A2lSetStackAddrMode_i(event_id) A2lSetStackAddrMode__i(event_id, xcp_get_frame_addr());
 
-// Set addressing mode to absolute and event 'event_name'
-// Error if the event does not exist
+/// Set Absolute addressing mode: subsequent A2lCreateMeasurement-family calls register their variables by their fixed,
+/// static address - use this for globals and static locals. 'event_name' does not need to exist and does not affect the
+/// addressing; if it does exist, the following registrations are additionally grouped under that event in the A2L file.
+/// @param event_name, event_id default event used for A2L grouping only, may name a nonexistent event
 #define A2lSetAbsoluteAddrMode(event_name) A2lSetAbsoluteAddrMode__s(#event_name);
 #define A2lSetAbsoluteAddrMode_s(event_name_string) A2lSetAbsoluteAddrMode__s(event_name_string);
 #define A2lSetAbsoluteAddrMode_i(event_id) A2lSetAbsoluteAddrMode__i(event_id);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Create parameters in calibration parameter segments or in global memory
+//
+// @param name variable identifier; must be in scope, its type is detected automatically and its address is registered
+// @param comment free-text description
+// @param unit physical unit string, or a "conv.<name>" reference to a conversion created with A2lCreateLinearConversion/A2lCreateEnumConversion (see below)
+// @param min, max physical value limits shown to the XCP tool
+// @param xdim, ydim number of elements along the respective array dimension
 
+/// Create a scalar calibration parameter
 #define A2lCreateParameter(name, comment, unit, min, max) A2lCreateParameter_(#name, A2lGetTypeId(name), (uint8_t *)&(name), comment, unit, min, max);
 
+/// Create a 1-dimensional calibration curve (no shared axis, tool creates a default axis)
 #define A2lCreateCurve(name, xdim, comment, unit, min, max) A2lCreateCurve_(#name, A2lGetArray1DElementTypeId(name), (uint8_t *)&(name)[0], xdim, comment, unit, min, max, NULL);
 
+/// Create a 1-dimensional calibration curve that shares its axis with another curve/axis created via A2lCreateAxis
+/// @param x_axis name of the axis object to share
 #define A2lCreateCurveWithSharedAxis(name, xdim, comment, unit, min, max, x_axis)                                                                                                  \
     A2lCreateCurve_(#name, A2lGetArray1DElementTypeId(name), (uint8_t *)&(name)[0], xdim, comment, unit, min, max, x_axis);
 
+/// Create a standalone axis, usable as the shared axis of one or more curves/maps
 #define A2lCreateAxis(name, xdim, comment, unit, min, max) A2lCreateAxis_(#name, A2lGetArray1DElementTypeId(name), (uint8_t *)&(name)[0], xdim, comment, unit, min, max);
 
+/// Create a 2-dimensional calibration map (no shared axes, tool creates default axes)
 #define A2lCreateMap(name, xdim, ydim, comment, unit, min, max)                                                                                                                    \
     A2lCreateMap_(#name, A2lGetArray2DElementTypeId(name), (uint8_t *)&(name)[0][0], xdim, ydim, comment, unit, min, max, NULL, NULL);
 
+/// Create a 2-dimensional calibration map that shares its axes with axis objects created via A2lCreateAxis
+/// @param x_axis, y_axis names of the axis objects to share
 #define A2lCreateMapWithSharedAxis(name, xdim, ydim, comment, unit, min, max, x_axis, y_axis)                                                                                      \
     A2lCreateMap_(#name, A2lGetArray2DElementTypeId(name), (uint8_t *)&(name)[0][0], xdim, ydim, comment, unit, min, max, x_axis, y_axis);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Create conversions
+//
+// A conversion is referenced from a measurement/parameter macro's unit_or_conversion parameter as the string "conv.<name>"
 
+/// Create a linear (factor, offset) physical value conversion, referenced as unit_or_conversion string "conv.<name>"
 #define A2lCreateLinearConversion(name, comment, unit, factor, offset) A2lCreateLinearConversion_(#name, comment, unit, factor, offset)
 
+/// Create an enumeration conversion, referenced as unit_or_conversion string "conv.<name>"
+/// @param description A2L COMPU_VTAB value list, e.g. "3 0 \"OFF\" 1 \"ON\" 2 \"STANDBY\"" (count, then value/label pairs)
 #define A2lCreateEnumConversion(name, description) A2lCreateEnumConversion_(#name, description)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Create measurements on stack or in global memory
+//
+// @param name variable identifier; must be in scope, its type is detected automatically and its address is registered
+// @param comment free-text description
+// @param unit_or_conversion physical unit string, or a "conv.<name>" reference to a conversion (see above)
+// @param min, max physical value limits shown to the XCP tool
+// @param instance_name prefix prepended to the A2L symbol name, to distinguish measurements of the same variable name across multiple instances (e.g. threads, class instances)
 
+/// Create a scalar measurement with no physical unit/conversion
 #define A2lCreateMeasurement(name, comment) A2lCreateMeasurement_(NULL, #name, A2lGetTypeId(name), 1, &(name), NULL, 0.0, 0.0, comment);
 
+/// Create a scalar measurement with a physical unit or conversion and value limits
 #define A2lCreatePhysMeasurement(name, comment, unit_or_conversion, min, max)                                                                                                      \
     A2lCreateMeasurement_(NULL, #name, A2lGetTypeId(name), 1, &(name), unit_or_conversion, min, max, comment);
 
+/// Create a 1-dimensional array measurement with no physical unit/conversion
 #define A2lCreateMeasurementArray(name, comment)                                                                                                                                   \
     A2lCreateMeasurementArray_(NULL, #name, A2lGetArray1DElementTypeId(name), sizeof(name) / sizeof((name)[0]), 1, &(name)[0], NULL, 0.0, 0.0, comment);
 
+/// Create a 2-dimensional array (matrix) measurement with no physical unit/conversion
 #define A2lCreateMeasurementMatrix(name, comment)                                                                                                                                  \
     A2lCreateMeasurementArray_(NULL, #name, A2lGetArray2DElementTypeId(name), sizeof((name)[0]) / sizeof((name)[0][0]), sizeof(name) / sizeof((name)[0]), &(name)[0], NULL, 0.0,   \
                                0.0, comment);
 
+/// Create a 1-dimensional array measurement with a physical unit or conversion and value limits
 #define A2lCreatePhysMeasurementArray(name, comment, unit_or_conversion, min, max)                                                                                                 \
     A2lCreatePhysMeasurementArray_(NULL, #name, A2lGetArray1DElementTypeId(name), sizeof(name) / sizeof((name)[0]), 1, &(name)[0], unit_or_conversion, min, max, comment);
 
+/// Create a 2-dimensional array (matrix) measurement with a physical unit or conversion and value limits
 #define A2lCreatePhysMeasurementMatrix(name, comment, unit_or_conversion, min, max)                                                                                                \
     A2lCreateMeasurementArray_(NULL, #name, A2lGetArray2DElementTypeId(name), sizeof((name)[0]) / sizeof((name)[0][0]), sizeof(name) / sizeof((name)[0]), &(name)[0],              \
                                unit_or_conversion, min, max, comment);
 
-// With instance name
-// Instance name is used as prefix for the A2L symbol name
+/// Create a scalar measurement, with instance_name used as a prefix for the A2L symbol name
 #define A2lCreateMeasurementInstance(instance_name, name, comment) A2lCreateMeasurement_(instance_name, #name, A2lGetTypeId(name), 1, &(name), NULL, 0.0, 0.0, comment);
 
+/// Create a scalar measurement with a physical unit or conversion, with instance_name used as a prefix for the A2L symbol name
 #define A2lCreatePhysMeasurementInstance(instance_name, name, comment, unit_or_conversion, min, max)                                                                               \
     A2lCreateMeasurement_(instance_name, #name, A2lGetTypeId(name), 1, &(name), unit_or_conversion, min, max, comment);
 
+/// Create a 1-dimensional array measurement, with instance_name used as a prefix for the A2L symbol name
 #define A2lCreateMeasurementArrayInstance(instance_name, name, comment)                                                                                                            \
     A2lCreateMeasurementArray_(instance_name, #name, A2lGetArray1DElementTypeId(name), sizeof(name) / sizeof((name)[0]), 1, &(name)[0], NULL, 0.0, 0.0, comment);
 
+/// Create a 2-dimensional array (matrix) measurement, with instance_name used as a prefix for the A2L symbol name
 #define A2lCreateMeasurementMatrixInstance(instance_name, name, comment)                                                                                                           \
     A2lCreateMeasurementArray_(instance_name, #name, A2lGetArray2DElementTypeId(name), sizeof((name)[0]) / sizeof(((name)[0][0])), sizeof(name) / sizeof((name)[0]), &(name)[0],   \
                                NULL, 0.0, 0.0, comment);
@@ -532,11 +587,20 @@ void A2lSetAutoAddrMode(tXcpEventId event_id, const uint8_t *frame_ptr, const ui
 
 #ifndef __cplusplus
 
-// Global once - thread-safe across all threads
+/// Execute the following block exactly once, thread-safe and wait-free across all threads: on concurrent first calls,
+/// an atomic compare-and-swap picks exactly one caller to enter the block; every other (losing) caller skips it
+/// immediately, without waiting for the winner to finish executing it. Use to guard a one-time A2L registration (e.g.
+/// A2lCreateMeasurement calls) that may be reached from code executed by more than one event/function.
+/// @param name suffix used to build a unique static flag variable (`__a2l_once_<name>_`) for this call site; may be
+/// omitted (A2lOnce()) when the enclosing scope contains only one A2lOnce block, since the flag variable's name still
+/// needs to be unique only within that scope
 #define A2lOnce(name)                                                                                                                                                              \
     static A2L_ONCE_TYPE __a2l_once_##name##_ = 0;                                                                                                                                 \
     if (A2lOnce_(&__a2l_once_##name##_))
-// Per thread once - executed once per thread
+/// Execute the following block exactly once per calling thread (unlike A2lOnce, does not block other threads and each
+/// thread runs the block independently on its first call).
+/// @param name suffix used to build a unique thread-local flag variable (`__a2l_thread_once_<name>_`) for this call
+/// site; may be omitted (A2lThreadOnce()) under the same uniqueness rule as A2lOnce's `name`
 #define A2lThreadOnce(name)                                                                                                                                                        \
     static THREAD_LOCAL uint64_t __a2l_thread_once_##name##_ = 0;                                                                                                                  \
     if ((__a2l_thread_once_##name##_++) == 0)

@@ -70,10 +70,14 @@
 #endif
 
 #include "dbg_print.h"   // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
+#ifdef OPTION_ENABLE_PERSISTENCE
 #include "persistence.h" // for XcpBinFreezeCalSeg
+#endif
 #include "platform.h"    // for atomics
 #include "queue.h"       // for QueueXxx transport queue layer interface
-#include "shm.h"         // for shared memory management
+#ifdef OPTION_SHM_MODE
+#include "shm.h" // for shared memory management, declares nothing outside SHM mode
+#endif
 #include "xcp.h"         // XCP protocol definitions
 #include "xcptl.h"       // for transport layer abstraction XcpTlWaitForTransmitQueueEmpty and XcpTlSendCrm
 
@@ -803,6 +807,22 @@ const tXcpEvent *XcpGetEvent(tXcpEventId event) {
 // Get the current event count, thread safe but visibility of new events created by other threads is not guaranteed
 uint16_t XcpGetEventCount(void) { return getEventCount(); }
 
+// Get the cycle time of an event, return 0 if not found
+uint32_t XcpGetEventCycleTime(tXcpEventId event) {
+    const tXcpEvent *e = XcpGetEvent(event);
+    if (e == NULL)
+        return 0;
+    return e->cycle_time_ns;
+}
+
+// Get the priority of an event, return 0 if not found
+uint8_t XcpGetEventPriority(tXcpEventId event) {
+    const tXcpEvent *e = XcpGetEvent(event);
+    if (e == NULL)
+        return 0;
+    return (e->flags & XCP_DAQ_EVENT_FLAG_PRIORITY) ? 1 : 0;
+}
+
 // Get the events application id
 #ifdef OPTION_SHM_MODE // get event application id
 uint8_t XcpGetEventAppId(tXcpEventId event) {
@@ -958,6 +978,8 @@ static uint16_t XcpRegisterSectionEvents(void) {
 
     uint16_t count = 0;
 
+#ifndef _WIN
+
     const tXcpEventDescriptor *begin = __start_xcp_evts;
     const tXcpEventDescriptor *end = __stop_xcp_evts;
     if (begin != NULL && end != NULL && begin < end) {
@@ -972,11 +994,14 @@ static uint16_t XcpRegisterSectionEvents(void) {
     } else {
         DBG_PRINT_WARNING("No xcp_evts section found\n");
     }
+#endif
 
     if (count > 0)
         DBG_PRINTF3(ANSI_COLOR_GREEN "Preregistered %u events from event descriptor section\n" ANSI_COLOR_RESET, count);
+#ifndef _WIN
     else
         DBG_PRINT3("No new event descriptors found in section xcp_evts\n");
+#endif
     return count;
 }
 
@@ -1015,6 +1040,22 @@ const char *XcpGetEventName(tXcpEventId event) {
         return event_desc->name;
     }
     return NULL;
+}
+
+// Get the cycle time of an event, return 0 if not found
+uint32_t XcpGetEventCycleTime(tXcpEventId event) {
+    const tXcpEventDescriptor *e = XcpGetEvent(event);
+    if (e == NULL)
+        return 0;
+    return e->cycle_time_ns;
+}
+
+// Get the priority of an event, return 0 if not found
+uint8_t XcpGetEventPriority(tXcpEventId event) {
+    const tXcpEventDescriptor *e = XcpGetEvent(event);
+    if (e == NULL)
+        return 0;
+    return e->priority;
 }
 
 tXcpEventId XcpFindEvent(const char *name) {
@@ -1657,13 +1698,11 @@ static void XcpTriggerDaqEvent_(tQueueHandle queue_handle, tXcpEventId event_id,
         return;
     }
     const tXcpEvent *event = &shared.event_list.event[event_id];
-
 #ifdef XCP_ENABLE_DAQ_CONTROL
     if ((event->flags & XCP_DAQ_EVENT_FLAG_DISABLED) != 0) {
         return; // Event disabled
     }
 #endif
-
 #ifdef XCP_ENABLE_DAQ_PRESCALER
     {
         tXcpEvent *event = &shared_mut.event_list.event[event_id];
@@ -1723,14 +1762,6 @@ void XcpEventExtAt_(tXcpEventId event, int count, const uint8_t **bases, uint64_
     if (!isStarted())
         return;
 
-#ifdef XCP_ENABLE_DAQ_EVENT_LIST
-    if (event >= getEventCount()) {
-        DBG_PRINTF_ERROR("Event id %u out of range\n", event);
-        assert(false);
-        return;
-    }
-#endif
-
     // Async command processing for pending command
 #ifdef XCP_ENABLE_DYN_ADDRESSING
     XcpProcessPendingCommand(event, count, bases);
@@ -1746,14 +1777,6 @@ void XcpEventExt_(tXcpEventId event, int count, const uint8_t **bases) {
 
     if (!isStarted())
         return;
-
-#ifdef XCP_ENABLE_DAQ_EVENT_LIST
-    if (event >= getEventCount()) {
-        DBG_PRINTF_ERROR("Event id %u out of range\n", event);
-        assert(false);
-        return;
-    }
-#endif
 
     // Async command processing for pending command
 #ifdef XCP_ENABLE_DYN_ADDRESSING
@@ -1795,14 +1818,6 @@ void XcpEvent(tXcpEventId event) {
     if (!isDaqRunning())
         return; // DAQ not running
 
-#ifdef XCP_ENABLE_DAQ_EVENT_LIST
-    if (event >= getEventCount()) {
-        DBG_PRINTF_ERROR("Event id %u out of range\n", event);
-        assert(false);
-        return;
-    }
-#endif
-
 #if defined(XCP_ADDRESS_MODE_XCPLITE__ACSDD)
     const uint8_t *bases[2] = {xcp_get_base_addr(), NULL};
 #else
@@ -1813,14 +1828,6 @@ void XcpEvent(tXcpEventId event) {
 void XcpEventAt(tXcpEventId event, uint64_t clock) {
     if (!isDaqRunning())
         return; // DAQ not running
-
-#ifdef XCP_ENABLE_DAQ_EVENT_LIST
-    if (event >= getEventCount()) {
-        DBG_PRINTF_ERROR("Event id %u out of range\n", event);
-        assert(false);
-        return;
-    }
-#endif
 
 #if defined(XCP_ADDRESS_MODE_XCPLITE__ACSDD)
     const uint8_t *bases[2] = {xcp_get_base_addr(), NULL};
@@ -1838,14 +1845,6 @@ void XcpEventExt_Var(tXcpEventId event, int args_count, ...) {
 
     if (!isStarted())
         return;
-
-#ifdef XCP_ENABLE_DAQ_EVENT_LIST
-    if (event >= getEventCount()) {
-        DBG_PRINTF_ERROR("Event id %u out of range\n", event);
-        assert(false);
-        return;
-    }
-#endif
 
     va_list args;
     va_start(args, args_count);
@@ -1868,14 +1867,6 @@ void XcpEventExtAt_Var(tXcpEventId event, uint64_t clock, int args_count, ...) {
 
     if (!isStarted())
         return;
-
-#ifdef XCP_ENABLE_DAQ_EVENT_LIST
-    if (event >= getEventCount()) {
-        DBG_PRINTF_ERROR("Event id %u out of range\n", event);
-        assert(false);
-        return;
-    }
-#endif
 
     va_list args;
     va_start(args, args_count);
@@ -2470,8 +2461,8 @@ static uint8_t XcpAsyncCommand(bool async, const uint32_t *cmdBuf, uint8_t cmdLe
             CRM_LEN = CRM_GET_DAQ_PROCESSOR_INFO_LEN;
             CRM_GET_DAQ_PROCESSOR_INFO_MIN_DAQ = 0;                          // Total number of predefined DAQ lists
             CRM_GET_DAQ_PROCESSOR_INFO_MAX_DAQ = shared.daq_lists.daq_count; // Number of currently dynamically allocated DAQ lists
-#if defined(XCP_ENABLE_DAQ_EVENT_INFO) && defined(XCP_ENABLE_DAQ_EVENT_LIST)
-            CRM_GET_DAQ_PROCESSOR_INFO_MAX_EVENT = getEventCount(); // Number of currently available event channels which can be queried by GET_DAQ_EVENT_INFO
+#if defined(XCP_ENABLE_DAQ_EVENT_INFO)
+            CRM_GET_DAQ_PROCESSOR_INFO_MAX_EVENT = XcpGetEventCount(); // Number of currently available event channels which can be queried by GET_DAQ_EVENT_INFO
 #else
             CRM_GET_DAQ_PROCESSOR_INFO_MAX_EVENT = 0; // 0 - unknown, because GET_DAQ_EVENT_INFO is not enabled
 #endif
@@ -2528,17 +2519,14 @@ static uint8_t XcpAsyncCommand(bool async, const uint32_t *cmdBuf, uint8_t cmdLe
         case CC_GET_DAQ_EVENT_INFO: {
             check_len(CRO_GET_DAQ_EVENT_INFO_LEN);
             uint16_t eventNumber = CRO_GET_DAQ_EVENT_INFO_EVENT;
-            const tXcpEvent *event = XcpGetEvent(eventNumber);
-            if (event == NULL) {
+            const char *eventName = XcpGetEventName(eventNumber);
+            if (eventName == NULL) {
                 error(CRC_OUT_OF_RANGE);
             }
-            const char *eventName = XcpGetEventName(eventNumber);
-            assert(eventName != NULL);
-
             // Convert cycle time to ASAM XCP IF_DATA coding time cycle and time unit
             // RESOLUTION OF TIMESTAMP "UNIT_1NS" = 0, "UNIT_10NS" = 1, ...
-            uint8_t timeUnit = 0;                      // timeCycle unit, 1ns=0, 10ns=1, 100ns=2, 1us=3, ..., 1ms=6, ...
-            uint32_t timeCycle = event->cycle_time_ns; // cycle time in units, 0 = sporadic or unknown
+            uint8_t timeUnit = 0;                                   // timeCycle unit, 1ns=0, 10ns=1, 100ns=2, 1us=3, ..., 1ms=6, ...
+            uint32_t timeCycle = XcpGetEventCycleTime(eventNumber); // cycle time in units, 0 = sporadic or unknown
             while (timeCycle >= 256) {
                 timeCycle /= 10;
                 timeUnit++;
@@ -2549,7 +2537,7 @@ static uint8_t XcpAsyncCommand(bool async, const uint32_t *cmdBuf, uint8_t cmdLe
             CRM_GET_DAQ_EVENT_INFO_NAME_LENGTH = (uint8_t)STRNLEN(eventName, XCP_MAX_EVENT_NAME);
             CRM_GET_DAQ_EVENT_INFO_TIME_CYCLE = (uint8_t)timeCycle;
             CRM_GET_DAQ_EVENT_INFO_TIME_UNIT = timeUnit;
-            CRM_GET_DAQ_EVENT_INFO_PRIORITY = (event->flags & XCP_DAQ_EVENT_FLAG_PRIORITY) ? 0xFF : 0x00;
+            CRM_GET_DAQ_EVENT_INFO_PRIORITY = XcpGetEventPriority(eventNumber);
             // Event name provided via upload
             local_mut.mta_ptr = (uint8_t *)eventName;
             local_mut.mta_ext = XCP_ADDR_EXT_PTR;
@@ -3226,11 +3214,13 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
 #endif
 
 // Create the async event with id 0 and cycle time 1ms
-#ifdef XCP_ENABLE_DAQ_EVENT_LIST
 #ifdef OPTION_DAQ_ASYNC_EVENT
+#ifdef XCP_ENABLE_DAQ_EVENT_LIST
     static const tXcpEventDescriptor evt__async XCP_EVENT_SECTION_ATTR = {.name = "async", .cycle_time_ns = 1000000, .priority = 0};
     tXcpEventId id = XcpCreateEvent("async", 0, 0);
     assert(id == 0);
+#else
+#error "DAQ event list must be enabled for async event"
 #endif
 #endif
 
@@ -3240,7 +3230,7 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     // In SHM multiapplication mode, only the leader reaches this point, and creates a EPK segment for the whole system
     // @@@@ TODO: Currently the EPK segment is treated like any other segment, even if it is read-only and should only expose the default page
     static tXcpCalSegIndex calseg_id_epk = XCP_UNDEFINED_CALSEG;
-    const static tXcpCalSegDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {
+    static const tXcpCalSegDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {
         .name = XCP_EPK_CALSEG_NAME, .addr = &calseg_id_epk, .indexp = (tXcpCalSegIndex *)&calseg_id_epk, .size = XCP_EPK_MAX_LENGTH + 1, .type = XCP_CALSEG_TYPE_SEGMENT};
     DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s'\n", XCP_EPK_CALSEG_NAME);
     // @@@@ TODO: Are we sure, that this works in absolute addressing mode, since the reference page is not copied anymore: what is writen to the A2L file
@@ -3670,6 +3660,7 @@ static void XcpPrintCmd(const tXcpCto *cmdBuf) {
             printf(" UNKNOWN TRANSPORT LAYER COMMAND %02X\n", CRO_TL_SUBCOMMAND);
             break;
         } // switch (CRO_TL_SUBCOMMAND)
+        break;
 
     case CC_NOP:
         printf(" NOP\n");

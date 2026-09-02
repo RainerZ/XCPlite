@@ -7,6 +7,7 @@
 // #define OPTION_DISPLAY
 // #define OPTION_CMSIS
 // #define OPTION_IO
+// #define OPTION_ANALOG
 
 // #define DEMO_TASK_CORE 1 // If defined, pin both tasks to this core
 
@@ -22,6 +23,15 @@
 
 // Initialize XCP demo (start XCP server and demo tasks)
 bool xcp_demo_init(void);
+
+#ifdef OPTION_ANALOG
+// Read a platform-provided single-ended analog channel. Returns NAN when the
+// converter is unavailable or the channel is invalid.
+float readAnalogChannel(uint8_t channel);
+
+// Raw analog value exposed as an XCP measurement.
+extern float pressure_sensor_voltage;
+#endif
 
 #ifdef OPTION_DISPLAY
 void displayUpdate(uint32_t slowTaskPeriodMs, uint16_t slowCounter, uint32_t fastTaskPeriodMs, uint16_t fastCounter);

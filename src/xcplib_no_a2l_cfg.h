@@ -22,7 +22,7 @@
 |   Platform requirements:
 |    File system for ELF optional ELF upload and .BIN files
 |   Examples:
-|    no_a2l_demo
+|    no_a2l_demo, no_a2l_demo_cpp
 |   Tools:
 |     Use xcpclient A2L generation from ELF
 |   Tests:
@@ -50,8 +50,8 @@
 
 // Create an asynchronous, cyclic DAQ event with event id 0 for asynchronous data acquisition
 // Global variables default to this event
+// Does not work with section registered events
 #undef OPTION_DAQ_ASYNC_EVENT
-#define OPTION_DAQ_ASYNC_EVENT
 
 //-------------------------------------------------------------------------------
 // A2L / ELF — generated externally from ELF by xcpclient; disable on-target features

@@ -20,7 +20,7 @@
 // XCP parameters
 
 constexpr const char *OPTION_PROJECT_NAME = "cpp_demo";
-constexpr const char OPTION_PROJECT_VERSION[] = "V200";
+constexpr const char OPTION_PROJECT_VERSION[] = "V201";
 constexpr bool OPTION_USE_TCP = false;
 constexpr uint16_t OPTION_SERVER_PORT = 5555;
 constexpr size_t OPTION_QUEUE_SIZE = (1024 * 64);
@@ -161,72 +161,73 @@ int main() {
     A2lCreateMeasurementArray(loop_histogram, "Mainloop cycle time histogram");
 #endif
 
-    // Signal generator C++ class demo
-    // See sig_gen.cpp for details how to measure instance members and stack variables in member functions
-    // Create 2 signal generator instances of class SignalGenerator with individual parameters
-    // Note that the signal generator threads register measurements in the A2L file as well
-    // This is not in conflict because the main thread has already registered its measurements above
-    // Otherwise use A2lLock() and A2lUnlock() to avoid race conditions when registering measurements, the A2L generator macros for are not thread safe by itself
-    signal_generator::SignalGenerator signal_generator_1("SigGen1", &kSignalParameters1);
-    signal_generator::SignalGenerator signal_generator_2("SigGen2", &kSignalParameters2);
+    {
+        // Signal generator C++ class demo
+        // See sig_gen.cpp for details how to measure instance members and stack variables in member functions
+        // Create 2 signal generator instances of class SignalGenerator with individual parameters
+        // Note that the signal generator threads register measurements in the A2L file as well
+        // This is not in conflict because the main thread has already registered its measurements above
+        // Otherwise use A2lLock() and A2lUnlock() to avoid race conditions when registering measurements, the A2L generator macros for are not thread safe by itself
+        signal_generator::SignalGenerator signal_generator_1("SigGen1", &kSignalParameters1);
+        signal_generator::SignalGenerator signal_generator_2("SigGen2", &kSignalParameters2);
+        sleepUs(100000); // Wait a bit to let the signal generator threads initialize
 
-    sleepUs(100000);
+        // Main loop
+        std::cout << "Starting main loop..." << std::endl;
+        uint64_t loop_time = clockGetMonotonicUs();
+        uint64_t last_loop_time = loop_time;
+        while (running) {
+            // Access the calibration parameters 'delay' and 'counter_max' safely
+            // Use RAII guard for automatic lock/unlock the calibration parameter segment 'calseg'
+            {
+                auto parameters = calseg.lock();
 
-    // Main loop
-    std::cout << "Starting main loop..." << std::endl;
-    uint64_t loop_time = clockGetMonotonicUs();
-    uint64_t last_loop_time = loop_time;
-    while (running) {
-        // Access the calibration parameters 'delay' and 'counter_max' safely
-        // Use RAII guard for automatic lock/unlock the calibration parameter segment 'calseg'
-        {
-            auto parameters = calseg.lock();
+                // Increment the local measurement variable 'loop_counter' using the calibration parameter 'counter_max' as a limit
+                counter++;
+                if (counter > parameters->counter_max)
+                    counter = 0;
 
-            // Increment the local measurement variable 'loop_counter' using the calibration parameter 'counter_max' as a limit
-            counter++;
-            if (counter > parameters->counter_max)
-                counter = 0;
+            } // Guard automatically unlocks here
 
-        } // Guard automatically unlocks here
+            // Measure and calculate the mainloop cycle time, build histogram
+            last_loop_time = loop_time;
+            loop_time = clockGetMonotonicUs();
+            loop_cycletime = loop_time - last_loop_time;
+            loop_histogram[(loop_cycletime >= (kHistogramBin * (kHistogramSize - 1))) ? (kHistogramSize - 1) : (loop_cycletime / kHistogramBin)]++;
 
-        // Measure and calculate the mainloop cycle time, build histogram
-        last_loop_time = loop_time;
-        loop_time = clockGetMonotonicUs();
-        loop_cycletime = loop_time - last_loop_time;
-        loop_histogram[(loop_cycletime >= (kHistogramBin * (kHistogramSize - 1))) ? (kHistogramSize - 1) : (loop_cycletime / kHistogramBin)]++;
+            // Sum the values of signal generator 1+2 into the local variable sum
+            channel1 = signal_generator_1.GetValue();
+            channel2 = signal_generator_2.GetValue();
+            sum = channel1 + channel2;
 
-        // Sum the values of signal generator 1+2 into the local variable sum
-        channel1 = signal_generator_1.GetValue();
-        channel2 = signal_generator_2.GetValue();
-        sum = channel1 + channel2;
+            // Update some more local and global variables
+            if (counter == 0) {
+                temperature += 1;
+                if (temperature > 150)
+                    temperature = 0; // Reset temperature to -50 °C
+            }
+            speed += (250.0f - speed) * 0.0001;
+            if (speed > 245.0f)
+                speed = 0; // Reset speed to 0 km/h
 
-        // Update some more local and global variables
-        if (counter == 0) {
-            temperature += 1;
-            if (temperature > 150)
-                temperature = 0; // Reset temperature to -50 °C
-        }
-        speed += (250.0f - speed) * 0.0001;
-        if (speed > 245.0f)
-            speed = 0; // Reset speed to 0 km/h
-
-        // Trigger the XCP measurement mainloop for temperature, speed, counter and sum
+            // Trigger the XCP measurement mainloop for temperature, speed, counter and sum
 #ifndef OPTION_USE_VARIADIC_MACROS
-        DaqTriggerEvent(mainloop);
+            DaqTriggerEvent(mainloop);
 #else
-        DaqEventVar(mainloop,                                                                                //
-                    A2L_MEAS_PHYS(temperature, "Motor temperature in °C", "conv.temperature", -50.0, 200.0), //
-                    A2L_MEAS_PHYS(speed, "Speed in km/h", "km/h", 0, 250.0),                                 //
-                    A2L_MEAS(counter, "Mainloop loop counter"),                                              //
-                    A2L_MEAS(sum, "Sum of SigGen1 and SigGen2 value"),                                       //
-                    A2L_MEAS_PHYS(loop_cycletime, "Mainloop cycle time", "conv.clock_ticks", 0.0, 0.05),     //
-                    A2L_MEAS_ARRAY(loop_histogram, "Mainloop cycle time histogram")                          //
-        );
+            DaqEventVar(mainloop,                                                                                //
+                        A2L_MEAS_PHYS(temperature, "Motor temperature in °C", "conv.temperature", -50.0, 200.0), //
+                        A2L_MEAS_PHYS(speed, "Speed in km/h", "km/h", 0, 250.0),                                 //
+                        A2L_MEAS(counter, "Mainloop loop counter"),                                              //
+                        A2L_MEAS(sum, "Sum of SigGen1 and SigGen2 value"),                                       //
+                        A2L_MEAS_PHYS(loop_cycletime, "Mainloop cycle time", "conv.clock_ticks", 0.0, 0.05),     //
+                        A2L_MEAS_ARRAY(loop_histogram, "Mainloop cycle time histogram")                          //
+            );
 #endif
 
-        sleepUs(calseg.lock()->delay_us);
+            sleepUs(calseg.lock()->delay_us);
 
-    } // while (running)
+        } // while (running)
+    } // Detroy signal generator instances before shutting down the XCP server and A2L generator
 
     XcpDisconnect();        // Force disconnect the XCP client
     A2lFinalize();          // Finalize A2L generation, if not done yet

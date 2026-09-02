@@ -1,7 +1,8 @@
+// Get CFA (Canonical Frame Address) information from DWARF debug data in an ELF file
+
 use anyhow::Result;
 use gimli::{AttributeValue, BaseAddresses, CieOrFde, DebugFrame, Dwarf, EhFrame, EndianSlice, LittleEndian, Unit, UnwindSection};
 use object::{Object, ObjectSection};
-use std::collections::HashMap;
 
 /// Represents CFA information for a function
 #[derive(Debug, Clone)]
@@ -18,13 +19,6 @@ pub struct CfaInfo {
     pub unit_idx: usize,
 }
 
-// pub fn get_cfa(mmap: &Mmap, cfa_info: &mut Vec<CfaInfo>, verbose: usize, unit_idx_limit: usize) -> Result<usize> {
-//     // Parse the ELF file using the object crate
-//     log::info!("CFA parser: Parsing ELF file for function CFAs ...");
-//     let object_file: object::File<'_> = object::File::parse(&mmap[..])?;
-//     get_cfa_from_object(&object_file, cfa_info, verbose, unit_idx_limit)
-// }
-
 pub fn get_cfa_from_object(object_file: &object::File<'_>, cfa_info: &mut Vec<CfaInfo>, verbose: usize, unit_idx_limit: usize) -> Result<usize> {
     // Load DWARF sections - this is where all the debug information is stored
 
@@ -38,26 +32,7 @@ pub fn get_cfa_from_object(object_file: &object::File<'_>, cfa_info: &mut Vec<Cf
         log::warn!("CFA parser: No functions found");
         return Ok(0);
     }
-    log::info!("CFA parser: Found {} functions:", n);
-
-    // Log all functions grouped by compilation unit
-    if verbose >= 2 {
-        let mut by_cu: HashMap<usize, Vec<&CfaInfo>> = HashMap::new();
-        for func in cfa_info {
-            by_cu.entry(func.unit_idx).or_default().push(func);
-        }
-        for (cu_idx, cu_functions) in by_cu {
-            println!("Compilation Unit {}: {} functions", cu_idx, cu_functions.len());
-            for func in cu_functions {
-                let cfa_info = match func.cfa_offset {
-                    Some(offset) => format!("CFA+{}", offset),
-                    None => "CFA unknown".to_string(),
-                };
-                println!("  {} (0x{:08x}-0x{:08x}) [{}]", func.function, func.low_pc, func.high_pc, cfa_info);
-            }
-        }
-    }
-
+    log::debug!("CFA parser: Found {} functions:", n);
     Ok(n)
 }
 
@@ -138,7 +113,7 @@ fn extract_function_info(
         let mut entries = unit.entries();
 
         // Skip the compilation unit DIE itself and process its children
-        if let Some((_, entry)) = entries.next_dfs()? {
+        if let Some(entry) = entries.next_dfs()? {
             if entry.tag() == gimli::DW_TAG_compile_unit {
                 if let Some(name) = get_string_attribute(dwarf, &unit, &entry, gimli::DW_AT_name)? {
                     log::debug!("Compilation unit name: {}", name);
@@ -147,7 +122,7 @@ fn extract_function_info(
         }
 
         // Process all DIEs in this compilation unit
-        while let Some((_depth, entry)) = entries.next_dfs()? {
+        while let Some(entry) = entries.next_dfs()? {
             // We're looking for subprogram DIEs (functions)
             if entry.tag() == gimli::DW_TAG_subprogram {
                 if let Some(func_info) = extract_function_from_die(dwarf, object_file, &unit, &entry, cu_index, verbose)? {
@@ -182,33 +157,24 @@ fn extract_function_from_die(
     let name = match get_string_attribute(dwarf, unit, entry, gimli::DW_AT_name)? {
         Some(name) => name,
         None => {
-            // if verbose {
-            //     println!("    Skipping unnamed function");
-            // }
             return Ok(None);
         }
     };
 
     // Get the low PC (start address)
-    let low_pc = match entry.attr_value(gimli::DW_AT_low_pc)? {
+    let low_pc = match entry.attr_value(gimli::DW_AT_low_pc) {
         Some(AttributeValue::Addr(addr)) => addr,
         _ => {
-            // if verbose {
-            //     println!("    Function '{}' has no low_pc", name);
-            // }
             return Ok(None);
         }
     };
 
     // Get the high PC (end address)
     // High PC can be either an absolute address or an offset from low PC
-    let high_pc = match entry.attr_value(gimli::DW_AT_high_pc)? {
+    let high_pc = match entry.attr_value(gimli::DW_AT_high_pc) {
         Some(AttributeValue::Addr(addr)) => addr,
         Some(AttributeValue::Udata(offset)) => low_pc + offset,
         _ => {
-            // if verbose {
-            //     println!("    Function '{}' has no high_pc", name);
-            // }
             return Ok(None);
         }
     };
@@ -250,7 +216,7 @@ fn extract_function_from_die(
 fn extract_frame_base_offset(entry: &gimli::DebuggingInformationEntry<EndianSlice<LittleEndian>>) -> Result<Option<i64>> {
     // Look for DW_AT_frame_base attribute
     // This attribute describes how to compute the frame base for local variables
-    match entry.attr_value(gimli::DW_AT_frame_base)? {
+    match entry.attr_value(gimli::DW_AT_frame_base) {
         Some(AttributeValue::Exprloc(expression)) => {
             // The frame base is described by a DWARF expression
             // For simple cases, this might be something like "DW_OP_call_frame_cfa + offset"
@@ -284,13 +250,6 @@ fn extract_frame_base_offset(entry: &gimli::DebuggingInformationEntry<EndianSlic
 /// This function parses .eh_frame or .debug_frame sections using gimli
 /// to find the CFA (Canonical Frame Address) calculation rule for a function.
 fn extract_cfa_from_cfi(file: &object::File, function_address: u64) -> Result<Option<i64>> {
-    // if verbose {
-    //     println!(
-    //         "    Searching for CFA rules at address 0x{:08x}",
-    //         function_address
-    //     );
-    // }
-
     // Try .eh_frame first (more common)
     if let Some(cfa_offset) = parse_eh_frame(file, function_address)? {
         // println!("    Found CFA offset in .eh_frame: {}", cfa_offset);
@@ -318,14 +277,6 @@ fn parse_eh_frame(file: &object::File, function_address: u64) -> Result<Option<i
 
     let eh_frame_data = eh_frame_section.data()?;
     let eh_frame_address = eh_frame_section.address();
-
-    // if verbose {
-    //     println!(
-    //         "    Found .eh_frame section with {} bytes at 0x{:08x}",
-    //         eh_frame_data.len(),
-    //         eh_frame_address
-    //     );
-    // }
 
     let eh_frame = EhFrame::new(eh_frame_data, LittleEndian);
     parse_cfi_section(&eh_frame, eh_frame_address, function_address, ".eh_frame")
@@ -377,26 +328,12 @@ fn parse_cfi_section<R: gimli::Reader>(section: &impl UnwindSection<R>, section_
 
                 // Check if this FDE covers our function
                 if function_address >= fde_start && function_address < fde_end {
-                    // if verbose {
-                    //     println!(
-                    //         "    Found FDE in {} covering 0x{:08x}-0x{:08x}",
-                    //         section_name, fde_start, fde_end
-                    //     );
-                    // }
-
                     // Parse the unwind instructions to get CFA rules
                     return parse_fde_for_cfa(&fde, section, &bases);
                 }
             }
         }
     }
-
-    // if verbose {
-    //     println!(
-    //         "    No FDE found in {} for address 0x{:08x}",
-    //         section_name, function_address
-    //     );
-    // }
 
     Ok(None)
 }
@@ -593,7 +530,7 @@ fn get_string_attribute(
     entry: &gimli::DebuggingInformationEntry<EndianSlice<LittleEndian>>,
     attr: gimli::DwAt,
 ) -> Result<Option<String>> {
-    if let Some(attr_value) = entry.attr_value(attr)? {
+    if let Some(attr_value) = entry.attr_value(attr) {
         match attr_value {
             AttributeValue::DebugStrRef(offset) => {
                 if let Ok(s) = dwarf.string(offset) {
@@ -610,29 +547,3 @@ fn get_string_attribute(
     }
     Ok(None)
 }
-
-//
-// Print detailed information for all functions
-// fn print_all_functions(functions: &[CfaInfo]) {
-//     println!("\nAll Functions");
-//     for (i, func) in functions.iter().enumerate() {
-//         println!("\nFunction #{}: {}", i + 1, func.function);
-//         println!("  Compilation Unit: {}", func.unit_idx);
-//         println!(
-//             "  Address Range: 0x{:08x} - 0x{:08x} (size: {} bytes)",
-//             func.low_pc,
-//             func.high_pc,
-//             func.high_pc - func.low_pc
-//         );
-//         match func.cfa_offset {
-//             Some(offset) => {
-//                 println!("  CFA Offset: {} (0x{:x})", offset, offset);
-//                 println!("  Local variables are likely at: CFA + {} + variable_offset", offset);
-//             }
-//             None => {
-//                 println!("  CFA Offset: Unknown - may require complex DWARF expression evaluation");
-//                 println!("  Note: This might indicate a more complex frame layout");
-//             }
-//         }
-//     }
-// }

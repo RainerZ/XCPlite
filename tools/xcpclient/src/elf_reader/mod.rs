@@ -1,6 +1,23 @@
 //--------------------------------------------------------------------------------------------------------------------------------------------------
 // Module elf_reader
-// Read ELF files and extract debug information
+// Defines and implements ElfReader
+// Read ELF files and extract debug information with DebugData (see copyright notice below)
+// ElfReader provides functions to fill a XCP registry with events, segments, variables and metadata
+
+// Based on Github repository a2ltool by DanielT: https://github.com/DanielT/a2ltool
+
+/* 
+Note on V2.1.10:
+Updated to typereader.rs from a2ltool v3.4.1 (commit 0b61aa5, 2026-08-04).
+The Class variant is gone. 
+Struct now carries is_class and inheritance, and the size and Display code follow.
+The two Class match arms from the previous fix are collapsed into the Struct arms, and a new test asserts that base members arrive for all four struct/class inheritance combinations.
+*/
+
+
+
+
+
 
 #![allow(clippy::collapsible_else_if)]
 
@@ -12,61 +29,44 @@ use std::ffi::OsStr;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 
-use xcp_registry::{McAddress, McDimType, McEvent, McObjectType, McSupportData, McValueType, Registry, RegistryError};
+use xcp_registry::{McAddress, McDimType, McEvent, McIdentifier, McObjectQualifier, McObjectType, McSupportData, McValueType, Registry, RegistryError};
 
 /*
 Which information can be detected from ELF/DWARF:
-- Events:
-    name, compilation unit, function name and CFA offset, but index is unknown
-- Memory segment name, type (naming convention name = reference page), address, length, but number is unknown
-- Variables:
-    variable name, typename, absolute address, frame offset, compilation unit, function name, namespace
-    static variables in functions get the correct event
-    local variables on stack get the correct CFA
-    name, type, compilation unit, namespace, location (register or stack)
-- Types:
-    typedefs, structs, enums
-    basic types: int8/16/32/64, uint8/16/32/64, float, double
-    arrays 1D and 2D
-    pointers (as ulong or ulonglong)
+    - Events:
+        name, compilation unit, function name and CFA offset, but index is unknown
+    - Memory segment name, type (naming convention name = reference page), address, length, but number is unknown
+    - Variables:
+        variable name, typename, absolute address, frame offset, compilation unit, function name, namespace
+        static variables in functions get the correct event
+        local variables on stack get the correct CFA
+        name, type, compilation unit, namespace, location (register or stack)
+    - Types:
+        typedefs, structs, enums
+        basic types: int8/16/32/64, uint8/16/32/64, float, double
+        arrays 1D and 2D
+        pointers (as ulong or ulonglong)
 
-    Key benefits:
+Key benefits:
     - Instance names get prefixed with function name if local stack or static variables
     - All instances get the correct fixed event id, if there is one in their scope, otherwise default event id is 0
     - Event compilation unit, function and CFA is detected to enable local variable access
 
-    Todo:
-    - test arrays and nested structs
-
-    - No DW_AT_location means optimized away
-
-Detect TLS Variables:
-
-TLS Variables:
-Check for missing DW_AT_location + thread-local context
-Look for variables referencing .tdata/.tbss sections
-Parse DW_TAG_variable with TLS-specific location expressions
-DW_OP_form_tls_address, etc
-
-
 Tools:
-dwarfdump --debug-info <filename>
-dwarfdump --debug-info --name <varname> <filename>
-objdump -h  <filename>
-objdump --syms <filename>
+    dwarfdump --debug-info <filename>
+    dwarfdump --debug-info --name <varname> <filename>
+    objdump -h  <filename>
+    objdump --syms <filename>
 
 Limitations:
-- With -o1 most stack variables are in registers, have to be manually spilled to stack or captured
-- Segment numbers and event index are not constant expressions, need to be read by XCP (current solution) or from the binary persistence file from the target
+    - With -o1 most stack variables are in registers, have to be manually spilled to stack or captured
+    - Segment numbers and event index are not constant expressions, need to be read by XCP (current solution) or from the binary persistence file from the target
 
 Possible future improvements:
-- Thread load addressing mode
-- C++ support,  this addressing support, namespaces
-- Measurement of variables and function parameters in registers
-- Just in time compilation of variable access expressions
-
-
-
+    - Thread load addressing mode
+    - C++ support,  this addressing support, namespaces
+    - Measurement of variables and function parameters in registers
+    - Just in time compilation of variable access expressions
 */
 
 // Dwarf reader
@@ -75,8 +75,6 @@ Possible future improvements:
 // Copyright (c) DanielT
 mod debuginfo;
 use debuginfo::{DbgDataType, DebugData, TypeInfo, VarInfo};
-
-//use crate::xcp_client::xcp;
 
 //------------------------------------------------------------------------
 //  ELF reader and A2L creator
@@ -113,15 +111,19 @@ impl ElfReader {
             DbgDataType::Sint64 => McValueType::Slonglong,
             DbgDataType::Float => McValueType::Float32Ieee,
             DbgDataType::Double => McValueType::Float64Ieee,
-            DbgDataType::Struct { size, members } => {
+            DbgDataType::Struct { size, members, .. } => {
                 if let Some(type_name) = &type_info.name {
-                    // Register the typedef struct for the value type typedef
-                    if let Some(name) = type_info.name.as_ref() {
-                        let _ = self.register_struct(reg, object_type, name.clone(), *size as usize, members);
+                    // Register a typedef for the struct/class type (no-op if it already exists).
+                    // The identifier is sanitized once (e.g. "TplStruct<short unsigned int>" -> "TplStruct_short_unsigned_int_")
+                    // and used for the typedef, its fields and the McValueType::TypeDef reference.
+                    // Inherited members of structs and classes are already flattened into `members` by the DWARF reader.
+                    let type_id = McIdentifier::from(type_name.clone());
+                    if let Err(e) = self.register_struct(reg, object_type, type_id, *size as usize, members) {
+                        error!("Failed to register typedef '{}' for struct/class type '{}': {}", type_id, type_name, e);
                     }
-                    McValueType::new_typedef(type_name.clone())
+                    McValueType::new_typedef(type_id)
                 } else {
-                    warn!("Struct type without name in get_field_type");
+                    warn!("Struct/class type without name in get_value_type");
                     McValueType::Ubyte
                 }
             }
@@ -136,7 +138,7 @@ impl ElfReader {
                 }
             }
 
-            DbgDataType::Pointer(pointee, size) => {
+            DbgDataType::Pointer(size, _pointee) => {
                 if *size == 4 {
                     McValueType::Ulong
                 } else if *size == 8 {
@@ -147,8 +149,8 @@ impl ElfReader {
                 }
             }
 
-            // These type are not a supported value type
-            // DbgDataType::Bitfield | DbgDataType::Pointer | DbgDataType::FuncPtr | DbgDataType::Class | DbgDataType::Union | DbgDataType::Enum  | DbgDataType::Other =>
+            // These types are not a supported value type (arrays are handled in get_dim_type)
+            // DbgDataType::Bitfield | DbgDataType::Union | DbgDataType::FuncPtr | DbgDataType::Other | DbgDataType::Array =>
             _ => {
                 warn!("Unsupported type in get_field_type: {:?}", &type_info.datatype);
                 //assert!(false, "Unsupported type in get_field_type: {:?}", &type_info.datatype);
@@ -177,25 +179,35 @@ impl ElfReader {
         }
     }
 
-    // Register a struct type in the registry, including its members
+    // Register a struct/class type as typedef in the registry, including its members.
+    // type_id is the sanitized identifier which is also used for the McValueType::TypeDef reference.
+    // Ok(()) if the typedef was created or already exists (same type used by several variables or fields).
     fn register_struct(
         &self,
         reg: &mut Registry,
         object_type: McObjectType,
-        type_name: String,
+        type_id: McIdentifier,
         size: usize,
         members: &IndexMap<String, (TypeInfo, u64)>,
-    ) -> Result<(), Box<dyn Error>> {
-        let typedef = reg.add_typedef(type_name.clone(), size)?;
+    ) -> Result<(), RegistryError> {
+        match reg.add_typedef(type_id, size) {
+            Ok(_) => {}
+            Err(RegistryError::Duplicate(_)) => return Ok(()), // already registered, keep the existing definition
+            Err(e) => return Err(e),
+        }
         for (field_name, (type_info, field_offset)) in members {
-            let field_dim_type = self.get_dim_type(reg, type_info, object_type);
-            let field_mc_support_data = McSupportData::new(object_type);
-            reg.add_typedef_field(&type_name, field_name.clone(), field_dim_type, field_mc_support_data, (*field_offset).try_into().unwrap())?;
+            let Ok(offset) = u16::try_from(*field_offset) else {
+                warn!("Field '{}.{}' skipped, offset {} exceeds the supported range", type_id, field_name, field_offset);
+                continue;
+            };
+            let field_dim_type = self.get_dim_type(reg, type_info, object_type); // may recursively register nested typedefs
+            reg.add_typedef_field(type_id.as_str(), field_name.clone(), field_dim_type, McSupportData::new(object_type), offset)?;
         }
         Ok(())
     }
 
     // Find the addressing mode marker variable (naming convention "XCPLITE__<signature>") and return the signature, if found
+    // (CASDD, ACSDD, ...)
     pub fn get_target_signature(&self) -> Option<&str> {
         // Iterate over variables and look for XCPlite addressing mode marker
         for (var_name, var_infos) in &self.debug_data.variables {
@@ -266,9 +278,9 @@ impl ElfReader {
 
         // Print the found segment definition markers
         if verbose >= 1 {
-            info!("Found {} segment definition marker variables:", seg_definitions.len());
+            println!("Found {} segment definition marker variables:", seg_definitions.len());
             for (seg_index, (var_name, var_infos, var_address, seg_number)) in seg_definitions.iter().enumerate() {
-                info!("{}: '{}' - number={:?}, addr={:08X}'", seg_index, var_name, seg_number, var_address);
+                println!("{}: '{}' - number={:?}, addr={:08X}'", seg_index, var_name, seg_number, var_address);
                 if verbose >= 2 {
                     let var_info = &var_infos[0];
                     let function_name = if let Some(f) = var_info.function.as_ref() { f.as_str() } else { "" };
@@ -278,7 +290,7 @@ impl ElfReader {
                     } else {
                         format!("{unit_idx}")
                     };
-                    info!("  found in {}:'{}'", unit_name, function_name);
+                    println!("  found in {}:'{}'", unit_name, function_name);
                 }
             }
         }
@@ -324,7 +336,7 @@ impl ElfReader {
                             for candidate in x {
                                 let unit_name = self.debug_data.make_simple_unit_name(candidate.unit_idx).unwrap_or_else(|| candidate.unit_idx.to_string());
                                 let function_name = candidate.function.as_deref().unwrap_or("<global>");
-                                info!(
+                                println!(
                                     "  candidate in {}:'{}', addr_class={}, addr=0x{:08X}",
                                     unit_name, function_name, candidate.address.0, candidate.address.1
                                 );
@@ -341,14 +353,14 @@ impl ElfReader {
                 // Determine segment length
                 seg_length = {
                     if let Some(type_info) = self.debug_data.types.get(&seg_var_info.typeref) {
-                        info!(
+                        println!(
                             "Calibration segment '{}' type information found, type={}, size = {}",
                             seg_name,
                             type_info.name.as_ref().map_or("<unnamed>", |s| s.as_str()),
                             type_info.get_size()
                         );
                         if verbose >= 2 {
-                            info!("  type = {}", type_info);
+                            println!("  type = {}", type_info);
                         }
                         type_info.get_size().try_into().expect("segment size exceeds 64K")
                     } else {
@@ -465,8 +477,25 @@ impl ElfReader {
 
         info!("Registering event information:");
 
-        // Get the address of the XCP event descriptor memory section
+        // Get the address range of the XCP event descriptor memory section (start is 0 if not found)
         let xcp_event_section_addr = self.debug_data.get_event_section_addr();
+        let xcp_event_section_end = self
+            .debug_data
+            .sections
+            .get("xcp_evts")
+            .map(|(_, end)| *end)
+            .or_else(|| self.debug_data.symbol_addresses.get("__stop_xcp_evts").copied());
+
+        // Placeholder ids for events whose id can not be determined from the event descriptor section
+        // They must be unique in the registry, counting down from 0xFFFF keeps them out of the range of real event ids
+        // The ids are corrected from the XCP server event information when connected (see --fix-a2l)
+        let mut next_undefined_event_id: u16 = 0xFFFF;
+
+        // Location "unit:function" of a marker variable for messages
+        let location = |v: &VarInfo| -> String {
+            let unit_name = self.debug_data.make_simple_unit_name(v.unit_idx).unwrap_or_else(|| v.unit_idx.to_string());
+            format!("{}:{}", unit_name, v.function.as_deref().unwrap_or(""))
+        };
 
         // Iterate over variables
         for (var_name, var_infos) in &self.debug_data.variables {
@@ -478,35 +507,68 @@ impl ElfReader {
 
             // Event definitions (by markers from DaqCreateEvent macro)
             // (thread local) static evt__<name>, name is event name
-            if var_name.starts_with("evt__") {
-                // remove the "evt__" prefix
-                let evt_name = var_name.strip_prefix("evt__").unwrap_or("unnamed");
-                let evt_unit_idx = var_infos[0].unit_idx;
-                let evt_unit_name = if let Some(name) = self.debug_data.make_simple_unit_name(evt_unit_idx) {
-                    name
-                } else {
-                    format!("{evt_unit_idx}")
+            if let Some(evt_name) = var_name.strip_prefix("evt__") {
+                let Some(first) = var_infos.first() else {
+                    continue;
                 };
 
-                let evt_function = if let Some(f) = var_infos[0].function.as_ref() { f.as_str() } else { "" };
+                // The DaqCreateEvent macro emits one event descriptor per call site. If the same event is created in several
+                // functions or compilation units, the target creates the event once for the first descriptor in the section
+                // (XcpInit scans the section in address order), so the definition with the lowest address is used here as well
+                let var_info = var_infos.iter().filter(|v| v.address.1 != 0).min_by_key(|v| v.address.1).unwrap_or(first);
                 info!(
-                    "Event definition for event '{}' found in {}:{}, addr = {:#x}",
-                    evt_name, evt_unit_name, evt_function, var_infos[0].address.1
+                    "Event definition for event '{}' found in {}, addr = {:#x}",
+                    evt_name,
+                    location(var_info),
+                    var_info.address.1
                 );
-                // Find the event already exists in the registry
-                if let Some(_evt) = reg.event_list.find_event(evt_name, 0) {
-                    continue; // event already exists
+                if var_infos.len() > 1 {
+                    let others: Vec<String> = var_infos.iter().filter(|v| !std::ptr::eq(*v, var_info)).map(|v| location(v)).collect();
+                    warn!(
+                        "Event '{}' is defined {} times, using the definition in {} (also defined in {})",
+                        evt_name,
+                        var_infos.len(),
+                        location(var_info),
+                        others.join(", ")
+                    );
                 }
-                // Create a new event and try to determine the event number from the event memory section
-                else {
-                    if xcp_event_section_addr > 0 {
-                        let event_id: u16 = ((var_infos[0].address.1 - xcp_event_section_addr) / 16) as u16; // @@@@ size of tXcpEventDescriptor hardcoded
-                        reg.event_list.add_event(McEvent::new(evt_name.to_string(), 0, event_id, 0)).unwrap();
-                        info!("New event '{}' found: event id = {}", evt_name, event_id);
-                        continue; // event id has to be fixed later, for now we just create it with a unique id based on the address of the event marker variable
+
+                // Skip if the event already exists in the registry (e.g. from the XCP server event information)
+                if reg.event_list.find_event(evt_name, 0).is_some() {
+                    continue;
+                }
+
+                // Determine the event id from the position of the event descriptor in the event descriptor section
+                let addr = var_info.address.1;
+                let mut event_id: Option<u16> = None;
+                if xcp_event_section_addr > 0 && addr >= xcp_event_section_addr && xcp_event_section_end.is_none_or(|end| addr < end) {
+                    let id = ((addr - xcp_event_section_addr) / 16) as u16; // @@@@ size of tXcpEventDescriptor hardcoded
+                    if let Some(other) = reg.event_list.find_event_id(id) {
+                        warn!("Event id {} of event '{}' is already used by event '{}'", id, evt_name, other.get_name());
                     } else {
-                        reg.event_list.add_event(McEvent::new(evt_name.to_string(), 0, 0xFFFF, 0)).unwrap();
-                        warn!("New event '{}' found, created with undefined event id 0xFFFF", evt_name);
+                        event_id = Some(id);
+                    }
+                } else if xcp_event_section_addr > 0 {
+                    warn!("Event definition marker of event '{}' at {:#x} is outside the event descriptor section", evt_name, addr);
+                }
+
+                match event_id {
+                    Some(id) => {
+                        reg.event_list.add_event(McEvent::new(evt_name.to_string(), 0, id, 0))?;
+                        info!("New event '{}' found: event id = {}", evt_name, id);
+                    }
+                    None => {
+                        // Use a unique placeholder id, it has to be corrected later from the XCP server event information
+                        let mut id = next_undefined_event_id;
+                        while reg.event_list.find_event_id(id).is_some() {
+                            id = id.saturating_sub(1);
+                        }
+                        next_undefined_event_id = id.saturating_sub(1);
+                        reg.event_list.add_event(McEvent::new(evt_name.to_string(), 0, id, 0))?;
+                        warn!(
+                            "New event '{}' found, created with undefined event id {:#06x}, correct it with the XCP server event information",
+                            evt_name, id
+                        );
                     }
                 }
             }
@@ -531,8 +593,17 @@ impl ElfReader {
             // trg__<event_name> (thread local static, name is event name)
             // Event definitions (thread local static variables)
             if var_name.starts_with("trg__") {
-                assert!(var_infos.len() == 1); // Only one definition allowed
-                let var_info = &var_infos[0];
+                // One trigger location per event is expected, the location is used to resolve stack relative variables
+                if var_infos.len() > 1 {
+                    warn!(
+                        "Event trigger marker '{}' is defined {} times, only the first definition is used to locate stack variables",
+                        var_name,
+                        var_infos.len()
+                    );
+                }
+                let Some(var_info) = var_infos.first() else {
+                    continue;
+                };
 
                 // Get the event name from format  "trg__<tag>__<eventname>" prefix
                 let s = var_name.strip_prefix("trg__").unwrap_or("unnamed");
@@ -568,7 +639,7 @@ impl ElfReader {
                     }
 
                     if verbose >= 1 {
-                        info!("  Event '{}' trigger in function '{}', cfa = {}", evt_name, evt_function, evt_cfa);
+                        println!("  Event '{}' trigger in function '{}', cfa = {}", evt_name, evt_function, evt_cfa);
                     }
 
                     // Store the unit and function name and canonical stack frame address offset for this event trigger
@@ -822,23 +893,27 @@ impl ElfReader {
                         | DbgDataType::Double
                         | DbgDataType::Array { .. }
                         | DbgDataType::Struct { .. } => {
-                            info!(
-                                "Add {} for {}: addr = {}:0x{:08x}",
-                                if object_type == McObjectType::Characteristic { "characteristic" } else { "measurement" },
-                                a2l_name,
-                                mem_addr_ext,
-                                mem_addr
-                            );
                             if verbose >= 2 {
-                                info!("{}", type_info);
+                                print!(
+                                    "  Add {} instance for {}: addr = {}:0x{:08x}",
+                                    if object_type == McObjectType::Characteristic { "characteristic" } else { "measurement" },
+                                    a2l_name,
+                                    mem_addr_ext,
+                                    mem_addr
+                                );
+                                if verbose >= 3 {
+                                    println!(" type = {}", type_info);
+                                } else {
+                                    println!();
+                                }
                             }
                             let dim_type = self.get_dim_type(reg, type_info, object_type);
                             let res = reg.instance_list.add_instance(a2l_name.clone(), dim_type, McSupportData::new(object_type), mc_addr);
                             match res {
                                 Ok(_) => {
                                     if verbose >= 1 {
-                                        info!(
-                                            "  Registered variable '{}' with type '{}', size = {}, event id = {}",
+                                        println!(
+                                            "Registered variable '{}' type_name = '{}', size = {}, event_id = {}",
                                             a2l_name,
                                             type_name.as_ref().unwrap_or(&"<unnamed>".to_string()),
                                             type_size,
@@ -851,6 +926,54 @@ impl ElfReader {
                                 }
                             }
                         }
+                        // Special case for enum types, which are represented as integer types with enumerators described as special unit format "value "NAME" value "NAME" ...".
+                        // We convert the enumerators to a unit string and store it in the McSupportData for the instance.
+                        DbgDataType::Enum { size, signed, enumerators } => {
+                            if verbose >= 2 {
+                                print!(
+                                    "  Add {} instance for enum {}: addr = {}:0x{:08x}, size = {}, signed = {}, enumerators = {:?}",
+                                    if object_type == McObjectType::Characteristic { "characteristic" } else { "measurement" },
+                                    a2l_name,
+                                    mem_addr_ext,
+                                    mem_addr,
+                                    size,
+                                    signed,
+                                    enumerators
+                                );
+                                if verbose >= 3 {
+                                    println!(" type = {}", type_info);
+                                } else {
+                                    println!();
+                                }
+                            }
+                            let dim_type = self.get_dim_type(reg, type_info, object_type);
+                            let unit_string = enumerators_to_unit_string(enumerators);
+                            let mc_support_data = if let Some(unit_str) = unit_string {
+                                McSupportData::new(object_type).set_unit(unit_str)
+                            } else {
+                                warn!("Enum variable '{}' has no enumerators, no conversion table generated", a2l_name);
+                                McSupportData::new(object_type)
+                            };
+                            let res = reg.instance_list.add_instance(a2l_name.clone(), dim_type, mc_support_data, mc_addr);
+                            match res {
+                                Ok(_) => {
+                                    if verbose >= 1 {
+                                        println!(
+                                            "Registered enum variable '{}' with type '{}', size = {}, event id = {}, unit = {:?}",
+                                            a2l_name,
+                                            type_name.as_ref().unwrap_or(&"<unnamed>".to_string()),
+                                            type_size,
+                                            xcp_event_id,
+                                            enumerators_to_unit_string(enumerators)
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to register variable '{}': {}", a2l_name, e);
+                                }
+                            }
+                        }
+
                         _ => {
                             warn!("Variable '{}' has unsupported type: {}", var_name, type_info);
                         }
@@ -870,6 +993,7 @@ impl ElfReader {
         info!("===============================================================");
         info!("Registering metadata from xcp_meta section:");
 
+        // Get meta_base_addr and meta_end
         let (meta_base_addr, meta_data) = match &self.debug_data.xcp_meta_data {
             Some(data) => data,
             None => {
@@ -879,9 +1003,12 @@ impl ElfReader {
         };
         let meta_end = meta_base_addr + meta_data.len() as u64;
         let is_le = self.debug_data.is_little_endian;
+        assert!(is_le, "Big endian is not supported for meta data registration");
 
+        // Search for metadata variables (xcp_meta__<kind>__<base_name>) in the debug data
+        // Add meta data to the registry instances
         for (var_name, var_infos) in &self.debug_data.variables {
-            // Only process metadata variables: xcp_meta__<kind>__<base_name>
+            // Only process metadata variables
             let Some(rest) = var_name.strip_prefix("xcp_meta__") else {
                 continue;
             };
@@ -889,16 +1016,20 @@ impl ElfReader {
                 warn!("Unexpected xcp_meta__ variable name format: '{}'", var_name);
                 continue;
             };
-
             if var_infos.is_empty() {
                 continue;
             }
+
+            // Get the address and section offset of the metadata variable
             let var_addr = var_infos[0].address.1;
+            if var_addr == 0 {
+                warn!("Metadata variable '{}' address is 0", var_name);
+                continue;
+            }
             if var_addr < *meta_base_addr || var_addr >= meta_end {
                 warn!("Metadata variable '{}' address 0x{:08X} is outside xcp_meta section", var_name, var_addr);
                 continue;
             }
-
             let offset = (var_addr - meta_base_addr) as usize;
 
             // Decode base_name: __ is the path separator, e.g. "params__delay_us" means
@@ -925,18 +1056,27 @@ impl ElfReader {
                 if let Some(inst) = reg.instance_list.get_instance_mut(name, None) {
                     apply_instance_metadata(inst, kind, meta_data, offset, is_le);
                     if verbose >= 1 {
-                        info!("  Metadata {} applied to instance '{}'", var_name, name);
+                        println!("  Metadata {} {} applied to instance '{}'", kind, var_name, name);
                     }
                 }
             }
 
             if !field_applied && names.is_empty() {
-                debug!("Metadata '{}': no matching registry entry for '{}'", var_name, dot_path);
+                warn!("Metadata '{}': no matching registry entry for '{}'", var_name, dot_path);
             }
         }
 
         Ok(())
     }
+}
+
+// Convert an enumerators vec to the XCP/A2L COMPU_VTAB string format: `value "NAME" value "NAME" ...`
+fn enumerators_to_unit_string(enumerators: &[(String, i64)]) -> Option<String> {
+    if enumerators.is_empty() {
+        return None;
+    }
+    let parts: Vec<String> = enumerators.iter().map(|(name, value)| format!(r#"{} "{}""#, value, name)).collect();
+    Some(parts.join(" "))
 }
 
 // Read a null-terminated UTF-8 string from a byte slice at a given offset
@@ -980,6 +1120,10 @@ fn apply_field_metadata(
             let sd = McSupportData::new(McObjectType::Unspecified);
             if kind == "min" { sd.set_min(Some(value)) } else { sd.set_max(Some(value)) }
         }
+        "read_write" => {
+            let sd = McSupportData::new(McObjectType::Unspecified);
+            sd.set_read_write()
+        }
         _ => {
             warn!("Unknown metadata kind '{}' in variable '{}'", kind, var_name);
             return false;
@@ -989,7 +1133,7 @@ fn apply_field_metadata(
     match reg.set_instance_field_support_data(instance_name, field_path, support_data) {
         Ok(()) => {
             if verbose >= 1 {
-                info!("  Metadata {} applied to typedef field '{}.{}'", var_name, instance_name, field_path);
+                println!("  Metadata {} applied to typedef field '{}.{}'", var_name, instance_name, field_path);
             }
             true
         }
@@ -1004,6 +1148,9 @@ fn apply_field_metadata(
 // Path B helper: apply metadata directly to an McInstance's mc_support_data.
 fn apply_instance_metadata(inst: &mut xcp_registry::McInstance, kind: &str, meta_data: &[u8], offset: usize, is_le: bool) {
     match kind {
+        "read_write" => {
+            inst.mc_support_data.update_qualifier(McObjectQualifier::ReadWrite);
+        }
         "unit" | "comment" => {
             if let Some(value) = read_cstr_at(meta_data, offset) {
                 if kind == "unit" {
@@ -1025,5 +1172,187 @@ fn apply_instance_metadata(inst: &mut xcp_registry::McInstance, kind: &str, meta
             }
         }
         _ => {}
+    }
+}
+
+//------------------------------------------------------------------------
+// Tests
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    // C++ type test fixture, see fixtures/cpp_types.cpp (GCC 12.3 arm-none-eabi, DWARF 5)
+    const CPP_TYPES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_types.elf");
+
+    fn load_cpp_types() -> Registry {
+        let elf_reader = ElfReader::new(CPP_TYPES_ELF, 0, usize::MAX).expect("failed to load fixtures/cpp_types.elf");
+        let mut reg = Registry::new();
+        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "").expect("register_variables failed");
+        reg
+    }
+
+    // Variables and struct members of C++ class type are registered like structs
+    #[test]
+    fn test_register_class_types() {
+        let reg = load_cpp_types();
+
+        for (var_name, typedef_name) in [
+            ("g_pubclass", "PubClass"),
+            ("g_tpl_class", "TplClass_long_unsigned_int_"),
+            ("g_derived_cc", "DerivedCC"),
+            ("g_derived_cs", "DerivedCS"),
+            ("g_derived_ss", "DerivedSS"),
+            ("g_derived_sc", "DerivedSC"),
+        ] {
+            let inst = reg
+                .instance_list
+                .get_instance(var_name, McObjectType::Measurement, None)
+                .unwrap_or_else(|| panic!("instance '{var_name}' not registered"));
+            assert_eq!(inst.dim_type.value_type, McValueType::new_typedef(typedef_name), "{var_name}");
+        }
+
+        let pub_class = reg.typedef_list.find_typedef("PubClass").expect("typedef PubClass");
+        assert_eq!(pub_class.size, 8);
+        assert_eq!(pub_class.find_field("x").map(|f| f.offset), Some(0));
+        assert_eq!(pub_class.find_field("y").map(|f| f.offset), Some(4));
+
+        // Inherited members of a class derived from a class are flattened by the DWARF reader
+        let derived_cc = reg.typedef_list.find_typedef("DerivedCC").expect("typedef DerivedCC");
+        assert_eq!(derived_cc.find_field("cbase_a").map(|f| f.offset), Some(0));
+        assert_eq!(derived_cc.find_field("cderived_b").map(|f| f.offset), Some(4));
+
+        // A class typed struct member references the class typedef instead of degrading to UBYTE
+        let outer = reg.typedef_list.find_typedef("Outer").expect("typedef Outer");
+        let inner_class = outer.find_field("inner_class").expect("field Outer.inner_class");
+        assert_eq!(inner_class.dim_type.value_type, McValueType::new_typedef("PubClass"));
+        assert_eq!(inner_class.offset, 0);
+    }
+
+    // Base class members are flattened into the derived type for all struct/class combinations
+    #[test]
+    fn test_register_inherited_members() {
+        let reg = load_cpp_types();
+
+        for (typedef_name, base_member, derived_member) in [
+            ("DerivedSS", "base_a", "derived_b"),
+            ("DerivedCC", "cbase_a", "cderived_b"),
+            ("DerivedCS", "base_a", "cs_b"),
+            ("DerivedSC", "cbase_a", "sc_b"),
+        ] {
+            let typedef = reg
+                .typedef_list
+                .find_typedef(typedef_name)
+                .unwrap_or_else(|| panic!("typedef '{typedef_name}' not registered"));
+            assert_eq!(typedef.size, 8, "{typedef_name}");
+            assert_eq!(typedef.fields.len(), 2, "{typedef_name} member count");
+            assert_eq!(typedef.find_field(base_member).map(|f| f.offset), Some(0), "{typedef_name}.{base_member}");
+            assert_eq!(typedef.find_field(derived_member).map(|f| f.offset), Some(4), "{typedef_name}.{derived_member}");
+        }
+    }
+
+    // Typedef names which are sanitized (template instantiations) get their members and a matching reference
+    #[test]
+    fn test_register_template_struct_members() {
+        let reg = load_cpp_types();
+
+        for typedef_name in ["TplStruct_short_unsigned_int_", "TplStruct_float_", "TplClass_long_unsigned_int_"] {
+            let typedef = reg
+                .typedef_list
+                .find_typedef(typedef_name)
+                .unwrap_or_else(|| panic!("typedef '{typedef_name}' not registered"));
+            assert_eq!(typedef.size, 8, "{typedef_name}");
+            assert_eq!(typedef.fields.len(), 2, "{typedef_name} has no members");
+            assert_eq!(typedef.find_field("value").map(|f| f.offset), Some(0), "{typedef_name}.value");
+            assert_eq!(typedef.find_field("count").map(|f| f.offset), Some(4), "{typedef_name}.count");
+        }
+
+        let outer = reg.typedef_list.find_typedef("Outer").unwrap();
+        let inner_tpl = outer.find_field("inner_tpl").expect("field Outer.inner_tpl");
+        assert_eq!(inner_tpl.dim_type.value_type, McValueType::new_typedef("TplStruct_short_unsigned_int_"));
+        assert_eq!(inner_tpl.offset, 8);
+    }
+
+    // Build an ElfReader from hand-made debug data containing only event definition (evt__) and trigger (trg__) marker variables
+    fn elf_reader_with_markers(markers: &[(&str, u64, &str)], event_section: Option<(u64, u64)>) -> ElfReader {
+        use std::collections::HashMap;
+        let mut variables: IndexMap<String, Vec<VarInfo>> = IndexMap::new();
+        for (name, addr, function) in markers {
+            variables.entry(name.to_string()).or_default().push(VarInfo {
+                address: (0, *addr),
+                typeref: 0,
+                unit_idx: 0,
+                function: Some(function.to_string()),
+                namespaces: Vec::new(),
+            });
+        }
+        let mut sections = HashMap::new();
+        if let Some(range) = event_section {
+            sections.insert("xcp_evts".to_string(), range);
+        }
+        ElfReader {
+            debug_data: DebugData {
+                variables,
+                types: HashMap::new(),
+                typenames: HashMap::new(),
+                demangled_names: HashMap::new(),
+                unit_names: vec![Some("main.c".to_string())],
+                sections,
+                symbol_addresses: HashMap::new(),
+                cfa_info: Vec::new(),
+                epk_string: None,
+                epk_addr: 0,
+                xcp_meta_data: None,
+                is_little_endian: true,
+            },
+        }
+    }
+
+    // An event created in several functions has several definition markers, the first descriptor in the section wins,
+    // duplicate trigger markers must not panic either
+    #[test]
+    fn test_register_events_duplicate_definitions() {
+        let elf = elf_reader_with_markers(
+            &[
+                ("evt__foo", 0x1010, "task_b"),
+                ("evt__foo", 0x1000, "task_a"),
+                ("evt__bar", 0x1020, "main"),
+                ("trg__AAS__foo", 0x2000, "task_a"),
+                ("trg__AAS__foo", 0x2004, "task_b"),
+            ],
+            Some((0x1000, 0x1030)),
+        );
+        let mut reg = Registry::new();
+        elf.register_events(&mut reg, 0).unwrap();
+        assert_eq!(reg.event_list.find_event("foo", 0).unwrap().get_id(), 0);
+        assert_eq!(reg.event_list.find_event("bar", 0).unwrap().get_id(), 2);
+        assert!(reg.event_list.find_event_id(1).is_none());
+        elf.register_event_locations(&mut reg, 0).unwrap();
+        assert!(reg.event_list.find_event_by_location(0, "task_a").is_some());
+    }
+
+    // Without an event descriptor section every event gets a unique placeholder id (previously all got 0xFFFF and the second one panicked)
+    #[test]
+    fn test_register_events_without_descriptor_section() {
+        let elf = elf_reader_with_markers(&[("evt__foo", 0x1000, "main"), ("evt__bar", 0x1010, "main"), ("evt__baz", 0, "main")], None);
+        let mut reg = Registry::new();
+        elf.register_events(&mut reg, 0).unwrap();
+        let ids: Vec<u16> = ["foo", "bar", "baz"].iter().map(|n| reg.event_list.find_event(n, 0).unwrap().get_id()).collect();
+        assert_eq!(ids, vec![0xFFFF, 0xFFFE, 0xFFFD]);
+    }
+
+    // Markers outside the descriptor section, without address or with an id which is already taken get placeholder ids
+    #[test]
+    fn test_register_events_marker_outside_section() {
+        let elf = elf_reader_with_markers(
+            &[("evt__foo", 0x1000, "main"), ("evt__out", 0x5000, "main"), ("evt__zero", 0, "main")],
+            Some((0x1000, 0x1010)),
+        );
+        let mut reg = Registry::new();
+        reg.event_list.add_event(McEvent::new("srv", 0, 0, 0)).unwrap(); // id 0 is taken, e.g. by the XCP server event information
+        elf.register_events(&mut reg, 0).unwrap();
+        assert_eq!(reg.event_list.find_event("foo", 0).unwrap().get_id(), 0xFFFF);
+        assert_eq!(reg.event_list.find_event("out", 0).unwrap().get_id(), 0xFFFE);
+        assert_eq!(reg.event_list.find_event("zero", 0).unwrap().get_id(), 0xFFFD);
     }
 }

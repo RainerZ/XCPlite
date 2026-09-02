@@ -68,11 +68,11 @@ The A2l address generation for measurement variables on stack needs to be done o
 ### Option 1: Runtime Generation (Volatile)
 
 The A2L file is always created during application runtime. The A2L may be volatile, which means it may change on each restart of the application. This happens when there are race conditions in registering segments and events. The A2L file is just downloaded again by the XCP client.  
-Note: XCP used the term 'upload' in the sense of upload to the client, which is a bit confusing, because the file is created on the target and then downloaded by the client.
+Note: XCP used the term `upload` in the sense of upload to the client, which is a bit confusing, because the file is created on the target and then downloaded by the client.
 
 To avoid A2L changes on each restart, the creation order of events and segments just has to be deterministic.
 
-As a default, the A2L version identifier (EPK) is generated from build time and date. If the A2L file is not stable, it is up to the user to provide an EPK version string which reflects this, otherwise it could create undefined behavior.
+If the A2L file is not stable, it is up to the user to provide an EPK version string which reflects this, otherwise it could create undefined behavior.
 
 ### Option 2: Persistent Generation with Freeze Support
 
@@ -89,7 +89,7 @@ As a side effect, calibration segment persistence (freeze command) is supported.
 ## Offline A2L Generation 
 
 Use the XCPlite specific A2L creator tool (xcpclient), which is aware of the different addressing schemes and static markers created by the code instrumentation macros.
-See `no_a2l_demo` and in particular  `esp32_freertos_demo` for examples and instructions.
+See `no_a2l_demo` or `no_a2l_demo_cpp` and in particular  `esp32_freertos_demo` for examples and instructions.
 
 ### xcpclient — ELF/DWARF Internals
 
@@ -102,8 +102,7 @@ see `examples/no_a2l_demo/README.md`.
 #### `xcp_evts` section — event descriptors
 
 Every call to `DaqCreateEvent(name)` or `DaqCreateAndTriggerEvent(name)` emits a
-`tXcpEventDescriptor` constant into the `.xcp_evts` section (`.rodata` on ELF targets,
-`__DATA,xcp_evts` on macOS):
+`tXcpEventDescriptor` constant into the `xcp_evts` section (`.rodata` on ELF targets, `__DATA,xcp_evts` on macOS):
 
 ```c
 // What DaqCreateEvent(task) expands to (simplified):
@@ -117,8 +116,7 @@ firmware, regardless of whether that code path has executed at the time of A2L g
 
 #### `xcp_cals` section — calibration segment descriptors
 
-Every `CalSegDecl(name)` + `CalSegCreate(name)` pair (or `CalSegDecl(name)` at file scope)
-emits a `tXcpCalSegDescriptor` constant into the `.xcp_cals` section:
+Every `CalSegDecl(name)` + `CalSegCreate(name)` pair (or `CalSegDecl(name)` at file scope) emits a `tXcpCalSegDescriptor` constant into the `xcp_cals` section:
 
 ```c
 // What CalSegDecl(params) + CalSegCreate(params) expands to (simplified):
@@ -219,15 +217,13 @@ static tXcpEventId trg__AASDD__calc = XCP_UNDEFINED_EVENT_ID;
 // AddrExt=0,1: absolute — AddrExt=2: stack — AddrExt=3: addr(&x) — AddrExt=4: addr(&y)
 ```
 
-The number of `D` letters in the anchor name equals the number of dynamic slots in use;
-xcpclient counts them to know how many individual base addresses to expect.
 
 #### What xcpclient reads from the ELF
 
 | ELF / DWARF source | Populated by | xcpclient use |
 |---|---|---|
-| `.xcp_evts` section | `DaqCreateEvent`, `DaqCreateEventInstance`, `DaqCreateAndTriggerEvent` | Discover all events, names, cycle times |
-| `.xcp_cals` section | `CalSegDecl` + `CalSegCreate` | Discover all calibration segments, default page addresses and sizes |
+| `xcp_evts` section | `DaqCreateEvent`, `DaqCreateEventInstance`, `DaqCreateAndTriggerEvent` | Discover all events, names, cycle times |
+| `xcp_cals` section | `CalSegDecl` + `CalSegCreate` | Discover all calibration segments, default page addresses and sizes |
 | DWARF scope of `trg__AAS__name` | `DaqTriggerEvent`, `DaqCreateAndTriggerEvent`, `DaqEventVar` (C) | Find stack-local and absolute variables — ext=0,1: Absolute, ext=2: Stack |
 | DWARF scope of `trg__AASD__name` | `DaqTriggerEventExt` | Same plus a dynamic base pointer slot — ext=3: Dynamic |
 | DWARF scope of `trg__AASDD__name` | `DaqEventVar` / `DaqEventAtVar` (C++) | Per-variable dynamic slots — ext=3+: one per measurement |
@@ -257,7 +253,7 @@ XCPlite absolute addressing: XCPLITE__CASDD (default)
 0xFE        - MTA pointer address space (XCP_ADDR_EXT_PTR)
 0xFF        - Undefined address extension (XCP_UNDEFINED_ADDR_EXT)
 
-XCPlite relative addressing: XCPLITE__ACSDD (for use case with external A2L generation)
+XCPlite relative addressing: XCPLITE__ACSDD (for use cases with external A2L generation)
 0x00        - Absolute addressing mode (XCP_ADDR_EXT_ABS)
 0x01        - Calibration segment relative addressing mode (XCP_ADDR_EXT_SEG)
 ... same as above
@@ -303,11 +299,6 @@ The flush operation for delayed calibration writes is redirected over the applic
 ```
 void ApplXcpRegisterFlushCallback(uint8_t (*cb_flush)(void));
 ```
-
-
-
-
-
 
 
 ## EPK - ECU Software Version
@@ -379,18 +370,7 @@ In XCPlite, the EPK may be specified with an API function or is generated from b
 - Indicate when polling access is not possible. CANape assumes polling access is always possible
 - Configuration for begin/end atomic calibration user defined XCP command is not default. Must be set once in a new CANape project to 0x01F1 and 0x02F1
 - EPK segment is defined with 2 readonly pages, because of CANape irritations with mixed mode calibration segment. CANape would not care for a single page EPK segment, reads active page always from segment 0 and uses only SET_CAL_PAGE ALL mode
-
-
-### Other Issues
-
 - CANape ignores address extension of `loop_histogram` in ccp_demo, when saving calibration values to a parameter file. `loop_histogram` is a CHARACTERISTIC array, but it is in a measurement group
-
-
-### TODO list
-
-- Provide a way to deactivate XCP without code changes when accessing calibration segments 
-
-
 
 
 ## 5 · Appendix

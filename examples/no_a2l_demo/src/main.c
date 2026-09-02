@@ -1,7 +1,8 @@
-﻿// no_a2l_demo XCPlite example
+﻿// no_a2l_demo - XCPlite example
 // Demonstrates XCPlite operation without runtime A2L generation
+// This concept works on microcontrollers and microprocessors without filesystem support
+// Requires manual or tool based XCPlite specific A2L file creation and update process or direct ELF support
 // See ../README.md for details
-// Requires manual or tool based XCPlite specific A2L file creation and update process
 
 #include <assert.h>  // for assert
 #include <signal.h>  // for signal handling
@@ -13,22 +14,23 @@
 
 #include "xcplib.h" // for libxcplite application programming interface
 
-// Internal libxcplite includes to simplify multi platform support
+// Internal libxcplite includes to simplify multi platform support and keep the demo code simple and readable
 #include "platform.h" // for platform abstraction - thread local, threads, mutex, sockets, sleepUs, ...
 
 static volatile bool global_running = true;
 static void sig_handler(int sig) { global_running = false; }
 
 //-----------------------------------------------------------------------------------------------------
-// XCP params
+// XCP configuration parameters
+
+#define OPTION_PROJECT_VERSION "V2.1.10" // EPK version string
 
 #define OPTION_PROJECT_NAME "no_a2l_demo" // Project name, used to build the volatile and BIN file name
-#define OPTION_PROJECT_VERSION "V101"     // EPK version string
 #define OPTION_USE_TCP false              // TCP or UDP
 #define OPTION_SERVER_PORT 5555           // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}   // Bind addr, 0.0.0.0 = ANY
 #define OPTION_QUEUE_SIZE (1024 * 8)      // Size of the measurement queue in bytes, must be a multiple of 8
-#define OPTION_LOG_LEVEL 3                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
+#define OPTION_LOG_LEVEL 4                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
@@ -51,7 +53,7 @@ struct params {
     uint64_t test_par_uint64;
     uint32_t test_par_uint32;
     uint16_t test_par_uint16;
-    enum { ENUM_0 = 0, ENUM_1 = 1, ENUM_2 = 2, ENUM_3 = 3 } test_par_enum;
+    enum { OFF = 0, ON = 1, STANDBY = 2 } test_par_enum;
     uint8_t test_par_uint8_array[10];
     struct test_par_struct {
         uint16_t test_field_uint16;
@@ -66,7 +68,7 @@ const struct params params = {.delay_us = 1000,
                               .test_par_uint64 = 0x1234567812345678,
                               .test_par_uint32 = 0x1234,
                               .test_par_uint16 = 0x1234,
-                              .test_par_enum = ENUM_2,
+                              .test_par_enum = ON,
                               .test_par_uint8_array = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
                               .test_par_struct = {2, -2, 0.4f, {0, 1, 2}}};
 
@@ -89,8 +91,14 @@ CalSegDecl(params);
 // Metadata annotation as code (static data in a special ELF section)
 // Via linker map file and xcpclient tool ELF->A2L generation, not supported by Vector A2L Toolset ELF reader
 // For struct instance fields, use __ as path separator (params__delay_us means params.delay_us)
+
+// Define physical unit and limits for the calibration parameter 'delay_us' in the params calibration segment
 XCP_LIMITS(params__delay_us, 1, 10000);
 XCP_UNIT(params__delay_us, "us");
+
+// Define the enum conversion for the calibration parameter test_par_enum
+// @@@@ UNUSED: Remove, enum support now build into xcpclient tool
+// XCP_UNIT(params__test_par_enum, "0 \"OFF\" 1 \"ON\" 2 \"STANDBY\" ");
 
 //-----------------------------------------------------------------------------------------------------
 // Demo global measurement values
@@ -99,6 +107,7 @@ XCP_UNIT(params__delay_us, "us");
 // Modified in function foo
 // Measuring it in main or task, is possible, but asynchronous and may give inconsistent results
 XCP_COMMENT(global_counter, "Global measurement variable"); // Example for meta data annotation as code
+XCP_READ_WRITE(global_counter);                             // Example for meta data annotation as code
 uint16_t global_counter = 0;
 
 // A2L Creator code parser annotation
@@ -136,11 +145,11 @@ THREAD_FUNC_RETURN task(void *p) {
     printf("Start thread %u ...\n", get_thread_id());
 
     // Static local scope measurement variable
-    XCP_COMMENT(static_counter, "Static local measurement variable"); // Example for meta data annotation as code
+    XCP_COMMENT(static_counter, "Static local measurement variable in function task"); // Example for meta data annotation as code
     volatile static uint16_t static_counter = 0;
 
     // Local measurement variable
-    XCP_COMMENT(counter, "Local measurement variable"); // Example for meta data annotation as code
+    XCP_COMMENT(counter, "Local measurement variable in function task"); // Example for meta data annotation as code
     volatile uint32_t counter = 0;
 
     // Heap measurement variable
@@ -242,7 +251,7 @@ int main(int argc, char *argv[]) {
     // Initialize the XCP singleton, activate XCP, must be called before starting the server
     // @@@@ TODO: Using binary persistence files not supported, | XCP_MODE_PERSISTENCE
     XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
-    XcpSetElfName(argv[0]); // Set ELF file name for upload via GET_ID, optional with OPTION_ENABLE_ELF_UPLOAD
+    XcpSetElfName(argv[0]); // Set ELF file name for upload via GET_ID, optional
 
     // Initialize the XCP Server
     const uint8_t __addr[4] = OPTION_SERVER_ADDR;
@@ -255,7 +264,9 @@ int main(int argc, char *argv[]) {
     create_thread(&__t1, NULL, task, NULL);
 
     // Demo measurement variables
-    volatile uint16_t local_counter = 0;
+    XCP_COMMENT(main__counter, "Local measurement variable in main");
+    volatile uint16_t counter = 0;
+    XCP_COMMENT(main__static_counter, "Static local measurement variable in main");
     volatile static uint16_t static_counter = 0;
 
     // Calibration parameter counter_max
@@ -281,7 +292,7 @@ int main(int argc, char *argv[]) {
         // Unlock the calibration block
         CalSegUnlock(counter_control);
 
-        local_counter = global_counter;
+        counter = global_counter;
         static_counter = global_counter;
 
         // Demonstrate calibration thread safety and consistency
@@ -309,19 +320,13 @@ int main(int argc, char *argv[]) {
 
     } // for (;;)
 
-    // Force disconnect the XCP client
-    XcpDisconnect();
-
     // Wait for the thread to stop
     if (__t1)
         join_thread(__t1);
 
-    // Save current calibration segments to binary persistence file
-    // @@@@ TODO: Using binary persistence files not supported
-    // XcpBinWrite(XcpGetEcuEpk());
-
-    // Stop the XCP server
-    XcpEthServerShutdown();
+    XcpDisconnect(); // Force disconnect the XCP client
+    // XcpFreeze(); // Save current calibration changes to binary persistence file
+    XcpEthServerShutdown(); // Stop the XCP server
 
     return 0;
 }

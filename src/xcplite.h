@@ -43,13 +43,13 @@ extern "C" {
 /* Protocol layer interface                                                 */
 /****************************************************************************/
 
-/// XcpInit mode flags
-#define XCP_MODE_DEACTIVATE 0     ///< Initialize XCP singleton without activating the protocol layer (passive/off)
-#define XCP_MODE_LOCAL 0x01       ///< Initialize and activate XCP, allocate state in static memory if libxcplite not compiled in SHM mode, otherwise allocate state in heap memory
-#define XCP_MODE_PERSISTENCE 0x02 ///< Load the binary persistence file, to keep deterministic order of events and calibration segments, and load persisted calibration data
-#define XCP_MODE_SHM 0x80         ///< Initialize and activate XCP, allocate state in POSIX shared memory
-#define XCP_MODE_SHM_AUTO 0x04    ///< Set this flag to automatically choose leader as XCP server
-#define XCP_MODE_SHM_SERVER 0x08  ///< Set this flag, to make this application the XCP server, regardless which application is started first
+// XcpInit mode flags
+#define XCP_MODE_DEACTIVATE 0     // Initialize XCP singleton without activating the protocol layer (passive/off)
+#define XCP_MODE_LOCAL 0x01       // Initialize and activate XCP, allocate state in static memory if libxcplite not compiled in SHM mode, otherwise allocate state in heap memory
+#define XCP_MODE_PERSISTENCE 0x02 // Load the binary persistence file, to keep deterministic order of events and calibration segments, and load persisted calibration data
+#define XCP_MODE_SHM 0x80         // Initialize and activate XCP, allocate state in POSIX shared memory
+#define XCP_MODE_SHM_AUTO 0x04    // Set this flag to automatically choose leader as XCP server
+#define XCP_MODE_SHM_SERVER 0x08  // Set this flag, to make this application the XCP server, regardless which application is started first
 
 // Manage the XCP driver singleton
 bool XcpInit(const char *name, const char *epk, uint8_t mode);
@@ -150,7 +150,9 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
 extern const tXcpEventDescriptor __start_xcp_evts[] __asm("section$start$__DATA$xcp_evts");
 extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp_evts");
 #else
+#ifndef _WIN32
 #error "Unsupported platform for event segment registration"
+#endif
 #endif
 
 #endif // __XCPLIB_H__
@@ -193,6 +195,9 @@ void XcpEventEnable(tXcpEventId event, bool enable);
 bool XcpCheckDaqLists(uint8_t daq_state, tXcpEventId event_id);
 
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
+
+// Dynamic event list
+//--------------------
 
 #ifndef XCP_MAX_EVENT_COUNT
 #error "Please define XCP_MAX_EVENT_COUNT!"
@@ -250,6 +255,9 @@ uint8_t XcpGetEventAppId(tXcpEventId event);
 
 #else
 
+// Section registered event descriptors
+//--------------------------------------
+
 #ifdef XCP_ENABLE_DAQ_PRESCALER
 #error "XCP_ENABLE_DAQ_PRESCALER requires XCP_ENABLE_DAQ_EVENT_LIST"
 #endif
@@ -264,12 +272,16 @@ const tXcpEventDescriptor *XcpGetEvent(tXcpEventId event);
 
 // Get event name by id, returns NULL if not found
 const char *XcpGetEventName(tXcpEventId event);
+// Get event cycle time by id, returns 0 if not found
+uint32_t XcpGetEventCycleTime(tXcpEventId event);
+// Get event priority by id, returns 0 if not found
+uint8_t XcpGetEventPriority(tXcpEventId event);
 
 // Get event id by name, returns XCP_UNDEFINED_EVENT_ID if not found
 // In SHM mode, only searches within the calling process's own events (scoped by app_id)
 tXcpEventId XcpFindEvent(const char *name);
 
-// Get the number of events in the XCP event list
+// Get the number of events
 uint16_t XcpGetEventCount(void);
 
 /****************************************************************************/
@@ -323,7 +335,7 @@ typedef struct {
 #endif
 #if !defined(XCP_ENABLE_DAQ_EVENT_LIST) && defined(XCP_MAX_EVENT_COUNT)
 #if (XCP_MAX_EVENT_COUNT == 0) || (XCP_MAX_EVENT_COUNT > 1024)
-#error "XCP_MAX_EVENT_COUNT must be > 0 and <= 1024, remove this if you are sure you want this"
+#error "XCP_MAX_EVENT_COUNT must be > 0 and <= 1024, remove this if you are sure about the memory usage"
 #endif
     uint16_t daq_first[XCP_MAX_EVENT_COUNT]; // Event channel to DAQ list mapping when there is no event management
 #endif

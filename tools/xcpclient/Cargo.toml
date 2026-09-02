@@ -1,6 +1,6 @@
 [package]
 name = "xcpclient"
-version = "3.0.1"
+version = "3.0.9"
 edition = "2024"
 resolver = "2"
 authors = ["RainerZ"]
@@ -26,26 +26,24 @@ regex = "1.12.3"
 chrono = "0.4.45"
 parking_lot = "0.12.5"
 tokio = { version = "1.52", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+figment = { version = "0.10", features = ["toml"] }
 ihex = "3.0"
 
 # ELF/DWARF Debug info parsing dependencies
-gimli = "0.28"  # 0.29+ has breaking API changes in attr_value (Option vs Result)
-object = "0.36" # keep in sync with gimli
-pdb2 = "0.10"
+object = { version = "0.39", default-features = false, features = ["read"] }
+gimli = { version = "0.34", default-features = false, features = ["read"] }
 memmap2 = "0.9"
 indexmap = "2.14"
-cpp_demangle = "0.4"  # 0.5 removed DemangleOptions, would require code changes
+cpp_demangle = "0.5" 
 
-
-# xcp_registry from xcp-lite on Github
+# Registry
 # From VectorGrp/xcp-lite
-xcp_registry = { git = "https://github.com/vectorgrp/xcp-lite", features = ["a2l_reader"] }
-
-
+#xcp_registry = { git = "https://github.com/vectorgrp/xcp-lite", features = ["a2l_reader"] }
 # From fork RainerZ/xcp-lite
-#xcp_registry = { git = "https://github.com/RainerZ/xcp-lite.git", branch = "V3.0.2", features = ["a2l_reader"] }
+xcp_registry = { git = "https://github.com/RainerZ/xcp-lite.git", branch = "V3.0.9", features = ["a2l_reader"] }
 # From local directory current branch
-#xcp_registry = { path = "../../../xcp-lite-RainerZ/xcp_registry", features = ["a2l_reader"] } 
+# xcp_registry = { path = "../../../xcp-lite-RainerZ/xcp_registry", features = ["a2l_reader"] } 
 
 
 [lints.rust]

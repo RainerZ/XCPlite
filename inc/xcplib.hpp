@@ -15,10 +15,19 @@
 
 #include <mutex> // for std::once_flag, std::call_once
 
-#include <a2l.h>
+#include "xcplib_cfg.h" // for OPTION_xxx, must include the correct configuration override file XCPLIB_CFG_OVERRIDE
+#ifndef XCPLITE_CONFIGURATION
+#error "XCPLITE_CONFIGURATION must be defined to make sure the correct configuration override file is set"
+#endif // XCPLITE_CONFIGURATION
 #include <xcplib.h>
+#ifdef OPTION_ENABLE_A2L_GENERATOR
+#include <a2l.h>
+#endif // OPTION_ENABLE_A2L_GENERATOR
 
-namespace xcplib = xcp; // Compatibility with V1.1.0 and earlier, where xcplib was used as the namespace
+// If A2L generation build option is turned off, we do not set segment address mode for the A2L generator
+#ifndef OPTION_ENABLE_A2L_GENERATOR
+#define A2lSetSegmentAddrMode__i(index, base)
+#endif
 
 namespace xcp {
 
@@ -84,6 +93,7 @@ template <typename T> class CalSeg {
     /// Create a guard that automatically locks and unlocks the calibration segment
     CalSegGuard lock() const { return CalSegGuard(index_, params_ptr_); }
 
+#ifdef OPTION_ENABLE_A2L_GENERATOR
     /// Create the A2L instance description for this calibration segment
     /// Thread safe
     /// @param type_name The name of the type as it should appear in the A2L file
@@ -96,6 +106,7 @@ template <typename T> class CalSeg {
             A2lUnlock();
         }
     }
+#endif
 };
 
 /// Non-owning typed wrapper for a section-registered calibration segment.
@@ -112,12 +123,16 @@ template <typename T> class CalSegRef {
     tXcpCalSegIndex getIndex() const { return indexp_ != nullptr ? *indexp_ : XCP_UNDEFINED_CALSEG; }
 
     /// RAII guard class for automatic lock/unlock.
+    /// Unlike CalSeg::CalSegGuard, this tolerates index == XCP_UNDEFINED_CALSEG (e.g. when queried before XcpInit()'s
+    /// xcp_cals section scan has run - see CalSegRef above): the lock/unlock calls are simply skipped in that case,
+    /// and get()/operator->()/operator*() then return the default_params passed in, unlocked.
     class CalSegGuard {
       private:
         tXcpCalSegIndex index_;
         const T *params_ptr_;
 
       public:
+        /// Constructor - locks the calibration segment, unless index is XCP_UNDEFINED_CALSEG
         explicit CalSegGuard(tXcpCalSegIndex index, const T *default_params) : index_(index), params_ptr_(default_params) {
             if (XcpIsActivated() && index_ != XCP_UNDEFINED_CALSEG) {
                 params_ptr_ = reinterpret_cast<const T *>(XcpLockCalSeg(index_));
@@ -127,22 +142,30 @@ template <typename T> class CalSegRef {
         CalSegGuard(const CalSegGuard &) = delete;
         CalSegGuard &operator=(const CalSegGuard &) = delete;
 
+        /// Move constructor - transfers ownership of the lock, leaving 'other' with no segment to unlock
         CalSegGuard(CalSegGuard &&other) : index_(other.index_), params_ptr_(other.params_ptr_) { other.index_ = XCP_UNDEFINED_CALSEG; }
         CalSegGuard &operator=(CalSegGuard &&) = delete;
 
+        /// Destructor - unlocks the calibration segment, unless index is XCP_UNDEFINED_CALSEG
         ~CalSegGuard() {
             if (XcpIsActivated() && index_ != XCP_UNDEFINED_CALSEG) {
                 XcpUnlockCalSeg(index_);
             }
         }
 
+        /// Access the locked parameters via pointer
         const T *operator->() const { return params_ptr_; }
+
+        /// Access the locked parameters via reference
         const T &operator*() const { return *params_ptr_; }
+
+        /// Get pointer to the locked parameters
         const T *get() const { return params_ptr_; }
     };
 
     CalSegGuard lock() const { return CalSegGuard(getIndex(), default_params_); }
 
+#ifdef OPTION_ENABLE_A2L_GENERATOR
     /// Create the A2L instance description for this calibration segment.
     void CreateA2lTypedefInstance(const char *type_name, const char *comment) const {
         const tXcpCalSegIndex index = getIndex();
@@ -153,6 +176,7 @@ template <typename T> class CalSegRef {
             A2lUnlock();
         }
     }
+#endif
 };
 
 /// Generic RAII wrapper for a single parameter of complex or simple type
@@ -212,6 +236,7 @@ template <typename T> class CalBlk {
     /// Create a guard that automatically locks and unlocks the calibration segment
     CalSegGuard lock() const { return CalSegGuard(index_, params_ptr_); }
 
+#ifdef OPTION_ENABLE_A2L_GENERATOR
     /// Create the A2L instance description for this calibration segment
     /// Thread safe
     /// @param type_name The name of the type as it should appear in the A2L file
@@ -224,26 +249,37 @@ template <typename T> class CalBlk {
             A2lUnlock();
         }
     }
+#endif
 };
 
 /// Convenience macro to create a calibration segment with automatic name stringification
 /// Usage: auto calseg = CalSegCreate(initial_value);
-#define CalSegCreate(value) xcplib::CalSeg<decltype(value)>(#value, &value)
+/// Unlike the C macro of the same name (xcplib.h), this is an expression, not a statement: it always creates the
+/// segment immediately, by calling XcpCreateCalSeg in xcp::CalSeg<T>'s constructor, and does not register an
+/// xcp_cals section descriptor at all - so it cannot be pre-registered by XcpInit()'s section scan and must itself
+/// run before the segment is first used. For the lazy, section-based equivalent (matching the C CalSegDecl), see
+/// CalSegDecl/CalSegDeclRef below.
+#define CalSegCreate(value) xcp::CalSeg<decltype(value)>(#value, &value)
 
 /// Declare a section-registered global calibration segment and create a typed C++ handle.
 /// Usage: CalSegDeclRef(parameters, parameters_calseg); auto parameters = parameters_calseg.lock();
+/// Like the C macro CalSegDecl (xcplib.h), this only registers an xcp_cals section descriptor: the segment is not
+/// created until XcpInit() pre-registers it via its section scan, so 'handle' is only valid for locking after
+/// XcpInit() has run. On top of that, this also defines 'handle' as a typed, non-owning xcp::CalSegRef<T> over the
+/// section-registered index - there is no C++ equivalent of the C CalSegCreate's immediate, self-sufficient creation.
 #define CalSegDeclRef(value, handle)                                                                                                                                               \
     static tXcpCalSegIndex calseg_id_##value = XCP_UNDEFINED_CALSEG;                                                                                                               \
     static const tXcpCalSegDescriptor calseg__##value __asm__("calseg__" #value)                                                                                                   \
         XCP_CAL_SECTION_ATTR = {#value, (const void *)&value, &calseg_id_##value, sizeof(value), XCP_CALSEG_TYPE_SEGMENT};                                                         \
-    static const xcplib::CalSegRef<decltype(value)> handle(&calseg_id_##value, &value)
+    static const xcp::CalSegRef<decltype(value)> handle(&calseg_id_##value, &value)
 
 /// Declare a section-registered global calibration segment and create a typed C++ handle named <value>_calseg.
+/// See CalSegDeclRef above for the section-based registration semantics this builds on.
 #define CalSegDecl(value) CalSegDeclRef(value, value##_calseg)
 
 /// Convenience macro to create a calibration value with automatic name stringification
 /// Usage: auto calval = CalVal(initial_value);
-#define CalBlkCreate(value) xcplib::CalBlk<decltype(value)>(#value, &value)
+#define CalBlkCreate(value) xcp::CalBlk<decltype(value)>(#value, &value)
 
 } // namespace xcp
 
@@ -269,6 +305,7 @@ namespace xcp {
 // =============================================================================
 
 // @@@@ TODO: Support link time event registration
+#ifdef OPTION_DAQ_EVENT_LIST
 
 /// Trigger an event with variadic base address list
 #define DaqTriggerEventVar(event_name, ...) xcp::DaqTriggerVarTemplate(#event_name, __VA_ARGS__)
@@ -283,7 +320,11 @@ template <typename... Bases> XCPLIB_ALWAYS_INLINE void DaqTriggerVarTemplate(con
     }
 }
 
+#endif // OPTION_DAQ_EVENT_LIST
+
 // =============================================================================
+
+#ifdef OPTION_ENABLE_A2L_GENERATOR
 
 // Helper macros for creating measurement or instance info objects, variable name stringification and address capture
 #define A2L_MEAS(var, comment) xcp::MeasurementInfo(#var, &(var), var, comment)
@@ -406,11 +447,14 @@ template <typename T> XCPLIB_ALWAYS_INLINE void registerDynMeasurement(uint8_t i
     A2lCreateInstance_(info.name, info.type_name, info.dim, (const void *)info.addr, info.comment);
 }
 
+#endif // OPTION_ENABLE_A2L_GENERATOR
+
 // Main template function for once event creation and registration with individual relative addressing mode, and event triggering
 template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventVarTemplate(tXcpEventId event_id, uint64_t clock, Measurements &&...measurements) {
     if (XcpIsActivated()) {
 
-        // Once
+// Once
+#ifdef OPTION_ENABLE_A2L_GENERATOR
         static std::once_flag once_flag;
         std::call_once(once_flag, [&]() {
             // Register measurements with individual DYN address extensions
@@ -419,6 +463,7 @@ template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventVarTemplat
             (registerDynMeasurement(index++, event_id, measurements), ...);
             A2lUnlock();
         });
+#endif // OPTION_ENABLE_A2L_GENERATOR
 
         // Always
         // Create base pointer list and trigger

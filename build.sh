@@ -45,7 +45,7 @@ show_usage() {
     echo "  cleanall           Clean all build directories and exit"
     echo "  install            Install xcplite library to <build_dir>/install"
     echo "  install=<path>     Install xcplite library to custom path"
-    echo "  cargo_install      Run 'cargo install' for xcpclient and bintool to ~/.cargo/bin"
+    echo "  cargo_install      Run 'cargo install --locked' for xcpclient and bintool to ~/.cargo/bin"
     echo "                     (only meaningful with rust_tools or all target)"
     echo "  tidy               Run clang-tidy on library sources"
     echo ""
@@ -63,7 +63,7 @@ show_usage() {
     echo "  $0 tests                            # Tests, default config, debug"
     echo "  $0 shm tools                        # shm config: shmtool + xcpdaemon"
     echo "  $0 ptp tools                        # ptp config: ptptool (Linux only)"
-    echo "  $0 no_a2l examples                  # no_a2l config: no_a2l_demo"
+    echo "  $0 no_a2l examples                  # no_a2l config: no_a2l_demo, no_a2l_demo_cpp"
     echo "  $0 rtos examples                    # rtos config: freertos_demo (Linux/macOS only)"
     echo "  $0 lib install                      # Library only, install to build/install"
     echo "  $0 release lib install=/usr/local   # Release build, install to /usr/local"
@@ -164,9 +164,11 @@ _TARGET_LIST=()
 [[ "$CMAKE_BUILD_TOOLS" == "ON" ]]    && _TARGET_LIST+=("tools")
 [[ "$CMAKE_BUILD_RUST" == "ON" ]]     && _TARGET_LIST+=("rust_tools")
 [[ ${#_TARGET_LIST[@]} -eq 0 ]]       && _TARGET_LIST+=("lib")
+_COMPILER_DISPLAY="${CC:-default}${CXX:+ / $CXX}"
 echo "Configuration : $CONFIGURATION  ($BUILD_DIR)"
 echo "Build type    : $BUILD_TYPE"
 echo "Target        : ${_TARGET_LIST[*]}"
+echo "Compiler      : $_COMPILER_DISPLAY"
 echo ""
 
 # Clean if requested
@@ -176,6 +178,14 @@ if [[ "$CLEAN_BUILD" == true ]]; then
     echo ""
 fi
 
+# Explicit compiler flags: pass -DCMAKE_C/CXX_COMPILER when CC/CXX are set in the environment.
+# CMake caches the compiler after the first configure and silently ignores CC/CXX on
+# re-configures of an existing build directory.  Passing the flag explicitly overrides
+# the cache so compiler switching works even without 'clean'.
+CMAKE_COMPILER_ARGS=()
+if [[ -n "${CC:-}" ]];  then CMAKE_COMPILER_ARGS+=("-DCMAKE_C_COMPILER=$CC");   fi
+if [[ -n "${CXX:-}" ]]; then CMAKE_COMPILER_ARGS+=("-DCMAKE_CXX_COMPILER=$CXX"); fi
+
 # Configure
 cmake \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
@@ -184,6 +194,7 @@ cmake \
     -DXCPLITE_BUILD_TESTS="$CMAKE_BUILD_TESTS" \
     -DXCPLITE_BUILD_TOOLS="$CMAKE_BUILD_TOOLS" \
     -DXCPLITE_BUILD_RUST_TOOLS="$CMAKE_BUILD_RUST" \
+    "${CMAKE_COMPILER_ARGS[@]}" \
     $CMAKE_INSTALL_ARGS \
     -S . -B "$BUILD_DIR"
 
@@ -224,13 +235,13 @@ if [[ "$CARGO_INSTALL" == true && "$BUILD_SUCCESS" == true ]]; then
         echo "  Install destination: $CARGO_BIN_DIR"
         CARGO_INSTALL_FLAG=""
         [[ "$BUILD_TYPE" == "Release" || "$BUILD_TYPE" == "RelWithDebInfo" ]] && CARGO_INSTALL_FLAG="" || true
-        if cargo install --path "$SCRIPT_DIR/tools/xcpclient" ${CARGO_INSTALL_FLAG:+$CARGO_INSTALL_FLAG} --force; then
+        if cargo install --path "$SCRIPT_DIR/tools/xcpclient" --locked ${CARGO_INSTALL_FLAG:+$CARGO_INSTALL_FLAG} --force; then
             echo "  xcpclient installed to $CARGO_BIN_DIR/xcpclient"
         else
             echo "  xcpclient cargo install failed"
             BUILD_SUCCESS=false
         fi
-        if cargo install --path "$SCRIPT_DIR/tools/bintool" ${CARGO_INSTALL_FLAG:+$CARGO_INSTALL_FLAG} --force; then
+        if cargo install --path "$SCRIPT_DIR/tools/bintool" --locked ${CARGO_INSTALL_FLAG:+$CARGO_INSTALL_FLAG} --force; then
             echo "  bintool installed to $CARGO_BIN_DIR/bintool"
         else
             echo "  bintool cargo install failed"
@@ -272,21 +283,22 @@ echo "Build summary"
 echo "=================================================================="
 echo "  Configuration : $CONFIGURATION"
 echo "  Build type    : $BUILD_TYPE"
+echo "  Compiler      : $_COMPILER_DISPLAY"
 echo "  Build dir     : $BUILD_DIR"
 echo ""
 
 # Print what was actually targeted per configuration
 case "$CONFIGURATION" in
     default)
-        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : hello_xcp, hello_xcp_cpp, c_demo, cpp_demo, point_cloud_demo, struct_demo, multi_thread_demo" \
+        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : hello_xcp, hello_xcp_cpp, c_demo, cpp_demo, point_cloud_demo, struct_demo, multi_thread_demo, ptp4l_demo (Linux), bpf_demo (Linux, if XCPLITE_BUILD_BPF_DEMO=ON)" \
             || echo "  Examples      : (not built)"
-        [[ "$CMAKE_BUILD_TESTS" == "ON" ]]    && echo "  Tests         : a2l_test, cal_test, daq_test, clock_test, queue_test, type_detection_test_*" \
+        [[ "$CMAKE_BUILD_TESTS" == "ON" ]]    && echo "  Tests         : a2l_test, cal_test, daq_test, clock_test, queue_test, xcp_test, type_detection_test_*" \
             || echo "  Tests         : (not built)"
         [[ "$CMAKE_BUILD_TOOLS" == "ON" ]]    && echo "  Tools         : (none for default configuration)" \
             || echo "  Tools         : (not built)"
         ;;
     no_a2l)
-        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : no_a2l_demo" \
+        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : no_a2l_demo, no_a2l_demo_cpp" \
             || echo "  Examples      : (not built)"
         echo "  Tests         : (none for no_a2l configuration)"
         echo "  Tools         : (none for no_a2l configuration)"
@@ -307,7 +319,7 @@ case "$CONFIGURATION" in
             || echo "  Tools         : (not built)"
         ;;
     rtos)
-        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : freertos_demo (Linux/macOS only; downloads FreeRTOS-Kernel)" \
+        [[ "$CMAKE_BUILD_EXAMPLES" == "ON" ]] && echo "  Examples      : freertos_emu_demo (Linux/macOS only; downloads FreeRTOS-Kernel)" \
             || echo "  Examples      : (not built)"
         echo "  Tests         : (none for rtos configuration)"
         echo "  Tools         : (none for rtos configuration)"

@@ -5,6 +5,11 @@
 #include <Arduino.h>
 #include <math.h>
 
+#ifdef OPTION_ANALOG
+#include <Adafruit_ADS1X15.h>
+#include <Wire.h>
+#endif
+
 #ifdef OPTION_DISPLAY
 #include <LovyanGFX.hpp>
 #endif
@@ -14,6 +19,10 @@
 #include "xcplib.hpp"
 
 #include "xcp_demo.hpp"
+
+#ifdef OPTION_ANALOG
+static bool ads1115Present = false;
+#endif
 
 //----------------------------------------------------------------------------------------------------
 // Display
@@ -124,6 +133,17 @@ void displayUpdate(uint32_t slowTaskPeriodMs, uint16_t slowCounter, uint32_t fas
         snprintf(line, sizeof(line), "XCP Offline");
     }
     displayLine(displayLineCount() - 7, line, TFT_WHITE);
+
+#ifdef OPTION_ANALOG
+    if (!ads1115Present) {
+        snprintf(line, sizeof(line), "ADS1115: not found");
+    } else if (isnan(pressure_sensor_voltage)) {
+        snprintf(line, sizeof(line), "ADS1115: found");
+    } else {
+        snprintf(line, sizeof(line), "ADS1115: %.3f V", pressure_sensor_voltage);
+    }
+    displayLine(displayLineCount() - 5, line, ads1115Present ? TFT_CYAN : TFT_RED);
+#endif
     
     snprintf(line, sizeof(line), "slowTask: %ums %u", slowTaskPeriodMs, slowCounter);
     displayLine(displayLineCount() - 4, line, TFT_YELLOW);
@@ -318,6 +338,40 @@ void initIO( void ) {
 #endif
 
 //----------------------------------------------------------------------------------------------------
+// Analog input
+
+#ifdef OPTION_ANALOG
+
+static constexpr uint8_t ADS1115_I2C_ADDRESS = 0x48;
+static Adafruit_ADS1115 ads1115;
+
+static void initAnalogConverter() {
+    Wire.begin(SDA, SCL);
+
+    ads1115Present = ads1115.begin(ADS1115_I2C_ADDRESS, &Wire);
+    if (!ads1115Present) {
+        Serial.printf("ADS1115 not found at I2C address 0x%02X; using sine signal\n", ADS1115_I2C_ADDRESS);
+        return;
+    }
+
+    // With a 3.3 V supply, gain 1 covers every valid single-ended input.
+    ads1115.setGain(GAIN_ONE);
+    // The slow task defaults to 500 Hz, so use the ADS1115's fastest rate.
+    ads1115.setDataRate(RATE_ADS1115_860SPS);
+    Serial.printf("ADS1115 found at I2C address 0x%02X (SDA=%u, SCL=%u)\n", ADS1115_I2C_ADDRESS, SDA, SCL);
+}
+
+float readAnalogChannel(uint8_t channel) {
+    if (!ads1115Present || channel > 3) {
+        return NAN;
+    }
+
+    return ads1115.computeVolts(ads1115.readADC_SingleEnded(channel));
+}
+
+#endif
+
+//----------------------------------------------------------------------------------------------------
 // Main (Arduino style)
 
 // Init
@@ -332,6 +386,10 @@ void setup() {
 
 #ifdef OPTION_IO
     initIO();
+#endif
+
+#ifdef OPTION_ANALOG
+    initAnalogConverter();
 #endif
 
     // Connect to WLAN

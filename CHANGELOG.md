@@ -2,11 +2,51 @@
 
 All notable changes to XCPlite are documented in this file.
 
+## [V2.1.10]
 
-## [V2.1.6]
+- Build cleanup: `shm.h` and `persistence.h` are only included where the corresponding feature is enabled, reducing overhead for minimal embedded source subsets
+- `xcpclient` related changes: 
+    - EPK validation — A2L file EPK is now compared against the EPK reported by the target; mismatch prints a warning and aborts unless overridden with `--yes`
+    - Dependency on `mc_registry` switched to public `RainerZ/xcp-lite` 3.0.9
+    - Improved error message when AML file is not found
+    - Uses ELF section boundary variables as fallback event detection when `xcp_evts` section is absent
+    - Fixed ESP32 image containing multiple DROM segments.
+    - Handle C++ class types and fix empty typedefs for template structs in offline A2L generation
+    - The DWARF type reader was merged up to a2ltool 3.4.1.
+    - Unique names for field typedefs in the A2L writer (`xcp_registry` update)
+    - Fixed the size of pointer members in structs and classes
+    - No panic on ELF files without `xcp_evts` section or with duplicate event markers
+    - README section on supported types and limitations, unit tests with a C++ type fixture
+    - Fixed free_rtos_esp32_demo linker map section based event detection when dynamic event management is disabled.
+- Documentation improvements.
+- Fixed metadata macros XCP_LIMITS (missing ;) and XCP_READ_WRITE ([])
+- Fixed link type_detection_test against xcplite for XCPLITE_CONFIGURATION define
+
+
+## [V2.1.9]
+
+- XCP DAQ event info (#define XCP_ENABLE_DAQ_EVENT_INFO) support for disabled OPTION_DAQ_EVENT_LIST with section registered events
+- New example `no_a2l_demo_cpp` demonstrating build-time A2L generation for C++
+- A2L generator declarations conditionally removed from public API headers (`inc/xcplib.h`, `inc/xcplib.hpp`) for non-A2L configurations
+- C++ namespace alias `xcplib` removed (breaking change for code using `xcplib::` instead of `xcplite::`)
+- `XcpSetA2lName` and `XcpGetA2lName` are now independent from enabling the A2L generator
+- Hardcoded maximum calibration segment name length limited by alignment requirements
+- Fixed `cpp_demo` shutdown issue
+- Windows build fixes
+- Removed code definition of `_GNU_SOURCE`, made it public in CMakeLists.txt
+
+- `xcpclient` related changes:
+    - New `XCP_READ_WRITE` metadata macro
+    - Added enum conversion support in ELF->A2L converter
+    - Updated `mc_registry`, `gimli` and `object` crate dependencies to latest versions
+    - New options `--elf_skip_no_metadata` and `--config <xcpclient.toml>`
+    - Various bugfixes in debuginfo parsing and `no_a2l_demo` event handling
+
+
+## [V2.1.6] 
 
 - Critical bugfix in ´XcpEventExt_´, undefined behaviour when DAQ is not running 
-- Optimizations for microcontroller/RTOS builds, optimized locking (critical section instead of mutex)and static allocated queue (new ´queue32m.c´)
+- Optimizations for microcontroller/RTOS builds, optimized locking (critical section instead of mutex) and static allocated queue (new ´queue32m.c´)
 - Link time, deterministic event id assignment (´tXcpEventDescriptor´ in section ´xcp_evts´)
 - Implemented ´XCP_LIMIT´, XCP_COMMENT and ´XCP_UNIT´ metadata definition to support A2L generation in RTOS use cases (new linker section ´xcp_meta´). See example no_a2l_demo for details
 - ´xcpclient´ tool refactoring and bugfixes, xcp_registry dependency switched back to ´xcplite´ crate main on VectorGrp
@@ -67,7 +107,7 @@ All notable changes to XCPlite are documented in this file.
 ## [V2.0.1]
 
 - General refactoring and code cleanup, various minor code improvements and optimizations
-- Renamed to 'libxcplite' with external package name `xcplite`
+- Renamed to `libxcplite` with external package name `xcplite`
 - DAQ performance optimization, lock-less transmit queue for vectored IO
 - New function XcpCreateCalBlk to create calibration blocks without A2L memory segments
 - Simplified build script and CMake configuration, build script option to install libxcplite 
@@ -93,7 +133,7 @@ void XcpInit(const char *name, const char *epk, uint8_t mode);
 
 ### Experimental
 
-- Multi application mode (OPTION_SHM_MODE). See 'SHM.md' for details.  
+- Multi application mode (OPTION_SHM_MODE). See `SHM.md` for details.  
 
 
 ## [V1.2.1]
@@ -195,7 +235,7 @@ void XcpInit(const char *name, const char *epk, bool activate);
 ### Experimental
 - Tool `bintool` to convert XCPlite-specific BIN files to Intel-HEX format and apply Intel-HEX files to BIN files
 - New demo `no_a2l_demo` to demonstrate workflows without runtime A2L generation (using a XCPlite-specific A2L creator, see README.md of `no_a2l_demo`)
-- New demo 'bpf_demo' to demonstrate usage of XCPlite together with eBPF programs for Linux kernel tracing (see README.md of `bpf_demo`)
+- New demo `bpf_demo` to demonstrate usage of XCPlite together with eBPF programs for Linux kernel tracing (see README.md of `bpf_demo`)
 - Internal naming convention refactored to support A2L creation for dynamic objects from ELF/DWARF binaries
 - Rust xcp-lite >V1.0.0 uses the calibration segment management of XCPlite instead of implementing its own
 

@@ -69,6 +69,9 @@
 // Requires XCP_MAX_EVENT_COUNT * 2 bytes of memory
 #define XCP_MAX_EVENT_COUNT OPTION_DAQ_EVENT_COUNT
 
+// Enable XCP_GET_EVENT_INFO, if this is enabled, event information can be queried by the XCP client tool
+#define XCP_ENABLE_DAQ_EVENT_INFO
+
 #else
 
 #error "Please define OPTION_DAQ_EVENT_COUNT, remove this error if you want arbitrary event numbers without a maximum count"
@@ -389,8 +392,6 @@ XCPlite multi application absolute addressing: XCP_ADDRESS_MODE_XCPLITE__CXSDD (
 /* Calibration segment management */
 
 #ifdef XCP_ENABLE_CALSEG_LIST
-
-#define XCP_MAX_CALSEG_NAME 17 // Maximum length of calibration segment name
 
 // Enable lazy write mode for calibration segments
 // RCU updates of calibration segments are done in a cyclic manner in the background

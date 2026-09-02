@@ -6,7 +6,7 @@ There are 3 different demos:
 - freertos_esp32_demo for ESP32 with PlatformIO
 - freertos_stm32_demo for STM32 with CubeMX
 
-All examples are based on the same demo application code in 'xcp_demo.c' and 'xcp_demo.h'.  
+All examples are based on the same demo application code in `xcp_demo.c` and `xcp_demo.h`.  
 
 Refer to the README.md files in the demo folders for more specific details.  
 
@@ -158,17 +158,13 @@ The xcpclient A2L generator reads two named ELF sections written by the XCPlite 
 DWARF debug information, to build the A2L file without any runtime A2L calls in the application.
 
 **`xcp_evts` section** — every `DaqCreateEvent(name)` or `DaqCreateAndTriggerEvent(name)`
-emits a `tXcpEventDescriptor` (name, cycle time, priority) into `.xcp_evts`. xcpclient
-iterates this section to discover all events.
+emits a `tXcpEventDescriptor` (name, cycle time, priority) into `xcp_evts`. xcpclient iterates this section to discover all events.
 
 **`xcp_cals` section** — every `CalSegDecl(name)` at file scope emits a `tXcpCalSegDescriptor`
-(name, default page address, size) into `.xcp_cals`. xcpclient iterates this to discover all
-calibration segments.
+(name, default page address, size) into `xcp_cals`. xcpclient iterates this to discover all calibration segments.
 
-**DWARF trigger point anchors** — every event trigger macro emits a named static variable
-(e.g. `trg__AAS__name`, `trg__AASD__name`) whose name encodes the active addressing modes.
-xcpclient finds this variable in the DWARF and walks all variables in the same lexical scope
-— those become the local measurements in the A2L.
+**DWARF trigger point anchors** — every event trigger macro emits a named static variable (e.g. `trg__AAS__name`, `trg__AASD__name`) whose name encodes the active addressing modes.
+xcpclient finds this variable in the DWARF and walks all variables in the same lexical scope — those become the local measurements in the A2L.
 
 **Therefore: always use the macros, never the raw C API functions** (`XcpCreateEvent()`,
 `XcpCreateCalSeg()`, etc.). Only the macros emit the section data and anchors that xcpclient

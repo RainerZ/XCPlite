@@ -241,7 +241,7 @@ impl XcpClient {
         assert!(self.daq_header_size == 4 || self.daq_header_size == 2, "DAQ header type must be ODT_FIL_DAQW or ODT_DAQB");
 
         debug!(
-            "GET_DAQ_PROPERTIES daq_properties = 0x{:0X}, max_daq = {}, max_event = {}, min_daq = {}, daq_key_byte = 0x{:0X} (header_size={})",
+            "CC_GET_DAQ_PROCESSOR_INFO daq_properties = 0x{:0X}, max_daq = {}, max_event = {}, min_daq = {}, daq_key_byte = 0x{:0X} (header_size={})",
             daq_properties, max_daq, self.max_events, min_daq, daq_key_byte, self.daq_header_size
         );
         Ok(())

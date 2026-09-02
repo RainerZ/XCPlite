@@ -13,10 +13,14 @@
 // xcpclient --help
 //-----------------------------------------------------------------------------
 
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::net::Ipv4Addr;
 use std::{error::Error, sync::Arc};
 
+use figment::{
+    Figment,
+    providers::{Format, Toml},
+};
 use parking_lot::Mutex;
 
 mod xcp_client;
@@ -43,14 +47,18 @@ use clap::Parser;
 #[command(long_about = concat!("XCP client v", env!("CARGO_PKG_VERSION"), " for testing XCP servers and managing A2L and HEX files"))]
 #[command(version)]
 struct Args {
+    // --config
+    /// Load arguments from a TOML config file. Command-line arguments take precedence.
+    #[arg(long, default_value = "")]
+    config: String,
+
     // -l --log-level
-    /// Log level (Off=0, Error=1, Warn=2, Info=3, Debug=4, Trace=5)
+    /// Program flow log level (Off=0, Error=1, Warn=2, Info=3, Debug=4, Trace=5)
     #[arg(long, default_value_t = 3)]
     log_level: u8,
 
     // -v --verbose
-    /// Verbose output
-    /// Enables additional output when reading ELF files and creating A2L files.
+    /// Content information detail verbosity level
     #[arg(long, default_value_t = 0)]
     verbose: usize,
 
@@ -153,6 +161,12 @@ struct Args {
     #[arg(long, default_value = "")]
     elf_var_filter: String,
 
+    // --elf-skip-no-metadata
+    /// Skip variables without any metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) when creating an A2L file from an ELF file.
+    /// Only variables that have at least one metadata annotation are included in the A2L output.
+    #[arg(long, default_value_t = false)]
+    elf_skip_no_metadata: bool,
+
     // --elf-unit-filter
     /// Regex pattern to filter variables by their compilation unit (source file) name.
     /// Only variables defined in compilation units whose name matches are included in the A2L output.
@@ -211,6 +225,11 @@ struct Args {
     /// Execute a test sequence on the XCP server.
     #[arg(long, default_value_t = false)]
     test: bool,
+
+    // --yes
+    /// Automatically confirm EPK mismatch and other safety warnings. Use in scripts to suppress interactive prompts.
+    #[arg(long, short = 'y', default_value_t = false)]
+    yes: bool,
 }
 
 //----------------------------------------------------------------------------------------------
@@ -412,7 +431,10 @@ impl XcpDaqDecoder for DaqDecoder {
                             format!("{}", f64::from_bits(value))
                         }
                     }
-                    A2lTypeEncoding::Blob => panic!("Blob not supported"),
+                    A2lTypeEncoding::Blob => {
+                        warn!("Blob not supported");
+                        String::new()
+                    }
                 };
 
                 if let Some(ref mut writer) = self.csv_writer {
@@ -465,34 +487,37 @@ impl XcpTextDecoder for ServTextDecoder {
 //------------------------------------------------------------------------
 //  XCP client
 
-async fn xcp_client(
-    verbose: usize,
-    protocol: &'static str,
-    dest_addr: std::net::SocketAddr,
-    local_addr: std::net::SocketAddr,
-    baud_rate: u32,
-    connect_mode: u8,
-    offline: bool,
-    a2l_filename: String,
-    upload_a2l: bool,
-    create_a2l: bool,
-    create_a2l_template: bool,
-    fix_a2l: bool,
-    elf_filename: String,
-    upload_elf: bool,
-    elf_idx_unit_limit: usize,
-    elf_var_filter: String,
-    elf_unit_filter: String,
-    bin_filename: String,
-    upload_bin: bool,
-    download_bin: bool,
-    list_cal: String,
-    list_mea: String,
-    measurement_list: Vec<String>,
-    measurement_duration_ms: u64,
-    cal_args: Vec<String>,
-    csv_filename: String,
-) -> Result<(), Box<dyn Error>> {
+async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::SocketAddr, local_addr: std::net::SocketAddr, baud_rate: u32) -> Result<(), Box<dyn Error>> {
+    // Destructure args
+    let Args {
+        verbose,
+        connect_mode,
+        offline,
+        a2l: a2l_filename,
+        upload_a2l,
+        create_a2l,
+        create_a2l_template,
+        fix_a2l,
+        elf: elf_filename,
+        upload_elf,
+        elf_unit_limit: elf_idx_unit_limit,
+        elf_var_filter,
+        elf_skip_no_metadata,
+        elf_unit_filter,
+        bin: bin_filename,
+        upload_bin,
+        download_bin,
+        list_cal,
+        list_mea,
+        mea: measurement_list,
+        time,
+        cal: cal_args,
+        csv: csv_filename,
+        yes,
+        ..
+    } = args;
+    let measurement_duration_ms = time * 1000;
+
     // Create xcp_client
     let mut xcp_client = XcpClient::new(protocol, dest_addr, local_addr, baud_rate);
 
@@ -501,6 +526,8 @@ async fn xcp_client(
 
     // A2L name (from GET_ID)
     let mut a2l_name = String::new();
+    // EPK reported by the target, empty when offline or unsupported
+    let mut ecu_epk = String::new();
 
     // Calibration segment relative addressing mode
     let mut segment_relative = false;
@@ -578,14 +605,13 @@ async fn xcp_client(
 
             // Get EPK
             let res = xcp_client.get_id(xcp::IDT_ASAM_EPK).await;
-            let _ecu_epk = match res {
+            match res {
                 Ok((_, Some(id))) => {
                     info!("  GET_ID IDT_EPK = {}", id);
-                    id
+                    ecu_epk = id;
                 }
                 Err(e) => {
                     warn!("GET_ID IDT_ASAM_EPK failed, Error: {}", e);
-                    "".into()
                 }
                 _ => {
                     panic!("Empty string");
@@ -623,7 +649,7 @@ async fn xcp_client(
         } else {
             return Err("^No A2L file name specified, use --a2l commandline parameter".into());
         };
-        warn!("A2L path: {}", a2l_path.display());
+        info!("A2L path: {}", a2l_path.display());
 
         //----------------------------------------------------------------
         // Upload A2L
@@ -760,6 +786,15 @@ async fn xcp_client(
                     elf_reader.register_variables(&mut reg, segment_relative, verbose, elf_idx_unit_limit, &elf_var_filter, &elf_unit_filter)?;
                     // Apply metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the xcp_meta ELF section
                     elf_reader.register_metadata(&mut reg, verbose)?;
+                    // Optionally remove all variables without any metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the registry
+                    if elf_skip_no_metadata {
+                        let before = reg.instance_list.len();
+                        reg.instance_list.retain(|inst| inst.get_mc_support_data().has_metadata());
+                        let removed = before - reg.instance_list.len();
+                        if verbose > 0 || removed > 0 {
+                            info!("Removed {} variables without metadata ({} remaining)", removed, reg.instance_list.len());
+                        }
+                    }
                 }
             }
 
@@ -794,7 +829,40 @@ async fn xcp_client(
             info!("Load A2L file: {}", a2l_path.display());
             xcp_client
                 .load_a2l_file_into_registry(&a2l_path, &mut reg)
-                .map_err(|e| format!("Could not load A2L file '{}'", a2l_path.display()))?;
+                .map_err(|e| format!("Could not load A2L file '{}': {}", a2l_path.display(), e))?;
+
+            // Check the A2L EPK against the EPK reported by the target.
+            // The EPK is the firmware version string the A2L was generated from,
+            // so a mismatch means this A2L describes different firmware and its
+            // addresses may point at the wrong variables.
+            if !ecu_epk.is_empty() {
+                let a2l_epk = reg.application.get_version();
+                if a2l_epk.is_empty() {
+                    warn!("A2L file {} has no EPK, cannot verify it matches the target", a2l_path.display());
+                } else if a2l_epk != ecu_epk {
+                    error!(
+                        "EPK mismatch: A2L file '{}' has EPK '{}', target reports EPK '{}'. Addresses may be wrong.",
+                        a2l_path.display(),
+                        a2l_epk,
+                        ecu_epk
+                    );
+                    if !yes {
+                        if std::io::stdin().is_terminal() {
+                            eprint!("Continue anyway? [y/N] ");
+                            let _ = std::io::stderr().flush();
+                            let mut input = String::new();
+                            let _ = std::io::stdin().read_line(&mut input);
+                            if !input.trim().eq_ignore_ascii_case("y") {
+                                return Err("Aborted due to EPK mismatch".into());
+                            }
+                        } else {
+                            return Err("EPK mismatch: aborting. Use --yes to proceed anyway.".into());
+                        }
+                    }
+                } else {
+                    info!("EPK '{}' of A2L file and target match", ecu_epk);
+                }
+            }
 
             let mut event_mapping: std::collections::HashMap<u16, u16> = std::collections::HashMap::new();
             let mut seg_mapping: std::collections::HashMap<u16, u16> = std::collections::HashMap::new();
@@ -1105,12 +1173,116 @@ fn parse_dest_addr(dest_addr: &str, default_port: u16) -> Result<std::net::Socke
 }
 
 //------------------------------------------------------------------------
+// Config file support
+
+/// Mirrors all Args fields as Option<T>.
+/// Fields present in the TOML file are Some(_); absent fields are None and left unchanged.
+#[derive(serde::Deserialize, Default)]
+#[serde(default)]
+struct ConfigFile {
+    log_level: Option<u8>,
+    verbose: Option<usize>,
+    dest_addr: Option<String>,
+    port: Option<u16>,
+    bind_addr: Option<String>,
+    baud_rate: Option<u32>,
+    tcp: Option<bool>,
+    udp: Option<bool>,
+    sxi: Option<bool>,
+    connect_mode: Option<u8>,
+    offline: Option<bool>,
+    a2l: Option<String>,
+    upload_a2l: Option<bool>,
+    create_a2l: Option<bool>,
+    create_a2l_template: Option<bool>,
+    fix_a2l: Option<bool>,
+    upload_elf: Option<bool>,
+    elf: Option<String>,
+    elf_unit_limit: Option<usize>,
+    elf_var_filter: Option<String>,
+    elf_unit_filter: Option<String>,
+    bin: Option<String>,
+    upload_bin: Option<bool>,
+    download_bin: Option<bool>,
+    list_mea: Option<String>,
+    mea: Option<Vec<String>>,
+    time: Option<u64>,
+    csv: Option<String>,
+    list_cal: Option<String>,
+    cal: Option<Vec<String>>,
+    elf_skip_no_metadata: Option<bool>,
+    test: Option<bool>,
+    yes: Option<bool>,
+}
+
+/// Apply config file values to args.
+/// Only fields that are present in the config file (Some) and were NOT explicitly
+/// set on the command line are overwritten.
+fn merge_config(matches: &clap::ArgMatches, config: ConfigFile, args: &mut Args) {
+    use clap::parser::ValueSource;
+    macro_rules! apply {
+        ($field:ident) => {
+            if let Some(v) = config.$field {
+                if matches.value_source(stringify!($field)) != Some(ValueSource::CommandLine) {
+                    args.$field = v;
+                }
+            }
+        };
+    }
+    apply!(log_level);
+    apply!(verbose);
+    apply!(dest_addr);
+    apply!(port);
+    apply!(bind_addr);
+    apply!(baud_rate);
+    apply!(tcp);
+    apply!(udp);
+    apply!(sxi);
+    apply!(connect_mode);
+    apply!(offline);
+    apply!(a2l);
+    apply!(upload_a2l);
+    apply!(create_a2l);
+    apply!(create_a2l_template);
+    apply!(fix_a2l);
+    apply!(upload_elf);
+    apply!(elf);
+    apply!(elf_unit_limit);
+    apply!(elf_var_filter);
+    apply!(elf_unit_filter);
+    apply!(bin);
+    apply!(upload_bin);
+    apply!(download_bin);
+    apply!(list_mea);
+    apply!(mea);
+    apply!(time);
+    apply!(csv);
+    apply!(list_cal);
+    apply!(cal);
+    apply!(elf_skip_no_metadata);
+    apply!(test);
+    apply!(yes);
+}
+
+//------------------------------------------------------------------------
 // Main function
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    use clap::{CommandFactory, FromArgMatches};
+
     // Parse command line arguments
-    let args = Args::parse();
+    let mut matches = Args::command().get_matches();
+    let mut args = Args::from_arg_matches(&mut matches).unwrap();
+
+    // Load and merge config file if --config was specified
+    if !args.config.is_empty() {
+        let config: ConfigFile = Figment::new()
+            .merge(Toml::file(&args.config))
+            .extract()
+            .map_err(|e| format!("Invalid config file '{}': {}", args.config, e))?;
+        merge_config(&matches, config, &mut args);
+    }
 
     // Initialize logging
     let log_level = args.log_level.to_log_level_filter();
@@ -1129,32 +1301,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
         env!("CARGO_PKG_VERSION_PATCH")
     );
 
-    // Parse IP addresses and ports
+    info!("{:#?}", args);
+
+    // Protocol, IP addresses, port, baudrate
+    let dest_addr: std::net::SocketAddr = parse_dest_addr(&args.dest_addr, args.port)?;
+    let local_addr: std::net::SocketAddr = parse_dest_addr(&args.bind_addr, 0)?;
+    let mut baud_rate = args.baud_rate;
     let protocol = if args.tcp {
         "TCP"
     } else if args.udp {
         "UDP"
     } else if args.sxi {
+        if baud_rate == 0 {
+            baud_rate = 115200;
+        }
         "SxI"
     } else {
         warn!("No protocol specified, defaulting to TCP");
         "TCP"
     };
-    let dest_addr: std::net::SocketAddr = parse_dest_addr(&args.dest_addr, args.port)?;
-    let local_addr: std::net::SocketAddr = parse_dest_addr(&args.bind_addr, 0)?;
-    let mut baud_rate = args.baud_rate;
-    if args.offline {
-        info!("XCP client offline mode");
-    } else {
-        if protocol == "SxI" && baud_rate == 0 {
-            warn!("No baud rate specified for SxI protocol, defaulting to 115200");
-            baud_rate = 115200;
-        }
-        if protocol == "TCP" || protocol == "UDP" {
-            info!("XCP server dest addr: {}", dest_addr);
-            info!("XCP client local bind addr: {}", local_addr);
-        }
-    }
 
     // Run the test executor if --test is specified
     if args.test {
@@ -1162,35 +1327,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     // Run the XCP client
     else {
-        let res = xcp_client(
-            args.verbose,
-            protocol,
-            dest_addr,
-            local_addr,
-            baud_rate,
-            args.connect_mode,
-            args.offline,
-            args.a2l,
-            args.upload_a2l,
-            args.create_a2l,
-            args.create_a2l_template,
-            args.fix_a2l,
-            args.elf,
-            args.upload_elf,
-            args.elf_unit_limit,
-            args.elf_var_filter,
-            args.elf_unit_filter,
-            args.bin,
-            args.upload_bin,
-            args.download_bin,
-            args.list_cal,
-            args.list_mea,
-            args.mea,
-            args.time * 1000,
-            args.cal,
-            args.csv,
-        )
-        .await;
+        let res = xcp_client(args, protocol, dest_addr, local_addr, baud_rate).await;
         if let Err(e) = res {
             error!("XCP client error: {}", e);
         }

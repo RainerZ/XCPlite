@@ -1,0 +1,128 @@
+# xcpclient configuration file
+# Usage: xcpclient --config xcpclient.toml [additional CLI overrides]
+# Command-line arguments always take precedence over values in this file.
+# All keys are optional; missing keys fall back to the built-in defaults shown below.
+
+#-----------------------------------------------------------------------------
+# Logging
+
+# Program flow log level: Off=0, Error=1, Warn=2, Info=3, Debug=4, Trace=5
+log_level = 3
+
+# Content information detail verbosity level (0 = minimal, higher = more output)
+verbose = 0
+
+#-----------------------------------------------------------------------------
+# Transport
+
+# XCP server address. Use "IP" or "IP:port" format.
+# If port is omitted here, the 'port' key below is used.
+dest_addr = "127.0.0.1"
+
+# XCP server port (used when dest_addr does not include a port)
+port = 5555
+
+# Local bind address. Use "IP" or "IP:port".
+# If port is omitted, the OS assigns a free port.
+bind_addr = "0.0.0.0"
+
+# Baud rate — only relevant for SxI protocol
+baud_rate = 115200
+
+# Protocol selection: exactly one of tcp / udp / sxi should be true
+tcp = true
+udp = false
+sxi = false
+
+# XCP connect mode byte (sent in the CONNECT command)
+connect_mode = 0
+
+# Force offline mode — no network connection; communication params are
+# still used when generating an A2L file
+offline = false
+
+#-----------------------------------------------------------------------------
+# A2L file handling
+
+# Override the A2L file name (default: read from XCP server via GET_ID)
+a2l = ""
+
+# Upload A2L from the XCP server (requires server-side GET_ID A2L support)
+upload_a2l = false
+
+# Build a complete A2L file from XCP server event/segment info + ELF DWARF data
+create_a2l = false
+
+# Build a minimal A2L skeleton (events and segments only, no variables)
+create_a2l_template = false
+
+# Correct an existing A2L file with event/segment info from the live target
+fix_a2l = false
+
+#-----------------------------------------------------------------------------
+# ELF / DWARF
+
+# Path to a local ELF file
+elf = ""
+
+# Upload the ELF file from the XCP server (proprietary GET_ID extension)
+upload_elf = false
+
+# Limit ELF parsing to compilation units with index <= this value.
+# Useful to speed up processing of large binaries. Default = no limit.
+# elf_unit_limit = 18446744073709551615   # usize::MAX — omit to parse all units
+
+# Regex filter: only register variables whose name matches
+elf_var_filter = ""
+
+# Regex filter: only register variables from compilation units whose path matches
+elf_unit_filter = ""
+
+# Skip variables that have no metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT)
+elf_skip_no_metadata = false
+
+#-----------------------------------------------------------------------------
+# Calibration segment binary (Intel-HEX)
+
+# Path to a HEX file used for upload/download of calibration segment data
+bin = ""
+
+# Upload calibration segment working-page data from target → HEX file
+upload_bin = false
+
+# Download calibration segment working-page data from HEX file → target
+download_bin = false
+
+#-----------------------------------------------------------------------------
+# Calibration (CAL)
+
+# List calibration variables matching this regex (printed to console)
+list_cal = ""
+
+# Set a single calibration variable: [name, value]
+# Example: cal = ["my_gain", "1.5"]
+cal = []
+
+#-----------------------------------------------------------------------------
+# Measurement (DAQ)
+
+# List measurement variables matching this regex (printed to console)
+list_mea = ""
+
+# Variables to measure: list of names or a single regex.
+# Example: mea = ["channel_a", "channel_b"]
+# Example: mea = [".*"]
+mea = []
+
+# Measurement duration in seconds (0 = run until Ctrl-C)
+time = 0
+
+# Write measurement data to this CSV file instead of the console
+# Format per row: time_ns,daq,name,value
+csv = ""
+
+#-----------------------------------------------------------------------------
+# Test
+
+# Execute the built-in test sequence against the XCP server
+test = false
