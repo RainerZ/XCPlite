@@ -1110,13 +1110,55 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                 let start_time = tokio::time::Instant::now();
                 xcp_client.start_measurement().await?;
 
-                if measurement_duration_ms > 0 {
-                    tokio::time::sleep(std::time::Duration::from_millis(measurement_duration_ms)).await;
+                // Periodic statistics reporter — prints event and data rate once per second.
+                // Reported at log level Info, independent of --verbose (which only controls per-sample content dumps).
+                let stats_decoder = xcp_client.get_daq_decoder();
+                let deadline = if measurement_duration_ms > 0 {
+                    Some(tokio::time::Instant::now() + std::time::Duration::from_millis(measurement_duration_ms))
                 } else {
                     println!("Press Ctrl-C to stop measurement...");
-                    // Wait for Ctrl-C signal
-                    let _ = tokio::signal::ctrl_c().await;
-                    println!("\nStopping measurement...");
+                    None
+                };
+                let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1));
+                ticker.tick().await; // consume the immediate first tick, report rates from t+1s
+                let mut last_report = tokio::time::Instant::now();
+                let mut last_events = 0usize;
+                let mut last_bytes = 0usize;
+                loop {
+                    tokio::select! {
+                        _ = ticker.tick() => {
+                            if let Some(ref d) = stats_decoder {
+                                let (events, bytes) = {
+                                    let g = d.lock();
+                                    (g.get_event_count(), g.get_byte_count())
+                                };
+                                let now = tokio::time::Instant::now();
+                                let dt = now.duration_since(last_report).as_secs_f64();
+                                if dt > 0.0 {
+                                    info!(
+                                        "Measurement: {:.0} event/s, {:.3} Mbyte/s",
+                                        (events - last_events) as f64 / dt,
+                                        (bytes - last_bytes) as f64 / dt / 1_000_000.0
+                                    );
+                                }
+                                last_report = now;
+                                last_events = events;
+                                last_bytes = bytes;
+                            }
+                        }
+                        _ = async {
+                            match deadline {
+                                Some(dl) => tokio::time::sleep_until(dl).await,
+                                None => std::future::pending::<()>().await,
+                            }
+                        } => {
+                            break;
+                        }
+                        _ = tokio::signal::ctrl_c(), if deadline.is_none() => {
+                            println!("\nStopping measurement...");
+                            break;
+                        }
+                    }
                 }
 
                 xcp_client.stop_measurement().await?;
@@ -1301,7 +1343,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         env!("CARGO_PKG_VERSION_PATCH")
     );
 
-    info!("{:#?}", args);
+    debug!("{:#?}", args);
 
     // Protocol, IP addresses, port, baudrate
     let dest_addr: std::net::SocketAddr = parse_dest_addr(&args.dest_addr, args.port)?;
