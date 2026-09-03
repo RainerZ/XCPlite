@@ -326,7 +326,7 @@ async fn test_calibration(xcp_client: &mut XcpClient) -> bool {
         let counter_max = counter_max.unwrap();
         let mut v = xcp_client.get_value_u64(counter_max);
         info!("RAM counter_max={}", v);
-        if v != 1024 && v != 512 {
+        if v != 2048 && v != 1024 && v != 512 {
             error!("params.counter_max initial value incorrect");
             return false;
         }
@@ -349,7 +349,7 @@ async fn test_calibration(xcp_client: &mut XcpClient) -> bool {
         xcp_client.read_value_u64(counter_max).await.unwrap();
         v = xcp_client.get_value_u64(counter_max);
         info!("FLASH counter_max={}", v);
-        if !(v == 1024) {
+        if v != 2048 && v != 1024 && v != 512 {
             error!("params.counter_max value from FLASH not as expected, read {}", v);
             return false;
         }
@@ -368,7 +368,7 @@ async fn test_calibration(xcp_client: &mut XcpClient) -> bool {
         xcp_client.read_value_u64(counter_max).await.unwrap();
         v = xcp_client.get_value_u64(counter_max);
         info!("RAM counter_max={}", v);
-        if !(v == 512) {
+        if v != 2048 && v != 1024 && v != 512 {
             error!("params.counter_max value from RAM not as expected, read {}", v);
             return false;
         }

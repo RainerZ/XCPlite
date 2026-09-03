@@ -10,7 +10,7 @@ Partial XCP implementation with hard-coded protocol settings for XCPlite.
 xcpclient generates A2L files from ELF/DWARF debug information written into the firmware by
 the XCPlite instrumentation macros — no runtime A2L code is needed in the application.
 
-**Three sources of information** are combined:
+**Four sources of information** are combined:
 
 1. **`xcp_evts` ELF section** — the XCPlite macros (`DaqCreateEvent`, `DaqCreateAndTriggerEvent`)
    emit a `tXcpEventDescriptor` constant per event into this named section. xcpclient iterates
@@ -26,12 +26,35 @@ the XCPlite instrumentation macros — no runtime A2L code is needed in the appl
    addressing mode from their name, and associates all in-scope local variables with the
    corresponding event as measurements.
 
+4. **`xcp_meta` ELF section** — optional metadata annotation macros emit constants into this
+   section that attach a physical unit, value limits, a comment, or read/write access to an
+   already-discovered measurement or calibration object. xcpclient reads the section after the
+   variables have been registered and applies each annotation to the matching object (or, using
+   a dot-separated field path, to a specific field of a typedef/struct instance).
+
+**Metadata annotation macros** (see `inc/xcplib.h`) — each emits a constant named
+`xcp_meta__<kind>__<name>` into the `xcp_meta` section, where `<name>` may be a simple variable
+name or an `instance.field.subfield` path:
+
+| Macro | Effect on the A2L object |
+|---|---|
+| `XCP_UNIT(name, unit)` | sets the physical unit (`PHYS_UNIT`) |
+| `XCP_LIMITS(name, min, max)` | sets the lower/upper value limits |
+| `XCP_COMMENT(name, comment)` | sets the description / comment string |
+| `XCP_READ_WRITE(name)` | marks the object read/write (i.e. a writable `CHARACTERISTIC`) |
+
+Metadata registration only annotates variables that are already discovered from the sources
+above; it never adds new objects. With `--elf-skip-no-metadata`, xcpclient additionally removes
+every variable that carries no `XCP_UNIT` / `XCP_LIMITS` / `XCP_COMMENT` annotation, which is a
+convenient way to publish only explicitly curated signals.
+
 **Preconditions in the application code:**
 - Use the XCPlite macros (`DaqCreateEvent`, `DaqTriggerEvent`, `CalSegDecl`, …),
   never the raw C API — only macros emit the ELF markers.
 - Build with debug info (`-g` / `Debug` or `RelWithDebInfo`).
-- Mark local measurement variables `volatile` so the compiler keeps them on the stack frame
-  and DWARF location expressions remain valid in optimized builds.
+- Mark local measurement variables `volatile` (or use the `XCP_MEA` / `XCP_MEAS` attribute) so
+  the compiler keeps them on the stack frame and DWARF location expressions remain valid in
+  optimized builds.
 
 For the full technical specification — ELF section layouts, the `trg__` anchor naming
 convention, and the `AddrExt` encoding — see

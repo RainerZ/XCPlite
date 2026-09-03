@@ -9,7 +9,6 @@ use log::{debug, error, info, trace, warn};
 use std::collections::HashMap;
 use std::error::Error;
 
-use super::xcp::*;
 use super::*;
 
 impl XcpClient {
