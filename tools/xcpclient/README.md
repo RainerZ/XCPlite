@@ -307,3 +307,8 @@ cargo r --  --dest-addr 192.168.0.206  --elf no_a2l_demo.out --elf-unit-limit 10
 cargo r --  --dest-addr 192.168.0.206  --elf no_a2l_demo.out --elf-unit-limit 1000 --log-level 3  --create-a2l --a2l no_a2l_demo.a2l --mea 'counter'  --time 5 --verbose 2
 
 ```
+
+
+## Suggestions for improvement
+
+- Maybe add an option not to skip static variables in functions without an event marker

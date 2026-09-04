@@ -6,18 +6,13 @@
 
 // Based on Github repository a2ltool by DanielT: https://github.com/DanielT/a2ltool
 
-/* 
+/*
 Note on V2.1.10:
 Updated to typereader.rs from a2ltool v3.4.1 (commit 0b61aa5, 2026-08-04).
-The Class variant is gone. 
+The Class variant is gone.
 Struct now carries is_class and inheritance, and the size and Display code follow.
 The two Class match arms from the previous fix are collapsed into the Struct arms, and a new test asserts that base members arrive for all four struct/class inheritance combinations.
 */
-
-
-
-
-
 
 #![allow(clippy::collapsible_else_if)]
 
@@ -241,6 +236,7 @@ impl ElfReader {
             "Registering segment information {}:",
             if !seg_relative { "(absolute addressing mode)" } else { "(relative addressing mode)" }
         );
+        info!("===============================================================");
 
         // Step 1
         // Iterate over all variables and look for segment definition markers, which are created by the CalSegCreate or CalBlkCreate macros
@@ -474,8 +470,8 @@ impl ElfReader {
     // Register events from event creation markers (evt__name) in the code
     pub fn register_events(&self, reg: &mut Registry, verbose: usize) -> Result<(), Box<dyn Error>> {
         info!("===============================================================");
-
         info!("Registering event information:");
+        info!("===============================================================");
 
         // Get the address range of the XCP event descriptor memory section (start is 0 if not found)
         let xcp_event_section_addr = self.debug_data.get_event_section_addr();
@@ -579,8 +575,8 @@ impl ElfReader {
     // Find event triggers in the code and register their location (compilation unit, function, CFA offset)
     pub fn register_event_locations(&self, reg: &mut Registry, verbose: usize) -> Result<(), Box<dyn Error>> {
         info!("===============================================================");
-
         info!("Registering event locations:");
+        info!("===============================================================");
 
         // Iterate over variables
         for (var_name, var_infos) in &self.debug_data.variables {
@@ -658,6 +654,7 @@ impl ElfReader {
         Ok(())
     }
 
+    // Register variables from the ELF debug information into the registry
     pub fn register_variables(
         &self,
         reg: &mut Registry,
@@ -670,6 +667,7 @@ impl ElfReader {
         // Load debug information from the ELF file
         info!("===============================================================");
         info!("Registering variables:");
+        info!("===============================================================");
 
         // Compile name filter regex if specified
         let name_regex: Option<Regex> = if name_filter.is_empty() {
@@ -703,7 +701,7 @@ impl ElfReader {
 
         // Iterate over variables
         for (var_name, var_infos) in &self.debug_data.variables {
-            // Skip standard library variables and system/compiler internals (__<name>)s
+            // Skip standard library variables and system/compiler internals (__<name>)
             // Skip global XCP variables (gXCP.. and gA2L..) and special marker variables (calseg__, evt__, trg__, xcp_meta__)
             if var_name.starts_with("__")
                 || var_name.starts_with("gXcp")
@@ -729,10 +727,15 @@ impl ElfReader {
             }
 
             let mut a2l_name = var_name.to_string();
-            let mut xcp_event_id = 0; // default event id is 0, async event in transmit thread
+            let mut xcp_event_id: Option<u16>;
+            // @@@@ TODO: Behaviour changed, check what this affect, async event 0 (OPTION_DAQ_ASYNC_EVENT) is now optional, does not work with section registered events (e.g. FreeRTOS)
+            // Previous: default event id is 0, which is the async event in transmit thread
+            // Current: default event id is None, meaning no event assigned
 
             // daq__<event_name>__<var_name> (local scope static variables)
             // Check for captured variables with format "daq__<event_name>__<var_name>"
+            // @@@@ TODO: Check if this is correct and up to date with the current event handling logic
+            /*
             if var_name.starts_with("daq__") {
                 // remove the "daq__" prefix
                 let new_name = var_name.strip_prefix("daq__").unwrap_or(var_name);
@@ -742,7 +745,7 @@ impl ElfReader {
                 let var_name = parts.next().unwrap_or("");
                 // Find the event in the registry
                 if let Some(id) = reg.event_list.find_event(event_name, 0) {
-                    xcp_event_id = id.id;
+                    xcp_event_id = Some(id.id);
                     if event_name.len() > 0 {
                         a2l_name = format!("{}.{}", event_name, var_name);
                     } else {
@@ -753,11 +756,12 @@ impl ElfReader {
                     continue; // skip this variable
                 }
             }
+            */
 
             // Count variables with this name in compilation unit 0
             let count = var_infos.iter().filter(|v| v.unit_idx <= unit_idx_limit).count();
 
-            // Process all variable with this name in different scopes and namespaces
+            // Process all variables with this name in different scopes and namespaces
             for var_info in var_infos {
                 // @@@@ TODO: Create only variables from specified compilation unit
                 if var_info.unit_idx > unit_idx_limit {
@@ -772,59 +776,74 @@ impl ElfReader {
                     }
                 }
 
-                let var_function = if let Some(f) = var_info.function.as_ref() { f.as_str() } else { "" };
+                let var_function =  var_info.function.as_ref().map(|f| f.as_str());
 
                 // Address encoder
                 let mem_addr_ext: u8 = var_info.address.0;
-                let mem_addr: u64 = if mem_addr_ext == 0 {
-                    // Encode absolute addressing mode
+                let mem_addr: u64 = 
+                
+                // Encode absolute addressing mode
+                if mem_addr_ext == 0 {
                     if var_info.address.1 == 0 {
-                        debug!("Variable '{}' in function '{}' skipped, no address", var_name, var_function);
+                        debug!("Variable '{}' not registered, no address", var_name);
                         continue; // skip this variable
-                    } else if var_info.address.1 >= 0xFFFFFFFF {
+                    } 
+                    else if var_info.address.1 >= 0xFFFFFFFF {
                         warn!(
-                            "Variable '{}' skipped, has 64 bit address {:#x}, which does not fit the 32 bit XCP address range",
+                            "Global variable '{}' not registered, address {:#x} out of the 32 bit XCP address range",
                             var_name, var_info.address.1
                         );
                         continue; // skip this variable
-                    } else {
-                        // find an event triggered in this function
-                        if let Some(event) = reg.event_list.find_event_by_location(var_info.unit_idx, var_function) {
-                            xcp_event_id = event.id;
-                            info!("Variable '{}' is local to function '{}', using event id = {}", var_name, var_function, xcp_event_id);
+                    } 
+                    else {
+                        // Find an event triggered in the function
+                        if let Some(var_function_name) = var_function {
+                            if let Some(event) = reg.event_list.find_event_by_location(var_info.unit_idx, var_function_name) {
+                                xcp_event_id = Some(event.id);
+                                info!("Static variable '{}' local to function '{:?}', event id = {}", var_name, var_function, event.id);
+                            } else {
+                                info!("Static variable '{}' local to function '{:?}', no event associated, no event found in this function", var_name, var_function);
+                                xcp_event_id = None;
+                            }
+                            
                         } else {
-                            debug!("Variable '{}' is local to function '{}', but no event found", var_name, var_function);
+                            info!("Global variable '{}', no event associated", var_name);
+                            xcp_event_id = None;
                         }
-                        // multiple variables with this name, prefix with function name
+
+                        // Multiple variables with this name, prefix with function name
                         if count > 1 {
-                            if var_function.len() > 0 {
-                                a2l_name = format!("{}.{}", var_function, var_name);
+                            if let Some(f) = var_function {
+                                a2l_name = format!("{}.{}", f, var_name);
                             } else {
                                 a2l_name = var_name.to_string();
                             }
                         }
                         var_info.address.1
+
                     }
                 }
-                // Encode relative addressing mode
+
+                // Encode stack relative addressing mode
                 else if mem_addr_ext == 2 {
                     // Find an event id for this local variable
-                    if let Some(event) = reg.event_list.find_event_by_location(var_info.unit_idx, var_function) {
+                    let var_function_name = var_function.expect("Local variable function name is missing for relative addressing mode");
+                    if let Some(event) = reg.event_list.find_event_by_location(var_info.unit_idx, var_function_name) {
                         // Set the event id for this function
                         // Prefix the variable with the function name
-                        xcp_event_id = event.id;
+                        xcp_event_id = Some(event.id);
                         let cfa: i64 = event.cfa as i64;
-                        if var_function.len() > 0 {
-                            a2l_name = format!("{}.{}", var_function, var_name);
+                        if let Some(f) = var_function {
+                            a2l_name = format!("{}.{}", f, var_name);
                         } else {
                             a2l_name = var_name.to_string();
                         }
-                        debug!(
-                            "Variable '{}' is local to function '{}', using event id = {}, dwarf_offset = {} cfa = {}",
+                        info!(
+                            "Local variable '{}' in function '{:?}', event id = {:?}, dwarf_offset = {} cfa = {}",
                             var_name,
                             var_function,
                             xcp_event_id,
-                            (var_info.address.1 as i64 - 0x80000000) as i64,
+                            (var_info.address.1 as i64 - 0x80000000) ,
                             cfa
                         );
 
@@ -835,7 +854,7 @@ impl ElfReader {
                             || offset > (McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK as i64 - McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64)
                         {
                             warn!(
-                                "Variable '{}' skipped, has offset {} which does not fit the XCP dynamic addressing mode range",
+                                "Local variable '{}' skipped, has offset {} which does not fit the XCP dynamic addressing mode range",
                                 var_name, offset
                             );
                             continue; // skip this variable
@@ -844,10 +863,11 @@ impl ElfReader {
                         (((offset + McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64) as u64) & McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK as u64)
                             | ((event.id as u64) << McAddress::XCP_ADDR_EXT_DYN_OFFSET_BITS)
                     } else {
-                        debug!("Variable '{}' skipped, could not find event for dyn addressing mode", var_name);
+                        warn!("Local variable '{}' in function {:?} skipped, could not find event for dyn addressing mode", var_name, var_function);
                         continue; // skip this variable
                     }
                 }
+
                 // @@@@ TODO: Handle other address extensions
                 else {
                     debug!("Variable '{}' skipped, has unsupported address extension {:#x}", var_name, mem_addr_ext);
@@ -872,7 +892,13 @@ impl ElfReader {
                     } else {
                         mem_addr_ext
                     };
-                    (McObjectType::Measurement, McAddress::new_a2l_with_event(xcp_event_id, mem_addr as u32, addr_ext))
+                    if let Some(xcp_event_id) = xcp_event_id {
+                        (McObjectType::Measurement, McAddress::new_a2l_with_event(xcp_event_id, mem_addr as u32, addr_ext))
+                    }
+                    else {
+                        (McObjectType::Measurement, McAddress::new_a2l(mem_addr as u32, addr_ext))
+                    }
+
                 };
 
                 // Register measurement variable if possible
@@ -913,7 +939,7 @@ impl ElfReader {
                                 Ok(_) => {
                                     if verbose >= 1 {
                                         println!(
-                                            "Registered variable '{}' type_name = '{}', size = {}, event_id = {}",
+                                            "  Registered variable '{}' type_name = '{}', size = {}, event_id = {:?}",
                                             a2l_name,
                                             type_name.as_ref().unwrap_or(&"<unnamed>".to_string()),
                                             type_size,
@@ -959,7 +985,7 @@ impl ElfReader {
                                 Ok(_) => {
                                     if verbose >= 1 {
                                         println!(
-                                            "Registered enum variable '{}' with type '{}', size = {}, event id = {}, unit = {:?}",
+                                            "Registered enum variable '{}' with type '{}', size = {}, event id = {:?}, unit = {:?}",
                                             a2l_name,
                                             type_name.as_ref().unwrap_or(&"<unnamed>".to_string()),
                                             type_size,
@@ -992,6 +1018,7 @@ impl ElfReader {
     pub fn register_metadata(&self, reg: &mut Registry, verbose: usize) -> Result<(), Box<dyn Error>> {
         info!("===============================================================");
         info!("Registering metadata from xcp_meta section:");
+        info!("===============================================================");
 
         // Get meta_base_addr and meta_end
         let (meta_base_addr, meta_data) = match &self.debug_data.xcp_meta_data {
