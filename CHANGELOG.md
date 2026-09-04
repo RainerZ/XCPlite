@@ -4,21 +4,29 @@ All notable changes to XCPlite are documented in this file.
 
 ## [V2.1.12]
 
-- xcpclient related changes:
+- xcpclient related changes (xcpclient version 3.0.10):
     - Improved variable registration for global and static variables
     - Global variables and local static variables in functions without event trigger are registered, but not associated to any specific default DAQ event
-    - no_a2l_demo, no_a2l_demo_cpp: more demo cases
+    - Unique typedef names for struct/class types with the same name in different namespaces, classes or functions (`motor_control.Input`, `valve_control.Input`). Previously all variables of such types referenced the first registered typedef and were shown with the wrong type.
+    - Global variables with the same name in different namespaces are registered with namespace qualified names (`motor_control.input`, `valve_control.input`) instead of dropping all but the first one
+    - A struct type which is used for measurement and for calibration variables gets separate typedefs
+    - The GCC declaration and definition entries of a namespace scope variable are merged, they no longer produce duplicate instance errors
+    - Variables with internal linkage in a namespace and without DWARF location (e.g. metadata markers `XCP_COMMENT(motor_control__input, ...)` inside a namespace) are resolved by their mangled symbol name
+    - Metadata annotations placed in the same namespace or function as the variable no longer need a scope prefix (`XCP_COMMENT(input, ...)` in namespace `motor_control` annotates `motor_control.input`), explicit prefixes keep working. Metadata for the typedef fields of namespace qualified instances.
+    - Local variables without a DWARF location (optimized away) are no longer resolved to the address of a global variable with the same name, only symbols with local binding are considered for them
+    - no_a2l_demo, no_a2l_demo_cpp: more demo cases, no_a2l_demo_cpp demonstrates types and variables with the same name in different namespaces
     
 
 
 ## [V2.1.11]
 
-* Allow custom memory attributes for queue32m
-* Avoid mutex allocation when queue32m uses critical sections
-* Support optional recursive FreeRTOS mutexes
-* Fix typos in FreeRTOS documentation and comments
-* Fix UDP segment size calculation from MTU
-* Make FreeRTOS queue segment count configurable
+- FreeRTOS related changes:
+    * Allow custom memory attributes for queue32m
+    * Avoid mutex allocation when queue32m uses critical sections
+    * Support optional recursive FreeRTOS mutexes
+    * Fix typos in FreeRTOS documentation and comments
+    * Fix UDP segment size calculation from MTU
+    * Make FreeRTOS queue segment count configurable
 
 
 ## [V2.1.10]

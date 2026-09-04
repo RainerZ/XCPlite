@@ -43,6 +43,12 @@ name or an `instance.field.subfield` path:
 | `XCP_COMMENT(name, comment)` | sets the description / comment string |
 | `XCP_READ_WRITE(name)` | marks the object read/write (i.e. a writable `CHARACTERISTIC`) |
 
+`<name>` uses `__` as path separator (`params__delay_us` annotates the field `params.delay_us`).
+A macro placed in the same namespace as the variable, or in the same function as a local variable, does not need
+a scope prefix: the name is looked up qualified with the scope of the macro first, then unqualified.
+`XCP_COMMENT(input, ...)` in namespace `motor_control` annotates the instance `motor_control.input`,
+`XCP_COMMENT(counter, ...)` in function `foo` annotates `foo.counter`; explicit prefixes (`foo__counter`) keep working.
+
 Metadata registration only annotates variables that are already discovered from the sources
 above; it never adds new objects. With `--elf-skip-no-metadata`, xcpclient additionally removes
 every variable that carries no `XCP_UNIT` / `XCP_LIMITS` / `XCP_COMMENT` annotation, which is a
@@ -73,6 +79,12 @@ The DWARF type information is mapped to A2L objects as follows:
 | pointers as struct or class members | the address value as unsigned integer of the target's pointer size, the pointee is not followed |
 
 Type names which are not valid A2L identifiers (template instantiations such as `TplStruct<float>`) are sanitized to `TplStruct_float_`.
+DWARF stores the unqualified type name and A2L has one flat name space for typedefs. Struct or class types with the same name in
+different namespaces, classes or functions are therefore qualified with their scope: `motor_control::Input` and `valve_control::Input`
+become `motor_control.Input` and `valve_control.Input`, `MotorController::Params` becomes `MotorController.Params`. Types with a unique
+name keep their plain name. Different types with the same name but without a scope (file local types in different C files) and a struct
+type which is used for measurement and for calibration variables get a numeric suffix (`state_1`), reported as a warning.
+Global variables with the same name in different namespaces are qualified with their namespace as well (`motor_control.input`, `valve_control.input`).
 The `TYPEDEF_MEASUREMENT`/`TYPEDEF_CHARACTERISTIC` of a struct field is named after the field; if another structure has a field with
 the same name but a different type or metadata, the name is qualified with the structure name (`TplStruct_float_.value`).
 

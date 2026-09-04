@@ -1,6 +1,6 @@
 [package]
 name = "xcpclient"
-version = "3.0.9"
+version = "3.0.10"
 edition = "2024"
 resolver = "2"
 authors = ["RainerZ"]

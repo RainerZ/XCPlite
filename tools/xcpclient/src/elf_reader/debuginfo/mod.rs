@@ -5,13 +5,12 @@
 
 // Based on Github repository a2ltool by DanielT: https://github.com/DanielT/a2ltool
 
-/* 
+/*
 Note on V2.1.10:
 Updated to typereader.rs from a2ltool v3.4.1 (commit 0b61aa5, 2026-08-04).
-The Class variant is gone. 
+The Class variant is gone.
 Struct now carries is_class and inheritance, and the size and Display code follow.
 */
-
 
 use indexmap::IndexMap;
 use std::collections::HashMap;
@@ -30,7 +29,7 @@ pub(crate) struct VarInfo {
     pub(crate) typeref: usize,           // reference to TypeInfo in DebugData.types
     pub(crate) unit_idx: usize,          // compilation unit index
     pub(crate) function: Option<String>, // function name if variable is local to a function
-    pub(crate) namespaces: Vec<String>,  // namespaces the variable is defined in
+    pub(crate) namespaces: Vec<String>,  // namespaces the variable is defined in, outermost first
 }
 
 // TypeInfo holds information about a variable's type
@@ -96,6 +95,7 @@ pub(crate) struct DebugData {
     pub(crate) variables: IndexMap<String, Vec<VarInfo>>, // variable name -> list of VarInfo for instances with that name
     pub(crate) types: HashMap<usize, TypeInfo>,           // type reference -> TypeInfo
     pub(crate) typenames: HashMap<String, Vec<usize>>,    // type name -> list of type references
+    pub(crate) type_scopes: HashMap<usize, Vec<String>>,  // type reference -> enclosing scopes (namespaces, classes, functions) of struct/class types, outermost first
     pub(crate) demangled_names: HashMap<String, String>,  // mangled name -> demangled name
     pub(crate) unit_names: Vec<Option<String>>,           // list of compilation unit names by unit index
     pub(crate) sections: HashMap<String, (u64, u64)>,     // section name -> (start, end)
@@ -242,7 +242,14 @@ impl DebugData {
                 println!("Type name '{}': {} references", type_name, type_refs.len());
                 for type_ref in type_refs {
                     if let Some(type_info) = self.types.get(type_ref) {
-                        println!("  -> type_ref={}, size={} bytes, unit={}", type_ref, type_info.get_size(), type_info.unit_idx);
+                        let scope = self.type_scopes.get(type_ref).map(|s| s.join("::")).unwrap_or_default();
+                        println!(
+                            "  -> type_ref={}, size={} bytes, unit={}, scope='{}'",
+                            type_ref,
+                            type_info.get_size(),
+                            type_info.unit_idx,
+                            scope
+                        );
                     }
                 }
             }

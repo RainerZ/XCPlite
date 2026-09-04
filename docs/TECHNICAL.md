@@ -230,6 +230,24 @@ static tXcpEventId trg__AASDD__calc = XCP_UNDEFINED_EVENT_ID;
 | DWARF global/static symbols | Linker output | Resolve absolute addresses of global measurement and calibration variables |
 | DWARF type info (`DW_TAG_structure_type` etc.) | Compiler | Generate `TYPEDEF_STRUCTURE` / `RECORD_LAYOUT` entries in A2L |
 
+#### Type names from DWARF
+
+The `DW_AT_name` of a `DW_TAG_structure_type` or `DW_TAG_class_type` entry is the unqualified type name (`Input` for
+`motor_control::Input`). The enclosing namespace, class or function is only visible from the position of the entry in the
+DWARF tree: it is a child of the `DW_TAG_namespace`, `DW_TAG_class_type` or `DW_TAG_subprogram` entry. Type entries have no
+`DW_AT_linkage_name`, only variables and functions carry a mangled name. Every compilation unit which uses a type has its own
+copy of the type entry.
+
+A2L has one flat name space for `TYPEDEF_STRUCTURE`, so xcpclient records the enclosing scopes of the type entries while
+traversing the tree and names the typedefs as follows:
+
+- The typedef is named after the type. If struct/class types with the same name exist in different scopes, all of them are
+  qualified with their scope (`motor_control.Input`, `valve_control.Input`, `MotorController.Params`), types with a unique name keep their plain name.
+- Typedefs with identical content are merged: the same type used by several variables, or the copies of a type from several compilation units.
+- A name which is still used by a typedef with different content (types without scope in different C files, or a type used for
+  measurement and for calibration variables) gets a numeric suffix (`state_1`), reported as a warning.
+- Global variables with the same name in different namespaces are named with their namespace (`motor_control.input`).
+
 See no_a2l_demo or free_rtos_demo.  
 
 
