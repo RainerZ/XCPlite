@@ -7,7 +7,10 @@
 use indexmap::IndexMap;
 use std::ffi::OsStr;
 use std::ops::Index;
-use std::{collections::HashMap, fs::File};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::File,
+};
 
 type SliceType<'a> = EndianSlice<'a, RunTimeEndian>;
 
@@ -40,8 +43,10 @@ struct DebugDataReader<'elffile> {
     epk_string: Option<String>,
     epk_addr: u64,
     symbol_addresses: HashMap<String, u64>,
+    global_symbol_names: HashSet<String>,  // names of the symbols with global (or weak) binding
     xcp_meta_data: Option<(u64, Vec<u8>)>, // (section_base_addr, raw_bytes)
     is_little_endian: bool,
+    scope_parent: HashMap<usize, usize>, // .debug_info offset of a named type or scope -> offset of its enclosing scope (namespace, struct, class, union or function)
 }
 
 // Create DebugData
@@ -147,8 +152,10 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
         epk_string,
         epk_addr,
         symbol_addresses: get_symbol_addresses(&elffile),
+        global_symbol_names: get_global_symbol_names(&elffile),
         xcp_meta_data,
         is_little_endian,
+        scope_parent: HashMap::new(),
     };
     log::debug!("Reading debug info entries");
     Ok(dbg_reader.collect_debug_data(unit_idx_limit))
@@ -234,6 +241,15 @@ fn get_symbol_addresses(elffile: &object::read::File) -> HashMap<String, u64> {
     map
 }
 
+// Names of the symbols with global (or weak) binding, all other symbols are local to their compilation unit (static variables and functions)
+fn get_global_symbol_names(elffile: &object::read::File) -> HashSet<String> {
+    elffile
+        .symbols()
+        .filter(|symbol| symbol.is_global())
+        .filter_map(|symbol| symbol.name().ok().filter(|name| !name.is_empty()).map(str::to_string))
+        .collect()
+}
+
 // load the DWARF debug info from the .debug_<xyz> sections
 fn load_dwarf_sections<'data>(elffile: &object::read::File<'data>) -> Result<gimli::Dwarf<SliceType<'data>>, String> {
     log::debug!("load_dwarf_sections");
@@ -273,34 +289,72 @@ fn get_endian(elffile: &object::read::File) -> RunTimeEndian {
 }
 
 impl DebugDataReader<'_> {
-    fn resolve_address_by_unique_suffix(&self, var_name: &str) -> Option<u64> {
+    // Get the address of a symbol by its exact name
+    // local_only: only symbols with local binding (static variables) are considered
+    fn symbol_address(&self, symbol_name: &str, local_only: bool) -> Option<u64> {
+        if local_only && self.global_symbol_names.contains(symbol_name) {
+            return None;
+        }
+        self.symbol_addresses.get(symbol_name).copied()
+    }
+
+    // Get the address of the only symbol whose (mangled) name ends with the variable name, e.g. _ZZ4mainE7counter for the static variable counter in main
+    fn resolve_address_by_unique_suffix(&self, var_name: &str, local_only: bool) -> Option<u64> {
         // Very short names are too ambiguous in mangled symbols.
         if var_name.len() < 4 {
             return None;
         }
 
-        let mut matches = self
-            .symbol_addresses
-            .iter()
-            .filter_map(|(symbol_name, addr)| if *addr != 0 && symbol_name.ends_with(var_name) { Some(*addr) } else { None });
+        let mut matches = self.symbol_addresses.iter().filter_map(|(symbol_name, addr)| {
+            if *addr != 0 && symbol_name.ends_with(var_name) && !(local_only && self.global_symbol_names.contains(symbol_name)) {
+                Some(*addr)
+            } else {
+                None
+            }
+        });
 
         let first = matches.next()?;
         if matches.next().is_none() { Some(first) } else { None }
     }
 
-    fn resolve_address_from_symbols(&self, entry: &DebuggingInformationEntry<SliceType, usize>, unit: &UnitHeader<SliceType>, var_name: &str) -> Option<u64> {
+    // Resolve the address of a variable without location attribute from the symbol table: by linkage name, by name,
+    // by the mangled name of a variable in a namespace or class scope, or by a unique name suffix
+    // local_only: the variable is local to a function, only symbols with local binding (static variables) are considered,
+    // a global symbol with the same name belongs to a different variable
+    // scopes: the namespaces and classes the variable is defined in (outermost first), used for the mangled name
+    fn resolve_address_from_symbols(
+        &self,
+        entry: &DebuggingInformationEntry<SliceType, usize>,
+        unit: &UnitHeader<SliceType>,
+        var_name: &str,
+        local_only: bool,
+        scopes: &[String],
+    ) -> Option<u64> {
         if let Ok(linkage_name) = get_linkage_name_attribute(entry, &self.dwarf, unit)
-            && let Some(addr) = self.symbol_addresses.get(&linkage_name).copied()
+            && let Some(addr) = self.symbol_address(&linkage_name, local_only)
         {
             return Some(addr);
         }
-        self.symbol_addresses.get(var_name).copied().or_else(|| self.resolve_address_by_unique_suffix(var_name))
+        if let Some(addr) = self.symbol_address(var_name, local_only) {
+            return Some(addr);
+        }
+        // GCC emits no linkage name for variables with internal linkage in a namespace (static const in a namespace, e.g. the XCP_COMMENT
+        // metadata markers), and the mangled symbol name of a namespace scope variable (_ZN13motor_controlL5inputE) does not end with the variable name
+        if !local_only && !scopes.is_empty() {
+            for mangled in itanium_mangled_names(scopes, var_name) {
+                if let Some(addr) = self.symbol_address(&mangled, local_only) {
+                    return Some(addr);
+                }
+            }
+        }
+        self.resolve_address_by_unique_suffix(var_name, local_only)
     }
 
     // Traverse DWARF entries and finalize collected parser state into DebugData.
     fn collect_debug_data(mut self, unit_idx_limit: usize) -> DebugData {
         let variables = self.load_variables(unit_idx_limit);
         let (types, typenames) = self.load_types(&variables);
+        let type_scopes = self.load_type_scopes(&types);
         let varname_list: Vec<&String> = variables.keys().collect();
         let demangled_names = demangle_cpp_varnames(&varname_list);
         let unit_names = std::mem::take(&mut self.unit_names);
@@ -309,6 +363,7 @@ impl DebugDataReader<'_> {
             variables,
             types,
             typenames,
+            type_scopes,
             demangled_names,
             unit_names,
             sections: self.sections,
@@ -365,34 +420,61 @@ impl DebugDataReader<'_> {
             }
 
             // traverse all entries in depth-first order
-            let mut context: Vec<(gimli::DwTag, Option<String>)> = Vec::new();
+            // context holds the tag, the name (namespaces and functions only) and the .debug_info offset of the ancestors of the current entry
+            let mut context: Vec<(gimli::DwTag, Option<String>, usize)> = Vec::new();
             while let Ok(Some(entry)) = entries_cursor.next_dfs() {
                 let depth = entry.depth();
                 debug_assert!(depth >= 1);
                 context.truncate((depth - 1) as usize);
                 let tag = entry.tag();
+                let offset = entry.offset().to_debug_info_offset(unit).map_or(0, |o| o.0);
                 // It's essential to only get those names that might actually be needed.
                 // Getting all names unconditionally doubled the runtime of the program
                 // as a result of countless useless string allocations and deallocations.
                 if tag == gimli::constants::DW_TAG_namespace || tag == gimli::constants::DW_TAG_subprogram {
-                    context.push((tag, get_name_attribute(entry, &self.dwarf, unit).ok()));
+                    context.push((tag, get_name_attribute(entry, &self.dwarf, unit).ok(), offset));
                 } else {
-                    context.push((tag, None));
+                    context.push((tag, None, offset));
                 }
                 debug_assert_eq!(depth as usize, context.len());
 
+                // Remember the enclosing scope of named types, of nested scopes and of variables declared in a namespace or class,
+                // to qualify the names of types which are defined in a namespace, class or function (motor_control::Input, Controller::Params)
+                // and to find the scope of a variable definition which refers to its declaration (DW_AT_specification).
+                // Only offsets are stored here, the scope names are resolved in load_type_scopes for the few types which need them.
+                if (is_scope_tag(tag) || is_type_tag(tag) || tag == gimli::constants::DW_TAG_variable)
+                    && let Some((parent_tag, _, parent_offset)) = context[..context.len() - 1].iter().rev().find(|(t, _, _)| is_scope_tag(*t))
+                    && (tag != gimli::constants::DW_TAG_variable || *parent_tag != gimli::constants::DW_TAG_subprogram)
+                {
+                    self.scope_parent.insert(offset, *parent_offset);
+                }
+
                 if entry.tag() == gimli::constants::DW_TAG_variable {
                     // Get variable information
-                    match self.get_variable(entry, unit, abbreviations) {
+                    let (function, namespaces) = get_varinfo_from_context(&context);
+                    match self.get_variable(entry, unit, abbreviations, function.is_some(), &namespaces) {
                         Ok((name, typeref, address)) => {
-                            let (function, namespaces) = get_varinfo_from_context(&context);
-                            variables.entry(name).or_default().push(VarInfo {
-                                address, // may be 0 for local variables
-                                typeref,
-                                unit_idx,
-                                function,
-                                namespaces,
-                            });
+                            let var_infos = variables.entry(name).or_default();
+                            // GCC describes a namespace scope (or static member) variable with a declaration entry inside the namespace
+                            // and a definition entry at compilation unit level (DW_AT_specification). Both resolve to the same address,
+                            // the variable is kept once with the namespaces of the declaration
+                            if function.is_none()
+                                && address.0 == 0
+                                && address.1 != 0
+                                && let Some(existing) = var_infos.iter_mut().find(|v| v.unit_idx == unit_idx && v.address == address && v.function.is_none())
+                            {
+                                if existing.namespaces.is_empty() {
+                                    existing.namespaces = namespaces;
+                                }
+                            } else {
+                                var_infos.push(VarInfo {
+                                    address, // may be 0 for local variables
+                                    typeref,
+                                    unit_idx,
+                                    function,
+                                    namespaces,
+                                });
+                            }
                         }
                         Err(errmsg) => {
                             let offset = entry.offset().to_debug_info_offset(unit).unwrap_or(gimli::DebugInfoOffset(0)).0;
@@ -404,6 +486,80 @@ impl DebugDataReader<'_> {
         }
 
         variables
+    }
+
+    // Resolve the scopes (namespaces, enclosing classes or functions) of all struct and class types, outermost scope first.
+    // The DWARF name of a type is its unqualified name (DW_AT_name "Input" for motor_control::Input), the enclosing
+    // scopes recorded during the traversal in load_variables are needed to tell types with the same name apart.
+    // Types without an enclosing scope are not included in the result.
+    fn load_type_scopes(&self, types: &HashMap<usize, TypeInfo>) -> HashMap<usize, Vec<String>> {
+        let mut type_scopes = HashMap::new();
+        for (offset, typeinfo) in types {
+            if !matches!(typeinfo.datatype, DbgDataType::Struct { .. }) {
+                continue;
+            }
+            // The type of a variable or member may be a const or volatile qualified type, the name (and the scope) is the one of the named type behind it
+            let Some(named_offset) = self.get_named_type_offset(*offset) else {
+                continue;
+            };
+            let scope = self.get_scope_path(named_offset);
+            if !scope.is_empty() {
+                log::trace!("type {} @{offset:x} has scope {}", typeinfo.name.as_deref().unwrap_or(""), scope.join("::"));
+                type_scopes.insert(*offset, scope);
+            }
+        }
+        type_scopes
+    }
+
+    // Read tag, name and type reference of the debug info entry at the given .debug_info offset
+    fn read_entry(&self, dbginfo_offset: usize) -> Option<(gimli::DwTag, Option<String>, Option<usize>)> {
+        let unit_idx = self.units.get_unit(dbginfo_offset)?;
+        let (unit, abbrev) = &self.units[unit_idx];
+        let unit_offset = gimli::DebugInfoOffset(dbginfo_offset).to_unit_offset(unit)?;
+        let mut entries_tree = unit.entries_tree(abbrev, Some(unit_offset)).ok()?;
+        let node = entries_tree.root().ok()?;
+        let entry = node.entry();
+        let name = get_name_attribute(entry, &self.dwarf, unit).ok();
+        let typeref = get_typeref_attribute(entry, unit).ok();
+        Some((entry.tag(), name, typeref))
+    }
+
+    // Follow const, volatile and similar qualifiers to the named type definition (struct, class, union, enum or typedef)
+    fn get_named_type_offset(&self, dbginfo_offset: usize) -> Option<usize> {
+        let mut offset = dbginfo_offset;
+        for _ in 0..16 {
+            // limited number of qualifier levels, to be safe with malformed debug info
+            let (tag, _, typeref) = self.read_entry(offset)?;
+            if is_type_tag(tag) {
+                return Some(offset);
+            }
+            match tag {
+                gimli::constants::DW_TAG_const_type
+                | gimli::constants::DW_TAG_volatile_type
+                | gimli::constants::DW_TAG_packed_type
+                | gimli::constants::DW_TAG_restrict_type
+                | gimli::constants::DW_TAG_immutable_type
+                | gimli::constants::DW_TAG_atomic_type => offset = typeref?,
+                _ => return None,
+            }
+        }
+        None
+    }
+
+    // Get the names of the scopes enclosing a debug info entry, outermost scope first
+    // Anonymous scopes (unnamed namespaces, anonymous structs) are skipped
+    fn get_scope_path(&self, dbginfo_offset: usize) -> Vec<String> {
+        let mut path = Vec::new();
+        let mut offset = dbginfo_offset;
+        // a parent always precedes its children in .debug_info, so the chain of parents terminates
+        while let Some(parent) = self.scope_parent.get(&offset) {
+            if let Some((_, Some(name), _)) = self.read_entry(*parent) {
+                path.push(name);
+            }
+            offset = *parent;
+        }
+        path.reverse();
+        path
     }
 
     // Return global variable information
@@ -450,11 +606,16 @@ impl DebugDataReader<'_> {
     // Return variable information
     // returns name, type reference and address
     // address may be 0 if a local variable is requested
+    // A missing address is resolved from the symbol table if possible (declarations of global variables, static variables without location)
+    // local: the variable is local to a function, only symbols with local binding are considered to resolve the address
+    // namespaces: the namespaces the entry is nested in (outermost first)
     fn get_variable<'a>(
         &self,
         entry: &DebuggingInformationEntry<SliceType<'a>, usize>,
         unit: &UnitHeader<SliceType<'a>>,
         abbrev: &gimli::Abbreviations,
+        local: bool,
+        namespaces: &[String],
     ) -> Result<(String, usize, (u8, u64)), String> {
         // if debugging information entry A has a DW_AT_specification or DW_AT_abstract_origin attribute
         // pointing to another debugging information entry B, any attributes of B are considered to be part of A.
@@ -464,10 +625,16 @@ impl DebugDataReader<'_> {
             log::debug!("get_variable '{}':", name);
             let typeref = get_typeref_attribute(&specification_entry, unit)?;
             let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1).unwrap_or((0u8, 0u64));
+            // The definition entry is at compilation unit level, the scope of the variable is the one of its declaration (specification)
+            let specification_scopes = specification_entry
+                .offset()
+                .to_debug_info_offset(unit)
+                .map(|o| self.get_scope_path(o.0))
+                .unwrap_or_default();
             if address == (0u8, 0u64)
                 && let Some(sym_addr) = self
-                    .resolve_address_from_symbols(entry, unit, &name)
-                    .or_else(|| self.resolve_address_from_symbols(&specification_entry, unit, &name))
+                    .resolve_address_from_symbols(entry, unit, &name, local, namespaces)
+                    .or_else(|| self.resolve_address_from_symbols(&specification_entry, unit, &name, local, &specification_scopes))
             {
                 address = (0u8, sym_addr);
             }
@@ -485,8 +652,8 @@ impl DebugDataReader<'_> {
             let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1).unwrap_or((0u8, 0u64));
             if address == (0u8, 0u64)
                 && let Some(sym_addr) = self
-                    .resolve_address_from_symbols(entry, unit, &name)
-                    .or_else(|| self.resolve_address_from_symbols(&abstract_origin_entry, unit, &name))
+                    .resolve_address_from_symbols(entry, unit, &name, local, namespaces)
+                    .or_else(|| self.resolve_address_from_symbols(&abstract_origin_entry, unit, &name, local, namespaces))
             {
                 address = (0u8, sym_addr);
             }
@@ -503,7 +670,7 @@ impl DebugDataReader<'_> {
             let typeref = get_typeref_attribute(entry, unit)?;
             let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1).unwrap_or((0u8, 0u64));
             if address == (0u8, 0u64)
-                && let Some(sym_addr) = self.resolve_address_from_symbols(entry, unit, &name)
+                && let Some(sym_addr) = self.resolve_address_from_symbols(entry, unit, &name, local, namespaces)
             {
                 address = (0u8, sym_addr);
             }
@@ -517,16 +684,50 @@ impl DebugDataReader<'_> {
     }
 }
 
-fn get_varinfo_from_context(context: &[(gimli::DwTag, Option<String>)]) -> (Option<String>, Vec<String>) {
+// Tags of debug info entries which are a named scope for the types and variables nested inside of them
+fn is_scope_tag(tag: gimli::DwTag) -> bool {
+    matches!(
+        tag,
+        gimli::constants::DW_TAG_namespace
+            | gimli::constants::DW_TAG_structure_type
+            | gimli::constants::DW_TAG_class_type
+            | gimli::constants::DW_TAG_union_type
+            | gimli::constants::DW_TAG_subprogram
+    )
+}
+
+// Tags of debug info entries which define a named type
+fn is_type_tag(tag: gimli::DwTag) -> bool {
+    matches!(
+        tag,
+        gimli::constants::DW_TAG_structure_type
+            | gimli::constants::DW_TAG_class_type
+            | gimli::constants::DW_TAG_union_type
+            | gimli::constants::DW_TAG_enumeration_type
+            | gimli::constants::DW_TAG_typedef
+    )
+}
+
+// Mangled names (Itanium C++ ABI) of a variable in nested namespaces or classes, with external and with internal linkage:
+// motor_control::input -> _ZN13motor_control5inputE, static motor_control::input -> _ZN13motor_controlL5inputE
+fn itanium_mangled_names(scopes: &[String], name: &str) -> [String; 2] {
+    let mut prefix = String::from("_ZN");
+    for scope in scopes {
+        prefix.push_str(&format!("{}{}", scope.len(), scope));
+    }
+    [format!("{prefix}{}{name}E", name.len()), format!("{prefix}L{}{name}E", name.len())]
+}
+
+// Get the innermost enclosing function and the enclosing namespaces (outermost first) of a variable from the traversal context
+fn get_varinfo_from_context(context: &[(gimli::DwTag, Option<String>, usize)]) -> (Option<String>, Vec<String>) {
     let function = context
         .iter()
         .rev()
-        .find(|(tag, _)| *tag == gimli::constants::DW_TAG_subprogram)
-        .and_then(|(_, name)| name.clone());
+        .find(|(tag, _, _)| *tag == gimli::constants::DW_TAG_subprogram)
+        .and_then(|(_, name, _)| name.clone());
     let namespaces: Vec<String> = context
         .iter()
-        .rev()
-        .filter_map(|(tag, ns)| (*tag == gimli::constants::DW_TAG_namespace).then(|| ns.clone()).flatten())
+        .filter_map(|(tag, ns, _)| (*tag == gimli::constants::DW_TAG_namespace).then(|| ns.clone()).flatten())
         .collect();
     (function, namespaces)
 }
@@ -589,6 +790,54 @@ mod test {
 
     // C++ type test fixture, see fixtures/cpp_types.cpp
     static ELF_FILE_NAMES: [&str; 1] = [concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_types.elf")];
+
+    #[test]
+    fn test_itanium_mangled_names() {
+        let namespace = ["motor_control".to_string()];
+        assert_eq!(itanium_mangled_names(&namespace, "input"), ["_ZN13motor_control5inputE", "_ZN13motor_controlL5inputE"]);
+        let nested = ["diagnostics".to_string(), "detail".to_string()];
+        assert_eq!(itanium_mangled_names(&nested, "input")[0], "_ZN11diagnostics6detail5inputE");
+    }
+
+    // Scopes of struct types: namespaces, nested namespaces and enclosing classes, see fixtures/cpp_namespaces.cpp
+    #[test]
+    fn test_load_type_scopes() {
+        let filename = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_namespaces.elf");
+        let debugdata = DebugData::load_dwarf(OsStr::new(filename), 0, usize::MAX).unwrap();
+        let scope_of = |varinfo: &VarInfo| -> Vec<String> { debugdata.type_scopes.get(&varinfo.typeref).cloned().unwrap_or_default() };
+
+        // The three variables named "input" are in different namespaces and have types of different scopes
+        let inputs = debugdata.variables.get("input").expect("variables named input");
+        assert_eq!(inputs.len(), 3);
+        let mut namespaces: Vec<Vec<String>> = inputs.iter().map(|v| v.namespaces.clone()).collect();
+        namespaces.sort();
+        assert_eq!(namespaces, vec![vec!["diagnostics", "detail"], vec!["motor_control"], vec!["valve_control"]]);
+        let mut scopes: Vec<Vec<String>> = inputs.iter().map(scope_of).collect();
+        scopes.sort();
+        assert_eq!(scopes, namespaces);
+
+        // Type from another namespace than the variable
+        let last_motor_input = &debugdata.variables.get("last_motor_input").unwrap()[0];
+        assert_eq!(last_motor_input.namespaces, vec!["diagnostics"]);
+        assert_eq!(scope_of(last_motor_input), vec!["motor_control"]);
+
+        // Types outside of any namespace have no scope
+        let config = debugdata.variables.get("config").unwrap();
+        let mut config_scopes: Vec<Vec<String>> = config.iter().map(scope_of).collect();
+        config_scopes.sort();
+        assert_eq!(config_scopes, vec![vec![], vec!["valve_control".to_string()]]);
+
+        // The scope of a struct type nested in a class is the class
+        let motor_controller = debugdata.types.get(&debugdata.variables.get("motor_controller").unwrap()[0].typeref).unwrap();
+        assert!(debugdata.type_scopes.get(&motor_controller.dbginfo_offset).is_none());
+        let DbgDataType::Struct { members, .. } = &motor_controller.datatype else {
+            panic!("MotorController is not a struct");
+        };
+        let DbgDataType::TypeRef(params_ref, _) = members.get("params").unwrap().0.datatype else {
+            panic!("MotorController.params is not a type reference");
+        };
+        assert_eq!(debugdata.type_scopes.get(&params_ref), Some(&vec!["MotorController".to_string()]));
+    }
 
     #[test]
     fn test_load_data() {

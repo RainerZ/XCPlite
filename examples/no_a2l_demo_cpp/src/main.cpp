@@ -105,7 +105,7 @@ XCP_UNIT(params__delay_us, "us");
 */
 
 //-----------------------------------------------------------------------------------------------------
-// Demo global measurement values
+// Demo global measurement variables
 
 // Global measurement variable
 uint16_t global_counter = 0;
@@ -153,6 +153,34 @@ class test_class {
     uint16_t d[3];
 };
 class test_class global_test_class = {1, 2, 0.3, {1, 2, 3}};
+
+//-----------------------------------------------------------------------------------------------------
+// Demo namespaces with types and variables of the same name
+
+// Types with the same name in different namespaces (or nested in different classes) are common in larger code bases.
+// A2L has one flat name space for typedefs.
+// The ELF->A2L generator therefore qualifies the typedef names of such types with their namespace or enclosing class
+// (motor_control.Input, valve_control.Input), types with a unique name keep their plain name.
+// Global variables with the same name in different namespaces are qualified with their namespace as well (motor_control.input, valve_control.input).
+// Metadata annotations (XCP_COMMENT, XCP_UNIT, ...) placed in the same namespace as the variable do not need the namespace prefix,
+// the ELF->A2L generator qualifies the name with the namespace of the annotation itself.
+
+namespace motor_control {
+struct Input {
+    int32_t speed;
+};
+Input input = {0};
+XCP_COMMENT(input, "Motor control input");
+} // namespace motor_control
+
+namespace valve_control {
+struct Input {
+    int32_t flow;
+    int32_t pressure;
+};
+Input input = {0, 0};
+XCP_COMMENT(input, "Valve control input");
+} // namespace valve_control
 
 //-----------------------------------------------------------------------------------------------------
 // Demo class
@@ -252,7 +280,7 @@ void foo() {
     volatile int32_t test_int32 = -3;
     volatile uint64_t test_int64 = 1;
     volatile struct test_struct test_struct = {1, -2, 0.001f * counter, {1, 2, 3}};
-    uint8_t test_array[3] = {1, 2, 3};
+    volatile uint8_t test_array[3] = {1, 2, 3};
 
     bar();
 
@@ -353,6 +381,11 @@ int main(int argc, char *argv[]) {
         counter_ctl.step(global_static_counter);
         counter_ctl.step(static_counter);
         counter_ctl.step(counter);
+
+        // Update the measurement variables of the demo namespaces
+        motor_control::input.speed = counter;
+        valve_control::input.flow = counter / 2;
+        valve_control::input.pressure = -counter;
 
         // Demonstrate calibration thread safety and consistency (typical concern on 32 bit microctls)
         {

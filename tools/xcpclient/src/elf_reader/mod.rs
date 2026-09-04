@@ -18,6 +18,8 @@ The two Class match arms from the previous fix are collapsed into the Struct arm
 
 use indexmap::IndexMap;
 use regex::Regex;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::ffi::OsStr;
 
@@ -76,6 +78,43 @@ use debuginfo::{DbgDataType, DebugData, TypeInfo, VarInfo};
 
 pub(crate) struct ElfReader {
     pub(crate) debug_data: DebugData,
+    typedefs: RefCell<TypedefNames>, // Bookkeeping for the typedef names of the struct/class types registered so far
+}
+
+// Bookkeeping for the typedef names of struct and class types
+// A2L has one flat name space for typedefs, but the DWARF type name is the unqualified name, so different types
+// may have the same name (motor_control::Input and valve_control::Input, MotorController::Params and ValveController::Params)
+#[derive(Default)]
+struct TypedefNames {
+    ambiguous: HashSet<String>,          // Type names used by struct/class types in different scopes, these types get scope qualified typedef names
+    signatures: HashMap<String, String>, // Typedef name -> content signature of the registered typedef, to detect different types with the same name
+}
+
+// Find the type names which are used by struct/class types in different scopes (namespaces, classes or functions)
+fn find_ambiguous_type_names(debug_data: &DebugData) -> HashSet<String> {
+    let mut ambiguous = HashSet::new();
+    for (type_name, type_refs) in &debug_data.typenames {
+        let mut scopes: Vec<&[String]> = Vec::new();
+        for type_ref in type_refs {
+            if let Some(type_info) = debug_data.types.get(type_ref)
+                && matches!(type_info.datatype, DbgDataType::Struct { .. })
+            {
+                let scope: &[String] = debug_data.type_scopes.get(type_ref).map_or(&[], |s| s.as_slice());
+                if !scopes.contains(&scope) {
+                    scopes.push(scope);
+                }
+            }
+        }
+        if scopes.len() > 1 {
+            debug!(
+                "Type name '{}' is used by {} different struct/class types, typedef names are qualified with their scope",
+                type_name,
+                scopes.len()
+            );
+            ambiguous.insert(type_name.clone());
+        }
+    }
+    ambiguous
 }
 
 impl ElfReader {
@@ -84,11 +123,23 @@ impl ElfReader {
         info!("Loading debug information from ELF file: {}", file_name);
         let debug_data = DebugData::load_dwarf(OsStr::new(file_name), verbose, unit_idx_limit);
         match debug_data {
-            Ok(debug_data) => Some(ElfReader { debug_data }),
+            Ok(debug_data) => Some(ElfReader::from_debug_data(debug_data)),
             Err(e) => {
                 error!("Failed to load debug info from '{}': {}", file_name, e);
                 None
             }
+        }
+    }
+
+    // Create the ELF reader from loaded debug information
+    fn from_debug_data(debug_data: DebugData) -> ElfReader {
+        let ambiguous = find_ambiguous_type_names(&debug_data);
+        ElfReader {
+            debug_data,
+            typedefs: RefCell::new(TypedefNames {
+                ambiguous,
+                signatures: HashMap::new(),
+            }),
         }
     }
 
@@ -107,16 +158,10 @@ impl ElfReader {
             DbgDataType::Float => McValueType::Float32Ieee,
             DbgDataType::Double => McValueType::Float64Ieee,
             DbgDataType::Struct { size, members, .. } => {
-                if let Some(type_name) = &type_info.name {
-                    // Register a typedef for the struct/class type (no-op if it already exists).
-                    // The identifier is sanitized once (e.g. "TplStruct<short unsigned int>" -> "TplStruct_short_unsigned_int_")
-                    // and used for the typedef, its fields and the McValueType::TypeDef reference.
+                if type_info.name.is_some() {
+                    // Register a typedef for the struct/class type (reused if it already exists) and reference it by its unique typedef name.
                     // Inherited members of structs and classes are already flattened into `members` by the DWARF reader.
-                    let type_id = McIdentifier::from(type_name.clone());
-                    if let Err(e) = self.register_struct(reg, object_type, type_id, *size as usize, members) {
-                        error!("Failed to register typedef '{}' for struct/class type '{}': {}", type_id, type_name, e);
-                    }
-                    McValueType::new_typedef(type_id)
+                    McValueType::new_typedef(self.register_struct(reg, object_type, type_info, *size as usize, members))
                 } else {
                     warn!("Struct/class type without name in get_value_type");
                     McValueType::Ubyte
@@ -174,31 +219,86 @@ impl ElfReader {
         }
     }
 
-    // Register a struct/class type as typedef in the registry, including its members.
-    // type_id is the sanitized identifier which is also used for the McValueType::TypeDef reference.
-    // Ok(()) if the typedef was created or already exists (same type used by several variables or fields).
-    fn register_struct(
-        &self,
-        reg: &mut Registry,
-        object_type: McObjectType,
-        type_id: McIdentifier,
-        size: usize,
-        members: &IndexMap<String, (TypeInfo, u64)>,
-    ) -> Result<(), RegistryError> {
-        match reg.add_typedef(type_id, size) {
-            Ok(_) => {}
-            Err(RegistryError::Duplicate(_)) => return Ok(()), // already registered, keep the existing definition
-            Err(e) => return Err(e),
-        }
-        for (field_name, (type_info, field_offset)) in members {
+    // Register a struct/class type as typedef in the registry, including its members, and return the typedef name to reference it.
+    // Nested struct/class members are registered recursively.
+    // A2L has one flat name space for typedefs, but the DWARF type name is unqualified, so the typedef name is determined as follows:
+    // - The typedef is named after the type, the identifier is sanitized (e.g. "TplStruct<short unsigned int>" -> "TplStruct_short_unsigned_int_").
+    // - If struct/class types with this name exist in different scopes, the name is qualified with the enclosing namespaces, classes or
+    //   functions of the type (motor_control::Input -> "motor_control.Input", MotorController::Params -> "MotorController.Params").
+    // - A typedef with the same name and the same content is reused: the same type used by several variables or fields, or
+    //   the same type defined again in another compilation unit (the DWARF of every compilation unit has its own copy of a type).
+    // - If the name is still in use for a typedef with different content, a numeric suffix is appended ("state_1"). This happens for
+    //   different types with the same name and without scope (file local struct types in different C files), and for a type
+    //   which is used for measurement and for calibration variables (TYPEDEF_MEASUREMENT vs. TYPEDEF_CHARACTERISTIC components).
+    fn register_struct(&self, reg: &mut Registry, object_type: McObjectType, type_info: &TypeInfo, size: usize, members: &IndexMap<String, (TypeInfo, u64)>) -> McIdentifier {
+        let type_name = type_info.name.as_deref().unwrap_or("");
+        let location = || self.debug_data.make_simple_unit_name(type_info.unit_idx).unwrap_or_else(|| type_info.unit_idx.to_string());
+
+        // Resolve the member types first, this may recursively register nested typedefs
+        let first_nested_index = reg.typedef_list.len();
+        let mut fields: Vec<(&String, McDimType, u16)> = Vec::with_capacity(members.len());
+        for (field_name, (field_type_info, field_offset)) in members {
             let Ok(offset) = u16::try_from(*field_offset) else {
-                warn!("Field '{}.{}' skipped, offset {} exceeds the supported range", type_id, field_name, field_offset);
+                warn!("Field '{}.{}' skipped, offset {} exceeds the supported range", type_name, field_name, field_offset);
                 continue;
             };
-            let field_dim_type = self.get_dim_type(reg, type_info, object_type); // may recursively register nested typedefs
-            reg.add_typedef_field(type_id.as_str(), field_name.clone(), field_dim_type, McSupportData::new(object_type), offset)?;
+            fields.push((field_name, self.get_dim_type(reg, field_type_info, object_type), offset));
         }
-        Ok(())
+
+        // Content signature: typedefs may share a name only if size, object type and all fields (name, type, dimensions, offset) are identical
+        let signature = format!("{size} {object_type:?} {fields:?}");
+
+        // Scope qualified name for ambiguous type names, e.g. "motor_control.Input" for motor_control::Input
+        let base_name = match self.debug_data.type_scopes.get(&type_info.dbginfo_offset) {
+            Some(scope) if self.typedefs.borrow().ambiguous.contains(type_name) => format!("{}.{}", scope.join("."), type_name),
+            _ => type_name.to_string(),
+        };
+
+        // Find the typedef with this content or a free name: base_name, base_name_1, base_name_2, ...
+        let mut candidate = base_name.clone();
+        let mut suffix = 0;
+        let type_id = loop {
+            let type_id = McIdentifier::from(candidate.clone());
+            match self.typedefs.borrow().signatures.get(type_id.as_str()) {
+                Some(existing) if *existing == signature => return type_id, // already registered
+                Some(_) => {}                                               // used by a typedef with different content
+                None if reg.typedef_list.find_typedef(type_id.as_str()).is_none() => break type_id,
+                None => {} // used by a typedef which was not registered from the ELF file
+            }
+            suffix += 1;
+            candidate = format!("{base_name}_{suffix}");
+        };
+        if suffix > 0 {
+            warn!(
+                "Struct/class type '{}' in {} has a different definition or object type than the existing typedef '{}', registered as typedef '{}'",
+                type_name,
+                location(),
+                base_name,
+                type_id
+            );
+        } else if base_name != type_name {
+            info!(
+                "Struct/class type '{}' in {} registered as typedef '{}', the type name is used in different scopes",
+                type_name,
+                location(),
+                type_id
+            );
+        }
+
+        // Register the typedef and its fields
+        if let Err(e) = reg.add_typedef(type_id, size) {
+            error!("Failed to register typedef '{}' for struct/class type '{}': {}", type_id, type_name, e);
+            return type_id;
+        }
+        for (field_name, field_dim_type, offset) in fields {
+            if let Err(e) = reg.add_typedef_field(type_id.as_str(), field_name.clone(), field_dim_type, McSupportData::new(object_type), offset) {
+                error!("Failed to register field '{}.{}': {}", type_id, field_name, e);
+            }
+        }
+        // Keep the typedef in front of its nested typedefs in the registry, this is the order of the typedefs in the A2L file
+        reg.typedef_list[first_nested_index..].rotate_right(1);
+        self.typedefs.borrow_mut().signatures.insert(type_id.to_string(), signature);
+        type_id
     }
 
     // Find the addressing mode marker variable (naming convention "XCPLITE__<signature>") and return the signature, if found
@@ -760,6 +860,16 @@ impl ElfReader {
 
             // Count variables with this name in compilation unit 0
             let count = var_infos.iter().filter(|v| v.unit_idx <= unit_idx_limit).count();
+            // Count the distinct global or static variables with this name by their address
+            // (declarations of the same variable in several compilation units resolve to the same address, local variables have no address)
+            let mut addresses: Vec<u64> = var_infos
+                .iter()
+                .filter(|v| v.unit_idx <= unit_idx_limit && v.address.0 == 0 && v.address.1 != 0)
+                .map(|v| v.address.1)
+                .collect();
+            addresses.sort_unstable();
+            addresses.dedup();
+            let defined_count = addresses.len();
 
             // Process all variables with this name in different scopes and namespaces
             for var_info in var_infos {
@@ -776,7 +886,7 @@ impl ElfReader {
                     }
                 }
 
-                let var_function =  var_info.function.as_ref().map(|f| f.as_str());
+                let var_function = var_info.function.as_ref().map(|f| f.as_str());
 
                 // Address encoder
                 let mem_addr_ext: u8 = var_info.address.0;
@@ -811,10 +921,13 @@ impl ElfReader {
                             xcp_event_id = None;
                         }
 
-                        // Multiple variables with this name, prefix with function name
+                        // Multiple variables with this name: local static variables are prefixed with the function name,
+                        // global variables defined in several namespaces with their namespace (motor_control.input, valve_control.input)
                         if count > 1 {
                             if let Some(f) = var_function {
                                 a2l_name = format!("{}.{}", f, var_name);
+                            } else if defined_count > 1 && !var_info.namespaces.is_empty() {
+                                a2l_name = format!("{}.{}", var_info.namespaces.join("."), var_name);
                             } else {
                                 a2l_name = var_name.to_string();
                             }
@@ -894,11 +1007,9 @@ impl ElfReader {
                     };
                     if let Some(xcp_event_id) = xcp_event_id {
                         (McObjectType::Measurement, McAddress::new_a2l_with_event(xcp_event_id, mem_addr as u32, addr_ext))
-                    }
-                    else {
+                    } else {
                         (McObjectType::Measurement, McAddress::new_a2l(mem_addr as u32, addr_ext))
                     }
-
                 };
 
                 // Register measurement variable if possible
@@ -1047,49 +1158,79 @@ impl ElfReader {
                 continue;
             }
 
-            // Get the address and section offset of the metadata variable
-            let var_addr = var_infos[0].address.1;
-            if var_addr == 0 {
+            // Every marker with this name is processed separately: markers without scope prefix in different namespaces or functions
+            // (XCP_COMMENT(input, ...) in namespace motor_control and in namespace valve_control) share the DWARF name.
+            // A declaration entry without address (GCC declaration/definition pairs) is skipped.
+            let markers: Vec<&VarInfo> = var_infos.iter().filter(|v| v.address.0 == 0 && v.address.1 != 0).collect();
+            if markers.is_empty() {
                 warn!("Metadata variable '{}' address is 0", var_name);
                 continue;
             }
-            if var_addr < *meta_base_addr || var_addr >= meta_end {
-                warn!("Metadata variable '{}' address 0x{:08X} is outside xcp_meta section", var_name, var_addr);
-                continue;
-            }
-            let offset = (var_addr - meta_base_addr) as usize;
+            for marker in markers {
+                // Get the section offset of the metadata variable
+                let var_addr = marker.address.1;
+                if var_addr < *meta_base_addr || var_addr >= meta_end {
+                    warn!("Metadata variable '{}' address 0x{:08X} is outside xcp_meta section", var_name, var_addr);
+                    continue;
+                }
+                let offset = (var_addr - meta_base_addr) as usize;
 
-            // Decode base_name: __ is the path separator, e.g. "params__delay_us" means
-            // instance "params", field "delay_us".  Replace all __ with . to get the dot path.
-            let dot_path = base_name.replace("__", ".");
+                // Decode base_name: __ is the path separator, e.g. "params__delay_us" means
+                // instance "params", field "delay_us".  Replace all __ with . to get the dot path.
+                let dot_path = base_name.replace("__", ".");
 
-            // Path A — typedef field metadata (instance + dot-separated field path)
-            // Applies when base_name contains __, i.e. it encodes a struct field reference.
-            // Uses set_instance_field_support_data which walks the typedef tree.
-            let field_applied = if dot_path.contains('.') {
-                let (instance_name, field_path) = dot_path.split_once('.').unwrap();
-                apply_field_metadata(reg, var_name, kind, instance_name, field_path, meta_data, offset, is_le, verbose)
-            } else {
-                false
-            };
+                // The name is looked up qualified with the scope of the metadata marker first, then unqualified:
+                // a marker in the same namespace as the variable (XCP_COMMENT(input, ...) in namespace motor_control) refers to motor_control.input,
+                // a marker in the same function as a local variable (XCP_COMMENT(counter, ...) in foo) refers to foo.counter.
+                // The unqualified lookup keeps markers with an explicit prefix (foo__counter) and markers at file scope working.
+                let scope = match &marker.function {
+                    Some(function) => function.clone(),
+                    None => marker.namespaces.join("."),
+                };
+                let mut candidates: Vec<String> = Vec::with_capacity(2);
+                if !scope.is_empty() {
+                    candidates.push(format!("{scope}.{dot_path}"));
+                }
+                candidates.push(dot_path);
 
-            // Path B — direct instance metadata (simple variable or flattened typedef)
-            // Matches instances whose A2L name equals dot_path or ends with ".{dot_path}".
-            // dot_path already has . separators so it matches both "delay_us" and "params.delay_us".
-            let escaped = dot_path.replace('.', "\\.");
-            let pattern = format!(r"^(.*\.)?{}$", escaped);
-            let names: Vec<String> = reg.instance_list.find_instances_regex(&pattern, McObjectType::Unspecified, None);
-            for name in &names {
-                if let Some(inst) = reg.instance_list.get_instance_mut(name, None) {
-                    apply_instance_metadata(inst, kind, meta_data, offset, is_le);
-                    if verbose >= 1 {
-                        println!("  Metadata {} {} applied to instance '{}'", kind, var_name, name);
+                let mut applied = false;
+                for path in &candidates {
+                    // Path A — typedef field metadata (instance + dot-separated field path)
+                    // Applies when base_name contains __, i.e. it encodes a struct field reference.
+                    // The instance name may contain dots itself (namespace qualified instances like motor_control.input), so every
+                    // split into instance name and field path is tried, the longest instance name first.
+                    // Uses set_instance_field_support_data which walks the typedef tree.
+                    for (split, _) in path.rmatch_indices('.') {
+                        let (instance_name, field_path) = (&path[..split], &path[split + 1..]);
+                        if apply_field_metadata(reg, var_name, kind, instance_name, field_path, meta_data, offset, is_le, verbose) {
+                            applied = true;
+                            break;
+                        }
+                    }
+
+                    // Path B — direct instance metadata (simple variable or flattened typedef)
+                    // Matches instances whose A2L name equals the path or ends with ".{path}".
+                    // The path already has . separators so it matches both "delay_us" and "params.delay_us".
+                    let escaped = path.replace('.', "\\.");
+                    let pattern = format!(r"^(.*\.)?{}$", escaped);
+                    let names: Vec<String> = reg.instance_list.find_instances_regex(&pattern, McObjectType::Unspecified, None);
+                    for name in &names {
+                        if let Some(inst) = reg.instance_list.get_instance_mut(name, None) {
+                            apply_instance_metadata(inst, kind, meta_data, offset, is_le);
+                            applied = true;
+                            if verbose >= 1 {
+                                println!("  Metadata {} {} applied to instance '{}'", kind, var_name, name);
+                            }
+                        }
+                    }
+                    if applied {
+                        break;
                     }
                 }
-            }
 
-            if !field_applied && names.is_empty() {
-                warn!("Metadata '{}': no matching registry entry for '{}'", var_name, dot_path);
+                if !applied {
+                    warn!("Metadata '{}': no matching registry entry for '{}'", var_name, candidates.join("' or '"));
+                }
             }
         }
 
@@ -1211,12 +1352,325 @@ mod test {
 
     // C++ type test fixture, see fixtures/cpp_types.cpp (GCC 12.3 arm-none-eabi, DWARF 5)
     const CPP_TYPES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_types.elf");
+    // C++ namespace test fixture, see fixtures/cpp_namespaces.cpp (GCC 12.3 arm-none-eabi, DWARF 5)
+    const CPP_NAMESPACES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_namespaces.elf");
 
-    fn load_cpp_types() -> Registry {
-        let elf_reader = ElfReader::new(CPP_TYPES_ELF, 0, usize::MAX).expect("failed to load fixtures/cpp_types.elf");
+    // Load a fixture ELF file and register all its variables
+    fn load_fixture(elf_file: &str) -> (ElfReader, Registry) {
+        let elf_reader = ElfReader::new(elf_file, 0, usize::MAX).unwrap_or_else(|| panic!("failed to load {elf_file}"));
         let mut reg = Registry::new();
         elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "").expect("register_variables failed");
-        reg
+        (elf_reader, reg)
+    }
+
+    fn load_cpp_types() -> Registry {
+        load_fixture(CPP_TYPES_ELF).1
+    }
+
+    // Name of the typedef referenced by a measurement instance
+    fn instance_typedef(reg: &Registry, var_name: &str) -> &'static str {
+        reg.instance_list
+            .get_instance(var_name, McObjectType::Measurement, None)
+            .unwrap_or_else(|| panic!("instance '{var_name}' not registered"))
+            .get_typedef_name()
+            .unwrap_or_else(|| panic!("instance '{var_name}' does not reference a typedef"))
+    }
+
+    // Names and offsets of the fields of a typedef
+    fn typedef_fields(reg: &Registry, typedef_name: &str) -> Vec<(&'static str, u16)> {
+        let typedef = reg
+            .typedef_list
+            .find_typedef(typedef_name)
+            .unwrap_or_else(|| panic!("typedef '{typedef_name}' not registered"));
+        typedef.fields.iter().map(|f| (f.get_name(), f.offset)).collect()
+    }
+
+    // Struct types with the same name in different namespaces get namespace qualified typedef names and the instances reference them,
+    // the same type used by several variables is registered once
+    #[test]
+    fn test_register_same_named_types_in_namespaces() {
+        let (_, reg) = load_fixture(CPP_NAMESPACES_ELF);
+
+        // different size
+        assert_eq!(instance_typedef(&reg, "motor_control.input"), "motor_control.Input");
+        assert_eq!(instance_typedef(&reg, "valve_control.input"), "valve_control.Input");
+        assert_eq!(reg.typedef_list.find_typedef("motor_control.Input").unwrap().size, 4);
+        assert_eq!(reg.typedef_list.find_typedef("valve_control.Input").unwrap().size, 8);
+        assert_eq!(typedef_fields(&reg, "motor_control.Input"), vec![("speed", 0)]);
+        assert_eq!(typedef_fields(&reg, "valve_control.Input"), vec![("flow", 0), ("pressure", 4)]);
+        assert!(reg.typedef_list.find_typedef("Input").is_none());
+
+        // same size, different member names
+        assert_eq!(instance_typedef(&reg, "motor_control.state"), "motor_control.State");
+        assert_eq!(instance_typedef(&reg, "valve_control.state"), "valve_control.State");
+        assert_eq!(typedef_fields(&reg, "motor_control.State"), vec![("rpm", 0)]);
+        assert_eq!(typedef_fields(&reg, "valve_control.State"), vec![("position", 0)]);
+
+        // nested namespace, and the same type used by a variable in another namespace
+        assert_eq!(instance_typedef(&reg, "diagnostics.detail.input"), "diagnostics.detail.Input");
+        assert_eq!(typedef_fields(&reg, "diagnostics.detail.Input"), vec![("raw", 0)]);
+        assert_eq!(instance_typedef(&reg, "last_motor_input"), "motor_control.Input");
+        assert_eq!(reg.typedef_list.iter().filter(|t| t.name.as_str().ends_with("Input")).count(), 3);
+    }
+
+    // Struct types with the same name nested in different classes get class qualified typedef names
+    #[test]
+    fn test_register_same_named_nested_types() {
+        let (_, reg) = load_fixture(CPP_NAMESPACES_ELF);
+
+        let motor = reg.typedef_list.find_typedef(instance_typedef(&reg, "motor_controller")).unwrap();
+        assert_eq!(motor.find_field("params").unwrap().get_typedef_name(), Some("MotorController.Params"));
+        let valve = reg.typedef_list.find_typedef(instance_typedef(&reg, "valve_controller")).unwrap();
+        assert_eq!(valve.find_field("params").unwrap().get_typedef_name(), Some("ValveController.Params"));
+        assert_eq!(typedef_fields(&reg, "MotorController.Params"), vec![("gain", 0)]);
+        assert_eq!(typedef_fields(&reg, "ValveController.Params"), vec![("gain", 0), ("offset", 4)]);
+        assert!(reg.typedef_list.find_typedef("Params").is_none());
+    }
+
+    // Types with a unique name keep their plain name, also inside a namespace.
+    // A type outside of any namespace keeps its plain name when a namespaced type has the same name.
+    #[test]
+    fn test_register_unique_type_names_unchanged() {
+        let (_, reg) = load_fixture(CPP_NAMESPACES_ELF);
+
+        assert_eq!(instance_typedef(&reg, "output"), "Output");
+        assert_eq!(instance_typedef(&reg, "config"), "Config");
+        assert_eq!(instance_typedef(&reg, "valve_control.config"), "valve_control.Config");
+        assert_eq!(reg.typedef_list.find_typedef("Config").unwrap().size, 4);
+        assert_eq!(reg.typedef_list.find_typedef("valve_control.Config").unwrap().size, 8);
+    }
+
+    // Empty debug data for hand-made test cases
+    fn empty_debug_data() -> DebugData {
+        DebugData {
+            variables: IndexMap::new(),
+            types: HashMap::new(),
+            typenames: HashMap::new(),
+            type_scopes: HashMap::new(),
+            demangled_names: HashMap::new(),
+            unit_names: vec![Some("main.c".to_string())],
+            sections: HashMap::new(),
+            symbol_addresses: HashMap::new(),
+            cfa_info: Vec::new(),
+            epk_string: None,
+            epk_addr: 0,
+            xcp_meta_data: None,
+            is_little_endian: true,
+        }
+    }
+
+    // Debug data with two struct types named "state" with different members and without scope (e.g. file local types in two C files)
+    fn elf_reader_with_conflicting_types() -> ElfReader {
+        let make_struct = |offset: usize, unit_idx: usize, member: &str| {
+            let member_type = TypeInfo {
+                name: Some("uint32_t".to_string()),
+                unit_idx,
+                datatype: DbgDataType::Uint32,
+                dbginfo_offset: offset + 1,
+            };
+            TypeInfo {
+                name: Some("state".to_string()),
+                unit_idx,
+                datatype: DbgDataType::Struct {
+                    size: 4,
+                    is_class: false,
+                    inheritance: IndexMap::new(),
+                    members: IndexMap::from([(member.to_string(), (member_type, 0u64))]),
+                },
+                dbginfo_offset: offset,
+            }
+        };
+        let var_info = |address: u64, typeref: usize, unit_idx: usize| VarInfo {
+            address: (0, address),
+            typeref,
+            unit_idx,
+            function: None,
+            namespaces: Vec::new(),
+        };
+        let mut debug_data = empty_debug_data();
+        debug_data.unit_names = vec![Some("a.c".to_string()), Some("b.c".to_string())];
+        debug_data.types.insert(0x10, make_struct(0x10, 0, "a"));
+        debug_data.types.insert(0x20, make_struct(0x20, 1, "b"));
+        debug_data.typenames.insert("state".to_string(), vec![0x10, 0x20]);
+        debug_data.variables.insert("state_a".to_string(), vec![var_info(0x1000, 0x10, 0)]);
+        debug_data.variables.insert("state_b".to_string(), vec![var_info(0x2000, 0x20, 1)]);
+        ElfReader::from_debug_data(debug_data)
+    }
+
+    // Different types with the same name and without scope get a numeric suffix,
+    // a type used for measurement and for calibration variables gets two typedefs
+    #[test]
+    fn test_register_conflicting_typedef_names() {
+        let elf = elf_reader_with_conflicting_types();
+        let mut reg = Registry::new();
+        elf.register_variables(&mut reg, false, 0, usize::MAX, "", "").unwrap();
+        assert_eq!(instance_typedef(&reg, "state_a"), "state");
+        assert_eq!(instance_typedef(&reg, "state_b"), "state_1");
+        assert_eq!(typedef_fields(&reg, "state"), vec![("a", 0)]);
+        assert_eq!(typedef_fields(&reg, "state_1"), vec![("b", 0)]);
+
+        // The same type registered again for a measurement reuses the typedef
+        let type_info = elf.debug_data.types.get(&0x10).unwrap();
+        assert_eq!(
+            elf.get_dim_type(&mut reg, type_info, McObjectType::Measurement).value_type,
+            McValueType::new_typedef("state")
+        );
+        // Registered for a characteristic it is a different typedef (TYPEDEF_CHARACTERISTIC instead of TYPEDEF_MEASUREMENT components)
+        assert_eq!(
+            elf.get_dim_type(&mut reg, type_info, McObjectType::Characteristic).value_type,
+            McValueType::new_typedef("state_2")
+        );
+        let field = reg.typedef_list.find_typedef("state_2").unwrap().find_field("a").unwrap();
+        assert_eq!(field.get_mc_support_data().get_object_type(), McObjectType::Characteristic);
+        assert_eq!(reg.typedef_list.len(), 3);
+    }
+
+    // Metadata markers for a namespace qualified instance (XCP_COMMENT(motor_control__input, ...)) and for a field of its typedef
+    #[test]
+    fn test_register_metadata_namespaced_instance() {
+        let meta_base: u64 = 0xF000;
+        let meta: Vec<u8> = b"Motor input\0rpm\0".to_vec(); // comment at offset 0, unit at offset 12
+        let marker = |addr: u64| {
+            vec![VarInfo {
+                address: (0, addr),
+                typeref: 0,
+                unit_idx: 0,
+                function: None,
+                namespaces: vec!["motor_control".to_string()],
+            }]
+        };
+        let mut debug_data = empty_debug_data();
+        debug_data.xcp_meta_data = Some((meta_base, meta));
+        debug_data.variables.insert("xcp_meta__comment__motor_control__input".to_string(), marker(meta_base));
+        debug_data
+            .variables
+            .insert("xcp_meta__unit__motor_control__input__speed".to_string(), marker(meta_base + 12));
+        let elf = ElfReader::from_debug_data(debug_data);
+
+        let mut reg = Registry::new();
+        reg.add_typedef("motor_control.Input", 4).unwrap();
+        reg.add_typedef_field(
+            "motor_control.Input",
+            "speed",
+            McDimType::new(McValueType::Slong, 1, 1),
+            McSupportData::new(McObjectType::Measurement),
+            0,
+        )
+        .unwrap();
+        reg.instance_list
+            .add_instance(
+                "motor_control.input",
+                McDimType::new(McValueType::new_typedef("motor_control.Input"), 1, 1),
+                McSupportData::new(McObjectType::Measurement),
+                McAddress::new_a2l(0x30388, 0),
+            )
+            .unwrap();
+        elf.register_metadata(&mut reg, 0).unwrap();
+
+        let instance = reg.instance_list.get_instance("motor_control.input", McObjectType::Measurement, None).unwrap();
+        assert_eq!(instance.comment(), "Motor input");
+        let field = reg.typedef_list.find_typedef("motor_control.Input").unwrap().find_field("speed").unwrap();
+        assert_eq!(field.get_mc_support_data().get_unit(), "rpm");
+    }
+
+    // Metadata markers without scope prefix and with the same DWARF name in different namespaces are applied to their own instance each
+    #[test]
+    fn test_register_metadata_same_marker_name_in_namespaces() {
+        let meta_base: u64 = 0xF000;
+        let meta: Vec<u8> = b"Motor input\0Valve input\0".to_vec(); // offsets 0 and 12
+        let marker = |addr: u64, namespace: &str| VarInfo {
+            address: (0, addr),
+            typeref: 0,
+            unit_idx: 0,
+            function: None,
+            namespaces: vec![namespace.to_string()],
+        };
+        let mut debug_data = empty_debug_data();
+        debug_data.xcp_meta_data = Some((meta_base, meta));
+        debug_data.variables.insert(
+            "xcp_meta__comment__input".to_string(),
+            vec![marker(meta_base, "motor_control"), marker(meta_base + 12, "valve_control")],
+        );
+        let elf = ElfReader::from_debug_data(debug_data);
+
+        let mut reg = Registry::new();
+        let measurement = || McSupportData::new(McObjectType::Measurement);
+        let ulong = || McDimType::new(McValueType::Ulong, 1, 1);
+        reg.instance_list
+            .add_instance("motor_control.input", ulong(), measurement(), McAddress::new_a2l(0x30388, 0))
+            .unwrap();
+        reg.instance_list
+            .add_instance("valve_control.input", ulong(), measurement(), McAddress::new_a2l(0x30390, 0))
+            .unwrap();
+        elf.register_metadata(&mut reg, 0).unwrap();
+
+        let comment = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None).unwrap().comment();
+        assert_eq!(comment("motor_control.input"), "Motor input");
+        assert_eq!(comment("valve_control.input"), "Valve input");
+    }
+
+    // Metadata markers without scope prefix: a marker in the same namespace as the variable refers to the namespace qualified instance,
+    // a marker in the same function as a local variable refers to the function qualified instance and not to other variables with this name
+    #[test]
+    fn test_register_metadata_marker_scope() {
+        let meta_base: u64 = 0xF000;
+        let meta: Vec<u8> = b"Motor input\0rpm\0Counter in foo\0".to_vec(); // offsets 0, 12 and 16
+        let marker = |addr: u64, function: Option<&str>, namespaces: &[&str]| {
+            vec![VarInfo {
+                address: (0, addr),
+                typeref: 0,
+                unit_idx: 0,
+                function: function.map(str::to_string),
+                namespaces: namespaces.iter().map(|s| s.to_string()).collect(),
+            }]
+        };
+        let mut debug_data = empty_debug_data();
+        debug_data.xcp_meta_data = Some((meta_base, meta));
+        debug_data
+            .variables
+            .insert("xcp_meta__comment__input".to_string(), marker(meta_base, None, &["motor_control"]));
+        debug_data
+            .variables
+            .insert("xcp_meta__unit__input__speed".to_string(), marker(meta_base + 12, None, &["motor_control"]));
+        debug_data
+            .variables
+            .insert("xcp_meta__comment__counter".to_string(), marker(meta_base + 16, Some("foo"), &[]));
+        let elf = ElfReader::from_debug_data(debug_data);
+
+        let mut reg = Registry::new();
+        reg.add_typedef("motor_control.Input", 4).unwrap();
+        reg.add_typedef_field(
+            "motor_control.Input",
+            "speed",
+            McDimType::new(McValueType::Slong, 1, 1),
+            McSupportData::new(McObjectType::Measurement),
+            0,
+        )
+        .unwrap();
+        let measurement = || McSupportData::new(McObjectType::Measurement);
+        let input_type = || McDimType::new(McValueType::new_typedef("motor_control.Input"), 1, 1);
+        let uword = || McDimType::new(McValueType::Uword, 1, 1);
+        reg.instance_list
+            .add_instance("motor_control.input", input_type(), measurement(), McAddress::new_a2l(0x30388, 0))
+            .unwrap();
+        reg.instance_list
+            .add_instance("valve_control.input", uword(), measurement(), McAddress::new_a2l(0x30390, 0))
+            .unwrap();
+        reg.instance_list
+            .add_instance("foo.counter", uword(), measurement(), McAddress::new_a2l(0x30400, 0))
+            .unwrap();
+        reg.instance_list
+            .add_instance("main.counter", uword(), measurement(), McAddress::new_a2l(0x30402, 0))
+            .unwrap();
+        elf.register_metadata(&mut reg, 0).unwrap();
+
+        let comment = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None).unwrap().comment();
+        assert_eq!(comment("motor_control.input"), "Motor input");
+        assert_eq!(comment("valve_control.input"), "");
+        assert_eq!(comment("foo.counter"), "Counter in foo");
+        assert_eq!(comment("main.counter"), "");
+        let field = reg.typedef_list.find_typedef("motor_control.Input").unwrap().find_field("speed").unwrap();
+        assert_eq!(field.get_mc_support_data().get_unit(), "rpm");
     }
 
     // Variables and struct members of C++ class type are registered like structs
@@ -1302,10 +1756,9 @@ mod test {
 
     // Build an ElfReader from hand-made debug data containing only event definition (evt__) and trigger (trg__) marker variables
     fn elf_reader_with_markers(markers: &[(&str, u64, &str)], event_section: Option<(u64, u64)>) -> ElfReader {
-        use std::collections::HashMap;
-        let mut variables: IndexMap<String, Vec<VarInfo>> = IndexMap::new();
+        let mut debug_data = empty_debug_data();
         for (name, addr, function) in markers {
-            variables.entry(name.to_string()).or_default().push(VarInfo {
+            debug_data.variables.entry(name.to_string()).or_default().push(VarInfo {
                 address: (0, *addr),
                 typeref: 0,
                 unit_idx: 0,
@@ -1313,26 +1766,10 @@ mod test {
                 namespaces: Vec::new(),
             });
         }
-        let mut sections = HashMap::new();
         if let Some(range) = event_section {
-            sections.insert("xcp_evts".to_string(), range);
+            debug_data.sections.insert("xcp_evts".to_string(), range);
         }
-        ElfReader {
-            debug_data: DebugData {
-                variables,
-                types: HashMap::new(),
-                typenames: HashMap::new(),
-                demangled_names: HashMap::new(),
-                unit_names: vec![Some("main.c".to_string())],
-                sections,
-                symbol_addresses: HashMap::new(),
-                cfa_info: Vec::new(),
-                epk_string: None,
-                epk_addr: 0,
-                xcp_meta_data: None,
-                is_little_endian: true,
-            },
-        }
+        ElfReader::from_debug_data(debug_data)
     }
 
     // An event created in several functions has several definition markers, the first descriptor in the section wins,
