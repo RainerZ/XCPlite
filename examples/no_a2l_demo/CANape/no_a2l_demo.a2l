@@ -1,5 +1,5 @@
 ﻿
-/* Created by xcp_client with ELF/DWARF information only,  offline mode - 2026-08-31 16:47:15 */
+/* Created by xcp_client with ELF/DWARF information only,  offline mode - 2026-09-04 13:24:55 */
 ASAP2_VERSION 1 71
 /begin PROJECT project_name ""
 /begin HEADER "" VERSION "1.0" PROJECT_NO XCPLITE__CASDD /end HEADER
@@ -114,7 +114,7 @@ EPK "V2.1.10" ADDR_EPK 0x000302C0
 
 /begin IF_DATA XCP
         /begin PROTOCOL_LAYER
-        0x0104 1000 2000 0 0 0 0 0 248 248 BYTE_ORDER_MSB_LAST ADDRESS_GRANULARITY_BYTE
+        0x0104 1000 2000 0 0 0 0 0 248 1024 BYTE_ORDER_MSB_LAST ADDRESS_GRANULARITY_BYTE
         OPTIONAL_CMD GET_COMM_MODE_INFO
         OPTIONAL_CMD GET_ID
         OPTIONAL_CMD SET_REQUEST

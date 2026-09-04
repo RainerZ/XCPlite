@@ -800,6 +800,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
 
             // Write the registry to A2L file
             if !a2l_path.as_os_str().is_empty() {
+                info!("===============================================================");
                 if a2l_path.exists() {
                     warn!("Overwriting existing A2L file: {}", a2l_path.display());
                 }
@@ -826,6 +827,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
         // If fix-a2l option is specified, check and correct the A2L file with the XCP server information otherwise just warn about differences
         // Consider command line option --epk-segment
         else {
+            info!("===============================================================");
             info!("Load A2L file: {}", a2l_path.display());
             xcp_client
                 .load_a2l_file_into_registry(&a2l_path, &mut reg)
@@ -973,6 +975,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
         if !list_cal.is_empty() {
             println!();
             let cal_objects = xcp_client.find_characteristics(list_cal.as_str());
+            info!("===============================================================");
             println!("Calibration variables:");
             if !cal_objects.is_empty() {
                 for name in &cal_objects {
@@ -1067,6 +1070,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
         if !list_mea.is_empty() {
             println!();
             let mea_objects = xcp_client.find_measurements(&list_mea);
+            info!("===============================================================");
             println!("Measurement variables:");
             if !mea_objects.is_empty() {
                 for name in &mea_objects {
@@ -1098,6 +1102,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
             else {
                 // Create measurement objects for all names in the list
                 // Multi dimensional objects not supported yet
+                info!("===============================================================");
                 info!("Measurement list:");
                 for name in &list {
                     if let Some(o) = xcp_client.create_measurement_object(name) {

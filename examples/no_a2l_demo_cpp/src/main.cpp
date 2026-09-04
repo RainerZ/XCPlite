@@ -109,6 +109,7 @@ XCP_UNIT(params__delay_us, "us");
 
 // Global measurement variable
 uint16_t global_counter = 0;
+static uint16_t global_static_counter = 0;
 
 // Meta data annotation as code
 // Modified in function foo, measuring it in main or task, is possible, but asynchronous and may give inconsistent results
@@ -133,7 +134,9 @@ int64_t global_test_int64 = -64;
 float global_test_float = 0.4f;
 double global_test_double = 0.8;
 bool global_test_bool = true;
+
 uint8_t global_test_array[3] = {1, 2, 3};
+
 struct test_struct {
     uint16_t a;
     int16_t b;
@@ -141,6 +144,15 @@ struct test_struct {
     uint8_t d[3];
 };
 struct test_struct global_test_struct = {1, -2, 0.3f, {1, 2, 3}};
+
+class test_class {
+  public:
+    int16_t a;
+    uint16_t b;
+    double f;
+    uint16_t d[3];
+};
+class test_class global_test_class = {1, 2, 0.3, {1, 2, 3}};
 
 //-----------------------------------------------------------------------------------------------------
 // Demo class
@@ -171,11 +183,13 @@ template <typename CounterType, typename ParamsType> class CounterControl {
         if (value > cal->max || cal->state == RESET) {
             value = 0;
         }
+        value_ = value;
     }
 
   private:
     // The calibration segment handle is stored as a member variable, and is used to access the calibration parameters in a thread-safe and consistent manner
     const CalSegHandle &calseg_;
+    mutable CounterType value_;
 };
 
 //-----------------------------------------------------------------------------------------------------
@@ -202,6 +216,18 @@ CounterControl<uint16_t, CounterCtlParams> counter_ctl(counter_ctl_calseg_handle
 //-----------------------------------------------------------------------------------------------------
 // Demo functions
 
+void bar() {
+
+    XCP_COMMENT(bar__static_counter, "Static local measurement variable in function bar, writable");
+    XCP_READ_WRITE(bar__static_counter);
+    volatile static uint16_t static_counter = 0;
+
+    volatile uint16_t counter;
+
+    static_counter++;
+    counter = static_counter;
+}
+
 void foo() {
 
     // Static local scope measurement variable
@@ -227,6 +253,8 @@ void foo() {
     volatile uint64_t test_int64 = 1;
     volatile struct test_struct test_struct = {1, -2, 0.001f * counter, {1, 2, 3}};
     uint8_t test_array[3] = {1, 2, 3};
+
+    bar();
 
     DaqCreateAndTriggerEvent(foo);
 }
@@ -322,6 +350,7 @@ int main(int argc, char *argv[]) {
     while (gRun) {
 
         counter_ctl.step(global_counter);
+        counter_ctl.step(global_static_counter);
         counter_ctl.step(static_counter);
         counter_ctl.step(counter);
 

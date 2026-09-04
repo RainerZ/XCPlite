@@ -39,15 +39,17 @@ BUILD_TYPE="RelWithDebInfo"
 #BUILD_TYPE="Release"
 
 # Run a simple test calibration and measurement
-TEST=true
-#TEST=false
+#TEST=true
+TEST=false
+# CSV measurement file path on local machine
+CSVFILE="$REPO_ROOT/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.csv"
 
 
 # Target connection details
-TARGET_USER="parallels"
-TARGET_HOST="10.211.55.4"
-#TARGET_USER="rainer"
-#TARGET_HOST="192.168.0.206"
+#TARGET_USER="parallels"
+#TARGET_HOST="10.211.55.4"
+TARGET_USER="rainer"
+TARGET_HOST="192.168.0.206"
 TARGET_PATH="~/XCPlite-Test"
 TARGET_BUILD_DIR="build-no_a2l"
 TARGET_BINARY="no_a2l_demo_cpp"
@@ -94,8 +96,9 @@ fi
 
 
 # Build on target
-echo "Build executable on Target ..."
-ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./build.sh $BUILD_TYPE no_a2l examples" 1> /dev/null
+# Always a clean build: if the target has no NTP and its clock may skew,
+echo "Clean build executable on Target ..."
+ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: Build on target"
     exit 1
@@ -124,8 +127,8 @@ echo "==========================================================================
 echo ""
 # --log-level is program flow verbosity
 # --verbose is information detail level
-echo "Command: $XCPCLIENT --log-level=3 --verbose=5 --dest-addr=$TARGET_HOST --udp --offline --elf \"$ELFFILE\" --create-a2l --a2l \"$A2LFILE\""
-$XCPCLIENT --log-level=3 --verbose=5 --dest-addr=$TARGET_HOST --udp --offline --elf "$ELFFILE" --create-a2l --a2l "$A2LFILE"  >> "$LOGFILE"
+echo "Command: $XCPCLIENT --log-level=3 --verbose=2 --dest-addr=$TARGET_HOST --udp --offline --elf \"$ELFFILE\" --elf-unit-filter main --create-a2l --a2l \"$A2LFILE\""
+$XCPCLIENT --log-level=3 --verbose=5 --dest-addr=$TARGET_HOST --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE"  >> "$LOGFILE"
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: xcpclient returned error"
     exit 1
@@ -153,13 +156,14 @@ echo "Test connect"
 echo "========================================================================================================"
 read -p "Press any key to continue..." -n1 -s
 $XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE" --list-mea . --list-cal . 
+sleep 1
 
 echo "========================================================================================================"
 echo "Test measurement"
 echo "========================================================================================================"
 read -p "Press any key to continue..." -n1 -s
-$XCPCLIENT --log-level=2 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea counter --time 1 --verbose 2
-
+$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea counter --time 3 --csv "$CSVFILE"
+sleep 1
 
 ssh "$TARGET_USER@$TARGET_HOST" "pkill -f no_a2l_demo_cpp" 
 

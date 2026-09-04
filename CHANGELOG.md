@@ -2,6 +2,15 @@
 
 All notable changes to XCPlite are documented in this file.
 
+## [V2.1.12]
+
+- xcpclient related changes:
+    - Improved variable registration for global and static variables
+    - Global variables and local static variables in functions without event trigger are registered, but not associated to any specific default DAQ event
+    - no_a2l_demo, no_a2l_demo_cpp: more demo cases
+    
+
+
 ## [V2.1.11]
 
 * Allow custom memory attributes for queue32m

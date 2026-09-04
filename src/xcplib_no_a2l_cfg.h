@@ -38,7 +38,7 @@
 // Default: Relative addressing mode (address extension 0 is segment relative addressing)
 
 // Option: Absolute addressing mode (address extension 0 is absolute addressing)
-// #define OPTION_CAL_SEGMENTS_ABS
+#define OPTION_CAL_SEGMENTS_ABS
 
 //-------------------------------------------------------------------------------
 // Events
