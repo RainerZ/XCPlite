@@ -4,6 +4,7 @@ Demonstrates XCPlite usage in C++ without runtime on-target A2L database generat
 Requires xcpclient tool or manual A2L generation from ELF file.
 
 Please find more general information in [no_a2l_demo C version](../no_a2l_demo/README.md).
+The offline A2L generation is described in [docs/OFFLINE_A2L.md](../../docs/OFFLINE_A2L.md).
 
 ## C++ Calibration Parameter Pattern Used
 
