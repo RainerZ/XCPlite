@@ -92,19 +92,19 @@ pub(crate) enum DbgDataType {
 // holds the debug information from an ELF file
 #[derive(Debug)]
 pub(crate) struct DebugData {
-    pub(crate) variables: IndexMap<String, Vec<VarInfo>>, // variable name -> list of VarInfo for instances with that name
-    pub(crate) types: HashMap<usize, TypeInfo>,           // type reference -> TypeInfo
-    pub(crate) typenames: HashMap<String, Vec<usize>>,    // type name -> list of type references
-    pub(crate) type_scopes: HashMap<usize, Vec<String>>,  // type reference -> enclosing scopes (namespaces, classes, functions) of struct/class types, outermost first
-    pub(crate) demangled_names: HashMap<String, String>,  // mangled name -> demangled name
-    pub(crate) unit_names: Vec<Option<String>>,           // list of compilation unit names by unit index
-    pub(crate) sections: HashMap<String, (u64, u64)>,     // section name -> (start, end)
-    pub(crate) symbol_addresses: HashMap<String, u64>,    // ELF symbol name -> address
-    pub(crate) cfa_info: Vec<CfaInfo>,                    // CFA information for functions which contain an event trigger, the CFA is valid for  the location of the event trigger
-    pub(crate) epk_string: Option<String>,                // EPK string read from xcp_epk ELF section
-    pub(crate) epk_addr: u64,                             // Address of the xcp_epk ELF section (0 if not found)
-    pub(crate) xcp_meta_data: Option<(u64, Vec<u8>)>,     // (section_base_addr, raw_bytes) of xcp_meta section
-    pub(crate) is_little_endian: bool,                    // ELF endianness
+    pub(crate) variables: IndexMap<String, Vec<VarInfo>>,    // variable name -> list of VarInfo for instances with that name
+    pub(crate) types: HashMap<usize, TypeInfo>,              // type reference -> TypeInfo
+    pub(crate) typenames: HashMap<String, Vec<usize>>,       // type name -> list of type references
+    pub(crate) qualified_type_names: HashMap<usize, String>, // type reference -> scope qualified name (motor_control.Input) of the struct/class types whose name is used in different scopes
+    pub(crate) demangled_names: HashMap<String, String>,     // mangled name -> demangled name
+    pub(crate) unit_names: Vec<Option<String>>,              // list of compilation unit names by unit index
+    pub(crate) sections: HashMap<String, (u64, u64)>,        // section name -> (start, end)
+    pub(crate) symbol_addresses: HashMap<String, u64>,       // ELF symbol name -> address
+    pub(crate) cfa_info: Vec<CfaInfo>, // CFA information for functions which contain an event trigger, the CFA is valid for  the location of the event trigger
+    pub(crate) epk_string: Option<String>, // EPK string read from xcp_epk ELF section
+    pub(crate) epk_addr: u64,          // Address of the xcp_epk ELF section (0 if not found)
+    pub(crate) xcp_meta_data: Option<(u64, Vec<u8>)>, // (section_base_addr, raw_bytes) of xcp_meta section
+    pub(crate) is_little_endian: bool, // ELF endianness
 }
 
 // load_dwarf - loads and parses the DWARF debug information from an ELF file
@@ -129,6 +129,13 @@ impl DebugData {
         };
 
         Some(file_name.replace('.', "_"))
+    }
+
+    /// Name of a struct/class type for its A2L typedef: the DWARF type name, qualified with the scope of the type
+    /// (namespace.Type, Class.Type) if the name is used by different types in different scopes. None for types without a name.
+    pub(crate) fn get_type_name<'a>(&'a self, type_info: &'a TypeInfo) -> Option<&'a str> {
+        let type_name = type_info.name.as_deref()?;
+        Some(self.qualified_type_names.get(&type_info.dbginfo_offset).map_or(type_name, String::as_str))
     }
 
     // Get the address of the XCP event descriptor memory section
@@ -242,13 +249,13 @@ impl DebugData {
                 println!("Type name '{}': {} references", type_name, type_refs.len());
                 for type_ref in type_refs {
                     if let Some(type_info) = self.types.get(type_ref) {
-                        let scope = self.type_scopes.get(type_ref).map(|s| s.join("::")).unwrap_or_default();
+                        let qualified_name = self.qualified_type_names.get(type_ref).map(String::as_str).unwrap_or("");
                         println!(
-                            "  -> type_ref={}, size={} bytes, unit={}, scope='{}'",
+                            "  -> type_ref={}, size={} bytes, unit={}, qualified name='{}'",
                             type_ref,
                             type_info.get_size(),
                             type_info.unit_idx,
-                            scope
+                            qualified_name
                         );
                     }
                 }

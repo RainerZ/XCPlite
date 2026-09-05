@@ -19,7 +19,7 @@ The two Class match arms from the previous fix are collapsed into the Struct arm
 use indexmap::IndexMap;
 use regex::Regex;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::OsStr;
 
@@ -78,43 +78,9 @@ use debuginfo::{DbgDataType, DebugData, TypeInfo, VarInfo};
 
 pub(crate) struct ElfReader {
     pub(crate) debug_data: DebugData,
-    typedefs: RefCell<TypedefNames>, // Bookkeeping for the typedef names of the struct/class types registered so far
-}
-
-// Bookkeeping for the typedef names of struct and class types
-// A2L has one flat name space for typedefs, but the DWARF type name is the unqualified name, so different types
-// may have the same name (motor_control::Input and valve_control::Input, MotorController::Params and ValveController::Params)
-#[derive(Default)]
-struct TypedefNames {
-    ambiguous: HashSet<String>,          // Type names used by struct/class types in different scopes, these types get scope qualified typedef names
-    signatures: HashMap<String, String>, // Typedef name -> content signature of the registered typedef, to detect different types with the same name
-}
-
-// Find the type names which are used by struct/class types in different scopes (namespaces, classes or functions)
-fn find_ambiguous_type_names(debug_data: &DebugData) -> HashSet<String> {
-    let mut ambiguous = HashSet::new();
-    for (type_name, type_refs) in &debug_data.typenames {
-        let mut scopes: Vec<&[String]> = Vec::new();
-        for type_ref in type_refs {
-            if let Some(type_info) = debug_data.types.get(type_ref)
-                && matches!(type_info.datatype, DbgDataType::Struct { .. })
-            {
-                let scope: &[String] = debug_data.type_scopes.get(type_ref).map_or(&[], |s| s.as_slice());
-                if !scopes.contains(&scope) {
-                    scopes.push(scope);
-                }
-            }
-        }
-        if scopes.len() > 1 {
-            debug!(
-                "Type name '{}' is used by {} different struct/class types, typedef names are qualified with their scope",
-                type_name,
-                scopes.len()
-            );
-            ambiguous.insert(type_name.clone());
-        }
-    }
-    ambiguous
+    // Typedef name -> content signature of the struct/class typedefs registered so far, to detect different types with the same name.
+    // A2L has one flat name space for typedefs, the type names from DebugData::get_type_name are unique per scope but not per content.
+    typedef_signatures: RefCell<HashMap<String, String>>,
 }
 
 impl ElfReader {
@@ -133,13 +99,9 @@ impl ElfReader {
 
     // Create the ELF reader from loaded debug information
     fn from_debug_data(debug_data: DebugData) -> ElfReader {
-        let ambiguous = find_ambiguous_type_names(&debug_data);
         ElfReader {
             debug_data,
-            typedefs: RefCell::new(TypedefNames {
-                ambiguous,
-                signatures: HashMap::new(),
-            }),
+            typedef_signatures: RefCell::new(HashMap::new()),
         }
     }
 
@@ -248,18 +210,16 @@ impl ElfReader {
         // Content signature: typedefs may share a name only if size, object type and all fields (name, type, dimensions, offset) are identical
         let signature = format!("{size} {object_type:?} {fields:?}");
 
-        // Scope qualified name for ambiguous type names, e.g. "motor_control.Input" for motor_control::Input
-        let base_name = match self.debug_data.type_scopes.get(&type_info.dbginfo_offset) {
-            Some(scope) if self.typedefs.borrow().ambiguous.contains(type_name) => format!("{}.{}", scope.join("."), type_name),
-            _ => type_name.to_string(),
-        };
+        // Typedef name: the type name, qualified with the scope of the type if the name is used by different types in different scopes
+        // ("motor_control.Input" for motor_control::Input), see DebugData::get_type_name
+        let base_name = self.debug_data.get_type_name(type_info).unwrap_or(type_name).to_string();
 
         // Find the typedef with this content or a free name: base_name, base_name_1, base_name_2, ...
         let mut candidate = base_name.clone();
         let mut suffix = 0;
         let type_id = loop {
             let type_id = McIdentifier::from(candidate.clone());
-            match self.typedefs.borrow().signatures.get(type_id.as_str()) {
+            match self.typedef_signatures.borrow().get(type_id.as_str()) {
                 Some(existing) if *existing == signature => return type_id, // already registered
                 Some(_) => {}                                               // used by a typedef with different content
                 None if reg.typedef_list.find_typedef(type_id.as_str()).is_none() => break type_id,
@@ -297,7 +257,7 @@ impl ElfReader {
         }
         // Keep the typedef in front of its nested typedefs in the registry, this is the order of the typedefs in the A2L file
         reg.typedef_list[first_nested_index..].rotate_right(1);
-        self.typedefs.borrow_mut().signatures.insert(type_id.to_string(), signature);
+        self.typedef_signatures.borrow_mut().insert(type_id.to_string(), signature);
         type_id
     }
 
@@ -1354,6 +1314,10 @@ mod test {
     const CPP_TYPES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_types.elf");
     // C++ namespace test fixture, see fixtures/cpp_namespaces.cpp (GCC 12.3 arm-none-eabi, DWARF 5)
     const CPP_NAMESPACES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_namespaces.elf");
+    // C++ type name collision fixture from pull request vectorgrp/XCPlite#126, see fixtures/cpp_type_name_collisions.cpp
+    const CPP_TYPE_NAME_COLLISIONS_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_type_name_collisions.elf");
+    // C test fixture with two compilation units, see fixtures/c_local_types_a.c (GCC 12.3 arm-none-eabi, DWARF 5)
+    const C_LOCAL_TYPES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_local_types.elf");
 
     // Load a fixture ELF file and register all its variables
     fn load_fixture(elf_file: &str) -> (ElfReader, Registry) {
@@ -1413,6 +1377,49 @@ mod test {
         assert_eq!(reg.typedef_list.iter().filter(|t| t.name.as_str().ends_with("Input")).count(), 3);
     }
 
+    // The type of a const or volatile qualified variable is a qualifier entry without a name of its own,
+    // the scope for the typedef name is the one of the named type behind the qualifier
+    #[test]
+    fn test_register_qualified_variables_of_same_named_types() {
+        let (_, reg) = load_fixture(CPP_NAMESPACES_ELF);
+
+        assert_eq!(instance_typedef(&reg, "volatile_motor_input"), "motor_control.Input");
+        assert_eq!(instance_typedef(&reg, "const_valve_input"), "valve_control.Input");
+        assert!(reg.typedef_list.find_typedef("Input").is_none());
+    }
+
+    // Equal sized and differently sized types with the same name in two namespaces, fixture of pull request vectorgrp/XCPlite#126
+    #[test]
+    fn test_register_namespaced_types_with_colliding_names() {
+        let (_, reg) = load_fixture(CPP_TYPE_NAME_COLLISIONS_ELF);
+
+        for (instance_name, typedef_name) in [
+            ("g_namespace_1_type_a", "namespace_1.TypeA"),
+            ("g_namespace_2_type_a", "namespace_2.TypeA"),
+            ("g_namespace_1_type_b", "namespace_1.TypeB"),
+            ("g_namespace_2_type_b", "namespace_2.TypeB"),
+        ] {
+            assert_eq!(instance_typedef(&reg, instance_name), typedef_name, "{instance_name}");
+        }
+        assert_eq!(reg.typedef_list.len(), 4);
+        assert_eq!(typedef_fields(&reg, "namespace_1.TypeA"), vec![("member_1", 0)]);
+        assert_eq!(typedef_fields(&reg, "namespace_2.TypeA"), vec![("member_1", 0), ("member_2", 4)]);
+        assert_eq!(typedef_fields(&reg, "namespace_1.TypeB"), vec![("member_1", 0), ("member_2", 4)]);
+        assert_eq!(typedef_fields(&reg, "namespace_2.TypeB"), vec![("member_3", 0), ("member_4", 4)]);
+    }
+
+    // File local struct types with the same tag but different content in two C compilation units:
+    // there is no scope to qualify the name with, the second type gets a numeric suffix
+    #[test]
+    fn test_register_same_named_c_types_in_different_units() {
+        let (_, reg) = load_fixture(C_LOCAL_TYPES_ELF);
+
+        assert_eq!(instance_typedef(&reg, "state_a"), "state");
+        assert_eq!(instance_typedef(&reg, "state_b"), "state_1");
+        assert_eq!(typedef_fields(&reg, "state"), vec![("a", 0)]);
+        assert_eq!(typedef_fields(&reg, "state_1"), vec![("b1", 0), ("b2", 4)]);
+    }
+
     // Struct types with the same name nested in different classes get class qualified typedef names
     #[test]
     fn test_register_same_named_nested_types() {
@@ -1446,7 +1453,7 @@ mod test {
             variables: IndexMap::new(),
             types: HashMap::new(),
             typenames: HashMap::new(),
-            type_scopes: HashMap::new(),
+            qualified_type_names: HashMap::new(),
             demangled_names: HashMap::new(),
             unit_names: vec![Some("main.c".to_string())],
             sections: HashMap::new(),
