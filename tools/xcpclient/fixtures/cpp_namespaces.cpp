@@ -1,8 +1,8 @@
 // C++ namespace test fixture for the xcpclient unit tests in src/elf_reader/mod.rs (mod test).
 // Covers: struct types with the same name in different namespaces (different and identical size), struct types
 // with the same name nested in different classes, a same-named type reused by variables in another namespace,
-// a nested namespace, a namespaced type without a name conflict, and global variables with the same name in
-// different namespaces.
+// a nested namespace, a namespaced type without a name conflict, global variables with the same name in
+// different namespaces, and const/volatile qualified variables of same-named types.
 //
 // cpp_namespaces.elf is built from this file with GCC 12.3.1 (xPack arm-none-eabi), DWARF 5, no libraries:
 //   arm-none-eabi-g++ -g -gdwarf-5 -O0 -fdebug-prefix-map=$(pwd)=. -nostdlib -nostartfiles -Wl,-e,main \
@@ -93,10 +93,14 @@ struct Config {
 Config config = {11, 12};
 } // namespace valve_control
 
+// 7. const and volatile qualified variables of same-named types: the type of the variable is a qualifier entry without a name of its own
+volatile motor_control::Input volatile_motor_input = {13};
+const valve_control::Input const_valve_input = {14, 15};
+
 volatile uint32_t g_sink;
 int main() {
     g_sink = motor_control::input.speed + valve_control::input.flow + motor_control::state.rpm + valve_control::state.position + motor_controller.params.gain +
              valve_controller.params.gain + diagnostics::last_motor_input.speed + diagnostics::detail::input.raw[0] + (uint32_t)motor_control::output.torque + config.id +
-             valve_control::config.limit;
+             valve_control::config.limit + volatile_motor_input.speed + const_valve_input.pressure;
     return 0;
 }

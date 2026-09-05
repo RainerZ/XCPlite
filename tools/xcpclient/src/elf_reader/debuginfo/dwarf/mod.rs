@@ -354,7 +354,7 @@ impl DebugDataReader<'_> {
     fn collect_debug_data(mut self, unit_idx_limit: usize) -> DebugData {
         let variables = self.load_variables(unit_idx_limit);
         let (types, typenames) = self.load_types(&variables);
-        let type_scopes = self.load_type_scopes(&types);
+        let qualified_type_names = self.load_qualified_type_names(&types, &typenames);
         let varname_list: Vec<&String> = variables.keys().collect();
         let demangled_names = demangle_cpp_varnames(&varname_list);
         let unit_names = std::mem::take(&mut self.unit_names);
@@ -363,7 +363,7 @@ impl DebugDataReader<'_> {
             variables,
             types,
             typenames,
-            type_scopes,
+            qualified_type_names,
             demangled_names,
             unit_names,
             sections: self.sections,
@@ -441,7 +441,7 @@ impl DebugDataReader<'_> {
                 // Remember the enclosing scope of named types, of nested scopes and of variables declared in a namespace or class,
                 // to qualify the names of types which are defined in a namespace, class or function (motor_control::Input, Controller::Params)
                 // and to find the scope of a variable definition which refers to its declaration (DW_AT_specification).
-                // Only offsets are stored here, the scope names are resolved in load_type_scopes for the few types which need them.
+                // Only offsets are stored here, the scope names are resolved in load_qualified_type_names for the few types which need them.
                 if (is_scope_tag(tag) || is_type_tag(tag) || tag == gimli::constants::DW_TAG_variable)
                     && let Some((parent_tag, _, parent_offset)) = context[..context.len() - 1].iter().rev().find(|(t, _, _)| is_scope_tag(*t))
                     && (tag != gimli::constants::DW_TAG_variable || *parent_tag != gimli::constants::DW_TAG_subprogram)
@@ -488,27 +488,59 @@ impl DebugDataReader<'_> {
         variables
     }
 
-    // Resolve the scopes (namespaces, enclosing classes or functions) of all struct and class types, outermost scope first.
-    // The DWARF name of a type is its unqualified name (DW_AT_name "Input" for motor_control::Input), the enclosing
-    // scopes recorded during the traversal in load_variables are needed to tell types with the same name apart.
-    // Types without an enclosing scope are not included in the result.
-    fn load_type_scopes(&self, types: &HashMap<usize, TypeInfo>) -> HashMap<usize, Vec<String>> {
-        let mut type_scopes = HashMap::new();
+    // Determine the scope qualified names of the struct and class types whose name is used by different types in different scopes.
+    // The DWARF name of a type is its unqualified name (DW_AT_name "Input" for motor_control::Input), the enclosing scopes
+    // (namespaces, classes, functions) recorded during the traversal in load_variables tell such types apart.
+    // The result maps a type reference to its qualified name ("motor_control.Input") and contains only the types which need
+    // qualification: the name is used in more than one scope and the type has a scope. All other types keep their plain name.
+    fn load_qualified_type_names(&self, types: &HashMap<usize, TypeInfo>, typenames: &HashMap<String, Vec<usize>>) -> HashMap<usize, String> {
+        // Scopes of all struct/class types, outermost first. The type of a variable or member may be a const or volatile
+        // qualified type, the name and the scope are the ones of the named type behind the qualifier
+        let mut scopes: HashMap<usize, Vec<String>> = HashMap::new();
         for (offset, typeinfo) in types {
-            if !matches!(typeinfo.datatype, DbgDataType::Struct { .. }) {
-                continue;
-            }
-            // The type of a variable or member may be a const or volatile qualified type, the name (and the scope) is the one of the named type behind it
-            let Some(named_offset) = self.get_named_type_offset(*offset) else {
-                continue;
-            };
-            let scope = self.get_scope_path(named_offset);
-            if !scope.is_empty() {
-                log::trace!("type {} @{offset:x} has scope {}", typeinfo.name.as_deref().unwrap_or(""), scope.join("::"));
-                type_scopes.insert(*offset, scope);
+            if matches!(typeinfo.datatype, DbgDataType::Struct { .. })
+                && let Some(named_offset) = self.get_named_type_offset(*offset)
+            {
+                scopes.insert(*offset, self.get_scope_path(named_offset));
             }
         }
-        type_scopes
+
+        // Type names which are used by struct/class types in more than one scope
+        let mut ambiguous: HashSet<&String> = HashSet::new();
+        for (type_name, type_refs) in typenames {
+            let mut distinct: Vec<&[String]> = Vec::new();
+            for type_ref in type_refs {
+                if let Some(scope) = scopes.get(type_ref)
+                    && !distinct.contains(&scope.as_slice())
+                {
+                    distinct.push(scope.as_slice());
+                }
+            }
+            if distinct.len() > 1 {
+                log::debug!(
+                    "Type name '{}' is used by {} different struct/class types, the typedef names are qualified with their scope",
+                    type_name,
+                    distinct.len()
+                );
+                ambiguous.insert(type_name);
+            }
+        }
+
+        // Qualified names for the types with an ambiguous name and a scope
+        let mut qualified_type_names = HashMap::new();
+        for (offset, scope) in &scopes {
+            if scope.is_empty() {
+                continue;
+            }
+            if let Some(type_name) = types.get(offset).and_then(|t| t.name.as_ref())
+                && ambiguous.contains(type_name)
+            {
+                let qualified = format!("{}.{}", scope.join("."), type_name);
+                log::trace!("type {} @{offset:x} is qualified as {}", type_name, qualified);
+                qualified_type_names.insert(*offset, qualified);
+            }
+        }
+        qualified_type_names
     }
 
     // Read tag, name and type reference of the debug info entry at the given .debug_info offset
@@ -799,12 +831,17 @@ mod test {
         assert_eq!(itanium_mangled_names(&nested, "input")[0], "_ZN11diagnostics6detail5inputE");
     }
 
-    // Scopes of struct types: namespaces, nested namespaces and enclosing classes, see fixtures/cpp_namespaces.cpp
+    // Qualified names of struct types whose name is used in different scopes: namespaces, nested namespaces, enclosing classes
+    // and const/volatile qualified variables, see fixtures/cpp_namespaces.cpp
     #[test]
-    fn test_load_type_scopes() {
+    fn test_load_qualified_type_names() {
         let filename = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_namespaces.elf");
         let debugdata = DebugData::load_dwarf(OsStr::new(filename), 0, usize::MAX).unwrap();
-        let scope_of = |varinfo: &VarInfo| -> Vec<String> { debugdata.type_scopes.get(&varinfo.typeref).cloned().unwrap_or_default() };
+        let type_name_of = |varinfo: &VarInfo| -> String {
+            let type_info = debugdata.types.get(&varinfo.typeref).expect("type of variable");
+            debugdata.get_type_name(type_info).expect("type name").to_string()
+        };
+        let variable = |name: &str| &debugdata.variables.get(name).unwrap_or_else(|| panic!("variable {name}"))[0];
 
         // The three variables named "input" are in different namespaces and have types of different scopes
         let inputs = debugdata.variables.get("input").expect("variables named input");
@@ -812,31 +849,32 @@ mod test {
         let mut namespaces: Vec<Vec<String>> = inputs.iter().map(|v| v.namespaces.clone()).collect();
         namespaces.sort();
         assert_eq!(namespaces, vec![vec!["diagnostics", "detail"], vec!["motor_control"], vec!["valve_control"]]);
-        let mut scopes: Vec<Vec<String>> = inputs.iter().map(scope_of).collect();
-        scopes.sort();
-        assert_eq!(scopes, namespaces);
+        let mut type_names: Vec<String> = inputs.iter().map(type_name_of).collect();
+        type_names.sort();
+        assert_eq!(type_names, vec!["diagnostics.detail.Input", "motor_control.Input", "valve_control.Input"]);
 
-        // Type from another namespace than the variable
-        let last_motor_input = &debugdata.variables.get("last_motor_input").unwrap()[0];
-        assert_eq!(last_motor_input.namespaces, vec!["diagnostics"]);
-        assert_eq!(scope_of(last_motor_input), vec!["motor_control"]);
+        // A type from another namespace than the variable, and const/volatile qualified variables
+        assert_eq!(variable("last_motor_input").namespaces, vec!["diagnostics"]);
+        assert_eq!(type_name_of(variable("last_motor_input")), "motor_control.Input");
+        assert_eq!(type_name_of(variable("volatile_motor_input")), "motor_control.Input");
+        assert_eq!(type_name_of(variable("const_valve_input")), "valve_control.Input");
 
-        // Types outside of any namespace have no scope
-        let config = debugdata.variables.get("config").unwrap();
-        let mut config_scopes: Vec<Vec<String>> = config.iter().map(scope_of).collect();
-        config_scopes.sort();
-        assert_eq!(config_scopes, vec![vec![], vec!["valve_control".to_string()]]);
+        // A type with a unique name keeps its plain name, a type without scope keeps its plain name even if the name is ambiguous
+        assert_eq!(type_name_of(variable("output")), "Output");
+        let mut config_names: Vec<String> = debugdata.variables.get("config").unwrap().iter().map(type_name_of).collect();
+        config_names.sort();
+        assert_eq!(config_names, vec!["Config", "valve_control.Config"]);
 
         // The scope of a struct type nested in a class is the class
-        let motor_controller = debugdata.types.get(&debugdata.variables.get("motor_controller").unwrap()[0].typeref).unwrap();
-        assert!(debugdata.type_scopes.get(&motor_controller.dbginfo_offset).is_none());
+        let motor_controller = debugdata.types.get(&variable("motor_controller").typeref).unwrap();
+        assert_eq!(debugdata.get_type_name(motor_controller), Some("MotorController"));
         let DbgDataType::Struct { members, .. } = &motor_controller.datatype else {
             panic!("MotorController is not a struct");
         };
         let DbgDataType::TypeRef(params_ref, _) = members.get("params").unwrap().0.datatype else {
             panic!("MotorController.params is not a type reference");
         };
-        assert_eq!(debugdata.type_scopes.get(&params_ref), Some(&vec!["MotorController".to_string()]));
+        assert_eq!(debugdata.get_type_name(debugdata.types.get(&params_ref).unwrap()), Some("MotorController.Params"));
     }
 
     #[test]
