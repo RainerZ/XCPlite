@@ -119,7 +119,7 @@ XCPlite encodes *where* a measured/calibrated variable lives (global, stack, hea
 - `xcp_evts` section — `tXcpEventDescriptor` constants emitted by `DaqCreateEvent`/`DaqCreateAndTriggerEvent`
 - `xcp_cals` section — `tXcpCalSegDescriptor` constants emitted by `CalSegDecl`+`CalSegCreate`
 
-and DWARF scope anchors named `trg__<mode-letters>__<event-name>` (e.g. `trg__AAS__foo`, letter position = address-extension value [0..]: `A`=absolute, `C`=cal-segment-relative, `S`=stack-relative, `D`=dynamic/heap) emitted by the trigger macros, to reconstruct addressing without any runtime A2L calls. Full details, including what changes if you modify the trigger macros, are in `docs/TECHNICAL.md`.
+and DWARF scope anchors named `trg__<mode-letters>__<event-name>` (e.g. `trg__AAS__foo`, letter position = address-extension value [0..]: `A`=absolute, `C`=cal-segment-relative, `S`=stack-relative, `D`=dynamic/heap) emitted by the trigger macros, to reconstruct addressing without any runtime A2L calls. The marker contract (sections, marker names, trigger anchor naming) is in `docs/TECHNICAL.md`, the tool side (workflow, naming rules, symbol resolution, supported types) in `docs/OFFLINE_A2L.md`.
 
 ### Shared-memory (SHM) multi-application mode (`docs/SHM.md`)
 

@@ -15,6 +15,7 @@ All notable changes to XCPlite are documented in this file.
     - Metadata annotations placed in the same namespace or function as the variable no longer need a scope prefix (`XCP_COMMENT(input, ...)` in namespace `motor_control` annotates `motor_control.input`), explicit prefixes keep working. Metadata for the typedef fields of namespace qualified instances.
     - Local variables without a DWARF location (optimized away) are no longer resolved to the address of a global variable with the same name, only symbols with local binding are considered for them
     - no_a2l_demo, no_a2l_demo_cpp: more demo cases, no_a2l_demo_cpp demonstrates types and variables with the same name in different namespaces
+- Documentation: new `docs/OFFLINE_A2L.md` for the offline A2L generation with xcpclient (workflow, naming rules, supported types, diagnostics), `docs/TECHNICAL.md` keeps the library topics and the instrumentation marker contract, xcpclient and no_a2l_demo READMEs updated
     
 
 

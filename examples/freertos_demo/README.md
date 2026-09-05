@@ -185,7 +185,7 @@ DWARF type or location data.
 
 For the complete technical details — ELF section layouts, `trg__` anchor naming convention,
 and `AddrExt` encoding — see
-[docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation--elfdwarf-internals).
+[docs/OFFLINE_A2L.md — Offline A2L Generation](../../docs/OFFLINE_A2L.md).
 
 
 
@@ -295,7 +295,8 @@ It has been tested with ELF files from Linux gcc and clang tool chains.
 For more information on offline A2L generation see:
 - [tools/xcpclient/README.md](../../tools/xcpclient/README.md) — xcpclient documentation and all command-line options
 - [examples/no_a2l_demo/README.md](../no_a2l_demo/README.md) — dedicated no-A2L / offline A2L workflow example
-- [docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation) — ELF/DWARF internals and design details of the offline A2L generation approach
+- [docs/OFFLINE_A2L.md — Offline A2L Generation](../../docs/OFFLINE_A2L.md) — offline A2L generation with xcpclient: workflow, naming rules, supported types, diagnostics
+- [docs/TECHNICAL.md — Instrumentation Markers](../../docs/TECHNICAL.md#instrumentation-markers-for-offline-a2l-tools) — the markers the instrumentation macros leave in the ELF file
 - [examples/freertos_demo/README.md](../freertos_demo/README.md) — Linux FreeRTOS demo with offline A2L generation
 
 

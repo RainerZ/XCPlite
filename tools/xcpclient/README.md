@@ -1,109 +1,11 @@
 # xcpclient
 
-XCP test client implementation in Rust
+XCP test client and A2L generator implementation in Rust
 
 Used for integration testing and for uploading or generating A2L files.  
 Partial XCP implementation with hard-coded protocol settings for XCPlite.  
 
-## How offline A2L generation works
-
-xcpclient generates A2L files from ELF/DWARF debug information written into the firmware by
-the XCPlite instrumentation macros — no runtime A2L code is needed in the application.
-
-**Four sources of information** are combined:
-
-1. **`xcp_evts` ELF section** — the XCPlite macros (`DaqCreateEvent`, `DaqCreateAndTriggerEvent`)
-   emit a `tXcpEventDescriptor` constant per event into this named section. xcpclient iterates
-   it to discover every event defined in the firmware, including name, cycle time, and priority.
-
-2. **`xcp_cals` ELF section** — `CalSegDecl` emits a `tXcpCalSegDescriptor` constant per
-   calibration segment into this section, containing the segment name, address of the default
-   page, and its size. xcpclient uses this to discover all calibration segments.
-
-3. **DWARF debug info** — every trigger macro also emits a named static variable (e.g.
-   `trg__AAS__eventname`) whose DWARF lexical scope covers the same local variables as the
-   trigger point. xcpclient walks the DWARF to find these anchor variables, reads the
-   addressing mode from their name, and associates all in-scope local variables with the
-   corresponding event as measurements.
-
-4. **`xcp_meta` ELF section** — optional metadata annotation macros emit constants into this
-   section that attach a physical unit, value limits, a comment, or read/write access to an
-   already-discovered measurement or calibration object. xcpclient reads the section after the
-   variables have been registered and applies each annotation to the matching object (or, using
-   a dot-separated field path, to a specific field of a typedef/struct instance).
-
-**Metadata annotation macros** (see `inc/xcplib.h`) — each emits a constant named
-`xcp_meta__<kind>__<name>` into the `xcp_meta` section, where `<name>` may be a simple variable
-name or an `instance.field.subfield` path:
-
-| Macro | Effect on the A2L object |
-|---|---|
-| `XCP_UNIT(name, unit)` | sets the physical unit (`PHYS_UNIT`) |
-| `XCP_LIMITS(name, min, max)` | sets the lower/upper value limits |
-| `XCP_COMMENT(name, comment)` | sets the description / comment string |
-| `XCP_READ_WRITE(name)` | marks the object read/write (i.e. a writable `CHARACTERISTIC`) |
-
-`<name>` uses `__` as path separator (`params__delay_us` annotates the field `params.delay_us`).
-A macro placed in the same namespace as the variable, or in the same function as a local variable, does not need
-a scope prefix: the name is looked up qualified with the scope of the macro first, then unqualified.
-`XCP_COMMENT(input, ...)` in namespace `motor_control` annotates the instance `motor_control.input`,
-`XCP_COMMENT(counter, ...)` in function `foo` annotates `foo.counter`; explicit prefixes (`foo__counter`) keep working.
-
-Metadata registration only annotates variables that are already discovered from the sources
-above; it never adds new objects. With `--elf-skip-no-metadata`, xcpclient additionally removes
-every variable that carries no `XCP_UNIT` / `XCP_LIMITS` / `XCP_COMMENT` annotation, which is a
-convenient way to publish only explicitly curated signals.
-
-**Preconditions in the application code:**
-- Use the XCPlite macros (`DaqCreateEvent`, `DaqTriggerEvent`, `CalSegDecl`, …),
-  never the raw C API — only macros emit the ELF markers.
-- Build with debug info (`-g` / `Debug` or `RelWithDebInfo`).
-- Mark local measurement variables `volatile` (or use the `XCP_MEA` / `XCP_MEAS` attribute) so
-  the compiler keeps them on the stack frame and DWARF location expressions remain valid in
-  optimized builds.
-
-For the full technical specification — ELF section layouts, the `trg__` anchor naming
-convention, and the `AddrExt` encoding — see
-[docs/TECHNICAL.md — Offline A2L Generation](../../docs/TECHNICAL.md#offline-a2l-generation--elfdwarf-internals).
-
-### Supported types and known limitations
-
-The DWARF type information is mapped to A2L objects as follows:
-
-| C/C++ type | A2L representation |
-|---|---|
-| `bool`, integer and floating point types | `MEASUREMENT` or `CHARACTERISTIC` of the matching A2L data type |
-| `enum` | integer of the enum's size; for variables the enumerators become a verbal conversion table, enum struct members are plain integers |
-| one- and two-dimensional arrays | `MEASUREMENT` / `CHARACTERISTIC` with `MATRIX_DIM` (`VAL_BLK`, `CURVE`, `MAP`); arrays of structs become arrays of typedef instances |
-| `struct`, `class`, template instantiations | `TYPEDEF_STRUCTURE` + `INSTANCE`; nested structs and classes become nested typedefs; private members are included; base class members are flattened into the derived type for all combinations of `struct`/`class` bases; `static`/`constexpr` members are skipped |
-| pointers as struct or class members | the address value as unsigned integer of the target's pointer size, the pointee is not followed |
-
-Type names which are not valid A2L identifiers (template instantiations such as `TplStruct<float>`) are sanitized to `TplStruct_float_`.
-DWARF stores the unqualified type name and A2L has one flat name space for typedefs. Struct or class types with the same name in
-different namespaces, classes or functions are therefore qualified with their scope: `motor_control::Input` and `valve_control::Input`
-become `motor_control.Input` and `valve_control.Input`, `MotorController::Params` becomes `MotorController.Params`. Types with a unique
-name keep their plain name. Different types with the same name but without a scope (file local types in different C files) and a struct
-type which is used for measurement and for calibration variables get a numeric suffix (`state_1`), reported as a warning.
-Global variables with the same name in different namespaces are qualified with their namespace as well (`motor_control.input`, `valve_control.input`).
-The `TYPEDEF_MEASUREMENT`/`TYPEDEF_CHARACTERISTIC` of a struct field is named after the field; if another structure has a field with
-the same name but a different type or metadata, the name is qualified with the structure name (`TplStruct_float_.value`).
-
-Not supported, skipped and reported as warnings (log level 2 and above):
-
-- Variables of pointer type (measure the pointed-to variable instead).
-- Unions, bitfields and function pointers. A struct member of such a type is written as a one byte `UBYTE` placeholder
-  so that the remaining members of the structure keep their offsets.
-- Arrays with more than two dimensions (written as a one byte placeholder).
-- C++ pointer-to-member types (`DW_TAG_ptr_to_member_type`): a struct or class containing one cannot be read at all,
-  so it and every class deriving from it end up without members. This is a limitation of the a2ltool DWARF reader
-  this code is based on.
-- C++ library containers (`std::vector`, `std::string`, smart pointers, ...) are read as the structs they are;
-  the heap data behind them is not reachable.
-
-
-
-
-XCP client v2.1.x for testing XCP servers and managing A2L and HEX files.
+XCP client v3.x for testing XCP servers and managing A2L and HEX files.
 
 This tool can:
 - Connect to XCP on Ethernet servers via TCP or UDP and show information about the XCP protocol and the target ECU
@@ -116,25 +18,57 @@ This tool can:
 - List available measurement variables and parameters with regex patterns
 - Test data acquisition (DAQ)
 - Execute test sequences
+- Check the EPK of the A2L file against the EPK reported by the target, abort on mismatch unless `--yes` is given
+- Load options from a TOML configuration file (`--config`, see `xcpclient.toml`)
 
+## Offline A2L generation
 
+xcpclient contains the XCPlite specific ELF/DWARF to A2L generator: `xcpclient --create-a2l --elf <binary>` reads the markers the
+XCPlite instrumentation macros leave in the ELF file (events, calibration segments, trigger points, metadata) and the DWARF debug
+information, and writes a complete A2L file without any runtime A2L code in the application. The workflow, the rules for the
+application code, the naming of types and variables, the supported types and the diagnostics are described in
+[docs/OFFLINE_A2L.md](../../docs/OFFLINE_A2L.md), the markers in [docs/TECHNICAL.md](../../docs/TECHNICAL.md#instrumentation-markers-for-offline-a2l-tools).
+
+## Usage
+
+```text
 Usage: xcpclient [OPTIONS]
 
 Options:
+      --config <CONFIG>
+          Load arguments from a TOML config file. Command-line arguments take precedence
+          
+          [default: ""]
+
       --log-level <LOG_LEVEL>
-          Log level (Off=0, Error=1, Warn=2, Info=3, Debug=4, Trace=5) [default: 3]
+          Program flow log level (Off=0, Error=1, Warn=2, Info=3, Debug=4, Trace=5)
+          
+          [default: 3]
 
       --verbose <VERBOSE>
-          Verbose output Enables additional output when reading ELF files and creating A2L files
-            
+          Content information detail verbosity level
+          
+          [default: 0]
+
       --dest-addr <DEST_ADDR>
-          XCP server address (IP address or IP:port). If port is omitted, uses --port parameter [default: 127.0.0.1]
+          XCP server address (IP address or IP:port). If port is omitted, uses --port parameter
+          
+          [default: 127.0.0.1]
 
       --port <PORT>
-          XCP server port number (used when --dest-addr doesn't include port) [default: 5555]
+          XCP server port number (used when --dest-addr doesn't include port)
+          
+          [default: 5555]
 
       --bind-addr <BIND_ADDR>
-          Bind address (IP address or IP:port). If port is omitted, system assigns an available port [default: 0.0.0.0]
+          Bind address (IP address or IP:port). If port is omitted, system assigns an available port
+          
+          [default: 0.0.0.0]
+
+      --baud-rate <BAUD_RATE>
+          Baud rate for XCP communication (only applicable for certain protocols)
+          
+          [default: 115200]
 
       --tcp
           Use TCP for XCP communication..
@@ -142,8 +76,13 @@ Options:
       --udp
           Use UDP for XCP communication
 
+      --sxi
+          Use SxI for XCP communication
+
       --connect-mode <CONNECT_MODE>
           XCP connect mode
+          
+          [default: 0]
 
       --offline
           Force offline mode (no network communication), communication parameters are used to create A2L file
@@ -151,6 +90,8 @@ Options:
       --a2l <A2L>
           Specify and overide the name of the A2L file name. If not specified, The A2L file name is read from the XCP server
           
+          [default: ""]
+
       --upload-a2l
           Upload A2L file from XCP server. Requires that the XCP server supports GET_ID A2L upload
 
@@ -168,24 +109,31 @@ Options:
 
       --elf <ELF>
           Specify the name of an ELF file, create an A2L file from ELF debug information. If connected to a XCP server, events and memory segments will be extracted from the XCP server
+          
+          [default: ""]
 
       --elf-unit-limit <ELF_UNIT_LIMIT>
           Parse only compilations units <= n
+          
+          [default: 18446744073709551615]
 
       --elf-var-filter <ELF_VAR_FILTER>
-          Regex pattern to filter variable names when registering from an ELF file.
-          Only variables whose names match the pattern are included in the A2L output.
-          If not specified (or empty), all variables are registered.
-          Example: --elf-var-filter "counter.*"
+          Regex pattern to filter variable names when registering from an ELF file. Only variables whose names match the pattern are included in the A2L output. If not specified (or empty), all variables are registered
+          
+          [default: ""]
+
+      --elf-skip-no-metadata
+          Skip variables without any metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) when creating an A2L file from an ELF file. Only variables that have at least one metadata annotation are included in the A2L output
 
       --elf-unit-filter <ELF_UNIT_FILTER>
-          Regex pattern to filter variables by their compilation unit (source file) name.
-          Only variables defined in compilation units whose name matches are included in the A2L output.
-          If not specified (or empty), variables from all compilation units are registered.
-          Example: --elf-cu-filter "my_module.*"
+          Regex pattern to filter variables by their compilation unit (source file) name. Only variables defined in compilation units whose name matches are included in the A2L output. If not specified (or empty), variables from all compilation units are registered
+          
+          [default: ""]
 
       --bin <BIN>
           Specify the pathname of a binary file (Intel-HEX) for calibration parameter segment data
+          
+          [default: ""]
 
       --upload-bin
           Upload all calibration segments working page data from target and store into a binary file. Requires that the XCP server supports GET_ID A2L upload
@@ -195,30 +143,42 @@ Options:
 
       --list-mea <LIST_MEA>
           Lists all specified measurement variables (regex) found in the A2L file
+          
+          [default: ""]
 
       --mea <MEA>...
           Specify variable names for DAQ measurement (list), may be list of names separated by space or single regular expressions (e.g. ".*")
 
       --time <TIME>
           Time limit measurement duration to n s. 0 means infinite
+          
+          [default: 0]
 
       --csv <CSV>
           Save measurement data to a CSV file. If not specified, data is printed to the console. CSV format: time_ns,daq,name,value  (one row per measurement sample)
+          
+          [default: ""]
 
       --list-cal <LIST_CAL>
           Lists all specified calibration variables (regex) found in the A2L file
           
+          [default: ""]
+
       --cal <NAME> <VALUE>
           Set calibration variable to a value (format: "variable_name value")
 
       --test
           --test Execute a test sequence on the XCP server
 
+  -y, --yes
+          Automatically confirm EPK mismatch and other safety warnings. Use in scripts to suppress interactive prompts
+
   -h, --help
           Print help (see a summary with '-h')
 
   -V, --version
           Print version
+```
 
 
 ## Build and Install
@@ -281,7 +241,7 @@ xcpclient --dest-addr=192.168.0.206:5555 --tcp --upload-a2l
 
 ### Create an A2L file for a target from ELF without on target A2L generation support
 
-Ccreate an A2L file from the ELF file (and optional XCP server information about events and memory segments), then save the A2L file as hello_xcp.a2l:
+Create an A2L file from the ELF file (and optional XCP server information about events and memory segments), then save the A2L file as hello_xcp.a2l:
 ```bash
 
 # offline
@@ -297,30 +257,23 @@ Upload the ELF file into hello_xcp.elf and create an A2L file from the ELF file 
 xcpclient --dest-addr=192.168.0.206:5555 --udp --create-a2l --upload-elf --elf hello_xcp.elf --a2l hello_xcp.a2l 
 ```
 
-### Upload an Intel-HEX file with the current calibration data
+### Upload the current calibration data from the target into an Intel-HEX file
 
 ```bash
-xcpclient --upload-bin test.hex
+xcpclient --dest-addr=192.168.0.206:5555 --udp --a2l hello_xcp.a2l --upload-bin --bin hello_xcp.hex
 ```
 
 
 #### Demo
 
 ```bash
+# A2L from the ELF file of no_a2l_demo, offline
+cargo r -- --elf no_a2l_demo.elf --log-level 3 --create-a2l --a2l no_a2l_demo.a2l --offline
 
-# A2l from no_a2l_demo.out
-cargo r --  --elf no_a2l_demo.out --elf-unit-limit 1000 --log-level 3  --create-a2l --a2l no_a2l_demo.a2l   --offline  
+# A2L with the event and segment information of the running target
+cargo r -- --dest-addr 192.168.0.206 --udp --elf no_a2l_demo.elf --log-level 3 --create-a2l --a2l no_a2l_demo.a2l
 
+cargo r -- --dest-addr 192.168.0.206 --udp --elf no_a2l_demo.elf --log-level 3 --create-a2l --a2l no_a2l_demo.a2l --list-mea 'counter'
 
-cargo r --  --dest-addr 192.168.0.206 --udp --elf no_a2l_demo.out --elf-unit-limit 1000 --log-level 3  --create-a2l --a2l no_a2l_demo.a2l 
-
-cargo r --  --dest-addr 192.168.0.206  --elf no_a2l_demo.out --elf-unit-limit 1000 --log-level 3  --create-a2l --a2l no_a2l_demo.a2l --list-mea 'counter'
-
-cargo r --  --dest-addr 192.168.0.206  --elf no_a2l_demo.out --elf-unit-limit 1000 --log-level 3  --create-a2l --a2l no_a2l_demo.a2l --mea 'counter'  --time 5 --verbose 2
-
+cargo r -- --dest-addr 192.168.0.206 --udp --elf no_a2l_demo.elf --log-level 3 --create-a2l --a2l no_a2l_demo.a2l --mea 'counter' --time 5 --verbose 2
 ```
-
-
-## Suggestions for improvement
-
-- Maybe add an option not to skip static variables in functions without an event marker
