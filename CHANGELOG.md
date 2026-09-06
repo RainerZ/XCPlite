@@ -2,11 +2,9 @@
 
 All notable changes to XCPlite are documented in this file.
 
-<<<<<<< HEAD
-## [V2.2.0] work in progress
+## [V2.2.1] 
 
 - Split `platform.c/.h` into `platform.c/.h` (threads, mutex, clock, sleep, memory, atomics) and `sockets.c/.h` (socket abstraction for all platforms). `sockets.h` includes `platform.h`; files that use both include both explicitly (IWYU).
-
 - New raw Ethernet transport `OPTION_ENABLE_UDP_RAW`: XCP on UDP/IPv4 implemented inside xcplib on top of a thin raw Ethernet HAL, for targets without a TCP/IP stack. See `docs/SOCKET_RAW.md`.
     - New build configuration `raw` (`src/xcplib_raw_cfg.h`, `build-raw/`) with the new example `udp_raw_demo` and the unit test `socket_raw_test` (Linux only)
     - `src/socket_raw.c` — UDP/IPv4 layer, answer-only ARP, ICMP Echo responder, receive filter with an absolute-deadline loop
@@ -21,7 +19,9 @@ All notable changes to XCPlite are documented in this file.
 - IPv4 fragmentation is now prevented on the socket transport: `socketOpen` sets the DF bit on UDP sockets (`IP_MTU_DISCOVER`/`IP_PMTUDISC_DO` on Linux, `IP_DONTFRAG` on macOS/BSD, `IP_DONTFRAGMENT` on Windows, no-op on lwIP). Fragmentation is harmful for DAQ - one lost fragment loses the whole datagram and reassembly adds jitter - and an `OPTION_MTU` larger than the path MTU previously degraded measurement silently. Oversized segments now fail with `EMSGSIZE` and a message naming the segment size and the `OPTION_MTU` to reduce. **Behaviour change:** a setup that relied on fragmentation will now report an error instead of silently fragmenting.
 - Fixed `PLATFORM_32_BIT` typo in `xcplib_cfg.h`, which prevented the automatic selection of `OPTION_QUEUE_32` on 32 bit platforms
 - Fixed missing `#include <errno.h>` in `shm.c`, which broke the `shm` configuration build on macOS
-=======
+- Window build workaround to disable section based event pre-registration
+- Fixed older XCP protocol layer versions 0x0100 to 0x0102
+
 ## [V2.1.14]
 
 - Support static allocation and improve FreeRTOS robustness (#124)
@@ -34,7 +34,6 @@ All notable changes to XCPlite are documented in this file.
     * Fix synchronization of FreeRTOS queue state
     * Correct FreeRTOS queue and lwIP documentation
     * Fix FreeRTOS emulator clock test build
->>>>>>> origin/V2.1.14
 
 
 ## [V2.1.12]

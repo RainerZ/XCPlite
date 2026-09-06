@@ -32,7 +32,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 #   TARGET_HOST=192.168.0.205 ./test.sh
 TARGET_USER="${TARGET_USER:-rainer}"
 TARGET_HOST="${TARGET_HOST:-192.168.0.206}"
-TARGET_PATH="${TARGET_PATH:-~/XCPlite-Test}"
+TARGET_PATH="${TARGET_PATH:-~/XCPlite-CMP}"
 TARGET_BINARY="cmp_demo"
 
 # Where the xcplite library is installed on the target, and where the demo is built

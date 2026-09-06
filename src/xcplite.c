@@ -2621,6 +2621,7 @@ static uint8_t XcpAsyncCommand(bool async, const uint32_t *cmdBuf, uint8_t cmdLe
             check_error(XcpAddOdtEntry(CRO_WRITE_DAQ_ADDR, CRO_WRITE_DAQ_EXT, CRO_WRITE_DAQ_SIZE));
         } break;
 
+#if XCP_PROTOCOL_LAYER_VERSION >= 0x0101        
         case CC_WRITE_DAQ_MULTIPLE: {
             check_len(CRO_WRITE_DAQ_MULTIPLE_LEN(1));
             uint8_t n = CRO_WRITE_DAQ_MULTIPLE_NODAQ;
@@ -2629,7 +2630,7 @@ static uint8_t XcpAsyncCommand(bool async, const uint32_t *cmdBuf, uint8_t cmdLe
                 check_error(XcpAddOdtEntry(CRO_WRITE_DAQ_MULTIPLE_ADDR(i), CRO_WRITE_DAQ_MULTIPLE_EXT(i), CRO_WRITE_DAQ_MULTIPLE_SIZE(i)));
             }
         } break;
-
+#endif
         case CC_START_STOP_DAQ_LIST: // start, stop, select individual daq list
         {
             check_len(CRO_START_STOP_DAQ_LIST_LEN);
@@ -2852,13 +2853,12 @@ static uint8_t XcpAsyncCommand(bool async, const uint32_t *cmdBuf, uint8_t cmdLe
 #endif
                 if (CRM_LEN > XCPTL_MAX_CTO_SIZE)
                     error(CRC_CMD_UNKNOWN); // Extended mode needs enough CTO size
-            } else
-#endif                                                                        // >= 0x0103
-            {                                                                 // Legacy format
+            } else {                                                                 // Legacy format
                 CRM_GET_DAQ_CLOCK_PAYLOAD_FMT = DAQ_CLOCK_PAYLOAD_FMT_SLV_32; // FMT_XCP_SLV = size of timestamp is DWORD
                 CRM_LEN = CRM_GET_DAQ_CLOCK_LEN;
                 CRM_GET_DAQ_CLOCK_TIME = (uint32_t)ApplXcpGetClock64();
             }
+#endif                                                                        // >= 0x0103            
         } break;
 
 #if XCP_PROTOCOL_LAYER_VERSION >= 0x0104
@@ -3373,7 +3373,6 @@ void XcpStart(tQueueHandle queue_handle, bool resumeMode) {
     local_mut.clock_info.server.nativeTimestampSize = 4; // NATIVE_TIMESTAMP_SIZE_LONG;
     local_mut.clock_info.server.valueBeforeWrapAround = 0xFFFFFFFFULL;
 #endif
-#endif // XCP_PROTOCOL_LAYER_VERSION >= 0x0103
 #ifdef XCP_ENABLE_PTP
 
     // Default UUID of the XCP server clock
@@ -3406,6 +3405,7 @@ void XcpStart(tQueueHandle queue_handle, bool resumeMode) {
                 local.clock_info.server.UUID[6], local.clock_info.server.UUID[7]);
 
 #endif // PTP
+#endif // XCP_PROTOCOL_LAYER_VERSION >= 0x0103
 #endif // XCP_ENABLE_PROTOCOL_LAYER_ETH
 
     DBG_PRINT3("Start XCP protocol layer\n");
@@ -3614,12 +3614,14 @@ static void XcpPrintCmd(const tXcpCto *cmdBuf) {
         printf(" SHORT_UPLOAD addr=%08Xh, addrext=%02Xh, size=%u\n", CRO_SHORT_UPLOAD_ADDR, CRO_SHORT_UPLOAD_EXT, CRO_SHORT_UPLOAD_SIZE);
     } break;
 
+#if XCP_PROTOCOL_LAYER_VERSION >= 0x0101
     case CC_WRITE_DAQ_MULTIPLE: {
         printf(" WRITE_DAQ_MULTIPLE count=%u\n", CRO_WRITE_DAQ_MULTIPLE_NODAQ);
         for (int i = 0; i < CRO_WRITE_DAQ_MULTIPLE_NODAQ; i++) {
             printf("   %u: size=%u,addr=%08Xh,%02Xh\n", i, CRO_WRITE_DAQ_MULTIPLE_SIZE(i), CRO_WRITE_DAQ_MULTIPLE_ADDR(i), CRO_WRITE_DAQ_MULTIPLE_EXT(i));
         }
     } break;
+#endif
 
 #if XCP_PROTOCOL_LAYER_VERSION >= 0x0103
     case CC_TIME_CORRELATION_PROPERTIES:

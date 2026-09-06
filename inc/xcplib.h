@@ -314,21 +314,16 @@ static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor 
 
 // Linker-synthesized section boundary symbols, resolved at link time
 #if defined(__ELF__)
-// Declared weak: if no object file contributes to the xcp_evts section the symbols resolve
-// to NULL rather than causing an undefined-reference linker error. Keeps Linux (production)
-// builds with zero section-registered events linkable and graceful.
 extern const tXcpEventDescriptor __start_xcp_evts[] __attribute__((weak));
 extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
 #elif defined(__APPLE__)
-// Mach-O (ld64) boundary symbols. Not weak: if no descriptor is ever placed in the section
-// the link fails with an undefined-symbol error. That is acceptable here - macOS is a
-// development-only target and a build with zero events is a non-functional configuration.
 extern const tXcpEventDescriptor __start_xcp_evts[] __asm("section$start$__DATA$xcp_evts");
 extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp_evts");
+#elif defined(_MSC_VER)
+#define __start_xcp_evts ((const tXcpEventDescriptor *)NULL)
+#define __stop_xcp_evts ((const tXcpEventDescriptor *)NULL)
 #else
-#ifndef _WIN32
-#error "Unsupported platform for event segment registration"
-#endif
+#error "Unsupported platform for section based event pre-registration"
 #endif
 
 #endif // __XCPLITE_H__
