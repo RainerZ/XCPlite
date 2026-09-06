@@ -85,13 +85,16 @@ int _kbhit(void) {
 #if defined(_FREE_RTOS) // FreeRTOS sleep
 
 // Minimum granularity is one tick (1 ms at configTICK_RATE_HZ = 1000).
-// Sub-millisecond delays are rounded up to the next tick.
+// Delays are rounded up to the next tick.
 void sleepUs(uint32_t us) {
-    TickType_t ticks = (us * configTICK_RATE_HZ) / 1000000UL;
+    TickType_t ticks = (TickType_t)((((uint64_t)us * configTICK_RATE_HZ) + 999999U) / 1000000U);
     vTaskDelay(ticks == 0U ? 1U : ticks);
 }
 
-void sleepMs(uint32_t ms) { vTaskDelay(pdMS_TO_TICKS(ms == 0U ? 1U : ms)); }
+void sleepMs(uint32_t ms) {
+    TickType_t ticks = (TickType_t)((((uint64_t)ms * configTICK_RATE_HZ) + 999U) / 1000U);
+    vTaskDelay(ticks == 0U ? 1U : ticks);
+}
 
 #elif defined(_WIN) // Windows
 
@@ -374,16 +377,24 @@ void mutexInit(MUTEX *m, bool recursive, uint32_t spinCount) {
     (void)spinCount;
 #if configUSE_RECURSIVE_MUTEXES == 1
     m->recursive = recursive;
+#if configSUPPORT_STATIC_ALLOCATION == 1
+    m->handle = recursive ? xSemaphoreCreateRecursiveMutexStatic(&m->buffer) : xSemaphoreCreateMutexStatic(&m->buffer);
+#else
     m->handle = recursive ? xSemaphoreCreateRecursiveMutex() : xSemaphoreCreateMutex();
+#endif
 #else
     if (recursive) {
         m->handle = NULL;
         assert(!recursive); // Recursive FreeRTOS mutexes are disabled in this configuration
         return;
     }
+#if configSUPPORT_STATIC_ALLOCATION == 1
+    m->handle = xSemaphoreCreateMutexStatic(&m->buffer);
+#else
     m->handle = xSemaphoreCreateMutex();
 #endif
-    assert(m->handle != NULL); // heap exhausted – increase configTOTAL_HEAP_SIZE
+#endif
+    assert(m->handle != NULL); // Check mutex creation
 }
 
 void mutexDestroy(MUTEX *m) {

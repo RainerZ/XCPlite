@@ -2,6 +2,7 @@
 
 All notable changes to XCPlite are documented in this file.
 
+<<<<<<< HEAD
 ## [V2.2.0] work in progress
 
 - Split `platform.c/.h` into `platform.c/.h` (threads, mutex, clock, sleep, memory, atomics) and `sockets.c/.h` (socket abstraction for all platforms). `sockets.h` includes `platform.h`; files that use both include both explicitly (IWYU).
@@ -20,6 +21,20 @@ All notable changes to XCPlite are documented in this file.
 - IPv4 fragmentation is now prevented on the socket transport: `socketOpen` sets the DF bit on UDP sockets (`IP_MTU_DISCOVER`/`IP_PMTUDISC_DO` on Linux, `IP_DONTFRAG` on macOS/BSD, `IP_DONTFRAGMENT` on Windows, no-op on lwIP). Fragmentation is harmful for DAQ - one lost fragment loses the whole datagram and reassembly adds jitter - and an `OPTION_MTU` larger than the path MTU previously degraded measurement silently. Oversized segments now fail with `EMSGSIZE` and a message naming the segment size and the `OPTION_MTU` to reduce. **Behaviour change:** a setup that relied on fragmentation will now report an error instead of silently fragmenting.
 - Fixed `PLATFORM_32_BIT` typo in `xcplib_cfg.h`, which prevented the automatic selection of `OPTION_QUEUE_32` on 32 bit platforms
 - Fixed missing `#include <errno.h>` in `shm.c`, which broke the `shm` configuration build on macOS
+=======
+## [V2.1.14]
+
+- Support static allocation and improve FreeRTOS robustness (#124)
+    * Support static allocation for FreeRTOS tasks and mutexes
+    * Use static storage when configSUPPORT_STATIC_ALLOCATION is enabled
+    * Preserve dynamic allocation and recursive mutex support
+    * Update FreeRTOS documentation and remove obsolete queue TODOs 
+    * Fix FreeRTOS delay rounding and overflow
+    * Avoid unaligned IPv4 address access in FreeRTOS/lwIP
+    * Fix synchronization of FreeRTOS queue state
+    * Correct FreeRTOS queue and lwIP documentation
+    * Fix FreeRTOS emulator clock test build
+>>>>>>> origin/V2.1.14
 
 
 ## [V2.1.12]
