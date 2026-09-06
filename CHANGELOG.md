@@ -2,10 +2,18 @@
 
 All notable changes to XCPlite are documented in this file.
 
-## [V2.1.13]
+## [V2.1.14]
 
-- 
-
+- Support static allocation and improve FreeRTOS robustness (#124)
+    * Support static allocation for FreeRTOS tasks and mutexes
+    * Use static storage when configSUPPORT_STATIC_ALLOCATION is enabled
+    * Preserve dynamic allocation and recursive mutex support
+    * Update FreeRTOS documentation and remove obsolete queue TODOs 
+    * Fix FreeRTOS delay rounding and overflow
+    * Avoid unaligned IPv4 address access in FreeRTOS/lwIP
+    * Fix synchronization of FreeRTOS queue state
+    * Correct FreeRTOS queue and lwIP documentation
+    * Fix FreeRTOS emulator clock test build
 
 
 ## [V2.1.12]
