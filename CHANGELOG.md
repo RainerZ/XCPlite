@@ -2,6 +2,26 @@
 
 All notable changes to XCPlite are documented in this file.
 
+## [V2.2.0] work in progress
+
+- Split `platform.c/.h` into `platform.c/.h` (threads, mutex, clock, sleep, memory, atomics) and `sockets.c/.h` (socket abstraction for all platforms). `sockets.h` includes `platform.h`; files that use both include both explicitly (IWYU).
+
+- New raw Ethernet transport `OPTION_ENABLE_UDP_RAW`: XCP on UDP/IPv4 implemented inside xcplib on top of a thin raw Ethernet HAL, for targets without a TCP/IP stack. See `docs/SOCKET_RAW.md`.
+    - New build configuration `raw` (`src/xcplib_raw_cfg.h`, `build-raw/`) with the new example `udp_raw_demo` and the unit test `socket_raw_test` (Linux only)
+    - `src/socket_raw.c` — UDP/IPv4 layer, answer-only ARP, ICMP Echo responder, receive filter with an absolute-deadline loop
+    - `src/socket_raw_hal.h` — raw Ethernet HAL interface, `src/socket_raw_hal_linux.c` — AF_PACKET backend (requires `CAP_NET_RAW`)
+    - `test/test_socket_raw.sh` — isolated veth/netns test setup with ARP, ping and XCP CONNECT checks
+    - Mutually exclusive with `OPTION_ENABLE_UDP`/`OPTION_ENABLE_TCP` and requires `OPTION_QUEUE_32`; both enforced by `#error` in `xcptl_cfg.h`, together with the SHM, multicast and MTU restrictions
+    - The `rtos` configuration keeps using the lwIP socket API - the raw transport is a separate configuration, not an override
+- Optional zero copy transmit for the raw Ethernet transport (`OPTION_UDP_RAW_ZERO_COPY`, on by default): headroom is reserved in front of every transmit queue3/queue32 segment so the Ethernet/IPv4/UDP header is written in place instead of copying the payload into a frame buffer.
+    - New generic queue concept `QUEUE_SEGMENT_HEADER_SIZE` in `queue.h` - reserved once per *segment*, as opposed to the existing per-*message* `QUEUE_ENTRY_USER_HEADER_SIZE`
+    - `queue32.c`/`queue32m.c` gain one guarded field; with the option off the queue entry layout is byte identical to before
+    - Command responses keep the copying path, they are built on the stack and are not hot
+- IPv4 fragmentation is now prevented on the socket transport: `socketOpen` sets the DF bit on UDP sockets (`IP_MTU_DISCOVER`/`IP_PMTUDISC_DO` on Linux, `IP_DONTFRAG` on macOS/BSD, `IP_DONTFRAGMENT` on Windows, no-op on lwIP). Fragmentation is harmful for DAQ - one lost fragment loses the whole datagram and reassembly adds jitter - and an `OPTION_MTU` larger than the path MTU previously degraded measurement silently. Oversized segments now fail with `EMSGSIZE` and a message naming the segment size and the `OPTION_MTU` to reduce. **Behaviour change:** a setup that relied on fragmentation will now report an error instead of silently fragmenting.
+- Fixed `PLATFORM_32_BIT` typo in `xcplib_cfg.h`, which prevented the automatic selection of `OPTION_QUEUE_32` on 32 bit platforms
+- Fixed missing `#include <errno.h>` in `shm.c`, which broke the `shm` configuration build on macOS
+
+
 ## [V2.1.12]
 
 - xcpclient related changes (xcpclient version 3.0.10):
@@ -157,7 +177,7 @@ All notable changes to XCPlite are documented in this file.
 ```c
 void XcpInit(const char *name, const char *epk, uint8_t mode);
 ```
-- The return value contract of `socketRecv` and `socketRecvFrom` has changed. Only code that uses these functions directly (i.e. code that includes `platform.h` is affected)
+- The return value contract of `socketRecv` and `socketRecvFrom` has changed. Only code that uses these functions directly (i.e. code that includes `socket.h` is affected)
 
 ### Experimental
 

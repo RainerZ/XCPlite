@@ -152,7 +152,7 @@
 // Transport layer queue, with variable queue entry size, 32 bit not lockless with mutex or critical_section synchronization
 // Mandatory for Windows and 32 bit platforms
 // #define OPTION_QUEUE_32 // (queue32.c for Windows or queue32m.c optimized for FreeRTOS)
-#if defined(OPTION_ATOMIC_EMULATION) || defined(PLATFORM_32_BIT)
+#if defined(OPTION_ATOMIC_EMULATION) || defined(PLATFORM_32BIT)
 #undef OPTION_QUEUE_64_VAR_SIZE
 #undef OPTION_QUEUE_64_FIX_SIZE
 #define OPTION_QUEUE_32

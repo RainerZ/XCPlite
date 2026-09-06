@@ -16,6 +16,7 @@ project(xcplite VERSION 2.1.2 LANGUAGES C CXX)
 #   cmake -B build-ptp    -S . -DXCPLITE_CONFIGURATION=ptp
 #   cmake -B build-shm    -S . -DXCPLITE_CONFIGURATION=shm
 #   cmake -B build-rtos   -S . -DXCPLITE_CONFIGURATION=rtos
+#   cmake -B build-raw    -S . -DXCPLITE_CONFIGURATION=raw
 #
 # Configuration descriptions (see src/xcplib_<name>_cfg.h for details):
 #   default  - 64-bit, on-target A2L generation, filesystem, Ethernet UDP/TCP
@@ -23,15 +24,16 @@ project(xcplite VERSION 2.1.2 LANGUAGES C CXX)
 #   ptp      - Like default with socket hardware timestamps (ptptool, Linux only)
 #   shm      - Shared-memory multi-application mode (shmtool, xcpdaemon)
 #   rtos     - Embedded RTOS targets (FreeRTOS), reduced footprint, no filesystem
+#   raw      - Raw Ethernet transport, UDP/IPv4 inside xcplib, no TCP/IP stack (Linux only)
 # =============================================================================
 set(XCPLITE_CONFIGURATION "default" CACHE STRING
-    "Library build configuration: default | no_a2l | ptp | shm | rtos")
-set_property(CACHE XCPLITE_CONFIGURATION PROPERTY STRINGS default no_a2l ptp shm rtos)
+    "Library build configuration: default | no_a2l | ptp | shm | rtos | raw")
+set_property(CACHE XCPLITE_CONFIGURATION PROPERTY STRINGS default no_a2l ptp shm rtos raw)
 
-if(NOT XCPLITE_CONFIGURATION MATCHES "^(default|no_a2l|ptp|shm|rtos)$")
+if(NOT XCPLITE_CONFIGURATION MATCHES "^(default|no_a2l|ptp|shm|rtos|raw)$")
     message(FATAL_ERROR
         "Invalid XCPLITE_CONFIGURATION='${XCPLITE_CONFIGURATION}'. "
-        "Must be one of: default, no_a2l, ptp, shm, rtos")
+        "Must be one of: default, no_a2l, ptp, shm, rtos, raw")
 endif()
 
 # Resolve configuration override header (empty = use default xcplib_cfg.h)
@@ -43,6 +45,8 @@ elseif(XCPLITE_CONFIGURATION STREQUAL "shm")
     set(_xcplib_cfg_override "xcplib_shm_cfg.h")
 elseif(XCPLITE_CONFIGURATION STREQUAL "rtos")
     set(_xcplib_cfg_override "xcplib_rtos_cfg.h")
+elseif(XCPLITE_CONFIGURATION STREQUAL "raw")
+    set(_xcplib_cfg_override "xcplib_raw_cfg.h")
 else()
     set(_xcplib_cfg_override "")
 endif()
@@ -176,7 +180,7 @@ elseif(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 # xcplite sources
-set(xcplite_SOURCES src/xcpappl.c src/xcplite.c src/xcpethserver.c src/xcpethtl.c src/queue32m.c src/queue32.c src/queue64v.c src/queue64f.c src/shm.c src/cal.c src/a2l.c src/a2l_writer.c src/persistence.c src/platform.c src/util.c )
+set(xcplite_SOURCES src/xcpappl.c src/xcplite.c src/xcpethserver.c src/xcpethtl.c src/queue32m.c src/queue32.c src/queue64v.c src/queue64f.c src/shm.c src/cal.c src/a2l.c src/a2l_writer.c src/persistence.c src/platform.c src/sockets.c src/socket_raw.c src/socket_raw_hal_linux.c src/util.c )
 
 # Create xcplite library
 add_library(xcplite ${xcplite_SOURCES})
@@ -314,6 +318,19 @@ if(XCPLITE_BUILD_EXAMPLES)
         # Build it separately: cd examples/silkit_demo && cmake -B build -DSilKit_DIR=... -Dxcplite_DIR=...
         message(STATUS "silkit_demo: not built from root (standalone project, see examples/silkit_demo/)")
 
+    elseif(XCPLITE_CONFIGURATION STREQUAL "raw")
+
+        # udp_raw_demo: XCP over the raw Ethernet transport (UDP/IPv4 inside xcplib).
+        # Linux only - the HAL backend uses AF_PACKET and needs CAP_NET_RAW.
+        # See docs/SOCKET_RAW.md for the network setup used to test it.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            add_executable(udp_raw_demo examples/udp_raw_demo/src/main.c)
+            target_link_libraries(udp_raw_demo PRIVATE xcplite)
+            message(STATUS "udp_raw_demo: building for raw configuration (Linux)")
+        else()
+            message(STATUS "udp_raw_demo: skipped (Linux only, raw Ethernet HAL uses AF_PACKET)")
+        endif()
+
     elseif(XCPLITE_CONFIGURATION STREQUAL "rtos")
 
         # freertos_demo: FreeRTOS POSIX simulator for testing FreeRTOS xcplite support on the host.
@@ -372,6 +389,27 @@ if(XCPLITE_BUILD_TESTS)
         add_executable(clock_test test/clock_test/src/main.cpp)
         target_link_libraries(clock_test PRIVATE xcplite)
         message(STATUS "clock_test: building for ptp configuration")
+
+    elseif(XCPLITE_CONFIGURATION STREQUAL "raw")
+
+        # Unit tests for the raw Ethernet transport: checksums, wire layout, frame build,
+        # receive filter, ARP and ICMP responders. No network and no HAL involved -
+        # src/socket_raw.c is compiled into the test with a fake Ethernet HAL (src/stubs.c),
+        # so this does not link against xcplite and needs no privileges.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            add_executable(socket_raw_test test/socket_raw_test/src/main.c test/socket_raw_test/src/stubs.c)
+            target_include_directories(socket_raw_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/inc")
+            # This target deliberately does not link xcplite (it supplies its own fake
+            # Ethernet HAL), so it does not inherit the PUBLIC _GNU_SOURCE from that target
+            target_compile_definitions(socket_raw_test PRIVATE
+                "XCPLITE_CONFIGURATION=\"raw\""
+                "XCPLIB_CFG_OVERRIDE=\"xcplib_raw_cfg.h\""
+                $<$<PLATFORM_ID:Linux>:_GNU_SOURCE>
+            )
+            message(STATUS "socket_raw_test: building for raw configuration")
+        else()
+            message(STATUS "socket_raw_test: skipped (Linux only, raw Ethernet HAL uses AF_PACKET)")
+        endif()
 
     else()
         message(STATUS "XCPLITE_BUILD_TESTS=ON: no test targets defined for configuration '${XCPLITE_CONFIGURATION}'")
@@ -483,6 +521,10 @@ install(DIRECTORY inc/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PA
 # Install xcplib_cfg.h (default configuration) and platform.h
 install(FILES src/xcplib_cfg.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES src/platform.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES src/sockets.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+# Raw Ethernet HAL interface, needed by applications which provide their own backend
+# (OPTION_UDP_RAW_HAL_EXTERNAL), e.g. an ASAM CMP implementation
+install(FILES src/socket_raw_hal.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # Install the active configuration override header (if not default)
 # This documents which configuration was compiled into the installed library.

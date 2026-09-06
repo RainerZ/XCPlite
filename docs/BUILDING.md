@@ -19,6 +19,7 @@ The library has **mutually exclusive build configurations** selected via `XCPLIT
 | `ptp` | `build-ptp/` | `xcplib_ptp_cfg.h` | Like default with socket hardware timestamps; requires Linux and a PTP-capable NIC |
 | `shm` | `build-shm/` | `xcplib_shm_cfg.h` | Shared-memory multi-application mode (shmtool, xcpdaemon) |
 | `rtos` | `build-rtos/` | `xcplib_rtos_cfg.h` | FreeRTOS embedded targets: reduced footprint, no filesystem, 32-bit |
+| `raw` | `build-raw/` | `xcplib_raw_cfg.h` | Raw Ethernet transport: UDP/IPv4 inside xcplib, no TCP/IP stack (Linux only) |
 
 Each `src/xcplib_<name>_cfg.h` header documents the exact overrides applied on top of the defaults in `src/xcplib_cfg.h`.
 
@@ -45,6 +46,7 @@ Within a chosen configuration, the following options control what gets built:
 | `ptp` | ptp4l_demo¹ | clock_test | ptptool¹ |
 | `shm` | hello_xcp (SHM), hello_xcp_cpp (SHM) | *(none)* | shmtool, xcpdaemon³ |
 | `rtos` | freertos_emu_demo³ (downloads FreeRTOS-Kernel) | *(none)* | *(none)* |
+| `raw` | udp_raw_demo (Linux only) | socket_raw_test | *(none)* |
 
 ¹ Linux only  ² requires libbpf  ³ not supported on Windows
 
@@ -71,7 +73,7 @@ These examples have their own `CMakeLists.txt` and use `find_package(xcplite)` a
 | Argument group | Values | Default |
 |----------------|--------|---------|
 | Build type | `debug` \| `release` \| `relwithdebinfo` | `debug` |
-| Configuration | `default` \| `no_a2l` \| `ptp` \| `shm` \| `rtos` | `default` |
+| Configuration | `default` \| `no_a2l` \| `ptp` \| `shm` \| `rtos` \| `raw` | `default` |
 | Target | `lib` \| `examples` \| `tests` \| `tools` \| `rust_tools` \| `all` | `examples` |
 | Options | `clean` `cleanall` `install` `install=<path>` `cargo_install` `tidy` | — |
 
@@ -110,6 +112,9 @@ Examples:
 
 # rtos config: freertos_demo (Linux/macOS only)
 ./build.sh rtos examples
+
+# raw config: udp_raw_demo, raw Ethernet transport (Linux only, needs CAP_NET_RAW)
+./build.sh raw examples
 
 # Library only, install to build/install
 ./build.sh lib install
@@ -172,6 +177,10 @@ cmake --build build-shm --parallel
 # rtos configuration — freertos_demo (downloads FreeRTOS-Kernel; Linux/macOS only)
 cmake -B build-rtos -S . -DXCPLITE_CONFIGURATION=rtos -DXCPLITE_BUILD_EXAMPLES=ON
 cmake --build build-rtos --parallel
+
+# raw configuration — udp_raw_demo, raw Ethernet transport (Linux only)
+cmake -B build-raw -S . -DXCPLITE_CONFIGURATION=raw -DXCPLITE_BUILD_EXAMPLES=ON
+cmake --build build-raw --parallel
 
 # Build a specific target
 cmake --build build --target hello_xcp
@@ -341,5 +350,6 @@ To test all configurations:
 ./build.sh ptp tools               # ptp config, tools (Linux only)
 ./build.sh no_a2l examples         # no_a2l config
 ./build.sh rtos examples           # rtos config (Linux/macOS only)
+./build.sh raw examples            # raw config (Linux only, see docs/SOCKET_RAW.md)
 ```
 

@@ -28,6 +28,7 @@ Note that examples targets may need different XCPlite library build configuratio
    cmake -B build-ptp    -S . -DXCPLITE_CONFIGURATION=ptp       # for ptp4l_demo
    cmake -B build-shm    -S . -DXCPLITE_CONFIGURATION=shm       # for silkit_demo
    cmake -B build-rtos   -S . -DXCPLITE_CONFIGURATION=rtos      # for freertos_demo with the FreeRTOS POSIX simulator
+   cmake -B build-raw    -S . -DXCPLITE_CONFIGURATION=raw       # for udp_raw_demo with the raw Ethernet transport
 ```
 
 
@@ -79,6 +80,25 @@ Builds against a pre-built libxcplite and silkit library
 ### [ptp4l_demo](ptp4l_demo/README.md)
 
 Demonstrates how to use a PTP (Precision Time Protocol) synchronized clock as XCP data acquisition timestamp source.  
+
+
+### [udp_raw_demo](udp_raw_demo/README.md)
+
+**Demonstrates XCP on UDP/IPv4 without any TCP/IP stack** - the transport is implemented inside xcplib on top of a thin raw Ethernet HAL.  
+- For targets with no IP stack at all: a bare metal EMAC driver, or an RTOS Ethernet abstraction without lwIP.  
+- xcplib answers ARP and ICMP itself, so the target is pingable without a stack.  
+- Needs an explicit local IPv4 address, there is no DHCP and `0.0.0.0` (ANY) has no meaning.  
+- Linux and FreeRTOS only, the HAL backend uses `AF_PACKET` and requires `CAP_NET_RAW`. See [docs/SOCKET_RAW.md](../docs/SOCKET_RAW.md).  
+- ASAM CMP driver planned, for all operating systems.
+
+
+### [cmp_demo](cmp_demo/README.md)
+
+**Demonstrates supplying your own Ethernet HAL backend from outside the library** - a standalone project consuming an installed xcplite, like external_example.  
+- Prepares XCP over ASAM CMP, for testing XCP tools which communicate through capture modules.  
+- Implements the six `eth_hal_*` functions of `src/socket_raw_hal.h` in the application; the built in AF_PACKET backend is then never pulled from the static library.  
+- The CMP envelope itself is not implemented yet and is a pass through, so the HAL plumbing is testable on its own.  
+- Linux only, needs `CAP_NET_RAW`. Not built from the root CMakeLists.  
 
 
 ### [external_example](external_example/README.md)

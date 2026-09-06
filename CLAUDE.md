@@ -89,7 +89,10 @@ src/queue*.c                    Lock-free/mutex transmit queue implementations (
 src/cal.c/.h                    Calibration segment RCU implementation (page switching, locks)
 src/a2l.c, src/a2l_writer.c     Runtime A2L file generation
 src/persistence.c/.h            Binary (.bin) parameter/event persistence across restarts
-src/platform.c/.h               OS abstraction (threads, sockets, clock, atomics) — Linux/macOS/QNX/Windows/FreeRTOS
+src/platform.c/.h               OS abstraction (threads, clock, mutex, atomics) — Linux/macOS/QNX/Windows/FreeRTOS
+src/sockets.c/.h                Socket abstraction over the OS socket API (all standard platforms)
+src/socket_raw.c                Raw-Ethernet UDP/IPv4 transport (OPTION_ENABLE_UDP_RAW), see docs/SOCKET_RAW.md
+src/socket_raw_hal.h            Raw Ethernet HAL interface; socket_raw_hal_linux.c is the AF_PACKET backend
 src/util.c/.h                   Shared helpers
 ```
 

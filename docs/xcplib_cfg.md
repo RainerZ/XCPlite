@@ -78,7 +78,7 @@ This section describes the transport layer configuration parameters in xcptl_cfg
 | `XCPTL_MAX_CTO_SIZE` | Maximum size of XCP command packets (CRO/CRM) in bytes. Must be divisible by 8 (default: 248) |
 | `XCPTL_MAX_DTO_SIZE` | Maximum size of XCP data packets (DAQ/STIM) in bytes. Must be divisible by 8 (default: 1024) |
 | `XCPTL_MAX_SEGMENT_SIZE` | Maximum data buffer size for socket send operations. For UDP, this is the UDP MTU. Calculated as OPTION_MTU - 32 (IP header) |
-| `XCPTL_PACKET_ALIGNMENT` | Packet alignment for multiple XCP transport layer packets in a message (default: 4) |
+| `XCPTL_PACKET_ALIGNMENT` | Size granularity of the protocol layer packet inside a transport layer message; the packet is padded to this alignment so that concatenated messages in a segment stay aligned. Only 4 is supported, enforced by an `#error` in `queue.h`. Note the fill is included in the message LEN — see "Transport Layer Message Padding" in `docs/TECHNICAL.md` (default: 4) |
 | `XCPTL_TRANSPORT_LAYER_HEADER_SIZE` | Transport layer message header size in bytes (fixed: 4) |
 
 ### Multicast Configuration
