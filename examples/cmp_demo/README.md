@@ -153,18 +153,18 @@ either: there is no IP route to the ECU, it lives behind the tunnel. Send an ICM
 bytes to every captured frame, and the outer IPv4/UDP headers add 28 more, so on a 1500-byte
 path the largest inner frame is **1438 bytes**.
 
-This is why xcplite's `raw` configuration sets **`OPTION_MTU 1424`** rather than the 1504 a
-standard Ethernet link would allow:
+This is why xcplite's `raw` configuration sets **`OPTION_MTU 1420`** rather than the 1500 a
+standard Ethernet link allows:
 
 | | |
 |---|---|
-| `OPTION_MTU` | 1424 |
+| `OPTION_MTU` | 1420 |
 | `XCPTL_MAX_SEGMENT_SIZE` | 1392 (`OPTION_MTU - 32`, `%8`) |
 | Largest inner Ethernet frame | 1434 (`42 + segment`) |
 | As a CMP message | 1468 (`+ 34` envelope) |
 | As an IP packet | 1496 (`+ 28`) — fits 1500 with 4 bytes to spare |
 
-At 1504 a full segment is already 1514 bytes and fills a 1500-byte path on its own, leaving
+At the full link MTU a segment is 1472 bytes and the frame 1514, filling a 1500-byte path on its own, leaving
 the envelope nothing: small transfers still work, but a saturated DAQ stream hits the limit
 and reports `SOCKET_ERROR_MSGSIZE`. The demo checks this at startup and warns, naming the
 budget and the remedy, so a mismatched configuration is visible before it bites:
@@ -384,7 +384,7 @@ test, since "everything on one box" is the only thing the port would buy.
 | | |
 |---|---|
 | xcplite | https://github.com/RainerZ/XCPlite, `raw` configuration |
-| Library version | 2.1.2 (as reported by `find_package`) |
+| Library version | 2.2.1 (as reported by `find_package`) |
 | Specification | ASAM CMP Protocol Layer Specification V1.1.0, 2026-01-31 |
 | Target | Raspberry Pi 5 Model B Rev 1.1 (`pi6`), Debian, aarch64, GCC, `RelWithDebInfo` — via `./test.sh` |
 | Host | macOS 15 / arm64 / Apple clang, library built with `OPTION_UDP_RAW_HAL_EXTERNAL` — via `./test/test_local.sh` |

@@ -15,10 +15,12 @@
   The values for XCP_xxx and XCPTL_xxx define constants (in xcp_cfg.h and xcptl_cfg.h) may depend on options
 */
 
-// XCPlite version, currently V2.1.x
+// XCPlite version, currently V2.2.x
+// Keep in sync with project(xcplite VERSION ...) in CMakeLists.txt, which is what
+// find_package(xcplite) reports to a consuming project.
 #define OPTION_VERSION_MAJOR 2
-#define OPTION_VERSION_MINOR 1
-#define OPTION_VERSION_PATCH 10
+#define OPTION_VERSION_MINOR 2
+#define OPTION_VERSION_PATCH 1
 
 // CANape version compatibility
 // Disable workarounds for CANape versions < 24SP2

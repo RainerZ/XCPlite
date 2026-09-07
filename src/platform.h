@@ -350,10 +350,25 @@ void mutexDestroy(MUTEX *m);
 //-------------------------------------------------------------------------------
 // Threads
 
+// create_thread() result convention
+//
+//   POSIX     expression, 0 on success (pthread_create)
+//   Windows   expression, 0 on success (adapted below, CreateThread itself returns a HANDLE)
+//   FreeRTOS  STATEMENTS, both variants assert on failure - they have no value and cannot be tested
+//
+// Windows follows the POSIX convention so that a check reads the same way on both rather than
+// meaning the opposite thing. A *portable* check is still not possible, because the FreeRTOS
+// variants are statements: `if (create_thread(...))` does not compile there. That is deliberate -
+// it fails at build time instead of silently. No caller in this repository tests the result.
+//
+// If you need to know that a thread is actually running, have the thread set a flag as its first
+// action and wait for it. That is portable and proves more than a creation result: see
+// cmpRestStart() in examples/cmp_demo/src/cmp_rest.c.
+
 #if defined(_WIN) // Windows
 
 typedef HANDLE THREAD_HANDLE;
-#define create_thread(thread_handle_ptr, attr, thread, args) *thread_handle_ptr = CreateThread(0, 0, thread, args, 0, NULL)
+#define create_thread(thread_handle_ptr, attr, thread, args) (((*(thread_handle_ptr) = CreateThread(0, 0, thread, args, 0, NULL)) == NULL) ? -1 : 0)
 #define join_thread(h) WaitForSingleObject(h, INFINITE);
 #define cancel_thread(h)                                                                                                                                                           \
     do {                                                                                                                                                                           \

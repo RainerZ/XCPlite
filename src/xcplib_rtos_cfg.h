@@ -11,7 +11,7 @@
 |
 |   Key differences in overrides from the defaults in xcplib_cfg.h:
 |     - Absolute memory addressing
-|     - No jumbo frames, standard Ethernet MTU of 1504 bytes (1472 bytes UDP payload)
+|     - No jumbo frames, standard Ethernet MTU of 1500 bytes (1472 bytes UDP payload)
 |     - No TCP support (not implemented yet for FreeRTOS)
 |     - Reduced memory footprint
 |     - 32 bit DAQ queue
@@ -84,7 +84,7 @@
 // (OPTION_ENABLE_UDP_RAW, hand-crafted UDP/IP over a raw Ethernet HAL) - see docs/SOCKET_RAW.md
 
 #undef OPTION_MTU
-#define OPTION_MTU 1504                    // Standard Ethernet MTU: 1504 - 32 = 1472 bytes max UDP payload (%8 aligned)
+#define OPTION_MTU 1500                    // Standard Ethernet MTU: (1500 - 28) & ~7 = 1472 bytes max UDP payload
 #undef OPTION_SERVER_FORCEFULL_TERMINATION // FreeRTOS uses vTaskDelete(NULL) to end tasks — no forceful termination
 
 //-------------------------------------------------------------------------------

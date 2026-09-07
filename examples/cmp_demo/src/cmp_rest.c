@@ -306,7 +306,7 @@ bool cmpRestStart(uint16_t port) {
     }
 
     // create_thread() returns 0 on success on POSIX and Windows alike, but it still cannot
-    // be tested PORTABLY: the FreeRTOS variant is a statement which asserts, so
+    // be tested PORTABLY: both FreeRTOS variants are statements which assert, so
     // "if (create_thread(...))" does not compile there. Wait for the thread to announce
     // itself instead - portable, and it proves the thread is running rather than merely
     // created. That matters here because the listen socket is already bound at this point,

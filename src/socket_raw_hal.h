@@ -20,7 +20,7 @@
 |     of the port does not pad to the 60 byte Ethernet minimum, the port must do it.
 |     The largest frame socket_raw.c will ever pass, and the max_len it offers to
 |     eth_hal_recv(), is 42 + XCPTL_MAX_SEGMENT_SIZE, which is OPTION_MTU + 10
-|     (1434 bytes with the OPTION_MTU of 1424 the raw configuration uses). Jumbo frames
+|     (1434 bytes with the OPTION_MTU of 1420 the raw configuration uses). Jumbo frames
 |     are therefore supported by configuring OPTION_MTU accordingly. 802.1Q VLAN tags are not.
 |     Whether the link can actually carry that frame is a RUNTIME property that only
 |     the backend knows: if it cannot, eth_hal_send() returns ETH_HAL_ERROR_SIZE.

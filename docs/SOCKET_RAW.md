@@ -35,17 +35,22 @@ There is deliberately **no compile-time MTU guard**. The link MTU is a runtime p
 the target knows, so hard-coding a limit would bake a "standard Ethernet" assumption into
 `xcptl_cfg.h` and would wrongly forbid a jumbo-capable link.
 
-Note what `OPTION_MTU` means: it is the link MTU rounded up to a multiple of 8, and the 14 byte
-**Ethernet header is not part of it**. `XCPTL_MAX_SEGMENT_SIZE = OPTION_MTU - 32` reserves 28 bytes
-for the IPv4 and UDP headers plus the 4 bytes of that round-up (1500 -> 1504), so the resulting IP
-packet is `OPTION_MTU - 4` bytes. The invariant is `OPTION_MTU <= link MTU + 4`.
+Note what `OPTION_MTU` means: it is the link MTU, and the 14 byte **Ethernet header is not part of
+it**. `XCPTL_MAX_SEGMENT_SIZE = (OPTION_MTU - 28) & ~7` reserves 28 bytes for the IPv4 and UDP
+headers and then aligns down as the transport layer requires, so the resulting IP packet is at most
+`OPTION_MTU` bytes, and exactly `OPTION_MTU` when `OPTION_MTU - 28` is already a multiple of 8:
+1500 gives a 1472 byte segment and a 1500 byte IP packet. The invariant is `OPTION_MTU <= link MTU`.
 
-An `OPTION_MTU` too large for the link is reported at runtime, and both transports behave the same
-way because **neither fragments IPv4**:
+Before V2.1.11 `OPTION_MTU` was the link MTU rounded *up* to a multiple of 8 (1504 for a 1500 byte
+link), with the invariant `OPTION_MTU <= link MTU + 4`. A configuration still carrying 1504 is a
+leftover of that convention: it works, but gains nothing over 1500.
+
+An `OPTION_MTU` too large for the link is reported at runtime, because neither of these
+**fragments IPv4**:
 
 | Transport | Mechanism |
 |---|---|
-| socket (UDP) | `socketOpen` sets DF (`IP_PMTUDISC_DO` / `IP_DONTFRAG` / `IP_DONTFRAGMENT`), so `sendto` fails with `EMSGSIZE` |
+| socket (UDP) on Linux, macOS/BSD, QNX, Windows | `socketOpen` sets DF (`IP_PMTUDISC_DO` / `IP_DONTFRAG` / `IP_DONTFRAGMENT`), so `sendto` fails with `EMSGSIZE` |
 | raw Ethernet | `eth_hal_send` returns `ETH_HAL_ERROR_SIZE`, mapped to `SOCKET_ERROR_MSGSIZE` |
 
 Both print the segment size and the `OPTION_MTU` to reduce; the raw HAL additionally names the
@@ -54,8 +59,18 @@ interface and its MTU, since only the backend knows that. Observed on a link for
 ```
 ERROR: eth_hal_send: frame of 1242 bytes is too large for interface veth1 (MTU 1000, so at most 1014 bytes per frame)
 ERROR: socketSendTo: segment of 1200 bytes does not fit into one Ethernet frame on this link.
-  Reduce OPTION_MTU (currently 1424, giving XCPTL_MAX_SEGMENT_SIZE=1392), see the interface MTU reported above.
+  Reduce OPTION_MTU (currently 1420, giving XCPTL_MAX_SEGMENT_SIZE=1392), see the interface MTU reported above.
 ```
+
+**lwIP does not refuse an oversized datagram.** The FreeRTOS/lwIP `socketOpen` is a separate
+implementation in `sockets.c` and sets no DF option, because lwIP has no `IP_DONTFRAG`, so the
+datagram is fragmented or dropped according to lwIP's own `IP_FRAG` build setting rather than
+failing. To keep the misconfiguration visible, `socketSendTo` compares the segment plus 28 bytes of
+IPv4/UDP headers against `netif_default->mtu` and warns once - it still sends, so this is a
+diagnostic and not a guard. Two caveats: `netif_default` is not necessarily the interface routing
+to the destination on a multi-homed target, so a false report is possible there, and the check
+costs one comparison per datagram on the DAQ transmit path. On lwIP, `OPTION_MTU` has to be correct
+by construction.
 
 The transport also asserts a **little endian host** (`src/socket_raw.c`) and the
 availability of a **HAL backend** (`src/socket_raw_hal.h`). Only the Linux AF_PACKET
@@ -344,7 +359,7 @@ much more here, and the receive filter to be exercised by real background traffi
 3. `tcpdump -i veth0 -nn -e -vv` alongside everything: it prints `bad ip cksum` explicitly.
    Build with `OPTION_UDP_RAW_UDP_CHECKSUM_COMPUTE` for this step so the UDP checksum can
    be validated too. Confirm full segments are `OPTION_MTU + 10` bytes on the wire
-   (1434 with the `OPTION_MTU` of 1424 this configuration uses)
+   (1434 with the `OPTION_MTU` of 1420 this configuration uses)
 4. `xcpclient` CONNECT / GET_STATUS — source address and port extraction, peer MAC
    learning, and the `socketSendTo` return value contract
 5. UPLOAD / DOWNLOAD — larger command responses
@@ -427,14 +442,7 @@ removing the payload copy already achieves. Not worth the complexity.
 The removed copy is up to `XCPTL_MAX_SEGMENT_SIZE` bytes per datagram. At a saturated 100 Mbit/s
 (~8000 frames/s) that is ~12 MB/s of memory bandwidth: negligible on a Linux host, a meaningful
 fraction of a core on a microcontroller. The optimization therefore pays off on the embedded targets
-the raw transport exists for, not on the Linux test vehicle — do not expect the Pi to show a
-difference.
-
-Validated on a Raspberry Pi 5 with the option enabled: `ping` still answered, 14247 DAQ samples over
-15 s with a strictly consecutive counter (no loss), full size 1464 byte datagrams, ~61 messages
-accumulated per datagram, zero errors, and a full `xcpclient` measurement (9475 events, 934 event/s).
-`test/socket_raw_test` additionally checks that the copy and zero copy paths produce **byte identical
-frames** apart from the IPv4 identification.
+the raw transport exists for, not on the Linux test vehicles.
 
 ---
 

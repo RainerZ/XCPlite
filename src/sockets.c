@@ -60,6 +60,7 @@ const char *socketGetErrorString(int32_t err) {
 
 #if defined(OPTION_FREERTOS_LWIP)
 #include "lwip/errno.h"   // lwIP errno values mapped to POSIX codes
+#include "lwip/netif.h"   // netif_default, struct netif::mtu, for the segment size check in socketSendTo
 #include "lwip/sockets.h" // lwip_socket, lwip_bind, lwip_sendto, lwip_recvfrom, lwip_close, lwip_shutdown, lwip_setsockopt
 #endif
 
@@ -210,6 +211,26 @@ int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t buffe
     if (time != NULL) {
         *time = clockGet(); // No hardware timestamps on lwIP; use XCP clock at send time
     }
+
+    // lwIP sets no DF option - it has no IP_DONTFRAG - so unlike Linux, macOS/BSD, QNX and Windows
+    // it does not refuse an oversized datagram: it fragments or drops it according to its own
+    // IP_FRAG build setting, silently either way. That makes lwIP the one transport where an
+    // OPTION_MTU larger than the link MTU degrades measurement without any diagnostic, so check it
+    // here. netif->mtu is the IP MTU, so the 20 byte IPv4 and 8 byte UDP headers are added.
+    //
+    // Reported once, not per datagram: this is the DAQ transmit path. Best effort - the default
+    // netif is not necessarily the one routing to dst on a multi homed target, so a false report
+    // is possible there, and it costs one log line and nothing else.
+    if (netif_default != NULL && (uint32_t)bufferSize + 20u + 8u > (uint32_t)netif_default->mtu) {
+        static bool mtu_reported = false;
+        if (!mtu_reported) {
+            mtu_reported = true;
+            DBG_PRINTF_WARNING("socketSendTo: segment of %u bytes does not fit the link MTU of %u and lwIP will\n"
+                               "  fragment or drop it. Reduce OPTION_MTU (currently %u, giving XCPTL_MAX_SEGMENT_SIZE=%u).\n",
+                               (unsigned)bufferSize, (unsigned)netif_default->mtu, (unsigned)OPTION_MTU, (unsigned)XCPTL_MAX_SEGMENT_SIZE);
+        }
+    }
+
     int16_t n = (int16_t)lwip_sendto(socket, buffer, bufferSize, 0, (struct sockaddr *)&dst, sizeof(dst));
     if (n < 0) {
         int32_t err = errno;

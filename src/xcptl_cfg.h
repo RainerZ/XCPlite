@@ -59,15 +59,26 @@
 #endif
 
 // Note on OPTION_MTU:
-// OPTION_MTU is the link MTU rounded up to a multiple of 8, the Ethernet header is NOT part of it.
-// XCPTL_MAX_SEGMENT_SIZE = OPTION_MTU - 32 reserves 28 bytes for the IPv4 and UDP headers plus the
-// 4 bytes of that round-up (1500 -> 1504), so the resulting IP packet is OPTION_MTU - 4 bytes.
-// The invariant is therefore: OPTION_MTU <= link MTU + 4.
+// OPTION_MTU is the link MTU, the Ethernet header is NOT part of it.
+// XCPTL_MAX_SEGMENT_SIZE = (OPTION_MTU - 28) & ~7 reserves 28 bytes for the IPv4 and UDP headers
+// and then aligns down as the transport layer requires, so the resulting IP packet is at most
+// OPTION_MTU bytes, and exactly OPTION_MTU when OPTION_MTU - 28 is already a multiple of 8:
+// 1500 -> segment 1472 -> IP packet 1500.
+// The invariant is therefore: OPTION_MTU <= link MTU.
+// Before V2.1.11 OPTION_MTU was the link MTU rounded UP to a multiple of 8 (1504 for a 1500 byte
+// link) and the invariant was OPTION_MTU <= link MTU + 4.
 // An OPTION_MTU too large for the link is NOT caught at compile time - the link MTU is a runtime
 // property that only the target knows. It is reported at runtime instead:
-//   - socket transport: DF is set in socketOpen, so sendto fails with EMSGSIZE
+//   - socket transport: socketOpen sets DF on Linux, macOS/BSD, QNX and Windows, so sendto fails
+//                       with EMSGSIZE and socketSendTo names the segment size and the OPTION_MTU
 //   - raw transport:    eth_hal_send reports ETH_HAL_ERROR_SIZE
-// Neither transport fragments IPv4.
+// Neither of those two fragments IPv4.
+//
+// lwIP is the exception: its socketOpen (the separate FreeRTOS implementation in sockets.c) sets
+// no DF option, because lwIP has no IP_DONTFRAG, so an oversized datagram is not refused - lwIP
+// fragments or drops it according to its own IP_FRAG build setting. socketSendTo therefore compares
+// the segment against netif_default->mtu itself and warns once, but it still hands the datagram to
+// lwIP: the check is a diagnostic, not a guard. On lwIP, OPTION_MTU has to be right.
 
 // Receive timeout in milliseconds (rate of periodic checks for shutdown and background tasks in the receive thread)
 #define XCPTL_RECV_TIMEOUT_MS 100
