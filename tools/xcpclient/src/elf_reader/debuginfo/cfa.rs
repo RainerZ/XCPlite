@@ -250,6 +250,13 @@ fn extract_frame_base_offset(entry: &gimli::DebuggingInformationEntry<EndianSlic
 /// This function parses .eh_frame or .debug_frame sections using gimli
 /// to find the CFA (Canonical Frame Address) calculation rule for a function.
 fn extract_cfa_from_cfi(file: &object::File, function_address: u64) -> Result<Option<i64>> {
+    // Xtensa (ESP32): the trigger macros pass the CFA itself as frame address (__builtin_dwarf_cfa() in xcplib.h) and the
+    // DWARF locations of the local variables are relative to the CFA (DW_AT_frame_base DW_OP_call_frame_cfa), no offset is needed
+    if file.architecture() == object::Architecture::Xtensa {
+        log::debug!("    Xtensa: the frame address is the CFA, CFA offset 0");
+        return Ok(Some(0));
+    }
+
     // Try .eh_frame first (more common)
     if let Some(cfa_offset) = parse_eh_frame(file, function_address)? {
         // println!("    Found CFA offset in .eh_frame: {}", cfa_offset);
@@ -278,7 +285,8 @@ fn parse_eh_frame(file: &object::File, function_address: u64) -> Result<Option<i
     let eh_frame_data = eh_frame_section.data()?;
     let eh_frame_address = eh_frame_section.address();
 
-    let eh_frame = EhFrame::new(eh_frame_data, LittleEndian);
+    let mut eh_frame = EhFrame::new(eh_frame_data, LittleEndian);
+    eh_frame.set_address_size(address_size(file));
     parse_cfi_section(&eh_frame, eh_frame_address, function_address, ".eh_frame")
 }
 
@@ -297,8 +305,15 @@ fn parse_debug_frame(file: &object::File, function_address: u64) -> Result<Optio
 
     log::debug!("    Found .debug_frame section with {} bytes at 0x{:08x}", debug_frame_data.len(), debug_frame_address);
 
-    let debug_frame = DebugFrame::new(debug_frame_data, LittleEndian);
+    let mut debug_frame = DebugFrame::new(debug_frame_data, LittleEndian);
+    debug_frame.set_address_size(address_size(file));
     parse_cfi_section(&debug_frame, debug_frame_address, function_address, ".debug_frame")
+}
+
+/// Address size of the target in bytes. The CIEs of .debug_frame before DWARF 4 do not contain the address size,
+/// gimli defaults to the address size of the host, which breaks the parsing of 32 bit targets (ARM, Xtensa) on a 64 bit host
+fn address_size(file: &object::File) -> u8 {
+    if file.is_64() { 8 } else { 4 }
 }
 
 /// Parse a CFI section (either .eh_frame or .debug_frame) using gimli
@@ -399,9 +414,18 @@ fn parse_fde_for_cfa<R: gimli::Reader, Section: gimli::UnwindSection<R>>(fde: &g
                             break;
                         }
                     }
+                    13 => {
+                        {
+                            log::debug!(" CFA = SP + {} (ARM)", offset);
+                        }
+                        // Keep track of the largest positive offset (after prologue)
+                        if offset > 0 && (best_cfa_offset.is_none() || offset > best_cfa_offset.unwrap()) {
+                            best_cfa_offset = Some(offset);
+                        }
+                    }
                     _ => {
                         {
-                            log::debug!("    CFA uses register {} + {} (unknown architecture)", register.0, offset);
+                            log::debug!("    CFA uses register {} + {}", register.0, offset);
                         }
                         if offset > 0 && (best_cfa_offset.is_none() || offset > best_cfa_offset.unwrap()) {
                             best_cfa_offset = Some(offset);

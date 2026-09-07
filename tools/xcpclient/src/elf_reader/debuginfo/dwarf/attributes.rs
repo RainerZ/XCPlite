@@ -116,7 +116,7 @@ pub(crate) fn get_location_attribute(
         gimli::AttributeValue::Exprloc(expression) => evaluate_exprloc(debug_data_reader, expression, encoding, current_unit),
         gimli::AttributeValue::LocationListsRef(offset) => evaluate_location_list(debug_data_reader, offset, encoding, current_unit),
         _ => {
-            log::error!("get_location_attribute: Unexpected location attribute type: {loc_attr:#?}");
+            log::warn!("get_location_attribute: Unexpected location attribute type: {loc_attr:#?}");
             None
         }
     }
@@ -416,7 +416,7 @@ fn evaluate_exprloc(
     let mut eval_result = evaluation
         .evaluate()
         .map_err(|e| {
-            log::error!("evaluate_exprloc: Initial evaluation failed: {e:?}");
+            log::debug!("evaluate_exprloc: Initial evaluation failed: {e:?}");
             e
         })
         .ok()?;
@@ -435,7 +435,7 @@ fn evaluate_exprloc(
                 eval_result = evaluation
                     .resume_with_relocated_address(address)
                     .map_err(|e| {
-                        log::error!("evaluate_exprloc: resume_with_relocated_address failed: {e:?}");
+                        log::debug!("evaluate_exprloc: resume_with_relocated_address failed: {e:?}");
                         e
                     })
                     .ok()?;
@@ -449,7 +449,7 @@ fn evaluate_exprloc(
                 eval_result = evaluation
                     .resume_with_frame_base(0x80000000)
                     .map_err(|e| {
-                        log::error!("evaluate_exprloc: resume_with_frame_base failed: {e:?}");
+                        log::debug!("evaluate_exprloc: resume_with_frame_base failed: {e:?}");
                         e
                     })
                     .ok()?;
@@ -470,7 +470,7 @@ fn evaluate_exprloc(
                 eval_result = evaluation
                     .resume_with_indexed_address(addr)
                     .map_err(|e| {
-                        log::error!("evaluate_exprloc: resume_with_indexed_address failed: {e:?}");
+                        log::debug!("evaluate_exprloc: resume_with_indexed_address failed: {e:?}");
                         e
                     })
                     .ok()?;

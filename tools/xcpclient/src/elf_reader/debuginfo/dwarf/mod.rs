@@ -478,7 +478,7 @@ impl DebugDataReader<'_> {
                         }
                         Err(errmsg) => {
                             let offset = entry.offset().to_debug_info_offset(unit).unwrap_or(gimli::DebugInfoOffset(0)).0;
-                            log::warn!("Could not load variable @{offset:x}: {errmsg}");
+                            log::debug!("Could not load variable @{offset:x}: {errmsg}");
                         }
                     }
                 }

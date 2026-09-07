@@ -112,7 +112,11 @@ are measurements.
 The trigger macros emit a static variable `trg__<modes>__<event>` in the function in which the event is triggered. Its DWARF scope gives
 the function, the canonical frame address (CFA) of the function at the trigger point and the addressing modes available there (the mode
 letters, see the marker contract). Local variables of that function are registered with stack frame relative addresses (address
-extension 2) and the event as fixed event, static variables in the function get the event as well. Global variables and static variables
+extension 2) and the event as fixed event, static variables in the function get the event as well. The DWARF locations of local
+variables are relative to the canonical frame address (CFA) of the function. The trigger macros pass the frame pointer
+(`__builtin_frame_address(0)`) as base address, so the generator adds the distance between the frame pointer and the CFA, which it
+reads from the call frame information of the function. On Xtensa (ESP32) the macros pass the CFA itself (`__builtin_dwarf_cfa()`)
+and no offset is added. Global variables and static variables
 in functions without an event trigger are registered without a fixed event, in this case it is in the responsibility of the XCP tool user to assign an event which allows correct visibilty and consistent capture of the associated variables. CANape usually defaults to polling in this case, and each available event may be selected for synchronous data acquisition. 
 (@@@@ TODO: Maybe add a feature to define a default event (see OPTION_ASYNC_EVENT), so CANape does not default to polling)
 
