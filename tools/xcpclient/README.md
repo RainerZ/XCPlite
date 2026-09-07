@@ -149,6 +149,9 @@ Options:
       --mea <MEA>...
           Specify variable names for DAQ measurement (list), may be list of names separated by space or single regular expressions (e.g. ".*")
 
+      --default-event <DEFAULT_EVENT>
+          Event id used for the DAQ measurement of variables without a fixed event (global variables). If not specified, such variables can not be measured
+
       --time <TIME>
           Time limit measurement duration to n s. 0 means infinite
           
@@ -224,6 +227,12 @@ With A2L file given:
 
 ```bash
 xcpclient --dest-addr=192.168.0.206  --tcp --a2l hello_xcp.a2l  --mea ".*" 
+```
+
+Variables without a fixed event (global variables in an A2L file generated from an ELF file) are measured with the event given by `--default-event`:
+
+```bash
+xcpclient --dest-addr=192.168.0.146 --udp --a2l freertos_demo.a2l --default-event 0 --mea global_counter --time 5
 ```
 
 With ELF file given, creates an A2L file from the ELF file and XCP server information about events and memory segments, then measures the specified variable:  

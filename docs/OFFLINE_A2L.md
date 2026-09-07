@@ -58,7 +58,8 @@ xcpclient --offline --elf build-no_a2l/no_a2l_demo --create-a2l-template --a2l n
 ```
 
 3. Use the A2L file in the XCP tool. The xcpclient test client itself can work with the ELF file directly (`--elf` with `--mea`,
-   `--cal`, `--list-mea`), no A2L file is needed for it.
+   `--cal`, `--list-mea`), no A2L file is needed for it. Variables without a fixed event are measured with the event given by
+   `--default-event`.
 
 `examples/no_a2l_demo_cpp/create_a2l.sh` shows a complete round trip: sync the sources to the target, build there, download the ELF
 file and generate the A2L file. The command line reference is in [tools/xcpclient/README.md](../tools/xcpclient/README.md).
@@ -118,6 +119,7 @@ variables are relative to the canonical frame address (CFA) of the function. The
 reads from the call frame information of the function. On Xtensa (ESP32) the macros pass the CFA itself (`__builtin_dwarf_cfa()`)
 and no offset is added. Global variables and static variables
 in functions without an event trigger are registered without a fixed event, in this case it is in the responsibility of the XCP tool user to assign an event which allows correct visibilty and consistent capture of the associated variables. CANape usually defaults to polling in this case, and each available event may be selected for synchronous data acquisition. 
+The xcpclient test client measures such variables with the event given by `--default-event`.
 (@@@@ TODO: Maybe add a feature to define a default event (see OPTION_ASYNC_EVENT), so CANape does not default to polling)
 
 ### Variables and symbols

@@ -200,6 +200,12 @@ struct Args {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     mea: Vec<String>,
 
+    // --default-event
+    /// Event id used for the DAQ measurement of variables without a fixed event (global variables).
+    /// If not specified, such variables can not be measured.
+    #[arg(long)]
+    default_event: Option<u16>,
+
     // --time
     /// Time limit measurement duration to n s. 0 means infinite.
     #[arg(long, default_value_t = 0)]
@@ -510,6 +516,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
         list_cal,
         list_mea,
         mea: measurement_list,
+        default_event,
         time,
         cal: cal_args,
         csv: csv_filename,
@@ -520,6 +527,10 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
 
     // Create xcp_client
     let mut xcp_client = XcpClient::new(protocol, dest_addr, local_addr, baud_rate);
+    xcp_client.set_default_event(default_event);
+    if let Some(event) = default_event {
+        info!("Default event id {} for the measurement of variables without a fixed event", event);
+    }
 
     // Target ECU name (from GET_ID)
     let mut ecu_name = String::new();
@@ -551,25 +562,8 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                     return Err("Failed to connect to XCP server".into());
                 }
             }
-            info!("XCP Protocol Information:");
-            info!("  XCP MAX_CTO = {}", xcp_client.max_cto_size);
-            info!("  XCP MAX_DTO = {}", xcp_client.max_dto_size);
-            info!(
-                "  XCP RESOURCES = 0x{:02X} {} {} {} {}",
-                xcp_client.resources,
-                if (xcp_client.resources & 0x01) != 0 { "CAL" } else { "" },
-                if (xcp_client.resources & 0x04) != 0 { "DAQ" } else { "" },
-                if (xcp_client.resources & 0x10) != 0 { "PGM" } else { "" },
-                if (xcp_client.resources & 0x40) != 0 { "STM" } else { "" }
-            );
-            info!("  XCP COMM_MODE_BASIC = 0x{:02X}", xcp_client.comm_mode_basic);
-            assert!((xcp_client.comm_mode_basic & 0x07) == 0); // Address granularity != 1 and motorola format not supported
-            info!("  XCP PROTOCOL_VERSION = 0x{:04X}", xcp_client.protocol_version);
-            info!("  XCP TRANSPORT_LAYER_VERSION = 0x{:04X}", xcp_client.transport_layer_version);
-            info!("  XCP DRIVER_VERSION = 0x{:02X}", xcp_client.driver_version);
-            info!("  XCP MAX_SEGMENTS = {}", xcp_client.max_segments);
-            info!("  XCP FREEZE_SUPPORTED = {}", xcp_client.freeze_supported);
-            info!("  XCP MAX_EVENTS = {}", xcp_client.max_events);
+            xcp_client.log_connect_info();
+            assert!((xcp_client.comm_mode_basic() & 0x07) == 0); // Address granularity != 1 and motorola format not supported
 
             info!("Reading target ECU information via XCP GET_ID commands:");
 
@@ -875,7 +869,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
             xcp_client.get_event_segment_info(&mut tmp_reg).await?;
 
             // Check events
-            if xcp_client.max_events == 0 {
+            if xcp_client.max_events() == 0 {
                 warn!("XCP server does not support get event info, skipping event check");
             } else {
                 for event in &tmp_reg.event_list {
@@ -900,7 +894,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
             }
 
             // Check calibration segments
-            if xcp_client.max_segments == 0 {
+            if xcp_client.max_segments() == 0 {
                 warn!("XCP server does not support get segment info, skipping calibration segment check");
             } else {
                 for seg in &tmp_reg.cal_seg_list {
@@ -964,7 +958,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
         } // load  A2L from specified file
 
         // Assign the new registry to xcp_client
-        xcp_client.registry = Some(reg);
+        xcp_client.set_registry(reg);
 
         // Check the status of all calibration segments and goto working page
         if xcp_client.is_connected() {
@@ -1253,6 +1247,7 @@ struct ConfigFile {
     download_bin: Option<bool>,
     list_mea: Option<String>,
     mea: Option<Vec<String>>,
+    default_event: Option<u16>,
     time: Option<u64>,
     csv: Option<String>,
     list_cal: Option<String>,
@@ -1302,6 +1297,12 @@ fn merge_config(matches: &clap::ArgMatches, config: ConfigFile, args: &mut Args)
     apply!(download_bin);
     apply!(list_mea);
     apply!(mea);
+    // default_event is an Option<u16> argument, a value from the config file wraps into Some
+    if let Some(v) = config.default_event
+        && matches.value_source("default_event") != Some(ValueSource::CommandLine)
+    {
+        args.default_event = Some(v);
+    }
     apply!(time);
     apply!(csv);
     apply!(list_cal);
