@@ -715,6 +715,7 @@ impl ElfReader {
     }
 
     // Register variables from the ELF debug information into the registry
+    // default_event: event assigned to global variables and to static variables in functions without an event trigger, None for no event
     pub fn register_variables(
         &self,
         reg: &mut Registry,
@@ -723,11 +724,19 @@ impl ElfReader {
         unit_idx_limit: usize,
         name_filter: &str,
         unit_filter: &str,
+        default_event: Option<u16>,
     ) -> Result<(), Box<dyn Error>> {
         // Load debug information from the ELF file
         info!("===============================================================");
         info!("Registering variables:");
         info!("===============================================================");
+
+        if let Some(event_id) = default_event {
+            match reg.event_list.find_event_id(event_id) {
+                Some(event) => info!("Default event '{}' (id {}) for global and static variables without an event trigger", event.get_name(), event_id),
+                None => warn!("Default event id {} for global and static variables without an event trigger is not defined in the registry", event_id),
+            }
+        }
 
         // Compile name filter regex if specified
         let name_regex: Option<Regex> = if name_filter.is_empty() {
@@ -872,13 +881,16 @@ impl ElfReader {
                                 xcp_event_id = Some(event.id);
                                 info!("Static variable '{}' local to function '{:?}', event id = {}", var_name, var_function, event.id);
                             } else {
-                                info!("Static variable '{}' local to function '{:?}', no event associated, no event found in this function", var_name, var_function);
-                                xcp_event_id = None;
+                                info!(
+                                    "Static variable '{}' local to function '{:?}', no event found in this function, event id = {:?}",
+                                    var_name, var_function, default_event
+                                );
+                                xcp_event_id = default_event;
                             }
                             
                         } else {
-                            info!("Global variable '{}', no event associated", var_name);
-                            xcp_event_id = None;
+                            info!("Global variable '{}', event id = {:?}", var_name, default_event);
+                            xcp_event_id = default_event;
                         }
 
                         // Multiple variables with this name: local static variables are prefixed with the function name,
@@ -1323,7 +1335,7 @@ mod test {
     fn load_fixture(elf_file: &str) -> (ElfReader, Registry) {
         let elf_reader = ElfReader::new(elf_file, 0, usize::MAX).unwrap_or_else(|| panic!("failed to load {elf_file}"));
         let mut reg = Registry::new();
-        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "").expect("register_variables failed");
+        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "", None).expect("register_variables failed");
         (elf_reader, reg)
     }
 
@@ -1447,6 +1459,22 @@ mod test {
         assert_eq!(reg.typedef_list.find_typedef("valve_control.Config").unwrap().size, 8);
     }
 
+    // Global variables get the default event when one is specified, otherwise no event
+    #[test]
+    fn test_register_variables_default_event() {
+        let elf_reader = ElfReader::new(CPP_TYPES_ELF, 0, usize::MAX).expect("failed to load fixtures/cpp_types.elf");
+
+        let mut reg = Registry::new();
+        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "", Some(3)).unwrap();
+        let g_plain = reg.instance_list.get_instance("g_plain", McObjectType::Measurement, None).expect("instance g_plain");
+        assert_eq!(g_plain.event_id(), Some(3));
+
+        let mut reg = Registry::new();
+        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "", None).unwrap();
+        let g_plain = reg.instance_list.get_instance("g_plain", McObjectType::Measurement, None).expect("instance g_plain");
+        assert_eq!(g_plain.event_id(), None);
+    }
+
     // Empty debug data for hand-made test cases
     fn empty_debug_data() -> DebugData {
         DebugData {
@@ -1510,7 +1538,7 @@ mod test {
     fn test_register_conflicting_typedef_names() {
         let elf = elf_reader_with_conflicting_types();
         let mut reg = Registry::new();
-        elf.register_variables(&mut reg, false, 0, usize::MAX, "", "").unwrap();
+        elf.register_variables(&mut reg, false, 0, usize::MAX, "", "", None).unwrap();
         assert_eq!(instance_typedef(&reg, "state_a"), "state");
         assert_eq!(instance_typedef(&reg, "state_b"), "state_1");
         assert_eq!(typedef_fields(&reg, "state"), vec![("a", 0)]);

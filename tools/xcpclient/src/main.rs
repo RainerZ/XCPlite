@@ -201,8 +201,9 @@ struct Args {
     mea: Vec<String>,
 
     // --default-event
-    /// Event id used for the DAQ measurement of variables without a fixed event (global variables).
-    /// If not specified, such variables can not be measured.
+    /// Event id for variables without a fixed event (global variables and static variables in functions without an event trigger).
+    /// Used for their DAQ measurement and assigned to them as default event when an A2L file is created from an ELF file.
+    /// If not specified, such variables get no event and can not be measured with xcpclient.
     #[arg(long)]
     default_event: Option<u16>,
 
@@ -529,7 +530,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
     let mut xcp_client = XcpClient::new(protocol, dest_addr, local_addr, baud_rate);
     xcp_client.set_default_event(default_event);
     if let Some(event) = default_event {
-        info!("Default event id {} for the measurement of variables without a fixed event", event);
+        info!("Default event id {} for variables without a fixed event", event);
     }
 
     // Target ECU name (from GET_ID)
@@ -777,7 +778,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                 // Register all accessible variables and their types
                 // Skipped in --create-a2l-template mode; events and segments are still registered above
                 if !create_a2l_template {
-                    elf_reader.register_variables(&mut reg, segment_relative, verbose, elf_idx_unit_limit, &elf_var_filter, &elf_unit_filter)?;
+                    elf_reader.register_variables(&mut reg, segment_relative, verbose, elf_idx_unit_limit, &elf_var_filter, &elf_unit_filter, default_event)?;
                     // Apply metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the xcp_meta ELF section
                     elf_reader.register_metadata(&mut reg, verbose)?;
                     // Optionally remove all variables without any metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the registry

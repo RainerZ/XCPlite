@@ -58,8 +58,8 @@ xcpclient --offline --elf build-no_a2l/no_a2l_demo --create-a2l-template --a2l n
 ```
 
 3. Use the A2L file in the XCP tool. The xcpclient test client itself can work with the ELF file directly (`--elf` with `--mea`,
-   `--cal`, `--list-mea`), no A2L file is needed for it. Variables without a fixed event are measured with the event given by
-   `--default-event`.
+   `--cal`, `--list-mea`), no A2L file is needed for it. Variables without a fixed event get the event given by `--default-event`,
+   in the generated A2L file and for the measurement with xcpclient.
 
 `examples/no_a2l_demo_cpp/create_a2l.sh` shows a complete round trip: sync the sources to the target, build there, download the ELF
 file and generate the A2L file. The command line reference is in [tools/xcpclient/README.md](../tools/xcpclient/README.md).
@@ -119,8 +119,8 @@ variables are relative to the canonical frame address (CFA) of the function. The
 reads from the call frame information of the function. On Xtensa (ESP32) the macros pass the CFA itself (`__builtin_dwarf_cfa()`)
 and no offset is added. Global variables and static variables
 in functions without an event trigger are registered without a fixed event, in this case it is in the responsibility of the XCP tool user to assign an event which allows correct visibilty and consistent capture of the associated variables. CANape usually defaults to polling in this case, and each available event may be selected for synchronous data acquisition. 
-The xcpclient test client measures such variables with the event given by `--default-event`.
-(@@@@ TODO: Maybe add a feature to define a default event (see OPTION_ASYNC_EVENT), so CANape does not default to polling)
+With `--default-event <id>`, xcpclient assigns this event to such variables when it creates the A2L file (`DAQ_EVENT VARIABLE` with a
+`DEFAULT_EVENT_LIST`), and measures them with it.
 
 ### Variables and symbols
 
@@ -182,8 +182,7 @@ Not supported, future extensions, cases skipped and reported as warnings (log le
 - Arrays with more than two dimensions (written as a byte array placeholder) (@@@@ TODO verify this claim).
 - C++ pointer-to-member types (`DW_TAG_ptr_to_member_type`): a struct or class containing one cannot be read at all, so it and every
   class deriving from it end up without members. This is a limitation of the a2ltool DWARF reader this code is based on.
-- C++ library containers (`std::vector`, `std::string`, smart pointers, ...) are read as the structs they are; the heap data behind them
-  is not reachable (@@@@ TODO: Maybe add a blacklist feature to remove these).
+- C++ library containers (`std::vector`, `std::string`, smart pointers, ...) are read as the structs they are; the heap data behind them is not reachable (@@@@ TODO: Maybe add a blacklist feature to remove these).
 - Variables addressed relative to a base pointer (`DaqTriggerEventExt`, the dynamic slots of `DaqEventVar`, address extension 3 and
   above) are not generated yet, only absolute and stack frame relative addressing is.
   (@@@@ TODO: Create a concept how to handle this)

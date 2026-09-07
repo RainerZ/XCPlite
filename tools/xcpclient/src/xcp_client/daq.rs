@@ -29,7 +29,7 @@ impl XcpClient {
                 // Measurement objects without a fixed event (global variables) are measured with the default event, if specified
                 let event = instance.event_id().or(self.default_event);
                 if event.is_none() {
-                    log::error!(
+                    log::warn!(
                         "Measurement object {} has no event and no default event is specified (--default-event), addr = {}:0x{:0X}",
                         name,
                         ext,
