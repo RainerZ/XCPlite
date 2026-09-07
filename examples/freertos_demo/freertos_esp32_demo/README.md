@@ -91,9 +91,7 @@ continues to generate the original sine signal. Disable `OPTION_ANALOG` in
    ```bash
    pio device monitor
    ```
-4. Generate the A2L file from the firmware ELF. The current linker limitation
-   described under [Offline A2L generation](#offline-a2l-generation) must first
-   be resolved so the ELF retains the `xcp_evts` section name:
+4. Generate the A2L file from the firmware ELF:
    ```bash
    xcpclient --offline --udp --dest-addr <esp32-ip-address> --elf .pio/build/lilygo-t-display-s3/firmware.elf --a2l CANape/freertos_demo.a2l --elf-unit-filter xcp_demo --log-level=3
    ```
@@ -298,6 +296,7 @@ src/xcpethtl.c
 src/queue32m.c
 src/cal.c
 src/platform.c
+src/sockets.c
 ```
 
 The XCPlite source files remain in the repository `src/` folder and are not

@@ -116,7 +116,7 @@ uint16_t global_counter = 0;
 XCP_COMMENT(global_counter, "Global measurement variable, incremented in fastTask");
 XCP_READ_WRITE(global_counter);
 
-// Platform analog input when available, otherwise a generated sine signal
+// Platform analog input when available
 #define SLOWTASK_PHASE_STEP_RAD 0.001f
 #define SINE_PERIOD_RAD 6.28318530717958647692f
 float channel1 = 0.0f;
