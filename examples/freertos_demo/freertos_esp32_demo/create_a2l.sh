@@ -21,6 +21,9 @@ ELFFILE=".pio/build/lilygo-t-display-s3/firmware.elf"
 # A2L file
 A2LFILE="CANape/freertos_demo.a2l"
 
+# LOG file
+LOGFILE="CANape/freertos_demo.log"
+
 # Path to xcpclient tool executable (assuming cargo installed it to ~/.cargo/bin)
 XCPCLIENT="xcpclient"
 
@@ -31,9 +34,9 @@ fi
 
 # Remove the A2L file of a previous run, so a failed generation can not leave a stale A2L file behind
 rm -f "$A2LFILE"
-XCPCLIENT_ARGS=(--offline --udp --dest-addr "$TARGET_HOST" --elf "$ELFFILE" --a2l "$A2LFILE" --elf-unit-filter xcp_demo --default-event 0 --log-level=3)
+XCPCLIENT_ARGS=(--offline --udp --dest-addr "$TARGET_HOST" --elf "$ELFFILE" --a2l "$A2LFILE" --elf-unit-limit=100 --elf-unit-filter xcp_demo --default-event=fastTask --log-level=3 --verbose=1) 
 echo "Command: $XCPCLIENT ${XCPCLIENT_ARGS[*]}"
-"$XCPCLIENT" "${XCPCLIENT_ARGS[@]}"
+"$XCPCLIENT" "${XCPCLIENT_ARGS[@]}" >$LOGFILE
 if [ $? -ne 0 ] || [ ! -f "$A2LFILE" ]; then
     echo "❌ FAILED: xcpclient could not create the A2L file $A2LFILE"
     exit 1

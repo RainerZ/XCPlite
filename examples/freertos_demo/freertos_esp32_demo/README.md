@@ -93,7 +93,7 @@ continues to generate the original sine signal. Disable `OPTION_ANALOG` in
    ```
 4. Generate the A2L file from the firmware ELF:
    ```bash
-   xcpclient --offline --udp --dest-addr <esp32-ip-address> --elf .pio/build/lilygo-t-display-s3/firmware.elf --a2l CANape/freertos_demo.a2l --elf-unit-filter xcp_demo --log-level=3
+   xcpclient --offline --udp --dest-addr <esp32-ip-address> --elf .pio/build/lilygo-t-display-s3/firmware.elf --a2l CANape/freertos_demo.a2l --default-event=fastTask --elf-unit-filter xcp_demo --log-level=3
    ```
 5. Connect with CANape using `CANape_Project`, or run a basic xcpclient measurement test:
    ```bash

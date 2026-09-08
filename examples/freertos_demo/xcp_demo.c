@@ -163,8 +163,8 @@ XCP_UNIT(parameters__pressure_point2, "bar");
 // &parameters is the A2l file address of the calibration parameter segment 'parameters'
 // Typename and variable name must be identical
 const struct parameters parameters = {
-    .fast_task_period_ms = 1, // 1 ms = 1000 Hz
-    .slow_task_period_ms = 2, // 2 ms = 500 Hz
+    .fast_task_period_ms = 1,  // 1 ms = 1000 Hz
+    .slow_task_period_ms = 10, // 10 ms = 100 Hz
     .counter_max = 1000,
     .amplitude = 1.0f,
     .sensor_voltage_point1 = 0.0f,
@@ -197,6 +197,46 @@ CalSegDecl(parameters);
     } while (0)
 
 //----------------------------------------------------------------------------------------------------
+// Functions
+
+XCP_NOINLINE void foo(void) {
+
+    struct test_struct {
+        uint16_t a;
+        int16_t b;
+        float f;
+        uint8_t d[3];
+    };
+
+    // Static local scope measurement variable
+    XCP_COMMENT(static_counter, "Local static measurement variable in function `foo`");
+    volatile static uint16_t static_counter = 0;
+
+    // Local measurement variable
+    XCP_COMMENT(counter, "Local measurement variable in function `foo`");
+    volatile uint32_t counter = 0;
+
+    // More local measurement variables
+    volatile float test_float = 0.1f;
+    volatile double test_double = 0.2;
+    volatile uint8_t test_uint8 = 1;
+    volatile uint16_t test_uint16 = 2;
+    volatile uint32_t test_uint32 = 3;
+    volatile uint64_t test_uint64 = 4;
+    volatile int8_t test_int8 = -1;
+    volatile int16_t test_int16 = -2;
+    volatile int32_t test_int32 = -3;
+    volatile uint64_t test_int64 = 1;
+    volatile struct test_struct test_struct = {1, -2, 0.3f, {1, 2, 3}};
+    volatile uint8_t test_array[3] = {1, 2, 3};
+
+    static_counter = static_counter + 1;
+    counter = static_counter;
+
+    DaqCreateAndTriggerEvent(foo);
+}
+
+//----------------------------------------------------------------------------------------------------
 // Tasks
 
 // High priority fast task
@@ -205,7 +245,10 @@ static void fastTask(void *parameter) {
 
     // Volatile keeps this local measurement variable visible in optimized builds,
     // The offline A2L generator can discover it in the ELF file and associate it to the functions DAQ event trigger.
+    XCP_COMMENT(counter, "Local measurement variable in `fastTask`");
     volatile uint16_t counter = 0;
+
+    XCP_COMMENT(static_counter, "Local static measurement variable in `fastTask`");
     static volatile uint16_t static_counter = 0;
 
     printf("fastTask started\n");
@@ -238,8 +281,8 @@ static void fastTask(void *parameter) {
             // Save the task period parameter, don't delay during the lock to give XCP a chance to modify the parameters.
             clamp_parameter(period_ms, params->fast_task_period_ms, FASTTASK_PERIOD_MIN_MS, FASTTASK_PERIOD_MAX_MS);
 
-            counter++;
-            static_counter++;
+            counter = counter + 1;
+            static_counter = static_counter + 1;
             if (counter > params->counter_max) {
                 counter = 0;
                 static_counter = 0;
@@ -275,7 +318,9 @@ static void fastTask(void *parameter) {
 static void slowTask(void *parameter) {
     (void)parameter;
 
+    XCP_COMMENT(counter, "Local measurement variable in `slowTask`");
     volatile uint16_t counter = 0;
+
     float phase = 0.0f;
     uint32_t slow_task_period_ms;
     uint32_t fast_task_period_ms;
@@ -302,7 +347,7 @@ static void slowTask(void *parameter) {
             clamp_parameter(slow_task_period_ms, params->slow_task_period_ms, SLOWTASK_PERIOD_MIN_MS, SLOWTASK_PERIOD_MAX_MS);
             fast_task_period_ms = params->fast_task_period_ms;
 
-            counter++;
+            counter = counter + 1;
             if (counter > params->counter_max) {
                 counter = 0;
             }
@@ -333,6 +378,9 @@ static void slowTask(void *parameter) {
         }
 
         DaqCreateAndTriggerEvent(slowTask);
+
+        // Call the demo function foo, keeps it and its local static variable in the linked image
+        foo();
 
         // printf("slowTask: counter = %u, period = %u ms, channel1 = %f\n", counter, slow_task_period_ms, channel1);
 #ifdef OPTION_DISPLAY

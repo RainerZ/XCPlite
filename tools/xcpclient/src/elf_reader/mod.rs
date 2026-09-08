@@ -1191,8 +1191,15 @@ impl ElfReader {
                     // Path B — direct instance metadata (simple variable or flattened typedef)
                     // Matches instances whose A2L name equals the path or ends with ".{path}".
                     // The path already has . separators so it matches both "delay_us" and "params.delay_us".
+                    // A marker in a function refers to a variable of this function only: the qualified candidate covers a prefixed
+                    // static local (foo.static_counter), the exact path an unprefixed one (static_counter) or an explicit prefix
+                    // (foo__counter). The wildcard prefix would attach the marker to a same-named variable in another function.
                     let escaped = path.replace('.', "\\.");
-                    let pattern = format!(r"^(.*\.)?{}$", escaped);
+                    let pattern = if marker.function.is_some() {
+                        format!(r"^{}$", escaped)
+                    } else {
+                        format!(r"^(.*\.)?{}$", escaped)
+                    };
                     let names: Vec<String> = reg.instance_list.find_instances_regex(&pattern, McObjectType::Unspecified, None);
                     for name in &names {
                         if let Some(inst) = reg.instance_list.get_instance_mut(name, None) {
@@ -1705,7 +1712,7 @@ mod test {
     #[test]
     fn test_register_metadata_marker_scope() {
         let meta_base: u64 = 0xF000;
-        let meta: Vec<u8> = b"Motor input\0rpm\0Counter in foo\0".to_vec(); // offsets 0, 12 and 16
+        let meta: Vec<u8> = b"Motor input\0rpm\0Counter in foo\0Static in foo\0Tick in bar\0".to_vec(); // offsets 0, 12, 16, 31 and 45
         let marker = |addr: u64, function: Option<&str>, namespaces: &[&str]| {
             vec![VarInfo {
                 address: (0, addr),
@@ -1727,6 +1734,12 @@ mod test {
         debug_data
             .variables
             .insert("xcp_meta__comment__counter".to_string(), marker(meta_base + 16, Some("foo"), &[]));
+        // The static local of foo was removed by the linker (foo is never called), the marker must not attach to fastTask.static_counter
+        debug_data
+            .variables
+            .insert("xcp_meta__comment__static_counter".to_string(), marker(meta_base + 31, Some("foo"), &[]));
+        // A static local which is registered without a function prefix (its name is unique)
+        debug_data.variables.insert("xcp_meta__comment__tick".to_string(), marker(meta_base + 45, Some("bar"), &[]));
         let elf = ElfReader::from_debug_data(debug_data);
 
         let mut reg = Registry::new();
@@ -1754,6 +1767,10 @@ mod test {
         reg.instance_list
             .add_instance("main.counter", uword(), measurement(), McAddress::new_a2l(0x30402, 0))
             .unwrap();
+        reg.instance_list
+            .add_instance("fastTask.static_counter", uword(), measurement(), McAddress::new_a2l(0x30404, 0))
+            .unwrap();
+        reg.instance_list.add_instance("tick", uword(), measurement(), McAddress::new_a2l(0x30406, 0)).unwrap();
         elf.register_metadata(&mut reg, 0).unwrap();
 
         let comment = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None).unwrap().comment();
@@ -1761,6 +1778,8 @@ mod test {
         assert_eq!(comment("valve_control.input"), "");
         assert_eq!(comment("foo.counter"), "Counter in foo");
         assert_eq!(comment("main.counter"), "");
+        assert_eq!(comment("fastTask.static_counter"), "");
+        assert_eq!(comment("tick"), "Tick in bar");
         let field = reg.typedef_list.find_typedef("motor_control.Input").unwrap().find_field("speed").unwrap();
         assert_eq!(field.get_mc_support_data().get_unit(), "rpm");
     }

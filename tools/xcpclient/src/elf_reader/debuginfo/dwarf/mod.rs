@@ -43,8 +43,9 @@ struct DebugDataReader<'elffile> {
     epk_string: Option<String>,
     epk_addr: u64,
     symbol_addresses: HashMap<String, u64>,
-    global_symbol_names: HashSet<String>,  // names of the symbols with global (or weak) binding
-    xcp_meta_data: Option<(u64, Vec<u8>)>, // (section_base_addr, raw_bytes)
+    global_symbol_names: HashSet<String>,        // names of the symbols with global (or weak) binding
+    function_symbol_names: HashMap<u64, String>, // address -> mangled name of a C++ function symbol
+    xcp_meta_data: Option<(u64, Vec<u8>)>,       // (section_base_addr, raw_bytes)
     is_little_endian: bool,
     scope_parent: HashMap<usize, usize>, // .debug_info offset of a named type or scope -> offset of its enclosing scope (namespace, struct, class, union or function)
 }
@@ -153,6 +154,7 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
         epk_addr,
         symbol_addresses: get_symbol_addresses(&elffile),
         global_symbol_names: get_global_symbol_names(&elffile),
+        function_symbol_names: get_function_symbol_names(&elffile),
         xcp_meta_data,
         is_little_endian,
         scope_parent: HashMap::new(),
@@ -256,6 +258,16 @@ fn get_symbol_addresses(elffile: &object::read::File) -> HashMap<String, u64> {
     map
 }
 
+// Mangled names of the C++ function symbols by their address, to find the linkage name of a function without DW_AT_linkage_name
+// (GCC emits none for a function with internal linkage, e.g. a static function in a C++ compilation unit)
+fn get_function_symbol_names(elffile: &object::read::File) -> HashMap<u64, String> {
+    elffile
+        .symbols()
+        .filter(|symbol| symbol.kind() == object::SymbolKind::Text && symbol.address() != 0)
+        .filter_map(|symbol| symbol.name().ok().filter(|name| name.starts_with("_Z")).map(|name| (symbol.address(), name.to_string())))
+        .collect()
+}
+
 // Names of the symbols with global (or weak) binding, all other symbols are local to their compilation unit (static variables and functions)
 fn get_global_symbol_names(elffile: &object::read::File) -> HashSet<String> {
     elffile
@@ -336,6 +348,7 @@ impl DebugDataReader<'_> {
     // by the mangled name of a variable in a namespace or class scope, or by a unique name suffix
     // local_only: the variable is local to a function, only symbols with local binding (static variables) are considered,
     // a global symbol with the same name belongs to a different variable
+    // function_linkage: the mangled name of the enclosing C++ function of a local variable, used for the mangled name of a static local
     // scopes: the namespaces and classes the variable is defined in (outermost first), used for the mangled name
     fn resolve_address_from_symbols(
         &self,
@@ -343,6 +356,7 @@ impl DebugDataReader<'_> {
         unit: &UnitHeader<SliceType>,
         var_name: &str,
         local_only: bool,
+        function_linkage: Option<&str>,
         scopes: &[String],
     ) -> Option<u64> {
         if let Ok(linkage_name) = get_linkage_name_attribute(entry, &self.dwarf, unit)
@@ -361,6 +375,15 @@ impl DebugDataReader<'_> {
                     return Some(addr);
                 }
             }
+        }
+        // GCC emits no linkage name and no location for a static const local variable in a C++ function either (the XCP_COMMENT
+        // metadata markers in a function), the symbol is found by the mangled name of a function local static (_ZZ3foovE7counter).
+        // The unique suffix search below is ambiguous as soon as several functions define a static variable with the same name
+        if local_only
+            && let Some(mangled) = function_linkage.and_then(|linkage| itanium_local_static_name(linkage, var_name))
+            && let Some(addr) = self.symbol_address(&mangled, local_only)
+        {
+            return Some(addr);
         }
         self.resolve_address_by_unique_suffix(var_name, local_only)
     }
@@ -450,6 +473,7 @@ impl DebugDataReader<'_> {
                     gimli::constants::DW_TAG_namespace => Scope {
                         tag,
                         name: get_name_attribute(entry, &self.dwarf, unit).ok(),
+                        linkage_name: None,
                         offset,
                         inlined: false,
                     },
@@ -464,6 +488,7 @@ impl DebugDataReader<'_> {
                         Scope {
                             tag,
                             name: self.get_subprogram_name(entry, unit, abbreviations),
+                            linkage_name: self.get_subprogram_linkage_name(entry, unit, abbreviations),
                             offset,
                             inlined,
                         }
@@ -471,6 +496,7 @@ impl DebugDataReader<'_> {
                     _ => Scope {
                         tag,
                         name: None,
+                        linkage_name: None,
                         offset,
                         inlined: false,
                     },
@@ -491,8 +517,8 @@ impl DebugDataReader<'_> {
 
                 if entry.tag() == gimli::constants::DW_TAG_variable {
                     // Get variable information
-                    let (function, namespaces, inlined) = get_varinfo_from_context(&context);
-                    match self.get_variable(entry, unit, abbreviations, function.is_some(), &namespaces) {
+                    let (function, function_linkage, namespaces, inlined) = get_varinfo_from_context(&context);
+                    match self.get_variable(entry, unit, abbreviations, function.is_some(), function_linkage.as_deref(), &namespaces) {
                         Ok((name, typeref, address)) => {
                             // Stack relative variables of an inlined function are not loaded: each copy of the function has its own
                             // stack frame layout and the event may be triggered from any copy, so there is no stack relative address
@@ -687,6 +713,30 @@ impl DebugDataReader<'_> {
         }
     */
 
+    // Linkage (mangled) name of a C++ function (DW_TAG_subprogram or DW_TAG_inlined_subroutine entry), None for C functions.
+    // Found like the name, on the entry itself, its abstract instance or its declaration. A function with internal linkage
+    // (static function) has no DW_AT_linkage_name, its mangled name is the function symbol at its start address (DW_AT_low_pc)
+    fn get_subprogram_linkage_name<'a>(
+        &self,
+        entry: &DebuggingInformationEntry<SliceType<'a>, usize>,
+        unit: &UnitHeader<SliceType<'a>>,
+        abbrev: &gimli::Abbreviations,
+    ) -> Option<String> {
+        if let Ok(name) = get_linkage_name_attribute(entry, &self.dwarf, unit) {
+            return Some(name);
+        }
+        if let Some(gimli::AttributeValue::Addr(low_pc)) = entry.attr_value(gimli::constants::DW_AT_low_pc)
+            && let Some(name) = self.function_symbol_names.get(&low_pc)
+        {
+            return Some(name.clone());
+        }
+        let origin = get_abstract_origin_attribute(entry, unit, abbrev).or_else(|| get_specification_attribute(entry, unit, abbrev))?;
+        get_linkage_name_attribute(&origin, &self.dwarf, unit).ok().or_else(|| {
+            let declaration = get_specification_attribute(&origin, unit, abbrev)?;
+            get_linkage_name_attribute(&declaration, &self.dwarf, unit).ok()
+        })
+    }
+
     // @@@@ xcp_client: Get all variables, including local variables
     // Return variable information
     // returns name, type reference and address
@@ -708,6 +758,7 @@ impl DebugDataReader<'_> {
     // address may be 0 if a local variable is requested
     // A missing address is resolved from the symbol table if possible (declarations of global variables, static variables without location)
     // local: the variable is local to a function, only symbols with local binding are considered to resolve the address
+    // function_linkage: the mangled name of the enclosing C++ function, to resolve the symbol of a static local variable
     // namespaces: the namespaces the entry is nested in (outermost first)
     fn get_variable<'a>(
         &self,
@@ -715,6 +766,7 @@ impl DebugDataReader<'_> {
         unit: &UnitHeader<SliceType<'a>>,
         abbrev: &gimli::Abbreviations,
         local: bool,
+        function_linkage: Option<&str>,
         namespaces: &[String],
     ) -> Result<(String, usize, (u8, u64)), String> {
         // if debugging information entry A has a DW_AT_specification or DW_AT_abstract_origin attribute
@@ -733,8 +785,8 @@ impl DebugDataReader<'_> {
                 .unwrap_or_default();
             if address == (0u8, 0u64)
                 && let Some(sym_addr) = self
-                    .resolve_address_from_symbols(entry, unit, &name, local, namespaces)
-                    .or_else(|| self.resolve_address_from_symbols(&specification_entry, unit, &name, local, &specification_scopes))
+                    .resolve_address_from_symbols(entry, unit, &name, local, function_linkage, namespaces)
+                    .or_else(|| self.resolve_address_from_symbols(&specification_entry, unit, &name, local, function_linkage, &specification_scopes))
             {
                 address = (0u8, sym_addr);
             }
@@ -752,8 +804,8 @@ impl DebugDataReader<'_> {
             let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1).unwrap_or((0u8, 0u64));
             if address == (0u8, 0u64)
                 && let Some(sym_addr) = self
-                    .resolve_address_from_symbols(entry, unit, &name, local, namespaces)
-                    .or_else(|| self.resolve_address_from_symbols(&abstract_origin_entry, unit, &name, local, namespaces))
+                    .resolve_address_from_symbols(entry, unit, &name, local, function_linkage, namespaces)
+                    .or_else(|| self.resolve_address_from_symbols(&abstract_origin_entry, unit, &name, local, function_linkage, namespaces))
             {
                 address = (0u8, sym_addr);
             }
@@ -770,7 +822,7 @@ impl DebugDataReader<'_> {
             let typeref = get_typeref_attribute(entry, unit)?;
             let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1).unwrap_or((0u8, 0u64));
             if address == (0u8, 0u64)
-                && let Some(sym_addr) = self.resolve_address_from_symbols(entry, unit, &name, local, namespaces)
+                && let Some(sym_addr) = self.resolve_address_from_symbols(entry, unit, &name, local, function_linkage, namespaces)
             {
                 address = (0u8, sym_addr);
             }
@@ -818,12 +870,21 @@ fn itanium_mangled_names(scopes: &[String], name: &str) -> [String; 2] {
     [format!("{prefix}{}{name}E", name.len()), format!("{prefix}L{}{name}E", name.len())]
 }
 
+// Itanium mangled name of a static local variable of a C++ function: _ZZ<function encoding>E<len><name>,
+// e.g. _ZZ3foovE7counter for counter in foo(), _ZZL8fastTaskPvE7counter for counter in the static function fastTask(void*).
+// function_linkage is the mangled name of the function (_Z3foov), None is returned if it is not an Itanium mangled name
+fn itanium_local_static_name(function_linkage: &str, name: &str) -> Option<String> {
+    let encoding = function_linkage.strip_prefix("_Z")?;
+    Some(format!("_ZZ{encoding}E{}{name}", name.len()))
+}
+
 // An ancestor of the current entry in the depth-first traversal of load_variables
 struct Scope {
     tag: gimli::DwTag,
-    name: Option<String>, // namespaces and functions only
-    offset: usize,        // .debug_info offset
-    inlined: bool,        // a function which the compiler inlined: its abstract instance, an inlined copy or the out of line copy
+    name: Option<String>,         // namespaces and functions only
+    linkage_name: Option<String>, // mangled name of a C++ function, used to resolve the symbols of its static variables
+    offset: usize,                // .debug_info offset
+    inlined: bool,                // a function which the compiler inlined: its abstract instance, an inlined copy or the out of line copy
 }
 
 // The entry is the abstract instance of an inlined function (DW_AT_inline)
@@ -834,20 +895,21 @@ fn is_inlined_subprogram(entry: &DebuggingInformationEntry<SliceType, usize>) ->
     )
 }
 
-// Get the innermost enclosing function (a subprogram or the inlined copy of a function), the enclosing namespaces (outermost first)
-// and whether the variable belongs to an inlined function, from the traversal context
-fn get_varinfo_from_context(context: &[Scope]) -> (Option<String>, Vec<String>, bool) {
-    let function = context
+// Get the innermost enclosing function (a subprogram or the inlined copy of a function) with its linkage name, the enclosing
+// namespaces (outermost first) and whether the variable belongs to an inlined function, from the traversal context
+fn get_varinfo_from_context(context: &[Scope]) -> (Option<String>, Option<String>, Vec<String>, bool) {
+    let function_scope = context
         .iter()
         .rev()
-        .find(|s| s.tag == gimli::constants::DW_TAG_subprogram || s.tag == gimli::constants::DW_TAG_inlined_subroutine)
-        .and_then(|s| s.name.clone());
+        .find(|s| s.tag == gimli::constants::DW_TAG_subprogram || s.tag == gimli::constants::DW_TAG_inlined_subroutine);
+    let function = function_scope.and_then(|s| s.name.clone());
+    let function_linkage = function_scope.and_then(|s| s.linkage_name.clone());
     let namespaces: Vec<String> = context
         .iter()
         .filter_map(|s| (s.tag == gimli::constants::DW_TAG_namespace).then(|| s.name.clone()).flatten())
         .collect();
     let inlined = context.iter().any(|s| s.inlined);
-    (function, namespaces, inlined)
+    (function, function_linkage, namespaces, inlined)
 }
 
 fn demangle_cpp_varnames(input: &[&String]) -> HashMap<String, String> {
@@ -915,6 +977,16 @@ mod test {
         assert_eq!(itanium_mangled_names(&namespace, "input"), ["_ZN13motor_control5inputE", "_ZN13motor_controlL5inputE"]);
         let nested = ["diagnostics".to_string(), "detail".to_string()];
         assert_eq!(itanium_mangled_names(&nested, "input")[0], "_ZN11diagnostics6detail5inputE");
+    }
+
+    #[test]
+    fn test_itanium_local_static_name() {
+        assert_eq!(itanium_local_static_name("_Z3foov", "counter").as_deref(), Some("_ZZ3foovE7counter"));
+        assert_eq!(
+            itanium_local_static_name("_ZL8fastTaskPv", "xcp_meta__comment__static_counter").as_deref(),
+            Some("_ZZL8fastTaskPvE33xcp_meta__comment__static_counter")
+        );
+        assert_eq!(itanium_local_static_name("main", "counter"), None);
     }
 
     // Qualified names of struct types whose name is used in different scopes: namespaces, nested namespaces, enclosing classes
