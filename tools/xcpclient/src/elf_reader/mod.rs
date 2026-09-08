@@ -676,7 +676,7 @@ impl ElfReader {
                 if var_info.inlined {
                     warn!(
                         "Event '{}' is triggered in function '{}', which the compiler inlined: the stack frame of an inlined function is ambiguous, \
-                         its stack relative variables are not registered. Add __attribute__((noinline)) to the function to measure them",
+                         its stack relative variables are not registered. Mark the function XCP_NOINLINE (inc/xcplib.h) to measure them",
                         evt_name, evt_function
                     );
                 }

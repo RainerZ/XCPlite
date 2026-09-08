@@ -256,7 +256,7 @@ void bar() {
     counter = static_counter;
 }
 
-void foo() {
+XCP_NOINLINE void foo() {
 
     // Static local scope measurement variable
     XCP_COMMENT(foo__static_counter, "Static local measurement variable in function foo"); // Example for meta data annotation as code

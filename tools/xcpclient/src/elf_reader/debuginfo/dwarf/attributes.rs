@@ -115,6 +115,18 @@ pub(crate) fn get_location_attribute(
     match loc_attr {
         gimli::AttributeValue::Exprloc(expression) => evaluate_exprloc(debug_data_reader, expression, encoding, current_unit),
         gimli::AttributeValue::LocationListsRef(offset) => evaluate_location_list(debug_data_reader, offset, encoding, current_unit),
+        gimli::AttributeValue::DebugLocListsIndex(index) => {
+            // DWARF 5: index into the location list offset table of the unit (DW_FORM_loclistx)
+            let (unit_header, _) = &debug_data_reader.units[current_unit];
+            let unit = debug_data_reader.dwarf.unit(*unit_header).ok()?;
+            match debug_data_reader.dwarf.locations_offset(&unit, index) {
+                Ok(offset) => evaluate_location_list(debug_data_reader, offset, encoding, current_unit),
+                Err(e) => {
+                    log::debug!("get_location_attribute: location list index {index:?} not resolved: {e}");
+                    None
+                }
+            }
+        }
         _ => {
             log::warn!("get_location_attribute: Unexpected location attribute type: {loc_attr:#?}");
             None
@@ -324,7 +336,11 @@ pub(crate) fn get_addr_base_attribute(entry: &DebuggingInformationEntry<SliceTyp
     }
 }
 
-// log location list entries for debugging
+// Evaluate a location list (a variable whose location depends on the PC, optimized code)
+// The trigger point of the event is not known here, so the list is only accepted if all its entries describe the same memory
+// location, which is then valid wherever the event is triggered. A variable which is held in a register or in different
+// memory locations in parts of the function is not measurable, this is reported as address extension 0x80 like a register
+// location of a single expression, so that the address is not looked up in the symbol table by name
 fn evaluate_location_list(debug_data_reader: &DebugDataReader, offset: gimli::LocationListsOffset, encoding: gimli::Encoding, current_unit: usize) -> Option<(u8, u64)> {
     let (unit_header, _) = &debug_data_reader.units[current_unit];
 
@@ -349,8 +365,7 @@ fn evaluate_location_list(debug_data_reader: &DebugDataReader, offset: gimli::Lo
     // Print
     log::debug!("LocationList: offset={:?}, entries:", offset);
 
-    let mut addr_ext: u8 = 0xff;
-    let mut addr: u64 = 0;
+    let mut location: Option<(u8, u64)> = None;
 
     // Iterate through location list entries
     let mut entry_count = 0;
@@ -384,21 +399,25 @@ fn evaluate_location_list(debug_data_reader: &DebugDataReader, offset: gimli::Lo
             }
         }
 
-        // Evaluate the expression to get a measurable (if possible) address
-        if let Some(ea) = evaluate_exprloc(debug_data_reader, expression, encoding, current_unit) {
-            log::debug!("    Evaluated Address: addr_ext={}, address=0x{:x}", ea.0, ea.1);
-            // @@@@ TODO: For now, just return the lowest evaluated valid address extension
-            if ea.0 < addr_ext {
-                addr_ext = ea.0;
-                addr = ea.1;
+        // Evaluate the expression, all entries must describe the same memory location
+        match evaluate_exprloc(debug_data_reader, expression, encoding, current_unit) {
+            Some(ea) if ea.0 < 0x80 => {
+                log::debug!("    Evaluated Address: addr_ext={}, address=0x{:x}", ea.0, ea.1);
+                if location.is_some_and(|l| l != ea) {
+                    log::debug!("LocationList: entries describe different locations, not measurable");
+                    return Some((0x80, 0));
+                }
+                location = Some(ea);
+            }
+            _ => {
+                log::debug!("LocationList: entry is not a memory location, not measurable");
+                return Some((0x80, 0));
             }
         }
     }
 
-    if entry_count == 0 || addr_ext == 0xff {
-        return None;
-    }
-    return Some((addr_ext, addr));
+    // A list without entries has no location, like a missing location attribute
+    location
 }
 
 // evaluate an exprloc expression to get a variable address or struct member offset

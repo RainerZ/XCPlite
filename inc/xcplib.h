@@ -339,6 +339,17 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 #define XCP_EVENT_SECTION_ATTR /* section-based registration not supported on this platform */
 #endif
 
+// Attribute for functions which trigger an event and measure their local variables: such a function must not be inlined.
+// An inlined function has a copy with its own stack frame at each call site, there is no stack frame relative address which is
+// valid for all copies. The offline A2L generator (xcpclient) does not register the local variables of an inlined function, see docs/OFFLINE_A2L.md
+#if defined(__GNUC__) || defined(__clang__)
+#define XCP_NOINLINE __attribute__((noinline))
+#elif defined(_MSC_VER)
+#define XCP_NOINLINE __declspec(noinline)
+#else
+#define XCP_NOINLINE
+#endif
+
 // Link-time event id derived from the descriptor's position in the xcp_evts section
 // Only with clang on Linux, this is a link-time constant, usable as a static initializer
 #if defined(__ELF__) || defined(__APPLE__)
@@ -518,6 +529,7 @@ extern const uint8_t *gXcpBaseAddr;
 // If needed, uses local scope static or thread local storage to create a once pattern for the event lookup to save runtime overhead
 // All macros can be used to measure variables registered in absolute addressing mode as well
 // Note that XCP_EVENT_SECTION_SET_ID expands to nothing on platforms where the event id is a link-time constant
+// A function which triggers an event and measures its local variables (stack relative addressing) must not be inlined, mark it XCP_NOINLINE
 
 // @@@@ TODO: Not all permutations of name, string, index with At implemented
 

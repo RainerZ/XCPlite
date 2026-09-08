@@ -148,11 +148,11 @@ THREAD_FUNC_RETURN task(void *p) {
     printf("Start thread %u ...\n", get_thread_id());
 
     // Static local scope measurement variable
-    XCP_COMMENT(task__static_counter, "Static local measurement variable in thread function `task`"); // Example for meta data annotation as code
+    XCP_COMMENT(static_counter, "Static local measurement variable in thread function `task`"); // Example for meta data annotation as code
     volatile static uint16_t static_counter = 0;
 
     // Local measurement variable
-    XCP_COMMENT(task__counter, "Local measurement variable in thread function `task`"); // Example for meta data annotation as code
+    XCP_COMMENT(counter, "Local measurement variable in thread function `task`"); // Example for meta data annotation as code
     volatile uint32_t counter = 0;
 
     // Heap measurement variable
@@ -188,14 +188,14 @@ THREAD_FUNC_RETURN task(void *p) {
 // Demo functions
 
 // Avoid inlining in this simple demo, xcpclient does not support inlined function and silently drop them
-__attribute__((noinline)) void foo(void) {
+XCP_NOINLINE void foo(void) {
 
     // Static local scope measurement variable
-    XCP_COMMENT(foo__static_counter, "Local static measurement variable in function `foo`"); // Example for meta data annotation as code
+    XCP_COMMENT(static_counter, "Local static measurement variable in function `foo`"); // Example for meta data annotation as code
     volatile static uint16_t static_counter = 0;
 
     // Local measurement variable
-    XCP_COMMENT(foo__counter, "Local measurement variable in function `foo`"); // Example for meta data annotation as code
+    XCP_COMMENT(counter, "Local measurement variable in function `foo`"); // Example for meta data annotation as code
     volatile uint32_t counter = 0;
 
     // More local measurement variables
@@ -271,7 +271,7 @@ int main(int argc, char *argv[]) {
     create_thread(&__t1, NULL, task, NULL);
 
     // Demo measurement variables
-    XCP_COMMENT(main__static_counter, "Static local measurement variable in function `main`");
+    XCP_COMMENT(static_counter, "Static local measurement variable in function `main`");
     volatile static uint16_t static_counter = 0;
 
     // Calibration parameter counter_max
