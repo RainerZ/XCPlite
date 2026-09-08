@@ -187,7 +187,8 @@ THREAD_FUNC_RETURN task(void *p) {
 //-----------------------------------------------------------------------------------------------------
 // Demo functions
 
-// Avoid inlining in this simple demo, xcpclient does not support inlined function and silently drop them
+// Avoid inlining to be able to measure local variables
+// xcpclient ELF->A2L does not support inlined function and silently drop them
 XCP_NOINLINE void foo(void) {
 
     // Static local scope measurement variable

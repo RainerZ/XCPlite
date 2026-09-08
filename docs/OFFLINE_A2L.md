@@ -131,8 +131,9 @@ register the stack frame relative variables of the function, its static variable
 functions `XCP_NOINLINE` (`inc/xcplib.h`). GCC does not inline external functions at `-O1`, clang inlines a function which is called once
 already at `-O1`. Global variables and static variables
 in functions without an event trigger are registered without a fixed event, in this case it is in the responsibility of the XCP tool user to assign an event which allows correct visibilty and consistent capture of the associated variables. CANape usually defaults to polling in this case, and each available event may be selected for synchronous data acquisition. 
-With `--default-event <id>`, xcpclient assigns this event to such variables when it creates the A2L file (`DAQ_EVENT VARIABLE` with a
-`DEFAULT_EVENT_LIST`), and measures them with it.
+With `--default-event <id|name>`, xcpclient assigns this event to such variables when it creates the A2L file (`DAQ_EVENT VARIABLE` with a
+`DEFAULT_EVENT_LIST`), and measures them with it. The event is given by its id or by its name (a C identifier, e.g. `--default-event mainloop`),
+a name is looked up in the event list of the ELF file (and of the XCP server when connected), xcpclient aborts when it is not found.
 
 ### Variables and symbols
 

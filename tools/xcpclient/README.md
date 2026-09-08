@@ -156,8 +156,8 @@ Options:
       --mea <MEA>...
           Specify variable names for DAQ measurement (list), may be list of names separated by space or single regular expressions (e.g. ".*")
 
-      --default-event <DEFAULT_EVENT>
-          Event id for variables without a fixed event (global variables and static variables in functions without an event trigger). Used for their DAQ measurement and assigned to them as default event when an A2L file is created from an ELF file. If not specified, such variables get no event and can not be measured with xcpclient
+      --default-event <ID|NAME>
+          Event for variables without a fixed event (global variables and static variables in functions without an event trigger), given by event id or event name. Used for their DAQ measurement and assigned to them as default event when an A2L file is created from an ELF file. An event name is looked up in the event list (from the XCP server, the ELF file or the A2L file), xcpclient aborts when it is not found. If not specified, such variables get no event and can not be measured with xcpclient
 
       --time <TIME>
           Time limit measurement duration to n s. 0 means infinite
@@ -236,10 +236,11 @@ With A2L file given:
 xcpclient --dest-addr=192.168.0.206  --tcp --a2l hello_xcp.a2l  --mea ".*" 
 ```
 
-Variables without a fixed event (global variables in an A2L file generated from an ELF file) are measured with the event given by `--default-event`. When the A2L file is created from an ELF file, `--default-event` assigns the event to such variables in the A2L file:
+Variables without a fixed event (global variables in an A2L file generated from an ELF file) are measured with the event given by `--default-event`. The event is given by its id or by its name (a C identifier, looked up in the event list of the XCP server, the ELF file or the A2L file, xcpclient aborts if the name is not found). When the A2L file is created from an ELF file, `--default-event` assigns the event to such variables in the A2L file:
 
 ```bash
 xcpclient --dest-addr=192.168.0.146 --udp --a2l freertos_demo.a2l --default-event 0 --mea global_counter --time 5
+xcpclient --dest-addr=192.168.0.146 --udp --a2l freertos_demo.a2l --default-event mainloop --mea global_counter --time 5
 ```
 
 With ELF file given, creates an A2L file from the ELF file and XCP server information about events and memory segments, then measures the specified variable:  

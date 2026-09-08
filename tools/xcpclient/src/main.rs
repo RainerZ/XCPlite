@@ -42,6 +42,80 @@ pub mod bin_reader;
 
 use clap::Parser;
 
+//------------------------------------------------------------------------
+// --default-event value
+
+/// Value of --default-event: an event id or an event name.
+/// A name follows the C identifier rules and is resolved to an event id against the registry event list once it is complete.
+#[derive(Debug, Clone, PartialEq)]
+enum DefaultEvent {
+    Id(u16),
+    Name(String),
+}
+
+impl DefaultEvent {
+    /// Resolve to an event id
+    /// An id is taken as it is, a name is looked up in the registry event list and is an error when not found
+    fn resolve(&self, reg: &xcp_registry::Registry) -> Result<u16, String> {
+        match self {
+            DefaultEvent::Id(id) => Ok(*id),
+            DefaultEvent::Name(name) => reg
+                .event_list
+                .iter()
+                .find(|e| e.get_unique_name(reg) == name.as_str() || (e.index == 0 && e.get_name() == name.as_str()))
+                .map(|e| e.get_id())
+                .ok_or_else(|| {
+                    let known: Vec<String> = reg.event_list.iter().map(|e| format!("{} ({})", e.get_unique_name(reg), e.get_id())).collect();
+                    format!("Default event '{}' not found in the event list [{}]", name, known.join(", "))
+                }),
+        }
+    }
+}
+
+impl std::fmt::Display for DefaultEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DefaultEvent::Id(id) => write!(f, "{}", id),
+            DefaultEvent::Name(name) => write!(f, "{}", name),
+        }
+    }
+}
+
+impl std::str::FromStr for DefaultEvent {
+    type Err = String;
+
+    /// An unsigned integer is an event id, a C identifier is an event name, anything else is an error
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+        if let Ok(id) = s.parse::<u16>() {
+            return Ok(DefaultEvent::Id(id));
+        }
+        let mut chars = s.chars();
+        let is_identifier = matches!(chars.next(), Some(c) if c == '_' || c.is_ascii_alphabetic()) && chars.all(|c| c == '_' || c.is_ascii_alphanumeric());
+        if is_identifier {
+            Ok(DefaultEvent::Name(s.to_string()))
+        } else {
+            Err(format!("'{}' is neither an event id (0..65535) nor an event name (C identifier)", s))
+        }
+    }
+}
+
+/// Config file: accept an integer (event id) or a string (event id or event name)
+impl<'de> serde::Deserialize<'de> for DefaultEvent {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Id(u16),
+            Text(String),
+        }
+        match Raw::deserialize(deserializer)? {
+            Raw::Id(id) => Ok(DefaultEvent::Id(id)),
+            Raw::Text(s) => s.parse().map_err(serde::de::Error::custom),
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "xcpclient")]
 #[command(about = concat!("XCP client v", env!("CARGO_PKG_VERSION"), " for testing XCP servers and managing A2L and HEX files"))]
@@ -203,11 +277,12 @@ struct Args {
     mea: Vec<String>,
 
     // --default-event
-    /// Event id for variables without a fixed event (global variables and static variables in functions without an event trigger).
+    /// Event for variables without a fixed event (global variables and static variables in functions without an event trigger), given by event id or event name.
     /// Used for their DAQ measurement and assigned to them as default event when an A2L file is created from an ELF file.
+    /// An event name is looked up in the event list (from the XCP server, the ELF file or the A2L file), xcpclient aborts when it is not found.
     /// If not specified, such variables get no event and can not be measured with xcpclient.
-    #[arg(long)]
-    default_event: Option<u16>,
+    #[arg(long, value_name = "ID|NAME")]
+    default_event: Option<DefaultEvent>,
 
     // --time
     /// Time limit measurement duration to n s. 0 means infinite.
@@ -530,10 +605,11 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
 
     // Create xcp_client
     let mut xcp_client = XcpClient::new(protocol, dest_addr, local_addr, baud_rate);
-    xcp_client.set_default_event(default_event);
-    if let Some(event) = default_event {
-        info!("Default event id {} for variables without a fixed event", event);
+    if let Some(event) = &default_event {
+        info!("Default event {} for variables without a fixed event", event);
     }
+    // Default event id, resolved from --default-event once the registry event list is complete
+    let mut default_event_id: Option<u16> = None;
 
     // Target ECU name (from GET_ID)
     let mut ecu_name = String::new();
@@ -780,7 +856,11 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                 // Register all accessible variables and their types
                 // Skipped in --create-a2l-template mode; events and segments are still registered above
                 if !create_a2l_template {
-                    elf_reader.register_variables(&mut reg, segment_relative, verbose, elf_idx_unit_limit, &elf_var_filter, &elf_unit_filter, default_event)?;
+                    // The event list is complete now (XCP server and ELF file), resolve the default event name to its id
+                    if let Some(event) = &default_event {
+                        default_event_id = Some(event.resolve(&reg)?);
+                    }
+                    elf_reader.register_variables(&mut reg, segment_relative, verbose, elf_idx_unit_limit, &elf_var_filter, &elf_unit_filter, default_event_id)?;
                     // Apply metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the xcp_meta ELF section
                     elf_reader.register_metadata(&mut reg, verbose)?;
                     // Optionally remove all variables without any metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the registry
@@ -959,6 +1039,17 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                 info!("segments: {:?}", seg_mapping);
             }
         } // load  A2L from specified file
+
+        // Resolve the default event against the final event list, if not done yet, and use it for the measurement of variables without a fixed event
+        if let Some(event) = &default_event
+            && default_event_id.is_none()
+        {
+            default_event_id = Some(event.resolve(&reg)?);
+        }
+        if let (Some(DefaultEvent::Name(name)), Some(id)) = (&default_event, default_event_id) {
+            info!("Default event '{}' resolved to event id {}", name, id);
+        }
+        xcp_client.set_default_event(default_event_id);
 
         // Assign the new registry to xcp_client
         xcp_client.set_registry(reg);
@@ -1250,7 +1341,7 @@ struct ConfigFile {
     download_bin: Option<bool>,
     list_mea: Option<String>,
     mea: Option<Vec<String>>,
-    default_event: Option<u16>,
+    default_event: Option<DefaultEvent>,
     time: Option<u64>,
     csv: Option<String>,
     list_cal: Option<String>,
@@ -1300,7 +1391,7 @@ fn merge_config(matches: &clap::ArgMatches, config: ConfigFile, args: &mut Args)
     apply!(download_bin);
     apply!(list_mea);
     apply!(mea);
-    // default_event is an Option<u16> argument, a value from the config file wraps into Some
+    // default_event is an Option<DefaultEvent> argument, a value from the config file wraps into Some
     if let Some(v) = config.default_event
         && matches.value_source("default_event") != Some(ValueSource::CommandLine)
     {
@@ -1402,4 +1493,55 @@ async fn run(args: Args) -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+//------------------------------------------------------------------------
+// Tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_event_parse() {
+        assert_eq!("3".parse::<DefaultEvent>(), Ok(DefaultEvent::Id(3)));
+        assert_eq!(" 65535 ".parse::<DefaultEvent>(), Ok(DefaultEvent::Id(65535)));
+        assert_eq!("mainloop".parse::<DefaultEvent>(), Ok(DefaultEvent::Name("mainloop".into())));
+        assert_eq!("_task_1".parse::<DefaultEvent>(), Ok(DefaultEvent::Name("_task_1".into())));
+        assert!("65536".parse::<DefaultEvent>().is_err()); // not a u16, not an identifier
+        assert!("-1".parse::<DefaultEvent>().is_err());
+        assert!("1abc".parse::<DefaultEvent>().is_err());
+        assert!("main loop".parse::<DefaultEvent>().is_err());
+        assert!("main-loop".parse::<DefaultEvent>().is_err());
+        assert!("".parse::<DefaultEvent>().is_err());
+    }
+
+    #[test]
+    fn test_default_event_resolve() {
+        let mut reg = xcp_registry::Registry::new();
+        reg.event_list.add_event(McEvent::new("mainloop", 0, 7, 0)).unwrap();
+        reg.event_list.add_event(McEvent::new("task", 1, 8, 0)).unwrap();
+        reg.event_list.add_event(McEvent::new("task", 2, 9, 0)).unwrap();
+
+        assert_eq!(DefaultEvent::Id(42).resolve(&reg), Ok(42)); // ids are not checked here
+        assert_eq!(DefaultEvent::Name("mainloop".into()).resolve(&reg), Ok(7));
+        assert_eq!(DefaultEvent::Name("task_2".into()).resolve(&reg), Ok(9)); // multi instance event by unique name
+        assert!(DefaultEvent::Name("task".into()).resolve(&reg).is_err()); // ambiguous, only exists with index > 0
+        assert!(DefaultEvent::Name("unknown".into()).resolve(&reg).is_err());
+    }
+
+    #[test]
+    fn test_default_event_config_file() {
+        #[derive(serde::Deserialize, Default)]
+        #[serde(default)]
+        struct Cfg {
+            default_event: Option<DefaultEvent>,
+        }
+        let parse = |text: &str| Figment::new().merge(Toml::string(text)).extract::<Cfg>().map_err(|e| e.to_string());
+        assert_eq!(parse("default_event = 3").unwrap().default_event, Some(DefaultEvent::Id(3)));
+        assert_eq!(parse("default_event = \"3\"").unwrap().default_event, Some(DefaultEvent::Id(3)));
+        assert_eq!(parse("default_event = \"mainloop\"").unwrap().default_event, Some(DefaultEvent::Name("mainloop".into())));
+        assert!(parse("default_event = \"main loop\"").is_err());
+        assert_eq!(parse("").unwrap().default_event, None);
+    }
 }
