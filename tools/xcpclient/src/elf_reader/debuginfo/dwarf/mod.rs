@@ -24,6 +24,7 @@ use crate::elf_reader::debuginfo::cfa::{CfaInfo, get_cfa_from_object};
 use crate::elf_reader::debuginfo::{DbgDataType, DebugData, TypeInfo, VarInfo};
 
 mod attributes;
+pub(super) use attributes::get_low_pc_attribute;
 use attributes::{get_abstract_origin_attribute, get_linkage_name_attribute, get_location_attribute, get_name_attribute, get_specification_attribute, get_typeref_attribute};
 
 mod typereader;
@@ -725,7 +726,8 @@ impl DebugDataReader<'_> {
         if let Ok(name) = get_linkage_name_attribute(entry, &self.dwarf, unit) {
             return Some(name);
         }
-        if let Some(gimli::AttributeValue::Addr(low_pc)) = entry.attr_value(gimli::constants::DW_AT_low_pc)
+        let name = get_name_attribute(entry, &self.dwarf, unit).unwrap_or_default();
+        if let Some(low_pc) = get_low_pc_attribute(entry, &name, |index| self.dwarf.unit(*unit).and_then(|unit| self.dwarf.address(&unit, index)))
             && let Some(name) = self.function_symbol_names.get(&low_pc)
         {
             return Some(name.clone());

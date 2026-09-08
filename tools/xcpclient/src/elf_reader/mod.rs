@@ -1499,7 +1499,9 @@ mod test {
         let event_id = |name: &str| reg.event_list.find_event(name, 0).unwrap_or_else(|| panic!("event {name}")).get_id();
         let instance = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None);
 
-        // bar is not inlined: stack and static variables with the event triggered in bar
+        // bar is not inlined: stack and static variables with the event triggered in bar, the stack frame offset (CFA) of the trigger
+        // is found in the CFI for GCC and clang (DWARF 5 with indexed strings and addresses) alike
+        assert_eq!(reg.event_list.find_event("bar", 0).unwrap().cfa, 24, "{elf_file}");
         assert_eq!(instance("bar.counter").expect("bar.counter").event_id(), Some(event_id("bar")));
         assert_eq!(instance("bar.test_float").expect("bar.test_float").event_id(), Some(event_id("bar")));
         assert_eq!(instance("bar.static_counter").expect("bar.static_counter").event_id(), Some(event_id("bar")));

@@ -6,6 +6,30 @@ use gimli::{DebugAddrBase, DebuggingInformationEntry, EndianSlice, RunTimeEndian
 type SliceType<'a> = EndianSlice<'a, RunTimeEndian>;
 type OptionalAttribute<'data> = Option<gimli::AttributeValue<SliceType<'data>>>;
 
+// Start address of a function: DW_AT_low_pc is a direct address (DW_FORM_addr) or, in DWARF 5, an index into the address table
+// of the unit (DW_FORM_addrx, Clang and split DWARF), which the caller resolves with resolve_index (Dwarf::address), it is only
+// called for the index form. name is the function name for the log message. Returns None if the attribute is missing or unresolved
+pub(crate) fn get_low_pc_attribute<R: gimli::Reader>(
+    entry: &DebuggingInformationEntry<R>,
+    name: &str,
+    resolve_index: impl FnOnce(gimli::DebugAddrIndex<R::Offset>) -> gimli::Result<u64>,
+) -> Option<u64> {
+    match entry.attr_value(gimli::constants::DW_AT_low_pc)? {
+        gimli::AttributeValue::Addr(addr) => Some(addr),
+        gimli::AttributeValue::DebugAddrIndex(index) => match resolve_index(index) {
+            Ok(addr) => Some(addr),
+            Err(e) => {
+                log::warn!("Function '{}': DW_AT_low_pc address index {:?} not resolved: {}", name, index, e);
+                None
+            }
+        },
+        other => {
+            log::warn!("Function '{}': unsupported form {:?} of DW_AT_low_pc, the function start address is unknown", name, other);
+            None
+        }
+    }
+}
+
 // try to get the attribute of the type attrtype for the DIE
 pub(crate) fn get_attr_value<'data>(entry: &DebuggingInformationEntry<SliceType<'data>, usize>, attrtype: gimli::DwAt) -> OptionalAttribute<'data> {
     entry.attr_value(attrtype)

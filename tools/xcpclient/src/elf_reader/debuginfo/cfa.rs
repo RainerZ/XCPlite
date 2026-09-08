@@ -1,5 +1,6 @@
 // Get CFA (Canonical Frame Address) information from DWARF debug data in an ELF file
 
+use crate::elf_reader::debuginfo::dwarf::get_low_pc_attribute;
 use anyhow::Result;
 use gimli::{AttributeValue, BaseAddresses, CieOrFde, DebugFrame, Dwarf, EhFrame, EndianSlice, LittleEndian, Unit, UnwindSection};
 use object::{Object, ObjectSection};
@@ -161,12 +162,9 @@ fn extract_function_from_die(
         }
     };
 
-    // Get the low PC (start address)
-    let low_pc = match entry.attr_value(gimli::DW_AT_low_pc) {
-        Some(AttributeValue::Addr(addr)) => addr,
-        _ => {
-            return Ok(None);
-        }
+    // Get the low PC (start address), None for declarations, abstract instances of inlined functions and unresolved address forms
+    let Some(low_pc) = get_low_pc_attribute(entry, &name, |index| dwarf.address(unit, index)) else {
+        return Ok(None);
     };
 
     // Get the high PC (end address)
@@ -544,30 +542,22 @@ fn decode_sleb128(data: &[u8]) -> Option<(i64, usize)> {
 
 /// Get a string attribute from a DWARF DIE
 ///
-/// String attributes in DWARF can be stored in different ways:
-/// - Directly in the DIE (DW_FORM_string)
-/// - As an offset into the string table (DW_FORM_strp)
-/// - Other forms...
+/// Dwarf::attr_string resolves all string forms: inline (DW_FORM_string), an offset into .debug_str (DW_FORM_strp) and the
+/// DWARF 5 index into .debug_str_offsets (DW_FORM_strx, clang). Other forms are reported and treated as no string
 fn get_string_attribute(
     dwarf: &Dwarf<EndianSlice<LittleEndian>>,
-    _unit: &Unit<EndianSlice<LittleEndian>>,
+    unit: &Unit<EndianSlice<LittleEndian>>,
     entry: &gimli::DebuggingInformationEntry<EndianSlice<LittleEndian>>,
     attr: gimli::DwAt,
 ) -> Result<Option<String>> {
-    if let Some(attr_value) = entry.attr_value(attr) {
-        match attr_value {
-            AttributeValue::DebugStrRef(offset) => {
-                if let Ok(s) = dwarf.string(offset) {
-                    let s = s.to_string_lossy().into_owned();
-                    return Ok(Some(s));
-                }
-            }
-            AttributeValue::String(s) => {
-                let s = s.to_string_lossy().into_owned();
-                return Ok(Some(s));
-            }
-            _ => {}
+    let Some(attr_value) = entry.attr_value(attr) else {
+        return Ok(None);
+    };
+    match dwarf.attr_string(unit, attr_value) {
+        Ok(s) => Ok(Some(s.to_string_lossy().into_owned())),
+        Err(e) => {
+            log::warn!("CFA parser: unsupported form {:?} of {}: {}", attr_value, attr, e);
+            Ok(None)
         }
     }
-    Ok(None)
 }
