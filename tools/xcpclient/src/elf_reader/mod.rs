@@ -14,6 +14,57 @@ Struct now carries is_class and inheritance, and the size and Display code follo
 The two Class match arms from the previous fix are collapsed into the Struct arms, and a new test asserts that base members arrive for all four struct/class inheritance combinations.
 */
 
+/*
+Reading guide: how this module gets from an ELF file to registry entries
+
+The code is layered top down:
+
+  ElfReader (this file)                 Registers events, calibration segments, variables and metadata in the xcp_registry.
+    |                                   It works on the DebugData below and recognizes the marker variables which the
+    |                                   XCPlite instrumentation macros emit.
+    v
+  DebugData (debuginfo/mod.rs)          Plain data extracted from the ELF file: every variable with name, scope, address and
+    |                                   type, every type used by a variable, the compilation unit names, the ELF sections
+    |                                   and symbols, the stack frame information of functions.
+    v
+  DebugDataReader (debuginfo/dwarf/)    The parser. Opens the ELF file with the `object` crate (sections, symbol table) and
+                                        reads the DWARF debug information with the `gimli` crate (variables, types, functions).
+  cfa.rs (debuginfo/cfa.rs)             A second, independent DWARF pass which determines the stack frame layout of functions.
+
+An ELF file carries two kinds of information which are used here:
+
+  1. Sections and the symbol table (.symtab). This is the linker's view: flat lists of named byte ranges (sections) and
+     named addresses (symbols). Used for the XCPlite marker sections (xcp_evts, xcp_epk, xcp_meta), for the address of a
+     variable when the DWARF information has none, and for the mangled names of C++ symbols.
+  2. DWARF debug information (.debug_info and the other .debug_* sections). This is the compiler's view: a tree of
+     "debugging information entries" (DIEs) per compilation unit (one .c/.cpp file), describing every function, scope,
+     variable and type of the source code with attributes like name, type, byte size and the location of a variable in
+     memory or on the stack. Only present if the code was compiled with -g. A stripped executable has neither .symtab
+     nor DWARF, an executable built on macOS has no DWARF in the executable (Mach-O, see load_elf_file).
+
+Marker variables, emitted by the macros in inc/xcplib.h and found by their name in the DWARF variable list:
+
+  calseg__<name>, calblk__<name>   calibration segment or block descriptor, CalSegCreate/CalBlkCreate  (register_segments)
+  evt__<name>                      event descriptor in the xcp_evts section, DaqCreateEvent            (register_events)
+  trg__<modes>__<name>             event trigger point in a function, DaqTriggerEvent                  (register_event_locations)
+  xcp_meta__<kind>__<name>         XCP_COMMENT, XCP_UNIT, XCP_LIMITS, XCP_READ_WRITE, xcp_meta section  (register_metadata)
+  XCPLITE__<signature>             addressing mode signature of the target build                       (get_target_signature)
+
+The order of the register_* calls matters: events before event locations (a trigger refers to its event), segments and
+events before variables (a variable gets its event and its segment), variables before metadata (metadata is attached to
+registered variables). See main.rs for the sequence.
+
+Addresses: VarInfo.address is a pair (address extension, address), the encoding is described in debuginfo/mod.rs.
+The XCP address extension tells the target how to interpret an address (absolute, calibration segment relative, stack
+relative, ...), see docs/TECHNICAL.md. register_variables converts the pair into the McAddress of the registry.
+
+Useful tools to look at an ELF file while debugging this code (the GNU or LLVM versions of the target toolchain):
+    readelf -S <file>                          sections
+    nm <file> | c++filt                        symbol table, demangled
+    readelf --debug-dump=info <file>           the DWARF tree, as this code sees it
+    llvm-dwarfdump --name <varname> <file>     the DIEs of one variable
+*/
+
 #![allow(clippy::collapsible_else_if)]
 
 use indexmap::IndexMap;
@@ -717,6 +768,23 @@ impl ElfReader {
     }
 
     // Register variables from the ELF debug information into the registry
+    //
+    // For every variable name in the debug data and every definition of that name (VarInfo: the same name may exist in several
+    // compilation units, functions or namespaces) the steps are:
+    //  1. Skip runtime internals, marker variables and names which do not match the --elf-var-filter / --elf-unit-filter options
+    //  2. Decide the XCP address and the event from the (address extension, address) pair of the variable:
+    //     - absolute address (extension 0): global variables and static locals. The event is the event triggered in the
+    //       enclosing function of a static local, otherwise the default event. The A2L name is prefixed with the function
+    //       (static locals) or the namespace (globals) if the name is not unique
+    //     - stack relative address (extension 2): local variables of a function with an event trigger. The DWARF offset of
+    //       the variable relative to the frame base plus the CFA offset of the trigger location is encoded together with
+    //       the event id into an XCP "dynamic" address, the A2L name is prefixed with the function name
+    //     - anything else (registers, thread local storage, optimized away): skipped
+    //  3. If the address lies inside a calibration segment, the variable is a characteristic (parameter) with a segment
+    //     relative address, otherwise a measurement
+    //  4. Convert the DWARF type to a registry type (basic types, arrays, enums as value tables, structs as typedefs)
+    //     and add the instance to the registry
+    //
     // default_event: event assigned to global variables and to static variables in functions without an event trigger, None for no event
     pub fn register_variables(
         &self,
@@ -806,37 +874,8 @@ impl ElfReader {
 
             let mut a2l_name = var_name.to_string();
             let mut xcp_event_id: Option<u16>;
-            // @@@@ TODO: Behaviour changed, check what this affect, async event 0 (OPTION_DAQ_ASYNC_EVENT) is now optional, does not work with section registered events (e.g. FreeRTOS)
-            // Previous: default event id is 0, which is the async event in transmit thread
-            // Current: default event id is None, meaning no event assigned
-
-            // daq__<event_name>__<var_name> (local scope static variables)
-            // Check for captured variables with format "daq__<event_name>__<var_name>"
-            // @@@@ TODO: Check if this is correct and up to date with the current event handling logic
-            /*
-            if var_name.starts_with("daq__") {
-                // remove the "daq__" prefix
-                let new_name = var_name.strip_prefix("daq__").unwrap_or(var_name);
-                // get event name and variable name
-                let mut parts = new_name.split("__");
-                let event_name = parts.next().unwrap_or("");
-                let var_name = parts.next().unwrap_or("");
-                // Find the event in the registry
-                if let Some(id) = reg.event_list.find_event(event_name, 0) {
-                    xcp_event_id = Some(id.id);
-                    if event_name.len() > 0 {
-                        a2l_name = format!("{}.{}", event_name, var_name);
-                    } else {
-                        a2l_name = var_name.to_string();
-                    }
-                } else {
-                    warn!("Event '{}' for captured variable '{}' not found in registry", event_name, var_name);
-                    continue; // skip this variable
-                }
-            }
-            */
-
-            // Count variables with this name in compilation unit 0
+            // Count the definitions of this name within the compilation unit limit (--elf-unit-limit), including definitions without
+            // an address. More than one definition means the A2L name has to be qualified to be unique
             let count = var_infos.iter().filter(|v| v.unit_idx <= unit_idx_limit).count();
             // Count the distinct global or static variables with this name by their address
             // (declarations of the same variable in several compilation units resolve to the same address, local variables have no address)
@@ -866,7 +905,8 @@ impl ElfReader {
 
                 let var_function = var_info.function.as_ref().map(|f| f.as_str());
 
-                // Address encoder
+                // Address encoder: the (address extension, address) pair from the DWARF reader (see VarInfo in debuginfo/mod.rs)
+                // becomes the memory address which is checked against the calibration segments and then the XCP address
                 let mem_addr_ext: u8 = var_info.address.0;
                 let mem_addr: u64 = if mem_addr_ext == 0 {
                     // Encode absolute addressing mode
@@ -912,6 +952,11 @@ impl ElfReader {
                     }
                 } else if mem_addr_ext == 2 {
                     // Encode stack relative addressing mode
+                    // The DWARF reader evaluated the location of the variable with a dummy frame base of 0x80000000 (see evaluate_exprloc
+                    // in attributes.rs), so address - 0x80000000 is the offset of the variable from the frame base of its function.
+                    // The event trigger in the function passes the frame address to the target, and the CFA offset found in cfa.rs
+                    // corrects the difference between the frame base used by DWARF and the frame address passed by the trigger macro.
+                    // The variable is only measurable at the trigger point, on the event of its function
                     // Find an event id for this local variable
                     if var_function.is_none() {
                         warn!("Local variable '{}' skipped - function name is required for relative addressing mode", var_name);
@@ -938,7 +983,9 @@ impl ElfReader {
                             );
 
                             // @@@@ TODO: Create functions instead of constants for relative address encoding
-                            // Encode dyn addressing mode A2L/XCP address from offset and event id
+                            // Encode dyn addressing mode A2L/XCP address from offset and event id: the low XCP_ADDR_EXT_DYN_OFFSET_BITS bits
+                            // are the offset, biased by XCP_ADDR_EXT_DYN_OFFSET_OFFSET so that negative offsets (below the frame address) fit,
+                            // the high bits are the event id. The target adds the frame address it received from the trigger of this event
                             let offset: i64 = var_info.address.1 as i64 - 0x80000000 + cfa;
                             if offset < -(McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64)
                                 || offset > (McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK as i64 - McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64)
@@ -1359,6 +1406,7 @@ mod test {
         (elf_reader, reg)
     }
 
+    // Register all variables of the C++ type fixture
     fn load_cpp_types() -> Registry {
         load_fixture(CPP_TYPES_ELF).1
     }
@@ -1490,6 +1538,7 @@ mod test {
         }
     }
 
+    // The checks of test_register_inlined_function_variables for one fixture ELF file (GCC or clang build of the same source)
     fn register_inlined_function_variables(elf_file: &str) {
         let elf_reader = ElfReader::new(elf_file, 0, usize::MAX).unwrap_or_else(|e| panic!("failed to load {elf_file}: {e}"));
         let mut reg = Registry::new();

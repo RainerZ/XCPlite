@@ -22,13 +22,27 @@ mod dwarf;
 mod cfa;
 use cfa::CfaInfo;
 
-// VarInfo holds information about a variable
+// VarInfo holds information about one definition of a variable. DebugData.variables maps a variable name to a list of
+// VarInfo, because the same name may be defined in several compilation units, functions or namespaces, and because a
+// global variable declared in a header shows up in the DWARF of every compilation unit which includes the header.
+//
+// address is the pair (address extension, address) as evaluated from the DWARF location of the variable, see
+// evaluate_exprloc in dwarf/attributes.rs:
+//   (0, addr)            a fixed address in memory: global variables and static locals. addr == 0 means no address is known
+//                        (a declaration, or the variable was optimized away by the compiler or removed by the linker)
+//   (2, 0x80000000+off)  a stack variable: off is the offset of the variable from the frame base of its function, the
+//                        0x80000000 is the dummy frame base used in the evaluation. Only useful together with the event
+//                        trigger in the function, see register_variables
+//   (0x80.., _)          not measurable: the variable lives in a register (0x80), in thread local storage (0x81), its
+//                        location is too complex (0x82) or unknown (0xFF)
+// The extension values 0 and 2 coincide with the XCP address extensions for absolute and dynamic addressing, the values
+// >= 0x80 are internal to this tool
 #[derive(Debug)]
 pub(crate) struct VarInfo {
-    pub(crate) address: (u8, u64),       // addr_ext, addr
-    pub(crate) typeref: usize,           // reference to TypeInfo in DebugData.types
-    pub(crate) unit_idx: usize,          // compilation unit index
-    pub(crate) function: Option<String>, // function name if variable is local to a function
+    pub(crate) address: (u8, u64),       // (address extension, address), see above
+    pub(crate) typeref: usize,           // the type of the variable: key of the TypeInfo in DebugData.types (a .debug_info offset)
+    pub(crate) unit_idx: usize,          // compilation unit index, index into DebugData.unit_names
+    pub(crate) function: Option<String>, // function name if variable is local to a function (stack variable or static local)
     pub(crate) namespaces: Vec<String>,  // namespaces the variable is defined in, outermost first
     pub(crate) inlined: bool,            // the variable belongs to a function which the compiler inlined, see load_variables
 }
@@ -36,14 +50,21 @@ pub(crate) struct VarInfo {
 // TypeInfo holds information about a variable's type
 // get_size - returns the size of the type in bytes
 // Display - formats the type information as a string
+//
+// The identity of a type is the offset of its DWARF entry in the .debug_info section (dbginfo_offset). Every compilation
+// unit has its own copy of the types it uses, so a struct from a header exists once per unit, with a different offset each.
+// Qualifiers (const, volatile) and typedefs are transparent: the type reader follows them to the underlying type, the
+// name of a typedef is kept as the name of the type if the underlying type has none
 #[derive(Debug, Clone)]
 pub(crate) struct TypeInfo {
-    pub(crate) name: Option<String>,  // not all types have a name
+    pub(crate) name: Option<String>,  // not all types have a name (anonymous structs, pointers, arrays)
     pub(crate) unit_idx: usize,       // compilation unit index
     pub(crate) datatype: DbgDataType, // the actual type information
-    pub(crate) dbginfo_offset: usize, // offset in the debug info section
+    pub(crate) dbginfo_offset: usize, // offset of the type's entry in .debug_info, the key in DebugData.types
 }
 
+// The kinds of types which are distinguished. Basic types are mapped by size and signedness, everything the A2L generator
+// can not use (function pointers, unknown encodings) becomes Other(size) and is reported as unsupported when a variable uses it
 #[derive(Debug, Clone)]
 pub(crate) enum DbgDataType {
     Uint8,
@@ -56,11 +77,13 @@ pub(crate) enum DbgDataType {
     Sint64,
     Float,
     Double,
+    // A bitfield struct member: basetype is the integer type holding the bits, bit_offset counts from the least significant bit
     Bitfield {
         basetype: Box<TypeInfo>,
         bit_offset: u16,
         bit_size: u16,
     },
+    // (pointer size in bytes, dbginfo_offset of the pointed-to type, 0 for void*). Pointers are registered as unsigned integers
     Pointer(u64, usize),
     /// A struct or a class. There is no practical difference between them, both can have base classes in C++;
     /// `is_class` only affects the displayed name. Inherited members are also copied into `members` with adjusted offsets.
@@ -79,28 +102,34 @@ pub(crate) enum DbgDataType {
         signed: bool,
         enumerators: Vec<(String, i64)>,
     },
+    // dim has one entry per dimension (outermost first), stride is the byte distance between elements, size the total size
     Array {
         size: u64,
         dim: Vec<u64>,
         stride: u64,
         arraytype: Box<TypeInfo>,
     },
-    TypeRef(usize, u64), // dbginfo_offset of the referenced type
+    // A reference to another type by its dbginfo_offset, with its size. Used for struct/union members of struct/union type
+    // (the member refers to the type in DebugData.types instead of holding a copy) and to break recursive array types
+    TypeRef(usize, u64),
+    // A function pointer, (size in bytes)
     FuncPtr(u64),
+    // Any other type, (size in bytes). Not usable for measurement or calibration
     Other(u64),
 }
 
-// holds the debug information from an ELF file
+// Holds the debug information from an ELF file, the result of DebugDataReader (dwarf/mod.rs). Everything the ElfReader
+// needs is in here, the ELF file and the gimli parser state are gone once this is built
 #[derive(Debug)]
 pub(crate) struct DebugData {
-    pub(crate) variables: IndexMap<String, Vec<VarInfo>>,    // variable name -> list of VarInfo for instances with that name
-    pub(crate) types: HashMap<usize, TypeInfo>,              // type reference -> TypeInfo
-    pub(crate) typenames: HashMap<String, Vec<usize>>,       // type name -> list of type references
+    pub(crate) variables: IndexMap<String, Vec<VarInfo>>, // variable name -> its definitions, in the order they were found in .debug_info
+    pub(crate) types: HashMap<usize, TypeInfo>,           // .debug_info offset of a type -> TypeInfo, only the types used by variables are loaded
+    pub(crate) typenames: HashMap<String, Vec<usize>>,    // type name -> the offsets of all types with this name (one per compilation unit and scope)
     pub(crate) qualified_type_names: HashMap<usize, String>, // type reference -> scope qualified name (motor_control.Input) of the struct/class types whose name is used in different scopes
-    pub(crate) demangled_names: HashMap<String, String>,     // mangled name -> demangled name
-    pub(crate) unit_names: Vec<Option<String>>,              // list of compilation unit names by unit index
-    pub(crate) sections: HashMap<String, (u64, u64)>,        // section name -> (start, end)
-    pub(crate) symbol_addresses: HashMap<String, u64>,       // ELF symbol name -> address
+    pub(crate) demangled_names: HashMap<String, String>,     // demangled name -> mangled name, for the variable names which are mangled C++ symbols
+    pub(crate) unit_names: Vec<Option<String>>,              // list of compilation unit names by unit index, the DW_AT_name of the unit (usually the source file path)
+    pub(crate) sections: HashMap<String, (u64, u64)>,        // ELF section name -> (start address, end address), only sections with an address
+    pub(crate) symbol_addresses: HashMap<String, u64>,       // ELF symbol name -> address, the symbol table (.symtab), C++ names are mangled
     pub(crate) cfa_info: Vec<CfaInfo>, // CFA information for functions which contain an event trigger, the CFA is valid for  the location of the event trigger
     pub(crate) epk_string: Option<String>, // EPK string read from xcp_epk ELF section
     pub(crate) epk_addr: u64,          // Address of the xcp_epk ELF section (0 if not found)
@@ -163,20 +192,6 @@ impl DebugData {
 
         log::warn!("XCP event descriptor memory section (xcp_evts) and linker boundary symbols not found");
         0
-    }
-
-    // Get the address of the XCP EPK memory section
-    pub(crate) fn get_epk_section_addr(&self) -> u64 {
-        let sections: Vec<(&String, &(u64, u64))> = self.sections.iter().collect();
-        for (name, (addr, size)) in sections {
-            if name == "xcp_epk" {
-                log::info!("Found XCP EPK memory section at address = 0x{:08X}, size = {} bytes", *addr, *size);
-                return *addr;
-            }
-        }
-
-        log::warn!("XCP epk descriptor memory section (xcp_epk) not found");
-        return 0;
     }
 
     /// print the debug statistics
@@ -372,30 +387,6 @@ impl DebugData {
             }
         }
 
-        // Print all functions with CFA info
-        // println!("\n====================================================================================================");
-        // println!("Functions:");
-        // for (i, func) in self.cfa_info.iter().enumerate() {
-        //     println!("\nFunction #{}: {}", i + 1, func.function);
-        //     println!("  Compilation Unit: {}", func.unit_idx);
-        //     println!(
-        //         "  Address Range: 0x{:08x} - 0x{:08x} (size: {} bytes)",
-        //         func.low_pc,
-        //         func.high_pc,
-        //         func.high_pc - func.low_pc
-        //     );
-        //     match func.cfa_offset {
-        //         Some(offset) => {
-        //             println!("  CFA Offset: {} (0x{:x})", offset, offset);
-        //             println!("  Local variables are likely at: CFA + {} + variable_offset", offset);
-        //         }
-        //         None => {
-        //             println!("  CFA Offset: Unknown - may require complex DWARF expression evaluation");
-        //             println!("  Note: This might indicate a more complex frame layout");
-        //         }
-        //     }
-        // }
-
         // Print all functions grouped by compilation unit
         if level >= 2 {
             println!("\n====================================================================================================");
@@ -420,6 +411,7 @@ impl DebugData {
 
 // TypeInfo holds information about a variable's type
 impl TypeInfo {
+    // Size of the type in bytes. The size of a bitfield is the size of its containing integer type
     pub(crate) fn get_size(&self) -> u64 {
         match &self.datatype {
             DbgDataType::Uint8 => 1,
@@ -446,71 +438,6 @@ impl TypeInfo {
 }
 
 impl Display for TypeInfo {
-    /*
-
-
-        /// print detailed type information
-        pub(crate) fn print_type_info(&self, type_info: &TypeInfo) {
-            let type_name = if let Some(name) = &type_info.name { name } else { "" };
-            let type_size = type_info.get_size();
-
-            print!("    TypeInfo: {}", type_name);
-            // print!(" (unit_idx = {}, dbginfo_offset = {})",type_info.unit_idx, type_info.dbginfo_offset);
-
-            match &type_info.datatype {
-                DbgDataType::Uint8 | DbgDataType::Uint16 | DbgDataType::Uint32 | DbgDataType::Uint64 => {
-                    println!(" Integer: {} byte unsigned", type_size);
-                }
-                DbgDataType::Sint8 | DbgDataType::Sint16 | DbgDataType::Sint32 | DbgDataType::Sint64 => {
-                    println!(" Integer: {} byte signed", type_size);
-                }
-                DbgDataType::Float | DbgDataType::Double => {
-                    println!(" Floating point: {} byte", type_size);
-                }
-
-                DbgDataType::Pointer(typeref, size) => {
-                    println!(" Pointer: typeref = {}, size = {} ", typeref, size);
-                }
-                DbgDataType::Array { arraytype, dim, stride, size } => {
-                    println!(" Array: typeref = {}, dim = {:?}, stride = {} bytes, size = {} bytes", arraytype, dim, stride, size);
-                }
-                DbgDataType::Struct { size, members } => {
-                    println!(" Struct: {} fields, size = {}", members.len(), size);
-                    for (name, (type_info, member_offset)) in members {
-                        let member_size = type_info.get_size();
-                        println!("      Field '{}': size = {} bytes, offset = {} bytes", name, member_size, member_offset);
-                    }
-                }
-                DbgDataType::Union { members, size } => {
-                    println!(" Union: {} members, size = {} bytes", members.len(), size);
-                }
-                DbgDataType::Enum { size, signed, enumerators } => {
-                    println!(" Enum: {} variants, size = {} bytes", enumerators.len(), size);
-                    for (name, value) in enumerators {
-                        println!("      Variant '{}': value={}", name, value);
-                    }
-                }
-                DbgDataType::Bitfield { basetype, bit_offset, bit_size } => {
-                    println!(" Bitfield: base type = {:?}, offset = {} bits, size = {} bits", basetype.datatype, bit_offset, bit_size);
-                }
-                DbgDataType::Class { size, inheritance, members } => {
-                    println!(" Class: {} members, size = {} bytes", members.len(), size);
-                }
-                DbgDataType::FuncPtr(size) => {
-                    println!(" Function pointer: size = {} bytes", size);
-                }
-                DbgDataType::TypeRef(typeref, size) => {
-                    println!(" TypeRef: typeref = {}, size = {} bytes", typeref, size);
-                }
-                _ => {
-                    println!(" Other type: {:?}", &type_info.datatype);
-                }
-            }
-        }
-
-
-    */
-
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.datatype {
             DbgDataType::Uint8 => f.write_str("Uint8"),

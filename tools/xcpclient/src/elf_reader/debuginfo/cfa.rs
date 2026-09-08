@@ -1,4 +1,30 @@
 // Get CFA (Canonical Frame Address) information from DWARF debug data in an ELF file
+//
+// Why this exists: a local variable on the stack has no fixed address. DWARF describes it as an offset relative to the
+// "frame base" of its function (DW_OP_fbreg, see evaluate_exprloc in dwarf/attributes.rs), and DW_AT_frame_base says what
+// the frame base is, usually DW_OP_call_frame_cfa: the CFA. The CFA is defined by the DWARF standard as the value of the
+// stack pointer at the call site, before the call instruction pushed anything, so it is a fixed point of the frame no
+// matter how the function moves its stack pointer later on.
+//
+// The XCPlite event trigger macro (DaqTriggerEvent in inc/xcplib.h) passes a frame address to the target at runtime,
+// xcp_get_frame_addr(): __builtin_frame_address(0), on Xtensa __builtin_dwarf_cfa(), minus the constant XCP_FRAME_ADDR_OFFSET
+// (0x10000, the same bias which the XCP dynamic address encoding adds back, see register_variables). The target adds the
+// variable offsets from the A2L file to it. The frame pointer at the trigger point is not the CFA, so the difference has
+// to be known when the A2L addresses are generated: cfa_offset. It is read from the call frame information
+// (CFI), which is the unwind table the compiler emits for exception handling and debuggers: for every code address it
+// says how to compute the CFA from the current registers, e.g. "CFA = SP + 24" once the function prologue has pushed
+// its registers. On Xtensa (ESP32) the trigger macro passes the CFA itself and the offset is 0.
+//
+// The CFI lives in .eh_frame (the exception handling variant, most common) or .debug_frame (the pure debug variant),
+// both with the same structure: CIEs (common information entries, shared initial rules) and FDEs (frame description
+// entries, one per function, the rules for its address range as a sequence of "rows"). gimli parses both.
+//
+// Limitations: the CFA rule is taken from the rows of the whole function, the row valid at the trigger point is not known
+// (the address of the trigger is not recorded in the marker), so the largest stack pointer based offset is used, which is
+// the state after the prologue in typical code. The DWARF register numbers are architecture specific, the matching in
+// parse_fde_for_cfa assumes the numbers of ARM, AArch64 and x86_64 and does not check which architecture the file is for.
+// This is a separate DWARF pass with its own section loader because it was written independently of the reader in
+// dwarf/mod.rs, both read the same .debug_info
 
 use crate::elf_reader::debuginfo::dwarf::get_low_pc_attribute;
 use anyhow::Result;
@@ -8,18 +34,20 @@ use object::{Object, ObjectSection};
 /// Represents CFA information for a function
 #[derive(Debug, Clone)]
 pub struct CfaInfo {
-    /// Function name
+    /// Function name (DW_AT_name, the source name, not mangled)
     pub function: String,
     /// Low PC (start address of function)
     pub low_pc: u64,
-    /// High PC (end address of function)  
+    /// High PC (end address of function)
     pub high_pc: u64,
-    /// CFA offset from stack pointer (if determinable)
+    /// CFA offset from stack pointer (if determinable): CFA = frame address at the trigger + cfa_offset, see module comment
     pub cfa_offset: Option<i64>,
-    /// Compilation unit index
+    /// Compilation unit index, the unit and the function name together identify the function (register_event_locations)
     pub unit_idx: usize,
 }
 
+// Entry point: collect the CfaInfo of all functions with a name and an address range in the compilation units up to
+// unit_idx_limit. Returns the number of functions found. Called from load_elf_dwarf before the variables are read
 pub fn get_cfa_from_object(object_file: &object::File<'_>, cfa_info: &mut Vec<CfaInfo>, verbose: usize, unit_idx_limit: usize) -> Result<usize> {
     // Load DWARF sections - this is where all the debug information is stored
 
@@ -203,11 +231,11 @@ fn extract_function_from_die(
     }))
 }
 
-/// Extract CFA offset information from a function DIE
+/// Extract a frame base offset from the DW_AT_frame_base attribute of a function DIE
 ///
-/// The CFA (Canonical Frame Address) is the address of the call frame.
-/// For local variables, their addresses are typically expressed as offsets
-/// from the CFA. This function tries to determine the CFA offset for a function.
+/// DW_AT_frame_base is the expression which defines the frame base the local variables are relative to. Usually it is
+/// just DW_OP_call_frame_cfa (offset 0, the CFA itself), older or unoptimized code may use a register (DW_OP_breg<n>).
+/// Only the constant offset forms are decoded here, the result is the fallback if the CFI gives no CFA rule.
 ///
 /// This is a simplified implementation - real CFA calculation can be quite complex
 /// and may vary throughout a function's execution.
@@ -314,7 +342,9 @@ fn address_size(file: &object::File) -> u8 {
     if file.is_64() { 8 } else { 4 }
 }
 
-/// Parse a CFI section (either .eh_frame or .debug_frame) using gimli
+/// Parse a CFI section (either .eh_frame or .debug_frame) using gimli: walk the CIEs and FDEs and find the FDE whose
+/// address range contains the function start address. .eh_frame encodes addresses relative to the section, so its base
+/// address has to be known (BaseAddresses), .debug_frame uses absolute addresses
 fn parse_cfi_section<R: gimli::Reader>(section: &impl UnwindSection<R>, section_address: u64, function_address: u64, section_name: &str) -> Result<Option<i64>> {
     // Set up proper base addresses for CFI parsing
     let mut bases = BaseAddresses::default();
@@ -352,6 +382,13 @@ fn parse_cfi_section<R: gimli::Reader>(section: &impl UnwindSection<R>, section_
 }
 
 /// Parse Frame Description Entry to extract CFA offset
+///
+/// fde.rows() replays the unwind instructions of the FDE and yields one row per code range with the rule in effect there,
+/// e.g. row 1 (function entry): CFA = SP + 0, row 2 (after push {r4-r7, lr}): CFA = SP + 20, row 3 (after sub sp, #4):
+/// CFA = SP + 24. The rule is either register + offset or a full expression (not handled).
+/// The register numbers are the DWARF register numbers of the target ABI, which differ per architecture:
+/// ARM: 13 = SP, AArch64: 31 = SP, 29 = FP, x86_64: 7 = RSP, 6 = RBP. The largest positive stack pointer offset is taken
+/// as the state after the prologue, a switch to a frame pointer based rule ends the search
 fn parse_fde_for_cfa<R: gimli::Reader, Section: gimli::UnwindSection<R>>(fde: &gimli::FrameDescriptionEntry<R>, section: &Section, bases: &BaseAddresses) -> Result<Option<i64>> {
     // Create unwind context for parsing the instructions
     let mut ctx = gimli::UnwindContext::new();

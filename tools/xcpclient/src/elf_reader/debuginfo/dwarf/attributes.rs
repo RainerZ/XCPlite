@@ -1,4 +1,23 @@
 // Taken from Github repository a2ltool by DanielT
+//
+// Readers for the DWARF attributes this tool needs. Each function reads one attribute (DW_AT_xxx) of a debug info entry
+// and converts it to a plain Rust value.
+//
+// Why every getter matches on several AttributeValue variants: DWARF separates the meaning of an attribute (DW_AT_byte_size)
+// from its storage format, the "form" (DW_FORM_data1, DW_FORM_data2, DW_FORM_udata, ...). The compiler picks the form which
+// takes the least space, so a byte size of 4 may arrive as Data1(4) from one compiler and as Udata(4) from another. gimli
+// hands the value over as the AttributeValue enum variant of its form, the getters accept every form which makes sense.
+//
+// Kinds of values which occur here:
+//   constants     Data1/2/4/8, Udata, Sdata: sizes, offsets, enumerator values, bit positions
+//   strings       String (inline), DebugStrRef (offset into .debug_str), DebugStrOffsetsIndex (DWARF 5 index, resolved
+//                 through the .debug_str_offsets table of the unit), DebugLineStrRef (.debug_line_str, file names)
+//   references    UnitRef (offset relative to the unit), DebugInfoRef (offset relative to .debug_info): the type of a
+//                 variable, the declaration a definition belongs to, the original of an inlined copy
+//   addresses     Addr (a plain address), DebugAddrIndex (DWARF 5 index into .debug_addr)
+//   expressions   Exprloc: a location expression, a small program which computes where a variable lives, see evaluate_exprloc.
+//                 LocationListsRef / DebugLocListsIndex: a list of (address range, expression) pairs for variables whose
+//                 location changes during the function (optimized code)
 
 use super::{DebugDataReader, UnitList};
 use gimli::{DebugAddrBase, DebuggingInformationEntry, EndianSlice, RunTimeEndian, UnitHeader};
@@ -35,6 +54,8 @@ pub(crate) fn get_attr_value<'data>(entry: &DebuggingInformationEntry<SliceType<
     entry.attr_value(attrtype)
 }
 
+// Decode a string attribute value in any of its forms, see the module comment. The DWARF 5 indexed form needs the
+// str_offsets_base of the unit, which is why a Unit is constructed from the header for that case only
 fn decode_string_attribute(
     attr: gimli::AttributeValue<SliceType>,
     dwarf: &gimli::Dwarf<EndianSlice<RunTimeEndian>>,
@@ -97,6 +118,9 @@ pub(crate) fn get_name_attribute(
     decode_string_attribute(name_attr, dwarf, unit_header)
 }
 
+// get the mangled (linker) name of a C++ variable or function from the DW_AT_linkage_name attribute, e.g. _ZN13motor_control5inputE
+// DW_AT_MIPS_linkage_name is the name of the attribute before it was standardized in DWARF 4, still emitted by some compilers.
+// C entities and C++ entities with internal linkage have no linkage name
 pub(crate) fn get_linkage_name_attribute(
     entry: &DebuggingInformationEntry<SliceType, usize>,
     dwarf: &gimli::Dwarf<EndianSlice<RunTimeEndian>>,
@@ -126,9 +150,10 @@ pub(crate) fn get_typeref_attribute(entry: &DebuggingInformationEntry<SliceType,
     }
 }
 
-// get the address of a variable from a DW_AT_location attribute
+// get the address of a variable from a DW_AT_location attribute, as (address extension, address), see VarInfo
 // The DW_AT_location contains an Exprloc expression that allows the address to be calculated
-// in complex ways, so the expression must be evaluated in order to get the address
+// in complex ways, so the expression must be evaluated in order to get the address.
+// A location list (several expressions, each valid for a range of code addresses) is accepted if all its entries agree
 pub(crate) fn get_location_attribute(
     debug_data_reader: &DebugDataReader,
     entry: &DebuggingInformationEntry<SliceType, usize>,
@@ -206,7 +231,7 @@ pub(crate) fn get_encoding_attribute(entry: &DebuggingInformationEntry<SliceType
     if let gimli::AttributeValue::Encoding(enc) = encoding_attr { Some(enc) } else { None }
 }
 
-// get the upper bound of an array from the DW_AT_upper_bound attribute
+// get the lower bound of an array dimension from the DW_AT_lower_bound attribute (0 for C/C++, the attribute is usually absent)
 pub(crate) fn get_lower_bound_attribute(entry: &DebuggingInformationEntry<SliceType, usize>) -> Option<u64> {
     let lbound_attr = get_attr_value(entry, gimli::constants::DW_AT_lower_bound)?;
     match lbound_attr {
@@ -234,7 +259,7 @@ pub(crate) fn get_upper_bound_attribute(entry: &DebuggingInformationEntry<SliceT
     }
 }
 
-// get the upper bound of an array from the DW_AT_upper_bound attribute
+// get the number of elements of an array dimension from the DW_AT_count attribute (clang emits this instead of the upper bound)
 pub(crate) fn get_count_attribute(entry: &DebuggingInformationEntry<SliceType, usize>) -> Option<u64> {
     let count_attr = get_attr_value(entry, gimli::constants::DW_AT_count)?;
     match count_attr {
@@ -248,7 +273,7 @@ pub(crate) fn get_count_attribute(entry: &DebuggingInformationEntry<SliceType, u
     }
 }
 
-// get the byte stride of an array from the DW_AT_upper_bound attribute
+// get the byte stride of an array from the DW_AT_byte_stride attribute
 // this attribute is only present if the stride is different from the element size
 pub(crate) fn get_byte_stride_attribute(entry: &DebuggingInformationEntry<SliceType, usize>) -> Option<u64> {
     let stride_attr = get_attr_value(entry, gimli::constants::DW_AT_byte_stride)?;
@@ -322,6 +347,9 @@ pub(crate) fn get_data_bit_offset_attribute(entry: &DebuggingInformationEntry<Sl
     }
 }
 
+// Follow the DW_AT_specification attribute: the entry is the definition (out of line) of something declared in another entry,
+// e.g. the definition of a C++ static class member or a namespace variable. Returns the declaration entry, which holds the
+// name, type and scope, while the definition entry holds the location
 pub(crate) fn get_specification_attribute<'data>(
     entry: &DebuggingInformationEntry<SliceType<'data>, usize>,
     unit: &UnitHeader<EndianSlice<'data, RunTimeEndian>>,
@@ -340,6 +368,8 @@ pub(crate) fn get_specification_attribute<'data>(
     }
 }
 
+// Follow the DW_AT_abstract_origin attribute: the entry is a concrete copy (inlined or out of line) of a function or of a
+// variable of a function which the compiler inlined. Returns the "abstract instance" entry, which holds name and type
 pub(crate) fn get_abstract_origin_attribute<'data>(
     entry: &DebuggingInformationEntry<SliceType<'data>, usize>,
     unit: &UnitHeader<EndianSlice<'data, RunTimeEndian>>,
@@ -352,6 +382,8 @@ pub(crate) fn get_abstract_origin_attribute<'data>(
     }
 }
 
+// get the DW_AT_addr_base attribute of a compilation unit entry: the start of the unit's part of the DWARF 5 .debug_addr table,
+// needed to resolve indexed addresses (DW_FORM_addrx / DW_OP_addrx) of the unit
 pub(crate) fn get_addr_base_attribute(entry: &DebuggingInformationEntry<SliceType, usize>) -> Option<DebugAddrBase> {
     let origin_attr = get_attr_value(entry, gimli::constants::DW_AT_addr_base)?;
     match origin_attr {
@@ -444,7 +476,26 @@ fn evaluate_location_list(debug_data_reader: &DebugDataReader, offset: gimli::Lo
     location
 }
 
-// evaluate an exprloc expression to get a variable address or struct member offset
+// Evaluate an exprloc expression to get a variable address or struct member offset, as (address extension, address)
+//
+// A DWARF location expression is a small stack machine program (DW_OP_addr 0x2000, DW_OP_fbreg -20, DW_OP_plus_uconst 4, ...)
+// which a debugger runs to find a variable. Typical expressions:
+//   DW_OP_addr <address>        a global or static variable at a fixed address
+//   DW_OP_addrx <index>         the same, DWARF 5, the address is in the .debug_addr table
+//   DW_OP_fbreg <offset>        a stack variable, offset relative to the frame base of the function (DW_AT_frame_base)
+//   DW_OP_reg<n>                the variable lives in register n, DW_OP_breg<n> <offset>: relative to register n
+//   DW_OP_plus_uconst <offset>  member offset inside a struct (DW_AT_data_member_location)
+//
+// gimli evaluates the program and stops whenever it needs something only the running program knows (the frame base, a
+// register value, a relocated address): evaluate() returns a RequiresXxx result, the caller supplies the value with
+// resume_with_xxx() and the evaluation continues until Complete. This tool has no running program, so it supplies:
+//   RequiresRelocatedAddress    the address itself (no relocation in a linked executable): address extension 0
+//   RequiresFrameBase           the dummy frame base 0x80000000, so the result is 0x80000000 + offset: address extension 2,
+//                               register_variables subtracts the dummy again and combines the offset with the event trigger
+//   RequiresIndexedAddress      the address from the .debug_addr table of the unit: address extension 0
+//   anything else               not measurable, reported with the internal address extensions 0x80 (register), 0x81 (thread
+//                               local), 0x82 (other), no further evaluation
+// The result is a list of "pieces" (a variable may be split over several locations), only a single piece is supported
 fn evaluate_exprloc(
     debug_data_reader: &DebugDataReader,
     expression: gimli::Expression<EndianSlice<RunTimeEndian>>,
@@ -589,18 +640,6 @@ fn evaluate_exprloc(
         };
         Some((addr_ext, address))
     }
-
-    // if let gimli::Piece {
-    //     location: gimli::Location::Address { address },
-    //     ..
-    // } = result[0]
-    // {
-    //     log::info!("evaluate_exprloc: Address is {}:0x{:x}", addr_ext, address);
-    //     Some((addr_ext, address))
-    // } else {
-    //     log::warn!("evaluate_exprloc: Location is not a measurement address {:?}", result[0]);
-    //     None
-    // }
 }
 
 // Get a DW_AT_type attribute and return the number of the unit in which the type is located
@@ -629,7 +668,8 @@ pub(crate) fn get_type_attribute(
     }
 }
 
-// get the DW_AT_declaration attribute
+// get the DW_AT_declaration attribute: true if the entry only declares something which is defined elsewhere (a struct
+// declared but not defined in this unit, a static class member, an extern variable)
 pub(crate) fn get_declaration_attribute(entry: &DebuggingInformationEntry<SliceType, usize>) -> Option<bool> {
     let decl_attr = get_attr_value(entry, gimli::constants::DW_AT_declaration)?;
     if let gimli::AttributeValue::Flag(flag) = decl_attr { Some(flag) } else { None }

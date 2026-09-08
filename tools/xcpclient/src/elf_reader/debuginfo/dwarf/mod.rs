@@ -4,6 +4,53 @@
 // Read ELF files and extract debug information
 // Taken from Github repository a2ltool by DanielT
 
+/*
+DWARF and gimli in a nutshell, as far as this module needs it
+
+DWARF stores the debug information as a tree of entries, each entry has a tag (what it is) and attributes (its properties):
+
+    DW_TAG_compile_unit  name="xcp_demo.c"                      one per compiled source file
+      DW_TAG_base_type   name="unsigned short" byte_size=2
+      DW_TAG_variable    name="global_counter" type=<ref> location=<expression>
+      DW_TAG_subprogram  name="fastTask" low_pc=0x4200.. high_pc=..
+        DW_TAG_variable  name="counter" type=<ref> location=<expression>          a local variable
+        DW_TAG_variable  name="static_counter" type=<ref> location=<expression>   a static local
+        DW_TAG_lexical_block ...                                                   a nested { } block
+      DW_TAG_namespace   name="motor_control"
+        DW_TAG_variable ...
+      DW_TAG_structure_type name="parameters" byte_size=..
+        DW_TAG_member    name="counter_max" type=<ref> data_member_location=4
+
+The tree lives in the .debug_info section. Every entry is identified by its byte offset in that section (a "debug info
+offset"), and references between entries (the type of a variable, the origin of an inlined function) are such offsets,
+either relative to the start of the section (DW_FORM_ref_addr) or relative to the start of the unit (DW_FORM_ref4 and
+friends). This module uses the section relative offset everywhere as the identity of an entry, in particular of a type.
+
+gimli is the Rust DWARF parser. The names which appear in this module:
+    Dwarf                       all .debug_* sections of the file, loaded once (load_dwarf_sections)
+    UnitHeader                  the header of one compilation unit: version, address size, format, offset in .debug_info.
+                                Cheap, Copy. Enough to iterate and read the entries of the unit
+    Unit                        a fully resolved unit (UnitHeader + abbreviations + the DWARF 5 base offsets for indexed
+                                strings and addresses). Constructed with dwarf.unit(header) when an indexed form has to be
+                                resolved, it is not kept because construction is not free
+    Abbreviations               the schema of the entries of a unit (.debug_abbrev), needed to decode the entries
+    DebuggingInformationEntry   one entry (DIE): tag, attributes, offset. entry.attr_value(DW_AT_xxx) reads an attribute
+    AttributeValue              the value of an attribute, an enum over the DWARF "forms" (how the value is stored):
+                                Addr, Udata, Data1..Data8, String, DebugStrRef, UnitRef, DebugInfoRef, Exprloc, ... The
+                                same attribute may use different forms depending on the compiler, see attributes.rs
+    EntriesCursor / next_dfs    depth first traversal of the entries of a unit, entry.depth() gives the nesting level
+    EntriesTree                 the subtree below one entry, used to read the children of a type (members, enumerators)
+    Expression / Evaluation     a DWARF location expression (a small stack machine program) and its evaluator, see
+                                evaluate_exprloc in attributes.rs
+
+The ELF container is read with the `object` crate: sections (name, address, size, data) and symbols (name, address,
+kind, binding). The DWARF information is just a set of sections of the ELF file, handed to gimli as byte slices.
+
+DWARF versions: GCC and clang emit DWARF 5 by default today, older toolchains DWARF 4 or 2. The differences which matter
+here are the forms: DWARF 5 may store strings and addresses as indices into per unit tables (.debug_str_offsets,
+.debug_addr) instead of directly, and location lists moved to .debug_loclists. Both are handled in attributes.rs
+*/
+
 use indexmap::IndexMap;
 use std::ffi::OsStr;
 use std::ops::Index;
@@ -29,21 +76,26 @@ use attributes::{get_abstract_origin_attribute, get_linkage_name_attribute, get_
 
 mod typereader;
 
+// All compilation units of the file with their abbreviations, in the order of .debug_info. The index into this list is
+// the unit index (unit_idx) used throughout the debug data, and the .debug_info offset of any entry can be mapped back to
+// its unit with get_unit
 pub(crate) struct UnitList<'a> {
     list: Vec<(UnitHeader<SliceType<'a>>, gimli::Abbreviations)>,
 }
 
+// The parser state while the debug information is read. Created in load_elf_dwarf, consumed by collect_debug_data,
+// which moves the results into a DebugData. The lifetime is the memory mapped ELF file, the gimli objects borrow from it
 struct DebugDataReader<'elffile> {
-    dwarf: Dwarf<EndianSlice<'elffile, RunTimeEndian>>,
+    dwarf: Dwarf<EndianSlice<'elffile, RunTimeEndian>>, // the .debug_* sections, the entry point to everything gimli reads
     verbose: usize,
-    units: UnitList<'elffile>,
-    unit_names: Vec<Option<String>>,
-    endian: Endianness,
-    sections: HashMap<String, (u64, u64)>,
-    cfa_info: Vec<CfaInfo>,
-    epk_string: Option<String>,
-    epk_addr: u64,
-    symbol_addresses: HashMap<String, u64>,
+    units: UnitList<'elffile>,                   // the compilation units seen so far, filled while load_variables iterates
+    unit_names: Vec<Option<String>>,             // DW_AT_name of each unit, by unit index
+    endian: Endianness,                          // byte order of the target, needed for bitfield offsets
+    sections: HashMap<String, (u64, u64)>,       // ELF section name -> (start, end)
+    cfa_info: Vec<CfaInfo>,                      // stack frame information of the functions, from cfa.rs
+    epk_string: Option<String>,                  // content of the xcp_epk section, the EPK version string of the application
+    epk_addr: u64,                               // address of the xcp_epk section, 0 if there is none
+    symbol_addresses: HashMap<String, u64>,      // ELF symbol table: name -> address, for variables without a DWARF location
     global_symbol_names: HashSet<String>,        // names of the symbols with global (or weak) binding
     function_symbol_names: HashMap<u64, String>, // address -> mangled name of a C++ function symbol
     xcp_meta_data: Option<(u64, Vec<u8>)>,       // (section_base_addr, raw_bytes)
@@ -224,6 +276,8 @@ fn load_elf_file<'data>(filename: &str, filedata: &'data [u8], verbose: usize) -
     }
 }
 
+// Address ranges of the ELF sections which are loaded to memory: name -> (start, end). Sections without an address
+// (the .debug_* sections, .symtab, ...) and empty sections are left out
 fn get_elf_sections(elffile: &object::read::File) -> HashMap<String, (u64, u64)> {
     log::debug!("get_elf_sections: Creating ELF sections map for debug data (only size!=0 and addr!=0)");
     let mut map = HashMap::new();
@@ -242,6 +296,8 @@ fn get_elf_sections(elffile: &object::read::File) -> HashMap<String, (u64, u64)>
     map
 }
 
+// The ELF symbol table (.symtab): symbol name -> address, for all symbols with a name and an address. Functions, global
+// and static variables, linker generated symbols (__start_xcp_evts). The names of C++ symbols are mangled (_ZN...)
 fn get_symbol_addresses(elffile: &object::read::File) -> HashMap<String, u64> {
     let mut map = HashMap::new();
     for symbol in elffile.symbols() {
@@ -390,6 +446,8 @@ impl DebugDataReader<'_> {
     }
 
     // Traverse DWARF entries and finalize collected parser state into DebugData.
+    // The order matters: the variables are loaded first, then only the types referenced by variables (loading all types of a
+    // large ELF file would take far longer), then the scope qualified names of the types whose plain name is ambiguous
     fn collect_debug_data(mut self, unit_idx_limit: usize) -> DebugData {
         let variables = self.load_variables(unit_idx_limit);
         let (types, typenames) = self.load_types(&variables);
@@ -415,7 +473,10 @@ impl DebugDataReader<'_> {
         }
     }
 
-    // load all variables from the dwarf data
+    // Load all variables from the dwarf data: every DW_TAG_variable entry of every compilation unit up to unit_idx_limit,
+    // with its enclosing function and namespaces. The traversal is depth first (next_dfs), the `context` stack mirrors the
+    // path from the unit root to the current entry (entry.depth() is the nesting level), so the scopes a variable is nested
+    // in are the entries currently on the stack
     fn load_variables(&mut self, unit_idx_limit: usize) -> IndexMap<String, Vec<VarInfo>> {
         let mut variables = IndexMap::<String, Vec<VarInfo>>::new();
 
@@ -674,46 +735,6 @@ impl DebugDataReader<'_> {
         path
     }
 
-    // Return global variable information
-    // an entry of the type DW_TAG_variable only describes a global variable if there is a name, a type and an address
-    // this function tries to get all three and returns them
-    // returns None if the entry does not describe a global variable
-    /*
-        fn get_global_variable(
-            &self,
-            entry: &DebuggingInformationEntry<SliceType, usize>,
-            unit: &UnitHeader<SliceType>,
-            abbrev: &gimli::Abbreviations,
-        ) -> Result<Option<(String, usize, u64)>, String> {
-            match get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1) {
-                Some((addr_ext, addr)) => {
-                    // if debugging information entry A has a DW_AT_specification or DW_AT_abstract_origin attribute
-                    // pointing to another debugging information entry B, any attributes of B are considered to be part of A.
-                    if let Some(specification_entry) = get_specification_attribute(entry, unit, abbrev) {
-                        // the entry refers to a specification, which contains the name and type reference
-                        let name = get_name_attribute(&specification_entry, &self.dwarf, unit)?;
-                        let typeref = get_typeref_attribute(&specification_entry, unit)?;
-                        Ok(Some((name, typeref, addr)))
-                    } else if let Some(abstract_origin_entry) = get_abstract_origin_attribute(entry, unit, abbrev) {
-                        // the entry refers to an abstract origin, which should also be considered when getting the name and type ref
-                        let name = get_name_attribute(entry, &self.dwarf, unit).or_else(|_| get_name_attribute(&abstract_origin_entry, &self.dwarf, unit))?;
-                        let typeref = get_typeref_attribute(entry, unit).or_else(|_| get_typeref_attribute(&abstract_origin_entry, unit))?;
-                        Ok(Some((name, typeref, addr)))
-                    } else {
-                        // usual case: there is no specification or abstract origin and all info is part of this entry
-                        let name = get_name_attribute(entry, &self.dwarf, unit)?;
-                        let typeref = get_typeref_attribute(entry, unit)?;
-                        Ok(Some((name, typeref, addr)))
-                    }
-                }
-                None => {
-                    // it's a local variable, skip, no error
-                    Ok(None)
-                }
-            }
-        }
-    */
-
     // Linkage (mangled) name of a C++ function (DW_TAG_subprogram or DW_TAG_inlined_subroutine entry), None for C functions.
     // Found like the name, on the entry itself, its abstract instance or its declaration. A function with internal linkage
     // (static function) has no DW_AT_linkage_name, its mangled name is the function symbol at its start address (DW_AT_low_pc)
@@ -739,9 +760,6 @@ impl DebugDataReader<'_> {
         })
     }
 
-    // @@@@ xcp_client: Get all variables, including local variables
-    // Return variable information
-    // returns name, type reference and address
     // Name of a function (DW_TAG_subprogram or DW_TAG_inlined_subroutine entry).
     // The copies of an inlined function refer to the abstract instance (DW_AT_abstract_origin) and the definition of a declared
     // function, e.g. a C++ member function, refers to its declaration (DW_AT_specification), the name is found there
@@ -757,8 +775,17 @@ impl DebugDataReader<'_> {
         })
     }
 
-    // address may be 0 if a local variable is requested
-    // A missing address is resolved from the symbol table if possible (declarations of global variables, static variables without location)
+    // Read one DW_TAG_variable entry: returns (name, type reference, (address extension, address)), see VarInfo for the address encoding.
+    // The three cases are the ways DWARF splits the description of a variable over several entries:
+    //  - DW_AT_specification: the entry is the definition of a variable which was declared elsewhere (a C++ namespace or static
+    //    class member: GCC puts the declaration into the namespace/class and the definition with the location at unit level).
+    //    Name and type are found in the declaration, the location in this entry
+    //  - DW_AT_abstract_origin: the entry is a copy of a variable of an inlined function, the original ("abstract instance")
+    //    holds name and type, the copy holds the location valid for this inlined copy
+    //  - neither: the usual case, everything is in this entry
+    // The address is 0 if the entry has no location (a declaration, a variable optimized away by the compiler) or if the location
+    // is not a plain address, see evaluate_exprloc. A missing address is resolved from the symbol table if possible
+    // (declarations of global variables, static variables without location)
     // local: the variable is local to a function, only symbols with local binding are considered to resolve the address
     // function_linkage: the mangled name of the enclosing C++ function, to resolve the symbol of a static local variable
     // namespaces: the namespaces the entry is nested in (outermost first)
@@ -914,6 +941,9 @@ fn get_varinfo_from_context(context: &[Scope]) -> (Option<String>, Option<String
     (function, function_linkage, namespaces, inlined)
 }
 
+// Demangle the variable names which are mangled C++ symbols (_ZN13motor_control5inputE -> motor_control::input), for the
+// lookup of a variable by its C++ name. Returns demangled name -> mangled name. Uses the cpp_demangle crate, without the
+// parameter list and return type of functions
 fn demangle_cpp_varnames(input: &[&String]) -> HashMap<String, String> {
     let mut demangled_symbols = HashMap::<String, String>::new();
     let demangle_opts = cpp_demangle::DemangleOptions::new().no_params().no_return_type();
@@ -942,10 +972,13 @@ impl<'a> UnitList<'a> {
         Self { list: Vec::new() }
     }
 
+    // Append a unit, its index in the list becomes its unit index
     fn add(&mut self, unit: UnitHeader<SliceType<'a>>, abbrev: Abbreviations) {
         self.list.push((unit, abbrev));
     }
 
+    // Find the unit which contains the entry at the given .debug_info offset. The units are laid out one after the other in
+    // .debug_info, so the unit is the one whose range [offset, offset + length) contains the entry
     fn get_unit(&self, itemoffset: usize) -> Option<usize> {
         for (idx, (unit, _)) in self.list.iter().enumerate() {
             let unitoffset = unit.offset().to_debug_info_offset(unit).unwrap().0;
@@ -958,6 +991,7 @@ impl<'a> UnitList<'a> {
     }
 }
 
+// units[unit_idx] gives the header and abbreviations of a unit
 impl<'a> Index<usize> for UnitList<'a> {
     type Output = (UnitHeader<SliceType<'a>>, gimli::Abbreviations);
 
