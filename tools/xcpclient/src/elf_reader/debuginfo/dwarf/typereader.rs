@@ -3,9 +3,9 @@
 
 /*
 Claude note on XCPlite version V2.1.10 :-):
-3-way merge of a2ltool upstream v3.2.0 to v3.4.1 onto V2.1.9 was conflict-free. 
+3-way merge of a2ltool upstream v3.2.0 to v3.4.1 onto V2.1.9 was conflict-free.
 Local edits survived unchanged.
-The header now records the base version and commit so the next sync does not need archaeology. 
+The header now records the base version and commit so the next sync does not need archaeology.
 Brings:
 - struct/class unification
 - inheritance on struct-tagged types

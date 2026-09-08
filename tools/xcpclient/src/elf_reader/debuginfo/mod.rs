@@ -30,6 +30,7 @@ pub(crate) struct VarInfo {
     pub(crate) unit_idx: usize,          // compilation unit index
     pub(crate) function: Option<String>, // function name if variable is local to a function
     pub(crate) namespaces: Vec<String>,  // namespaces the variable is defined in, outermost first
+    pub(crate) inlined: bool,            // the variable belongs to a function which the compiler inlined, see load_variables
 }
 
 // TypeInfo holds information about a variable's type

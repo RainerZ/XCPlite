@@ -436,7 +436,7 @@ impl DebugDataReader<'_> {
 
             // traverse all entries in depth-first order
             // context holds the tag, the name (namespaces and functions only) and the .debug_info offset of the ancestors of the current entry
-            let mut context: Vec<(gimli::DwTag, Option<String>, usize)> = Vec::new();
+            let mut context: Vec<Scope> = Vec::new();
             while let Ok(Some(entry)) = entries_cursor.next_dfs() {
                 let depth = entry.depth();
                 debug_assert!(depth >= 1);
@@ -446,11 +446,36 @@ impl DebugDataReader<'_> {
                 // It's essential to only get those names that might actually be needed.
                 // Getting all names unconditionally doubled the runtime of the program
                 // as a result of countless useless string allocations and deallocations.
-                if tag == gimli::constants::DW_TAG_namespace || tag == gimli::constants::DW_TAG_subprogram {
-                    context.push((tag, get_name_attribute(entry, &self.dwarf, unit).ok(), offset));
-                } else {
-                    context.push((tag, None, offset));
-                }
+                let scope = match tag {
+                    gimli::constants::DW_TAG_namespace => Scope {
+                        tag,
+                        name: get_name_attribute(entry, &self.dwarf, unit).ok(),
+                        offset,
+                        inlined: false,
+                    },
+                    gimli::constants::DW_TAG_subprogram | gimli::constants::DW_TAG_inlined_subroutine => {
+                        // A function which the compiler inlined is described by an abstract instance (DW_AT_inline, GCC keeps the static
+                        // variables there), an inlined copy at each call site (DW_TAG_inlined_subroutine) and, if the function is also
+                        // called, an out of line copy (a DW_TAG_subprogram without a name, referring to the abstract instance).
+                        // The stack frame of such a function is ambiguous, see get_varinfo_from_context
+                        let inlined = tag == gimli::constants::DW_TAG_inlined_subroutine
+                            || is_inlined_subprogram(entry)
+                            || get_abstract_origin_attribute(entry, unit, abbreviations).is_some();
+                        Scope {
+                            tag,
+                            name: self.get_subprogram_name(entry, unit, abbreviations),
+                            offset,
+                            inlined,
+                        }
+                    }
+                    _ => Scope {
+                        tag,
+                        name: None,
+                        offset,
+                        inlined: false,
+                    },
+                };
+                context.push(scope);
                 debug_assert_eq!(depth as usize, context.len());
 
                 // Remember the enclosing scope of named types, of nested scopes and of variables declared in a namespace or class,
@@ -458,18 +483,30 @@ impl DebugDataReader<'_> {
                 // and to find the scope of a variable definition which refers to its declaration (DW_AT_specification).
                 // Only offsets are stored here, the scope names are resolved in load_qualified_type_names for the few types which need them.
                 if (is_scope_tag(tag) || is_type_tag(tag) || tag == gimli::constants::DW_TAG_variable)
-                    && let Some((parent_tag, _, parent_offset)) = context[..context.len() - 1].iter().rev().find(|(t, _, _)| is_scope_tag(*t))
-                    && (tag != gimli::constants::DW_TAG_variable || *parent_tag != gimli::constants::DW_TAG_subprogram)
+                    && let Some(parent) = context[..context.len() - 1].iter().rev().find(|s| is_scope_tag(s.tag))
+                    && (tag != gimli::constants::DW_TAG_variable || parent.tag != gimli::constants::DW_TAG_subprogram)
                 {
-                    self.scope_parent.insert(offset, *parent_offset);
+                    self.scope_parent.insert(offset, parent.offset);
                 }
 
                 if entry.tag() == gimli::constants::DW_TAG_variable {
                     // Get variable information
-                    let (function, namespaces) = get_varinfo_from_context(&context);
+                    let (function, namespaces, inlined) = get_varinfo_from_context(&context);
                     match self.get_variable(entry, unit, abbreviations, function.is_some(), &namespaces) {
                         Ok((name, typeref, address)) => {
+                            // Stack relative variables of an inlined function are not loaded: each copy of the function has its own
+                            // stack frame layout and the event may be triggered from any copy, so there is no stack relative address
+                            // which is valid for all of them. The static variables and the event trigger marker are loaded,
+                            // the marker tells register_event_locations to warn
+                            if inlined && address.0 != 0 {
+                                log::debug!("Local variable '{}' of the inlined function {:?} not loaded, the stack frame is ambiguous", name, function);
+                                continue;
+                            }
                             let var_infos = variables.entry(name).or_default();
+                            // A static variable of an inlined function may be described in the abstract instance and again in each copy
+                            if inlined && address.0 == 0 && address.1 != 0 && var_infos.iter().any(|v| v.unit_idx == unit_idx && v.address == address && v.function == function) {
+                                continue;
+                            }
                             // GCC describes a namespace scope (or static member) variable with a declaration entry inside the namespace
                             // and a definition entry at compilation unit level (DW_AT_specification). Both resolve to the same address,
                             // the variable is kept once with the namespaces of the declaration
@@ -488,6 +525,7 @@ impl DebugDataReader<'_> {
                                     unit_idx,
                                     function,
                                     namespaces,
+                                    inlined,
                                 });
                             }
                         }
@@ -652,6 +690,21 @@ impl DebugDataReader<'_> {
     // @@@@ xcp_client: Get all variables, including local variables
     // Return variable information
     // returns name, type reference and address
+    // Name of a function (DW_TAG_subprogram or DW_TAG_inlined_subroutine entry).
+    // The copies of an inlined function refer to the abstract instance (DW_AT_abstract_origin) and the definition of a declared
+    // function, e.g. a C++ member function, refers to its declaration (DW_AT_specification), the name is found there
+    fn get_subprogram_name<'a>(&self, entry: &DebuggingInformationEntry<SliceType<'a>, usize>, unit: &UnitHeader<SliceType<'a>>, abbrev: &gimli::Abbreviations) -> Option<String> {
+        if let Ok(name) = get_name_attribute(entry, &self.dwarf, unit) {
+            return Some(name);
+        }
+        let origin = get_abstract_origin_attribute(entry, unit, abbrev).or_else(|| get_specification_attribute(entry, unit, abbrev))?;
+        get_name_attribute(&origin, &self.dwarf, unit).ok().or_else(|| {
+            // the abstract instance of an inlined member function refers to the declaration in the class
+            let declaration = get_specification_attribute(&origin, unit, abbrev)?;
+            get_name_attribute(&declaration, &self.dwarf, unit).ok()
+        })
+    }
+
     // address may be 0 if a local variable is requested
     // A missing address is resolved from the symbol table if possible (declarations of global variables, static variables without location)
     // local: the variable is local to a function, only symbols with local binding are considered to resolve the address
@@ -765,18 +818,36 @@ fn itanium_mangled_names(scopes: &[String], name: &str) -> [String; 2] {
     [format!("{prefix}{}{name}E", name.len()), format!("{prefix}L{}{name}E", name.len())]
 }
 
-// Get the innermost enclosing function and the enclosing namespaces (outermost first) of a variable from the traversal context
-fn get_varinfo_from_context(context: &[(gimli::DwTag, Option<String>, usize)]) -> (Option<String>, Vec<String>) {
+// An ancestor of the current entry in the depth-first traversal of load_variables
+struct Scope {
+    tag: gimli::DwTag,
+    name: Option<String>, // namespaces and functions only
+    offset: usize,        // .debug_info offset
+    inlined: bool,        // a function which the compiler inlined: its abstract instance, an inlined copy or the out of line copy
+}
+
+// The entry is the abstract instance of an inlined function (DW_AT_inline)
+fn is_inlined_subprogram(entry: &DebuggingInformationEntry<SliceType, usize>) -> bool {
+    matches!(
+        entry.attr_value(gimli::constants::DW_AT_inline),
+        Some(gimli::AttributeValue::Inline(gimli::constants::DW_INL_inlined | gimli::constants::DW_INL_declared_inlined))
+    )
+}
+
+// Get the innermost enclosing function (a subprogram or the inlined copy of a function), the enclosing namespaces (outermost first)
+// and whether the variable belongs to an inlined function, from the traversal context
+fn get_varinfo_from_context(context: &[Scope]) -> (Option<String>, Vec<String>, bool) {
     let function = context
         .iter()
         .rev()
-        .find(|(tag, _, _)| *tag == gimli::constants::DW_TAG_subprogram)
-        .and_then(|(_, name, _)| name.clone());
+        .find(|s| s.tag == gimli::constants::DW_TAG_subprogram || s.tag == gimli::constants::DW_TAG_inlined_subroutine)
+        .and_then(|s| s.name.clone());
     let namespaces: Vec<String> = context
         .iter()
-        .filter_map(|(tag, ns, _)| (*tag == gimli::constants::DW_TAG_namespace).then(|| ns.clone()).flatten())
+        .filter_map(|s| (s.tag == gimli::constants::DW_TAG_namespace).then(|| s.name.clone()).flatten())
         .collect();
-    (function, namespaces)
+    let inlined = context.iter().any(|s| s.inlined);
+    (function, namespaces, inlined)
 }
 
 fn demangle_cpp_varnames(input: &[&String]) -> HashMap<String, String> {

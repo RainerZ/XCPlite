@@ -30,7 +30,7 @@ static void sig_handler(int sig) { global_running = false; }
 #define OPTION_SERVER_PORT 5555           // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}   // Bind addr, 0.0.0.0 = ANY
 #define OPTION_QUEUE_SIZE (1024 * 8)      // Size of the measurement queue in bytes, must be a multiple of 8
-#define OPTION_LOG_LEVEL 4                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
+#define OPTION_LOG_LEVEL 3                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
@@ -106,13 +106,16 @@ XCP_UNIT(params__delay_us, "us");
 // Global measurement variable
 // Modified in function foo
 // Measuring it in main or task, is possible, but asynchronous and may give inconsistent results
+XCP_COMMENT(counter, "Global measurement variable"); // Example for meta data annotation as code
+XCP_READ_WRITE(counter);                             // Example for meta data annotation as code
+uint16_t counter = 0;
 XCP_COMMENT(global_counter, "Global measurement variable"); // Example for meta data annotation as code
 XCP_READ_WRITE(global_counter);                             // Example for meta data annotation as code
 uint16_t global_counter = 0;
 
 // A2L Creator code parser annotation
 /*
-@@ SYMBOL = global_counter
+@@ SYMBOL = counter
 @@ DESCRIPTION = "Global measurement variable"
 @@ END
 */
@@ -145,11 +148,11 @@ THREAD_FUNC_RETURN task(void *p) {
     printf("Start thread %u ...\n", get_thread_id());
 
     // Static local scope measurement variable
-    XCP_COMMENT(static_counter, "Static local measurement variable in function task"); // Example for meta data annotation as code
+    XCP_COMMENT(task__static_counter, "Static local measurement variable in thread function `task`"); // Example for meta data annotation as code
     volatile static uint16_t static_counter = 0;
 
     // Local measurement variable
-    XCP_COMMENT(counter, "Local measurement variable in function task"); // Example for meta data annotation as code
+    XCP_COMMENT(task__counter, "Local measurement variable in thread function `task`"); // Example for meta data annotation as code
     volatile uint32_t counter = 0;
 
     // Heap measurement variable
@@ -184,12 +187,15 @@ THREAD_FUNC_RETURN task(void *p) {
 //-----------------------------------------------------------------------------------------------------
 // Demo functions
 
-void foo(void) {
+// Avoid inlining in this simple demo, xcpclient does not support inlined function and silently drop them
+__attribute__((noinline)) void foo(void) {
 
     // Static local scope measurement variable
+    XCP_COMMENT(foo__static_counter, "Local static measurement variable in function `foo`"); // Example for meta data annotation as code
     volatile static uint16_t static_counter = 0;
 
-    // Local variable
+    // Local measurement variable
+    XCP_COMMENT(foo__counter, "Local measurement variable in function `foo`"); // Example for meta data annotation as code
     volatile uint32_t counter = 0;
 
     // More local measurement variables
@@ -204,10 +210,11 @@ void foo(void) {
     volatile int32_t test_int32 = -3;
     volatile uint64_t test_int64 = 1;
     volatile struct test_struct test_struct = {1, -2, 0.3f, {1, 2, 3}};
-    // uint8_t test_array[3] = {1, 2, 3};
+    volatile uint8_t test_array[3] = {1, 2, 3};
 
+    global_counter++;
+    static_counter++;
     counter = global_counter;
-    static_counter = global_counter;
 
     DaqCreateAndTriggerEvent(foo);
 }
@@ -236,7 +243,7 @@ int main(int argc, char *argv[]) {
     printf("(no optimization)\n");
 #endif
     printf("Address of 'params': %p (%u:%08X)(%zu bytes)\n", &params, ApplXcpGetAddrExt((uint8_t *)&params), ApplXcpGetAddr((uint8_t *)&params), sizeof(params));
-    printf("Address of 'global_counter': %p (%u:%08X)\n", &global_counter, ApplXcpGetAddrExt((uint8_t *)&global_counter), ApplXcpGetAddr((uint8_t *)&global_counter));
+    printf("Address of 'counter': %p (%u:%08X)\n", &counter, ApplXcpGetAddrExt((uint8_t *)&counter), ApplXcpGetAddr((uint8_t *)&counter));
     printf("\n");
 
     signal(SIGINT, sig_handler);
@@ -264,9 +271,7 @@ int main(int argc, char *argv[]) {
     create_thread(&__t1, NULL, task, NULL);
 
     // Demo measurement variables
-    XCP_COMMENT(main__counter, "Local measurement variable in main");
-    volatile uint16_t counter = 0;
-    XCP_COMMENT(main__static_counter, "Static local measurement variable in main");
+    XCP_COMMENT(main__static_counter, "Static local measurement variable in function `main`");
     volatile static uint16_t static_counter = 0;
 
     // Calibration parameter counter_max
@@ -284,16 +289,15 @@ int main(int argc, char *argv[]) {
         // Returns a pointer to the active page (working or reference) of the calibration segment or block
         const struct counter_control *p_counter_control = CalSegLock(counter_control);
 
-        global_counter += p_counter_control->counter_inc;
-        if (global_counter > p_counter_control->counter_max) { // Limit the global counter with the counter_max calibration value
-            global_counter = 0;
+        counter += p_counter_control->counter_inc;
+        if (counter > p_counter_control->counter_max) { // Limit the global counter with the counter_max calibration value
+            counter = 0;
         }
 
         // Unlock the calibration block
         CalSegUnlock(counter_control);
 
-        counter = global_counter;
-        static_counter = global_counter;
+        static_counter++;
 
         // Demonstrate calibration thread safety and consistency
         const struct params *p_params = CalSegLock(params);
@@ -308,7 +312,6 @@ int main(int argc, char *argv[]) {
 
         // Function calls
         foo(); // Call a function to demonstrate the DaqCreateAndTriggerEvent macro in foo
-        // bar(); // Uncomment to demonstrate that the event in bar is created, but the code is never executed, so the event exists, but is never triggered
 
         // Trigger the measurement event "mainloop"
         DaqTriggerEvent(mainloop);

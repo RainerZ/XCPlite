@@ -673,6 +673,13 @@ impl ElfReader {
                     "  Event {} trigger found in {}:{}, address resolver mode {}",
                     evt_name, evt_unit_name, evt_function, evt_mode
                 );
+                if var_info.inlined {
+                    warn!(
+                        "Event '{}' is triggered in function '{}', which the compiler inlined: the stack frame of an inlined function is ambiguous, \
+                         its stack relative variables are not registered. Add __attribute__((noinline)) to the function to measure them",
+                        evt_name, evt_function
+                    );
+                }
 
                 // Find the event in the registry
                 if let Some(_evt) = reg.event_list.find_event(evt_name, 0) {
@@ -728,8 +735,15 @@ impl ElfReader {
 
         if let Some(event_id) = default_event {
             match reg.event_list.find_event_id(event_id) {
-                Some(event) => info!("Default event '{}' (id {}) for global and static variables without an event trigger", event.get_name(), event_id),
-                None => warn!("Default event id {} for global and static variables without an event trigger is not defined in the registry", event_id),
+                Some(event) => info!(
+                    "Default event '{}' (id {}) for global and static variables without an event trigger",
+                    event.get_name(),
+                    event_id
+                ),
+                None => warn!(
+                    "Default event id {} for global and static variables without an event trigger is not defined in the registry",
+                    event_id
+                ),
             }
         }
 
@@ -854,22 +868,18 @@ impl ElfReader {
 
                 // Address encoder
                 let mem_addr_ext: u8 = var_info.address.0;
-                let mem_addr: u64 = 
-                
-                // Encode absolute addressing mode
-                if mem_addr_ext == 0 {
+                let mem_addr: u64 = if mem_addr_ext == 0 {
+                    // Encode absolute addressing mode
                     if var_info.address.1 == 0 {
                         debug!("Variable '{}' not registered, no address", var_name);
                         continue; // skip this variable
-                    } 
-                    else if var_info.address.1 >= 0xFFFFFFFF {
+                    } else if var_info.address.1 >= 0xFFFFFFFF {
                         warn!(
                             "Global variable '{}' not registered, address {:#x} out of the 32 bit XCP address range",
                             var_name, var_info.address.1
                         );
                         continue; // skip this variable
-                    } 
-                    else {
+                    } else {
                         // Find an event triggered in the function
                         if let Some(var_function_name) = var_function {
                             if let Some(event) = reg.event_list.find_event_by_location(var_info.unit_idx, var_function_name) {
@@ -882,7 +892,6 @@ impl ElfReader {
                                 );
                                 xcp_event_id = default_event;
                             }
-                            
                         } else {
                             info!("Global variable '{}', event id = {:?}", var_name, default_event);
                             xcp_event_id = default_event;
@@ -900,54 +909,58 @@ impl ElfReader {
                             }
                         }
                         var_info.address.1
-
                     }
-                }
-
-                // Encode stack relative addressing mode
-                else if mem_addr_ext == 2 {
+                } else if mem_addr_ext == 2 {
+                    // Encode stack relative addressing mode
                     // Find an event id for this local variable
-                    let var_function_name = var_function.expect("Local variable function name is missing for relative addressing mode");
-                    if let Some(event) = reg.event_list.find_event_by_location(var_info.unit_idx, var_function_name) {
-                        // Set the event id for this function
-                        // Prefix the variable with the function name
-                        xcp_event_id = Some(event.id);
-                        let cfa: i64 = event.cfa as i64;
-                        if let Some(f) = var_function {
-                            a2l_name = format!("{}.{}", f, var_name);
-                        } else {
-                            a2l_name = var_name.to_string();
-                        }
-                        info!(
-                            "Local variable '{}' in function '{:?}', event id = {:?}, dwarf_offset = {} cfa = {}",
-                            var_name,
-                            var_function,
-                            xcp_event_id,
-                            (var_info.address.1 as i64 - 0x80000000) ,
-                            cfa
-                        );
+                    if var_function.is_none() {
+                        warn!("Local variable '{}' skipped - function name is required for relative addressing mode", var_name);
+                        continue;
+                    } else {
+                        let var_function_name = var_function.unwrap();
+                        if let Some(event) = reg.event_list.find_event_by_location(var_info.unit_idx, var_function_name) {
+                            // Set the event id for this function
+                            // Prefix the variable with the function name
+                            xcp_event_id = Some(event.id);
+                            let cfa: i64 = event.cfa as i64;
+                            if let Some(f) = var_function {
+                                a2l_name = format!("{}.{}", f, var_name);
+                            } else {
+                                a2l_name = var_name.to_string();
+                            }
+                            info!(
+                                "Local variable '{}' in function '{:?}', event id = {:?}, dwarf_offset = {} cfa = {}",
+                                var_name,
+                                var_function,
+                                xcp_event_id,
+                                (var_info.address.1 as i64 - 0x80000000),
+                                cfa
+                            );
 
-                        // @@@@ TODO: Create functions instead of constants for relative address encoding
-                        // Encode dyn addressing mode A2L/XCP address from offset and event id
-                        let offset: i64 = var_info.address.1 as i64 - 0x80000000 + cfa;
-                        if offset < -(McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64)
-                            || offset > (McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK as i64 - McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64)
-                        {
+                            // @@@@ TODO: Create functions instead of constants for relative address encoding
+                            // Encode dyn addressing mode A2L/XCP address from offset and event id
+                            let offset: i64 = var_info.address.1 as i64 - 0x80000000 + cfa;
+                            if offset < -(McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64)
+                                || offset > (McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK as i64 - McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64)
+                            {
+                                warn!(
+                                    "Local variable '{}' skipped, has offset {} which does not fit the XCP dynamic addressing mode range",
+                                    var_name, offset
+                                );
+                                continue; // skip this variable
+                            }
+
+                            (((offset + McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64) as u64) & McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK as u64)
+                                | ((event.id as u64) << McAddress::XCP_ADDR_EXT_DYN_OFFSET_BITS)
+                        } else {
                             warn!(
-                                "Local variable '{}' skipped, has offset {} which does not fit the XCP dynamic addressing mode range",
-                                var_name, offset
+                                "Local variable '{}' in function {:?} skipped, could not find event for dyn addressing mode",
+                                var_name, var_function
                             );
                             continue; // skip this variable
                         }
-
-                        (((offset + McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64) as u64) & McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK as u64)
-                            | ((event.id as u64) << McAddress::XCP_ADDR_EXT_DYN_OFFSET_BITS)
-                    } else {
-                        warn!("Local variable '{}' in function {:?} skipped, could not find event for dyn addressing mode", var_name, var_function);
-                        continue; // skip this variable
                     }
                 }
-
                 // @@@@ TODO: Handle other address extensions
                 else {
                     debug!("Variable '{}' skipped, has unsupported address extension {:#x}", var_name, mem_addr_ext);
@@ -1325,12 +1338,17 @@ mod test {
     const CPP_TYPE_NAME_COLLISIONS_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_type_name_collisions.elf");
     // C test fixture with two compilation units, see fixtures/c_local_types_a.c (GCC 12.3 arm-none-eabi, DWARF 5)
     const C_LOCAL_TYPES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_local_types.elf");
+    // C test fixture with an inlined function, see fixtures/c_inlined_function.c, built with GCC 12.3 arm-none-eabi (-O2) and with clang
+    const C_INLINED_FUNCTION_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_inlined_function.elf");
+    const C_INLINED_FUNCTION_CLANG_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_inlined_function_clang.elf");
 
     // Load a fixture ELF file and register all its variables
     fn load_fixture(elf_file: &str) -> (ElfReader, Registry) {
         let elf_reader = ElfReader::new(elf_file, 0, usize::MAX).unwrap_or_else(|e| panic!("failed to load {elf_file}: {e}"));
         let mut reg = Registry::new();
-        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "", None).expect("register_variables failed");
+        elf_reader
+            .register_variables(&mut reg, false, 0, usize::MAX, "", "", None)
+            .expect("register_variables failed");
         (elf_reader, reg)
     }
 
@@ -1454,6 +1472,46 @@ mod test {
         assert_eq!(reg.typedef_list.find_typedef("valve_control.Config").unwrap().size, 8);
     }
 
+    // A function with an event trigger which the compiler inlined (and also emitted out of line) has no stack frame layout which is
+    // valid for all its copies: its stack relative variables are not registered, in none of the copies. The static variables
+    // keep the function scope and get the event of the trigger, like in a function which is not inlined.
+    // GCC describes the static variables and the markers in the abstract instance, clang in the out of line copy
+    #[test]
+    fn test_register_inlined_function_variables() {
+        for elf_file in [C_INLINED_FUNCTION_ELF, C_INLINED_FUNCTION_CLANG_ELF] {
+            register_inlined_function_variables(elf_file);
+        }
+    }
+
+    fn register_inlined_function_variables(elf_file: &str) {
+        let elf_reader = ElfReader::new(elf_file, 0, usize::MAX).unwrap_or_else(|e| panic!("failed to load {elf_file}: {e}"));
+        let mut reg = Registry::new();
+        elf_reader.register_events(&mut reg, 0).unwrap();
+        elf_reader.register_event_locations(&mut reg, 0).unwrap();
+        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "", None).unwrap();
+        let event_id = |name: &str| reg.event_list.find_event(name, 0).unwrap_or_else(|| panic!("event {name}")).get_id();
+        let instance = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None);
+
+        // bar is not inlined: stack and static variables with the event triggered in bar
+        assert_eq!(instance("bar.counter").expect("bar.counter").event_id(), Some(event_id("bar")));
+        assert_eq!(instance("bar.test_float").expect("bar.test_float").event_id(), Some(event_id("bar")));
+        assert_eq!(instance("bar.static_counter").expect("bar.static_counter").event_id(), Some(event_id("bar")));
+
+        // foo is inlined into main and emitted out of line: the trigger marker is flagged, the stack variables of both copies are
+        // not registered (in particular not as local variables of main), the static variables keep the scope and the event
+        assert!(
+            elf_reader.debug_data.variables["trg__AAS__foo"]
+                .iter()
+                .all(|v| v.inlined && v.function.as_deref() == Some("foo"))
+        );
+        assert!(!elf_reader.debug_data.variables["trg__AAS__bar"][0].inlined);
+        for name in ["foo.counter", "foo.test_float", "main.counter", "main.test_float", "counter", "test_float"] {
+            assert!(instance(name).is_none(), "{name} must not be registered");
+        }
+        assert_eq!(instance("foo.static_counter").expect("foo.static_counter").event_id(), Some(event_id("foo")));
+        assert_eq!(elf_reader.debug_data.variables["static_counter"].len(), 2);
+    }
+
     // Global variables get the default event when one is specified, otherwise no event
     #[test]
     fn test_register_variables_default_event() {
@@ -1516,6 +1574,7 @@ mod test {
             unit_idx,
             function: None,
             namespaces: Vec::new(),
+            inlined: false,
         };
         let mut debug_data = empty_debug_data();
         debug_data.unit_names = vec![Some("a.c".to_string()), Some("b.c".to_string())];
@@ -1567,6 +1626,7 @@ mod test {
                 unit_idx: 0,
                 function: None,
                 namespaces: vec!["motor_control".to_string()],
+                inlined: false,
             }]
         };
         let mut debug_data = empty_debug_data();
@@ -1614,6 +1674,7 @@ mod test {
             unit_idx: 0,
             function: None,
             namespaces: vec![namespace.to_string()],
+            inlined: false,
         };
         let mut debug_data = empty_debug_data();
         debug_data.xcp_meta_data = Some((meta_base, meta));
@@ -1652,6 +1713,7 @@ mod test {
                 unit_idx: 0,
                 function: function.map(str::to_string),
                 namespaces: namespaces.iter().map(|s| s.to_string()).collect(),
+                inlined: false,
             }]
         };
         let mut debug_data = empty_debug_data();
@@ -1794,6 +1856,7 @@ mod test {
                 unit_idx: 0,
                 function: Some(function.to_string()),
                 namespaces: Vec::new(),
+                inlined: false,
             });
         }
         if let Some(range) = event_section {

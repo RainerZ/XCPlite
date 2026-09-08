@@ -121,7 +121,15 @@ extension 2) and the event as fixed event, static variables in the function get 
 variables are relative to the canonical frame address (CFA) of the function. The trigger macros pass the frame pointer
 (`__builtin_frame_address(0)`) as base address, so the generator adds the distance between the frame pointer and the CFA, which it
 reads from the call frame information of the function. On Xtensa (ESP32) the macros pass the CFA itself (`__builtin_dwarf_cfa()`)
-and no offset is added. Global variables and static variables
+and no offset is added.
+
+A function with an event trigger must not be inlined. An inlined function has a copy at each call site and possibly an out of line copy,
+each with its own stack frame layout, and the event may be triggered from any of them, so there is no stack frame relative address which
+is valid for all copies. xcpclient warns when the trigger of an event is found in an inlined function (an abstract instance with
+`DW_AT_inline`, an inlined copy `DW_TAG_inlined_subroutine` or an out of line copy referring to the abstract instance) and does not
+register the stack frame relative variables of the function, its static variables keep the function scope and the event. Mark such
+functions `__attribute__((noinline))`. GCC does not inline external functions at `-O1`, clang inlines a function which is called once
+already at `-O1`. Global variables and static variables
 in functions without an event trigger are registered without a fixed event, in this case it is in the responsibility of the XCP tool user to assign an event which allows correct visibilty and consistent capture of the associated variables. CANape usually defaults to polling in this case, and each available event may be selected for synchronous data acquisition. 
 With `--default-event <id>`, xcpclient assigns this event to such variables when it creates the A2L file (`DAQ_EVENT VARIABLE` with a
 `DEFAULT_EVENT_LIST`), and measures them with it.

@@ -401,7 +401,7 @@ impl XcpDaqDecoder for DaqDecoder {
         let delta_us = ((t - t_last) * self.timestamp_resolution) / 1000;
 
         if self.verbose >= 2 {
-            println!("DAQ: lost={}, daq={}, odt={}, t={}ns (+{}us)", lost, daq, odt, t_ns, delta_us);
+            println!("EVENT: daq={}, odt={}, lost={}, t={}ns (+{}us)", daq, odt, lost, t_ns, delta_us);
         }
 
         // Decode all odt entries — for terminal (log_level >= 2) and/or CSV output

@@ -5,6 +5,7 @@
 # The script syncs the example project to the target, builds it there, runs it with XCP on Ethernet,
 # downloads the ELF file to the local machine and creates an A2L file.  
 # Prerequisites:
+# - The target machine must be Linux
 # - The target must be reachable via SSH and have rsync installed
 # - The local machine must have rsync and scp installed
 # - The local machine must have xcpclient installed

@@ -24,18 +24,16 @@ pub use types::*;
 mod decoder;
 pub use decoder::*;
 
-mod transport;
-mod protocol;
 mod a2l;
 mod cal;
 mod daq;
+mod protocol;
+mod transport;
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------
 // XCP Parameters
 
 pub const CMD_TIMEOUT: Duration = Duration::from_secs(3);
-
-
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------
 // Type to control the receive task sent over the receive task control channel

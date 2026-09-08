@@ -75,7 +75,7 @@
 
 #define OPTION_ENABLE_TCP
 #define OPTION_ENABLE_UDP
-#define OPTION_MTU 8000                     // IP MTU; jumbo frames supported
+#define OPTION_MTU 1500                     // IP MTU; jumbo frames support depend on path MTU in your network
 #define OPTION_SERVER_FORCEFULL_TERMINATION // Don't wait for the rx and tx thread to finish, just terminate them
 
 //-------------------------------------------------------------------------------

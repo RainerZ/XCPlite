@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # The script syncs the example project to the target, builds it there, runs it with XCP on Ethernet,
 # downloads the ELF file to the local machine and creates an A2L file. 
 # Prerequisites:
+# - The target machine must be Linux
 # - The target must be reachable via SSH and have rsync installed
 # - The local machine must have rsync and scp installed
 # - The local machine must have xcpclient installed
@@ -39,8 +40,7 @@ BUILD_TYPE="RelWithDebInfo"
 #BUILD_TYPE="Release"
 
 # Run a simple test calibration and measurement
-#TEST=true
-TEST=false
+TEST=true
 # CSV measurement file path on local machine
 CSVFILE="$REPO_ROOT/examples/no_a2l_demo/CANape/no_a2l_demo.csv"
 
@@ -98,7 +98,9 @@ fi
 # Build on target
 # Always a clean build: if the target has no NTP and its clock may skew,
 echo "Clean build executable on Target ..."
-ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
+#ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
+#ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=gcc CXX=g++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
+ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=clang CXX=clang++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: Build on target"
     exit 1
@@ -127,7 +129,7 @@ echo "==========================================================================
 echo ""
 # Remove the A2L file of a previous run, so a failed generation can not leave a stale A2L file behind
 rm -f "$A2LFILE"
-XCPCLIENT_ARGS=(--log-level=3 --verbose=2 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE")
+XCPCLIENT_ARGS=(--log-level=3 --verbose=2 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE"  --default-event=3)
 echo "Command: $XCPCLIENT ${XCPCLIENT_ARGS[*]}"
 "$XCPCLIENT" "${XCPCLIENT_ARGS[@]}" >> "$LOGFILE"
 if [ $? -ne 0 ] || [ ! -f "$A2LFILE" ]; then
@@ -163,7 +165,11 @@ sleep 1
 echo "========================================================================================================"
 echo "Test measurement"
 echo "========================================================================================================"
-$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea counter --time 3 --csv "$CSVFILE"
+read -p "Press any key to continue..." -n1 -s
+# Log measurement to stdout
+$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea . --time 3 --verbose=2
+# Log measurement to CSV file
+#$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea . --time 3 --csv "$CSVFILE"
 read -p "Press any key to continue..." -n1 -s
 sleep 1
 
