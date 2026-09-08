@@ -1,9 +1,6 @@
 #!/bin/bash
 
-# A2L file creator for the no_a2l_demo_cpp example project
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# A2L file creator for the freertos_emu_demo example project
 
 # The script syncs the example project to the target, builds it there, runs it with XCP on Ethernet,
 # downloads the ELF file to the local machine and creates an A2L file.  
@@ -13,19 +10,43 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # - The local machine must have xcpclient installed
 
 
+echo "========================================================================================================"
+echo "A2L file creator for the freertos_emu_demo example project"
+echo "========================================================================================================"
+
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 1
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)" || exit 1
+
+if [ ! -f "$REPO_ROOT/build.sh" ] || [ ! -f "$REPO_ROOT/CMakeLists.txt" ]; then
+    echo "❌ FAILED: Repository root not found at $REPO_ROOT" >&2
+    exit 1
+fi
+
 #======================================================================================================================
 # Parameters
 #======================================================================================================================
 
-LOGFILE="$REPO_ROOT/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.log"
+# Build on the remote Linux target (true) or on the local machine (false)
+# A local build is possible on Linux only: executables built on macOS (Mach-O) contain no DWARF debug information,
+# the xcpclient A2L generator can not create an A2L file from them
+REMOTE=true
+
+# Run a short calibration and measurement test
+TEST=false
+CSVFILE="$REPO_ROOT/examples/freertos_demo/freertos_emu_demo/CANape/freertos_demo.csv"
+
+
+
+LOGFILE="$REPO_ROOT/examples/freertos_demo/freertos_emu_demo/CANape/freertos_demo.log"
 #LOGFILE='/dev/stdout'
 #LOGFILE="/dev/null"
 
 # A2L file path on local machine
-A2LFILE="$REPO_ROOT/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l"
+A2LFILE="$REPO_ROOT/examples/freertos_demo/freertos_emu_demo/CANape/freertos_demo.a2l"
 
 # ELF file path on local machine
-ELFFILE="$REPO_ROOT/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.elf"
+ELFFILE="$REPO_ROOT/examples/freertos_demo/freertos_emu_demo/CANape/freertos_demo.elf"
 
 # Build type for target executable: Release, RelWithDebInfo or Debug
 # RelWithDebInfo is default to demonstrate operation with with -O1 and NDEBUG
@@ -38,21 +59,15 @@ BUILD_TYPE="RelWithDebInfo"
 # -O2 no debug symbols
 #BUILD_TYPE="Release"
 
-# Run a simple test calibration and measurement
-#TEST=true
-TEST=false
-# CSV measurement file path on local machine
-CSVFILE="$REPO_ROOT/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.csv"
-
 
 # Target connection details
 #TARGET_USER="parallels"
 #TARGET_HOST="10.211.55.4"
 TARGET_USER="rainer"
 TARGET_HOST="192.168.0.206"
-TARGET_PATH="~/XCPlite-Test"
-TARGET_BUILD_DIR="build-no_a2l"
-TARGET_BINARY="no_a2l_demo_cpp"
+TARGET_PATH="~/XCPlite-rtos"
+TARGET_BUILD_DIR="build-rtos"
+TARGET_BINARY="freertos_emu_demo"
 
 # Path to xcpclient tool executable (assuming cargo installed it to ~/.cargo/bin)
 XCPCLIENT="xcpclient"
@@ -62,22 +77,19 @@ XCPCLIENT="xcpclient"
 # Sync Target, Build Application on Target, Download ELF, Start ECU, ...
 #======================================================================================================================
 
-
-echo "========================================================================================================"
-echo "A2L file creator for the no_a2l_demo_cpp example project"
-echo "========================================================================================================"
-
 mkdir -p "$(dirname "$LOGFILE")"
 echo "Logging to $LOGFILE enabled"
 echo "" > "$LOGFILE"
 
 #======================================================================================================================
-# ECU_ONLINE
+# Remote build
 # Sync target, build, upload ELF, start application on target
 #======================================================================================================================
 
+if [ "$REMOTE" = true ]; then
+
 # Sync target
-echo "Sync target ..."            
+echo "Sync $REPO_ROOT/ to $TARGET_USER@$TARGET_HOST:$TARGET_PATH/ ..."
 rsync -avz --delete \
     --include='/build.sh' \
     --include='/CMakeLists.txt' \
@@ -85,8 +97,7 @@ rsync -avz --delete \
     --include='/inc/***' \
     --include='/src/***' \
     --include='/examples/' \
-    --include='/examples/no_a2l_demo/***' \
-    --include='/examples/no_a2l_demo_cpp/***' \
+    --include='/examples/freertos_demo/***' \
     --exclude='*' \
     "$REPO_ROOT/" "$TARGET_USER@$TARGET_HOST:$TARGET_PATH/" 1> /dev/null
 if [ $? -ne 0 ]; then
@@ -98,7 +109,7 @@ fi
 # Build on target
 # Always a clean build: if the target has no NTP and its clock may skew,
 echo "Clean build executable on Target ..."
-ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
+ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./build.sh $BUILD_TYPE rtos examples clean" 1> /dev/null
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: Build on target"
     exit 1
@@ -113,6 +124,30 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+else
+
+# Build local
+# Linux only: the macOS linker does not put the DWARF debug information into the executable (Mach-O),
+# xcpclient can not create an A2L file from it
+if [ "$(uname -s)" = "Darwin" ]; then
+    echo "❌ FAILED: A local build on macOS creates a Mach-O executable without DWARF debug information, xcpclient can not create an A2L file from it"
+    echo "   Build on a Linux target instead: set REMOTE=true in $SCRIPT_DIR/create_a2l.sh"
+    exit 1
+fi
+echo "Build ..."
+"$REPO_ROOT/build.sh" $BUILD_TYPE rtos examples 1> /dev/null
+if [ $? -ne 0 ]; then
+    echo "❌ FAILED: Build"
+    exit 1
+fi
+
+cp "$REPO_ROOT/$TARGET_BUILD_DIR/$TARGET_BINARY" "$ELFFILE" 1> /dev/null
+if [ $? -ne 0 ]; then
+    echo "❌ FAILED: Copy $REPO_ROOT/$TARGET_BUILD_DIR/$TARGET_BINARY to $ELFFILE"
+    exit 1
+fi
+
+fi
 
 
 #======================================================================================================================
@@ -129,7 +164,7 @@ echo ""
 # --verbose is information detail level
 # Remove the A2L file of a previous run, so a failed generation can not leave a stale A2L file behind
 rm -f "$A2LFILE"
-XCPCLIENT_ARGS=(--log-level=3 --verbose=5 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE")
+XCPCLIENT_ARGS=(--log-level=3 --verbose=5 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter xcp_demo --default-event=0 --create-a2l --a2l "$A2LFILE")
 echo "Command: $XCPCLIENT ${XCPCLIENT_ARGS[*]}"
 "$XCPCLIENT" "${XCPCLIENT_ARGS[@]}" >> "$LOGFILE"
 if [ $? -ne 0 ] || [ ! -f "$A2LFILE" ]; then
@@ -159,7 +194,7 @@ echo "==========================================================================
 echo "Test connect"
 echo "========================================================================================================"
 read -p "Press any key to continue..." -n1 -s
-$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE" --list-mea . --list-cal . 
+$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE" --list-mea .  --list-cal . 
 sleep 1
 
 echo "========================================================================================================"
@@ -169,6 +204,6 @@ read -p "Press any key to continue..." -n1 -s
 $XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea counter --time 3 --csv "$CSVFILE"
 sleep 1
 
-ssh "$TARGET_USER@$TARGET_HOST" "pkill -f no_a2l_demo_cpp" 
+ssh "$TARGET_USER@$TARGET_HOST" "pkill -f freertos_emu_demo" 
 
 fi

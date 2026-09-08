@@ -125,10 +125,14 @@ echo "==========================================================================
 echo "Creating A2L file from XCPlite ELF file ..."
 echo "========================================================================================================"
 echo ""
-echo "Command: $XCPCLIENT --log-level=3 --verbose=2 --dest-addr=$TARGET_HOST --udp --offline --elf \"$ELFFILE\" --elf-unit-filter main --create-a2l --a2l \"$A2LFILE\""
-$XCPCLIENT --log-level=3 --verbose=2 --dest-addr=$TARGET_HOST --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE" >> "$LOGFILE"
-if [ $? -ne 0 ]; then
-    echo "❌ FAILED: xcpclient returned error"
+# Remove the A2L file of a previous run, so a failed generation can not leave a stale A2L file behind
+rm -f "$A2LFILE"
+XCPCLIENT_ARGS=(--log-level=3 --verbose=2 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE")
+echo "Command: $XCPCLIENT ${XCPCLIENT_ARGS[*]}"
+"$XCPCLIENT" "${XCPCLIENT_ARGS[@]}" >> "$LOGFILE"
+if [ $? -ne 0 ] || [ ! -f "$A2LFILE" ]; then
+    echo "❌ FAILED: xcpclient could not create the A2L file $A2LFILE, see $LOGFILE"
+    grep "\[ERROR\]" "$LOGFILE"
     exit 1
 fi
 

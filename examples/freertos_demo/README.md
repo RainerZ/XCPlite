@@ -51,6 +51,7 @@ The following files are required:
 xcplite_sources = [
     "cal.c",
     "platform.c",
+    "sockets.c",
     "queue32m.c",
     "xcpappl.c",
     "xcpethserver.c",
@@ -60,7 +61,7 @@ xcplite_sources = [
 ```
 
 The FreeRTOS build of XCPlite:
-- Uses the FreeRTOS/lwIP socket, thread, mutex and clock platform abstractions in `src/platform.c`.
+- Uses the FreeRTOS/lwIP socket, thread, mutex and clock platform abstractions in `src/platform.c` and `src/sockets.c`.
 - Uses `src/queue32m.c` with mutex or critical-section synchronization.
 
 
@@ -90,7 +91,7 @@ xcpclient --offline --udp --dest-addr <ip-addr> --elf <elf-file>  --elf-unit-fil
 # Automatically add all possible measurement variables and calibration parameters in calibration parameter segments from compilation unit 'xcp_demo'
 # Example freertos_stm32_demo:
 xcpclient --offline --udp --dest-addr 192.168.0.207 --elf build/Debug/STM32H753EthDemo.elf --a2l CANape/stm32_freertos_demo.a2l --elf-unit-filter xcp_demo
-# Example freertos_emu_demo:
+# Example freertos_emu_demo (Linux build only: an executable built on macOS contains no DWARF debug information and is rejected by xcpclient):
 xcpclient --offline --udp --dest-addr 127.0.0.1 --elf build-rtos/Debug/freertos_emu_demo --a2l examples/freertos_demo/freertos_emu_demo/CANape/freertos_demo.a2l --elf-unit-filter xcp_demo
 ```
 
@@ -353,9 +354,9 @@ target_compile_definitions(freertos_config INTERFACE projCOVERAGE_TEST=0)
 ### Step 3 — Implement the socket layer
 
 When `_FREE_RTOS` is defined **without** `FREE_RTOS_POSIX_SIM`, the socket functions in
-`platform.c` use the lwIP socket API.
+`sockets.c` use the lwIP socket API.
 Replace them with another implementation if required.
-The required interface is documented in `src/platform.h` (search for `SOCKET_HANDLE`).
+The required interface is documented in `src/sockets.h`.
 
 
 ### Step 4 — Implement the clock (bare-metal)

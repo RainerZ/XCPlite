@@ -137,7 +137,7 @@ using std::atomic_uint_least64_t;
 using std::atomic_uint_least8_t;
 #endif
 
-// When testing FreeRTOS code paths on macOS/Linux, we use OS-specific sockets and clock code in platform.c
+// When testing FreeRTOS code paths on macOS/Linux, we use OS-specific sockets and clock code in platform.c and sockets.c
 #if defined(FREE_RTOS_POSIX_SIM)
 
 #if defined(__APPLE__)

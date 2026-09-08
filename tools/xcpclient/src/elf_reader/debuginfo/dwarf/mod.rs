@@ -179,6 +179,21 @@ fn load_filedata(filename: &OsStr) -> Result<memmap2::Mmap, String> {
 // read the headers and sections of an elf/object file
 fn load_elf_file<'data>(filename: &str, filedata: &'data [u8], verbose: usize) -> Result<object::read::File<'data>, String> {
     log::debug!("load_elf_file: {}", filename);
+
+    // Reject Mach-O files with a clear message, macOS is not supported
+    // Executables built on macOS contain no DWARF debug information, the macOS linker leaves it in the object files and in the separate .dSYM bundle,
+    // and the XCPlite instrumentation markers are read from ELF sections
+    if let Ok(kind) = object::FileKind::parse(filedata)
+        && matches!(
+            kind,
+            object::FileKind::MachO32 | object::FileKind::MachO64 | object::FileKind::MachOFat32 | object::FileKind::MachOFat64
+        )
+    {
+        return Err(format!(
+            "Error: '{filename}' is a Mach-O (macOS) binary, macOS is not supported. Executables built on macOS contain no DWARF debug information and the A2L generator reads ELF files only. Build the application on Linux or for an embedded ELF target and use that ELF file"
+        ));
+    }
+
     match object::File::parse(filedata) {
         Ok(object_file) => {
             if verbose >= 1 {

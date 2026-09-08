@@ -124,6 +124,8 @@ XCPlite encodes *where* a measured/calibrated variable lives (global, stack, hea
 
 and DWARF scope anchors named `trg__<mode-letters>__<event-name>` (e.g. `trg__AAS__foo`, letter position = address-extension value [0..]: `A`=absolute, `C`=cal-segment-relative, `S`=stack-relative, `D`=dynamic/heap) emitted by the trigger macros, to reconstruct addressing without any runtime A2L calls. The marker contract (sections, marker names, trigger anchor naming) is in `docs/TECHNICAL.md`, the tool side (workflow, naming rules, symbol resolution, supported types) in `docs/OFFLINE_A2L.md`.
 
+The generator reads ELF files only. Executables built on macOS are Mach-O and carry no DWARF (the linker leaves it in the `.o` files / `.dSYM`), so `xcpclient` rejects them with an explicit "macOS is not supported" error and exit status 1 — A2L files for `no_a2l`/`rtos` builds must be generated from a Linux build, which is what the examples' `create_a2l.sh` scripts do via a remote build on a Linux target.
+
 ### Shared-memory (SHM) multi-application mode (`docs/SHM.md`)
 
 `shm` configuration lets multiple independent OS processes share one transmit queue and XCP server state via POSIX shared memory; exactly one process is elected XCP server/leader (`XCP_MODE_SHM_AUTO`) or forced (`XCP_MODE_SHM_SERVER`). Binary persistence (`.bin` file) is mandatory in this mode since it's how the shared state (event/calseg numbering, application list) is bootstrapped and kept stable across process restarts. `shmtool` inspects/clears SHM state; `xcpdaemon` is a standalone XCP-on-Ethernet server that attaches to SHM-instrumented applications.

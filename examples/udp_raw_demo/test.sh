@@ -182,17 +182,33 @@ fi
 echo "========================================================================================================"
 echo "Connect and upload A2L"
 echo "List measurements and calibrations"
-$XCPCLIENT --log-level=3 --dest-addr=$TARGET_IP:$TARGET_PORT --udp --upload-a2l --a2l "$A2LFILE" --list-mea . --list-cal . 
+TEST_FAILED=0
+$XCPCLIENT --log-level=3 --dest-addr=$TARGET_IP:$TARGET_PORT --udp --upload-a2l --a2l "$A2LFILE" --list-mea . --list-cal .
+if [ $? -ne 0 ]; then
+    echo "❌ FAILED: xcpclient connect, A2L upload or variable listing"
+    TEST_FAILED=1
+fi
 
+if [ $TEST_FAILED -eq 0 ]; then
 echo "========================================================================================================"
 echo "Test measurement"
 echo "========================================================================================================"
 $XCPCLIENT --log-level=2 --dest-addr=$TARGET_IP:$TARGET_PORT --udp --a2l "$A2LFILE"  --mea counter --time 2 --verbose 2
+if [ $? -ne 0 ]; then
+    echo "❌ FAILED: xcpclient measurement"
+    TEST_FAILED=1
+fi
+fi
 
 # Stop the target executable
 # -x matches the process name exactly. -f would also match this very ssh command line, because it
 # contains the binary name, and would terminate the ssh session instead of (or as well as) the demo.
 ssh "$TARGET_USER@$TARGET_HOST" "pkill -x $TARGET_BINARY"
 wait "$SSH_PID" 2>/dev/null
+
+if [ $TEST_FAILED -ne 0 ]; then
+    exit 1
+fi
+echo "✅ SUCCESS: udp_raw_demo test passed"
 
 fi

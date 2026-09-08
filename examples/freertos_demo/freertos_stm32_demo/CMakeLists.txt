@@ -82,7 +82,7 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
 
     # for XCPlite library
-    _FREE_RTOS                                          # Enable FreeRTOS code paths in platform.h/platform.c, xcpappl.c
+    _FREE_RTOS                                          # Enable FreeRTOS code paths in platform.h/.c, sockets.h/c, xcpappl.c
     "XCPLIB_CFG_OVERRIDE=\"xcplib_rtos_cfg.h\""         # Enable configuration override for FreeRTOS 
     # OPTION_CMSIS
     OPTION_IO

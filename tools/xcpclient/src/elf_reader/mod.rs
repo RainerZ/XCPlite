@@ -85,16 +85,11 @@ pub(crate) struct ElfReader {
 
 impl ElfReader {
     // Load debug information from the ELF file
-    pub fn new(file_name: &str, verbose: usize, unit_idx_limit: usize) -> Option<ElfReader> {
+    // The error message describes why the file can not be used (not found, not an ELF file, no DWARF debug information, ...)
+    pub fn new(file_name: &str, verbose: usize, unit_idx_limit: usize) -> Result<ElfReader, String> {
         info!("Loading debug information from ELF file: {}", file_name);
-        let debug_data = DebugData::load_dwarf(OsStr::new(file_name), verbose, unit_idx_limit);
-        match debug_data {
-            Ok(debug_data) => Some(ElfReader::from_debug_data(debug_data)),
-            Err(e) => {
-                error!("Failed to load debug info from '{}': {}", file_name, e);
-                None
-            }
-        }
+        let debug_data = DebugData::load_dwarf(OsStr::new(file_name), verbose, unit_idx_limit)?;
+        Ok(ElfReader::from_debug_data(debug_data))
     }
 
     // Create the ELF reader from loaded debug information
@@ -1333,7 +1328,7 @@ mod test {
 
     // Load a fixture ELF file and register all its variables
     fn load_fixture(elf_file: &str) -> (ElfReader, Registry) {
-        let elf_reader = ElfReader::new(elf_file, 0, usize::MAX).unwrap_or_else(|| panic!("failed to load {elf_file}"));
+        let elf_reader = ElfReader::new(elf_file, 0, usize::MAX).unwrap_or_else(|e| panic!("failed to load {elf_file}: {e}"));
         let mut reg = Registry::new();
         elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "", None).expect("register_variables failed");
         (elf_reader, reg)

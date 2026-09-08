@@ -29,6 +29,13 @@ information, and writes a complete A2L file without any runtime A2L code in the 
 application code, the naming of types and variables, the supported types and the diagnostics are described in
 [docs/OFFLINE_A2L.md](../../docs/OFFLINE_A2L.md), the markers in [docs/TECHNICAL.md](../../docs/TECHNICAL.md#instrumentation-markers-for-offline-a2l-tools).
 
+The generator reads ELF files with DWARF debug information (Linux, QNX, embedded targets). macOS is not supported: executables built
+on macOS (Mach-O) contain no DWARF debug information, the macOS linker leaves it in the object files and in the `.dSYM` bundle.
+xcpclient rejects Mach-O files with an error message, generate the A2L file from a Linux build of the application instead.
+
+xcpclient exits with status 1 on any error (connection failed, ELF or A2L file not found or not usable, test failed), so scripts can
+detect failures by the exit status.
+
 ## Usage
 
 ```text
@@ -108,7 +115,7 @@ Options:
           Upload ELF file from XCP server. Requires that the XCP server supports proprietary GET_ID ELF upload command
 
       --elf <ELF>
-          Specify the name of an ELF file, create an A2L file from ELF debug information. If connected to a XCP server, events and memory segments will be extracted from the XCP server
+          Specify the name of an ELF file, create an A2L file from ELF debug information. If connected to a XCP server, events and memory segments will be extracted from the XCP server. ELF files with DWARF debug information only (Linux, QNX, embedded targets), macOS Mach-O executables are not supported
           
           [default: ""]
 

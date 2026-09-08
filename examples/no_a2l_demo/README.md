@@ -145,6 +145,8 @@ cmake -B build-no_a2l -S . -DXCPLITE_CONFIGURATION=no_a2l -DCMAKE_BUILD_TYPE=Deb
 cmake --build build-no_a2l
 
 # Generate an A2L file for the no_a2l_demo application offline from its ELF file
+# The ELF file must come from a Linux build: executables built on macOS (Mach-O) contain no DWARF debug information
+# and are rejected by xcpclient, see create_a2l.sh for a remote build on a Linux target
 # Example:
 # Add all variables
 xcpclient  --offline --elf build-no_a2l/no_a2l_demo --a2l no_a2l_demo.a2l --create-a2l --verbose 1

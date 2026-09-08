@@ -572,24 +572,21 @@ pub async fn test_setup(
 }
 
 // Test shutdown
-// Disconnect from XCP server
-pub async fn test_disconnect(xcp_client: &mut XcpClient) {
-    let mut error_state = false;
-
-    // Disconnect from XCP server
+// Disconnect from XCP server, returns false if the disconnect failed
+pub async fn test_disconnect(xcp_client: &mut XcpClient) -> bool {
     info!("Disconnect from XCP server");
-    xcp_client
-        .disconnect()
-        .await
-        .map_err(|e| {
-            error_state = true;
+    match xcp_client.disconnect().await {
+        Ok(_) => true,
+        Err(e) => {
             error!("Disconnect failed: {:?}", e);
-        })
-        .ok();
+            false
+        }
+    }
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------
 
+// Returns true if all tests passed
 pub async fn test_executor(
     protocol: &'static str,
     dest_addr: std::net::SocketAddr,
@@ -597,7 +594,8 @@ pub async fn test_executor(
     test_mode_cal: TestModeCal,
     test_mode_daq: TestModeDaq,
     daq_test_duration_ms: u64,
-) {
+) -> bool {
+    let mut all_ok = true;
     let load_a2l = test_mode_cal != TestModeCal::None || test_mode_daq != TestModeDaq::None;
     let (mut xcp_client, daq_decoder) = test_setup(protocol, dest_addr, local_addr, load_a2l, true).await;
 
@@ -637,6 +635,7 @@ pub async fn test_executor(
             assert_eq!(d.packets_lost, 0);
         } else {
             error!("Daq test failed");
+            all_ok = false;
         }
     }
 
@@ -645,13 +644,17 @@ pub async fn test_executor(
 
     if test_mode_cal == TestModeCal::Cal {
         //
-        let error = test_calibration(&mut xcp_client).await;
-        if error {
+        let cal_ok = test_calibration(&mut xcp_client).await;
+        if cal_ok {
             info!("Calibration test passed");
         } else {
             error!("Calibration test failed");
+            all_ok = false;
         }
     }
 
-    test_disconnect(&mut xcp_client).await;
+    if !test_disconnect(&mut xcp_client).await {
+        all_ok = false;
+    }
+    all_ok
 }

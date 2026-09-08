@@ -15,6 +15,7 @@
 
 use std::io::{IsTerminal, Write};
 use std::net::Ipv4Addr;
+use std::process::ExitCode;
 use std::{error::Error, sync::Arc};
 
 use figment::{
@@ -146,6 +147,7 @@ struct Args {
     // ---elf
     /// Specify the name of an ELF file, create an A2L file from ELF debug information.
     /// If connected to a XCP server, events and memory segments will be extracted from the XCP server.
+    /// ELF files with DWARF debug information only (Linux, QNX, embedded targets), macOS Mach-O executables are not supported.
     #[arg(long, default_value = "")]
     elf: String,
 
@@ -738,7 +740,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
 
                 // Read ELF file and DWARF debug information, compilation unit number may be limited to reduce processing time and memory needed
                 info!("Reading ELF file: {}", elf_filename);
-                let elf_reader = ElfReader::new(&elf_filename, verbose, elf_idx_unit_limit).ok_or(format!("Failed to read ELF file '{}'", elf_filename))?;
+                let elf_reader = ElfReader::new(&elf_filename, verbose, elf_idx_unit_limit).map_err(|e| format!("Failed to read ELF file '{}': {}", elf_filename, e))?;
                 if verbose > 0 {
                     elf_reader.debug_data.print_debug_info(verbose, elf_idx_unit_limit); // print only variables <= compilation unit 0
                 }
@@ -1316,8 +1318,9 @@ fn merge_config(matches: &clap::ArgMatches, config: ConfigFile, args: &mut Args)
 //------------------------------------------------------------------------
 // Main function
 
+// Exit status is 1 on any error, so scripts can detect failures
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> ExitCode {
     use clap::{CommandFactory, FromArgMatches};
 
     // Parse command line arguments
@@ -1325,12 +1328,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut args = Args::from_arg_matches(&mut matches).unwrap();
 
     // Load and merge config file if --config was specified
+    // Logging is not initialized yet, the log level may come from the config file
     if !args.config.is_empty() {
-        let config: ConfigFile = Figment::new()
-            .merge(Toml::file(&args.config))
-            .extract()
-            .map_err(|e| format!("Invalid config file '{}': {}", args.config, e))?;
-        merge_config(&matches, config, &mut args);
+        match Figment::new().merge(Toml::file(&args.config)).extract::<ConfigFile>() {
+            Ok(config) => merge_config(&matches, config, &mut args),
+            Err(e) => {
+                eprintln!("Error: Invalid config file '{}': {}", args.config, e);
+                return ExitCode::FAILURE;
+            }
+        }
     }
 
     // Initialize logging
@@ -1352,6 +1358,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     debug!("{:#?}", args);
 
+    // Run the XCP client or the test executor
+    match run(args).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            error!("{}", e);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+// Select protocol and addresses, run the XCP client or the test executor
+async fn run(args: Args) -> Result<(), Box<dyn Error>> {
     // Protocol, IP addresses, port, baudrate
     let dest_addr: std::net::SocketAddr = parse_dest_addr(&args.dest_addr, args.port)?;
     let local_addr: std::net::SocketAddr = parse_dest_addr(&args.bind_addr, 0)?;
@@ -1372,14 +1390,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Run the test executor if --test is specified
     if args.test {
-        test_executor(protocol, dest_addr, local_addr, TEST_CAL, TEST_DAQ, TEST_DURATION_MS).await
+        if !test_executor(protocol, dest_addr, local_addr, TEST_CAL, TEST_DAQ, TEST_DURATION_MS).await {
+            return Err("XCP test failed".into());
+        }
     }
     // Run the XCP client
     else {
-        let res = xcp_client(args, protocol, dest_addr, local_addr, baud_rate).await;
-        if let Err(e) = res {
-            error!("XCP client error: {}", e);
-        }
+        xcp_client(args, protocol, dest_addr, local_addr, baud_rate)
+            .await
+            .map_err(|e| format!("XCP client error: {}", e))?;
     }
 
     Ok(())

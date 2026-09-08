@@ -34,7 +34,11 @@ order, without a persistence file.
 ## Workflow
 
 1. Build the application with debug information: `-g`, `CMAKE_BUILD_TYPE=Debug` or `RelWithDebInfo`. Optimized builds work, see the
-   rules for the application code below.
+   rules for the application code below. The generator reads ELF files: build on Linux or QNX, or for an embedded ELF target.
+   macOS is not supported: the macOS linker does not put the DWARF debug information into the executable (Mach-O), it stays in the
+   object files and in the `.dSYM` bundle. xcpclient rejects Mach-O files with an error message. The `no_a2l` and `rtos`
+   configurations build and run on macOS, but the A2L file has to be generated from a Linux build of the same sources, as the
+   `create_a2l.sh` scripts of the examples do with a remote build on a Linux target.
 2. Generate the A2L file from the ELF file, offline or with the running target:
 
 ```bash
@@ -206,6 +210,12 @@ Messages worth knowing when a variable is missing or looks wrong in the A2L file
 | `New event '...' found, created with undefined event id ...` | No `xcp_evts` section and no linker symbols. Connect to the target to get the ids. |
 | `Calibration segment reference page variable 'x' has N usable definitions, expected 1` | The name of the default page variable is ambiguous, restrict the compilation units with `--elf-unit-filter`. |
 | `EPK mismatch: A2L file '...' has EPK '...', target reports EPK '...'` | The A2L file does not belong to the running build. `--yes` overrides the check. |
+| `'...' is a Mach-O (macOS) binary, macOS is not supported` | The application was built on macOS. Executables built on macOS contain no DWARF debug information, build on Linux or for an embedded ELF target. |
+| `... does not contain DWARF2+ debug info. The section .debug_info is missing.` | The application was built without `-g`, or the debug information was stripped. |
+
+xcpclient exits with status 1 when the A2L file could not be created or any other error occurred, scripts can rely on the exit
+status. The `create_a2l.sh` scripts of the examples check the exit status and the existence of the A2L file, and print the error
+lines of the xcpclient log when the generation failed.
 
 ## Other tools
 
