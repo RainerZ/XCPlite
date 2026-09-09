@@ -192,11 +192,11 @@ THREAD_FUNC_RETURN task(void *p) {
 XCP_NOINLINE void foo(void) {
 
     // Static local scope measurement variable
-    XCP_COMMENT(static_counter, "Local static measurement variable in function `foo`"); // Example for meta data annotation as code
+    XCP_COMMENT(static_counter, "Local static measurement variable in function `foo`");
     volatile static uint16_t static_counter = 0;
 
     // Local measurement variable
-    XCP_COMMENT(foo__counter, "Local measurement variable in function `foo`"); // Example for meta data annotation as code
+    XCP_COMMENT(foo__counter, "Local captured measurement variable in function `foo`");
     uint32_t counter = 0;
 
     // More local measurement variables

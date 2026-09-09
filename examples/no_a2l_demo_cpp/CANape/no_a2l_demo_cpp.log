@@ -6,59 +6,53 @@
 [INFO ] Generate A2L file /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l with ELF/DWARF information only,  offline mode 
 [INFO ] Reading ELF file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.elf
 [INFO ] Loading debug information from ELF file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.elf
-[INFO ] Compiler: GNU C++17 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c++17 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fasynchronous-unwind-tables
-[INFO ] Compiler: GNU C11 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c11 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fasynchronous-unwind-tables
+[INFO ] Compiler: Debian clang version 14.0.6
 [INFO ] ===============================================================
 [INFO ] Target signature found: ACSDD
 [INFO ] Using absolute addressing for calibration segments
 [INFO ] ===============================================================
-[INFO ] EPK segment memory section found at address = 0x00030328
+[INFO ] EPK segment memory section found at address = 0x00030390
 [INFO ] EPK string: 'V2.1.10'
 [INFO ] ===============================================================
 [INFO ] Registering event information:
 [INFO ] ===============================================================
-[INFO ] Found XCP event descriptor memory section at address = 0x00030330, size = 48 bytes
-[INFO ] Event definition for event 'mainloop' found in main_cpp:main, addr = 0x30350
+[INFO ] Found XCP event descriptor memory section at address = 0x00030360, size = 48 bytes
+[INFO ] Event definition for event 'foo' found in main_cpp:foo, addr = 0x30360
+[INFO ] New event 'foo' found: event id = 0
+[INFO ] Event definition for event 'task' found in main_cpp:task, addr = 0x30370
+[INFO ] New event 'task' found: event id = 1
+[INFO ] Event definition for event 'mainloop' found in main_cpp:main, addr = 0x30380
 [INFO ] New event 'mainloop' found: event id = 2
-[INFO ] Event definition for event 'task' found in main_cpp:task, addr = 0x30330
-[INFO ] New event 'task' found: event id = 0
-[INFO ] Event definition for event 'foo' found in main_cpp:foo, addr = 0x30340
-[INFO ] New event 'foo' found: event id = 1
 [INFO ] ===============================================================
 [INFO ] Registering segment information (absolute addressing mode):
 [INFO ] ===============================================================
 [INFO ] Calibration segment 'epk' not yet defined in registry
-[INFO ] Created segment 0: 'epk':  addr = 0x00030328, size = 7, mem_addr = 0x00030328
-Calibration segment 'task_counter_ctl_params' type information found, type=TaskCounterCtlParams, size = 12
-[INFO ] Calibration segment 'task_counter_ctl_params' default page variable found in debug data: Address = 0xd240, Size = 0xc
-[INFO ] Calibration segment 'task_counter_ctl_params' not yet defined in registry
-[INFO ] Created segment 1: 'task_counter_ctl_params':  addr = 0x0000D240, size = 12, mem_addr = 0x0000D240
-Calibration segment 'counter_ctl_params' type information found, type=CounterCtlParams, size = 8
-[INFO ] Calibration segment 'counter_ctl_params' default page variable found in debug data: Address = 0xd2a8, Size = 0x8
-[INFO ] Calibration segment 'counter_ctl_params' not yet defined in registry
-[INFO ] Created segment 2: 'counter_ctl_params':  addr = 0x0000D2A8, size = 8, mem_addr = 0x0000D2A8
+[INFO ] Created segment 0: 'epk':  addr = 0x00030390, size = 7, mem_addr = 0x00030390
 Calibration segment 'params' type information found, type=params, size = 64
-[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xd250, Size = 0x40
+[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xc808, Size = 0x40
 [INFO ] Calibration segment 'params' not yet defined in registry
-[INFO ] Created segment 3: 'params':  addr = 0x0000D250, size = 64, mem_addr = 0x0000D250
+[INFO ] Created segment 1: 'params':  addr = 0x0000C808, size = 64, mem_addr = 0x0000C808
+Calibration segment 'counter_ctl_params' type information found, type=CounterCtlParams, size = 8
+[INFO ] Calibration segment 'counter_ctl_params' default page variable found in debug data: Address = 0xc848, Size = 0x8
+[INFO ] Calibration segment 'counter_ctl_params' not yet defined in registry
+[INFO ] Created segment 2: 'counter_ctl_params':  addr = 0x0000C848, size = 8, mem_addr = 0x0000C848
+Calibration segment 'task_counter_ctl_params' type information found, type=TaskCounterCtlParams, size = 12
+[INFO ] Calibration segment 'task_counter_ctl_params' default page variable found in debug data: Address = 0xc854, Size = 0xc
+[INFO ] Calibration segment 'task_counter_ctl_params' not yet defined in registry
+[INFO ] Created segment 3: 'task_counter_ctl_params':  addr = 0x0000C854, size = 12, mem_addr = 0x0000C854
 [INFO ] ===============================================================
 [INFO ] Registering event locations:
 [INFO ] ===============================================================
-[INFO ]   Event mainloop trigger found in main_cpp:main, address resolver mode AAS
-[INFO ]   Event task trigger found in main_cpp:task, address resolver mode AAS
-[INFO ]   Event foo trigger found in main_cpp:foo, address resolver mode AAS
+[INFO ] Event foo trigger found in main_cpp:foo, address resolver mode AASR
+[INFO ] Event task trigger found in main_cpp:task, address resolver mode AAS
+[INFO ] Event mainloop trigger found in main_cpp:main, address resolver mode AAS
 [INFO ] ===============================================================
 [INFO ] Registering variables:
 [INFO ] ===============================================================
 [INFO ] Default event 'mainloop' (id 2) for global and static variables without an event trigger
 [INFO ] Compilation unit filter: 'main'
 [INFO ] Global variable 'gRun', event id = Some(2)
-[INFO ] Global variable 'OPTION_PROJECT_NAME', event id = Some(2)
-[INFO ] Global variable 'OPTION_SERVER_ADDR', event id = Some(2)
-[INFO ] Global variable 'params', event id = Some(2)
-[INFO ] Global variable 'calseg_id_params', event id = Some(2)
 [INFO ] Global variable 'global_counter', event id = Some(2)
-[INFO ] Global variable 'global_static_counter', event id = Some(2)
 [INFO ] Global variable 'global_test_uint8', event id = Some(2)
 [INFO ] Global variable 'global_test_uint16', event id = Some(2)
 [INFO ] Global variable 'global_test_uint32', event id = Some(2)
@@ -77,36 +71,45 @@ Calibration segment 'params' type information found, type=params, size = 64
 [INFO ] Struct/class type 'Input' in main_cpp registered as typedef 'motor_control.Input', the type name is used in different scopes
 [INFO ] Global variable 'input', event id = Some(2)
 [INFO ] Struct/class type 'Input' in main_cpp registered as typedef 'valve_control.Input', the type name is used in different scopes
+[INFO ] Global variable 'counter_ctl', event id = Some(2)
+[INFO ] Static variable 'static_counter' local to function 'Some("bar")', no event found in this function, event id = Some(2)
+[INFO ] Static variable 'static_counter' local to function 'Some("foo")', event id = 0
+[INFO ] Static variable 'static_counter' local to function 'Some("task")', event id = 1
+[INFO ] Static variable 'static_counter' local to function 'Some("main")', event id = 2
+[INFO ] Local variable 'test_int8' in function 'Some("foo")', event id = Some(0), offset = 28
+[INFO ] Local variable 'test_int16' in function 'Some("foo")', event id = Some(0), offset = 24
+[INFO ] Local variable 'test_int32' in function 'Some("foo")', event id = Some(0), offset = -4
+[INFO ] Local variable 'test_int64' in function 'Some("foo")', event id = Some(0), offset = -16
+[INFO ] Static variable 'task_counter_ctl_params' local to function 'Some("task")', event id = 1
+[INFO ] Static variable 'calseg_id_task_counter_ctl_params' local to function 'Some("task")', event id = 1
+[INFO ] Static variable 'counter_ctl_task_calseg_handle' local to function 'Some("task")', event id = 1
+[INFO ] Local variable 'xcp_epk_keep' in function 'Some("main")', event id = Some(2), offset = -4
+[INFO ] Global variable 'params', event id = Some(2)
+[INFO ] Global variable 'calseg_id_params', event id = Some(2)
 [INFO ] Global variable 'counter_ctl_params', event id = Some(2)
 [INFO ] Global variable 'calseg_id_counter_ctl_params', event id = Some(2)
 [INFO ] Global variable 'counter_ctl_calseg_handle', event id = Some(2)
-[INFO ] Global variable 'counter_ctl', event id = Some(2)
-[INFO ] Local variable 'counter' in function 'Some("main")', event id = Some(2), offset = -10
-[INFO ] Local variable 'counter' in function 'Some("task")', event id = Some(0), offset = -4
-[INFO ] Local variable 'counter' in function 'Some("foo")', event id = Some(1), offset = -18
-[WARN ] Local variable 'counter' in function Some("bar") skipped, could not find event for dyn addressing mode
-[INFO ] Static variable 'static_counter' local to function 'Some("main")', event id = 2
-[INFO ] Static variable 'static_counter' local to function 'Some("task")', event id = 0
-[INFO ] Static variable 'static_counter' local to function 'Some("foo")', event id = 1
-[INFO ] Static variable 'static_counter' local to function 'Some("bar")', no event found in this function, event id = Some(2)
-[INFO ] Local variable 'xcp_epk_keep' in function 'Some("main")', event id = Some(2), offset = -11
-[INFO ] Static variable 'task_counter_ctl_params' local to function 'Some("task")', event id = 0
-[INFO ] Static variable 'calseg_id_task_counter_ctl_params' local to function 'Some("task")', event id = 0
-[INFO ] Local variable 'test_float' in function 'Some("foo")', event id = Some(1), offset = -24
-[INFO ] Local variable 'test_double' in function 'Some("foo")', event id = Some(1), offset = -32
-[INFO ] Local variable 'test_uint8' in function 'Some("foo")', event id = Some(1), offset = -33
-[INFO ] Local variable 'test_uint16' in function 'Some("foo")', event id = Some(1), offset = -36
-[INFO ] Local variable 'test_uint32' in function 'Some("foo")', event id = Some(1), offset = -40
-[INFO ] Local variable 'test_uint64' in function 'Some("foo")', event id = Some(1), offset = -48
-[INFO ] Local variable 'test_int8' in function 'Some("foo")', event id = Some(1), offset = -49
-[INFO ] Local variable 'test_int16' in function 'Some("foo")', event id = Some(1), offset = -52
-[INFO ] Local variable 'test_int32' in function 'Some("foo")', event id = Some(1), offset = -56
-[INFO ] Local variable 'test_int64' in function 'Some("foo")', event id = Some(1), offset = -64
-[INFO ] Local variable 'test_struct' in function 'Some("foo")', event id = Some(1), offset = -80
-[INFO ] Local variable 'test_array' in function 'Some("foo")', event id = Some(1), offset = -88
+[INFO ] Global variable 'OPTION_PROJECT_NAME', event id = Some(2)
+[INFO ] Global variable 'OPTION_SERVER_ADDR', event id = Some(2)
+[INFO ] Global variable 'global_static_counter', event id = Some(2)
+[INFO ] ===============================================================
+[INFO ] Registering captured variables:
+[INFO ] ===============================================================
+[INFO ] Capture of event 'foo' in function 'foo' with 9 variables
+[INFO ] Captured variable 'counter' in function 'foo', event id = 0, offset = 0
+[INFO ] Captured variable 'test_float' in function 'foo', event id = 0, offset = 4
+[INFO ] Captured variable 'test_double' in function 'foo', event id = 0, offset = 8
+[INFO ] Captured variable 'test_uint8' in function 'foo', event id = 0, offset = 16
+[INFO ] Captured variable 'test_uint16' in function 'foo', event id = 0, offset = 18
+[INFO ] Captured variable 'test_uint32' in function 'foo', event id = 0, offset = 20
+[INFO ] Captured variable 'test_uint64' in function 'foo', event id = 0, offset = 24
+[INFO ] Captured variable 'test_struct' in function 'foo', event id = 0, offset = 32
+[INFO ] Captured variable 'test_array' in function 'foo', event id = 0, offset = 44
 [INFO ] ===============================================================
 [INFO ] Registering metadata from xcp_meta section:
 [INFO ] ===============================================================
+[WARN ] Metadata 'xcp_meta__comment__task__counter': no matching registry entry for 'task.task.counter' or 'task.counter'
+[WARN ] Metadata 'xcp_meta__comment__main__counter': no matching registry entry for 'main.main.counter' or 'main.counter'
 [INFO ] ===============================================================
 [INFO ] Write A2L file "/Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l"
 [INFO ] A2L writer: transport layer: UDP 192.168.0.206:5555

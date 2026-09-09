@@ -134,6 +134,7 @@ fn is_internal_variable(name: &str) -> bool {
         || name.starts_with("evt__")
         || name.starts_with("trg__")
         || name.starts_with("cap__")
+        || name.starts_with("xcp_cap_p__")
         || name.starts_with("xcp_meta__")
 }
 
@@ -1287,6 +1288,18 @@ impl ElfReader {
             for (member_name, (member_type, offset)) in members {
                 let a2l_name = format!("{}.{}", function, member_name);
 
+                // A member of struct or union type refers to the loaded type instead of repeating it, see the type reader
+                let member_type = match &member_type.datatype {
+                    DbgDataType::TypeRef(type_ref, _) => match self.debug_data.types.get(type_ref) {
+                        Some(type_info) => type_info,
+                        None => {
+                            warn!("Captured variable '{}' skipped, its type {} is not in the debug information", a2l_name, type_ref);
+                            continue;
+                        }
+                    },
+                    _ => member_type,
+                };
+
                 // The XCP address is the offset of the member in the capture struct, with the event id in the high bits, the target
                 // adds the address of the struct it received from the trigger of this event (address extension 3)
                 if *offset > McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK as u64 {
@@ -1597,6 +1610,8 @@ mod test {
     const C_LOCAL_TYPES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_local_types.elf");
     // C test fixture with captured local variables, see fixtures/c_captures.c (GCC 12.3 arm-none-eabi, DWARF 5, -O2)
     const C_CAPTURES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_captures.elf");
+    // C++ test fixture with captured local variables, see fixtures/cpp_captures.cpp (GCC 12.3 arm-none-eabi, DWARF 5, -O2)
+    const CPP_CAPTURES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_captures.elf");
     // C test fixture with metadata markers of local variables, see fixtures/c_meta_markers.c (GCC 12.3 arm-none-eabi, DWARF 5, -O1)
     const C_META_MARKERS_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_meta_markers.elf");
     // C test fixture with an inlined function, see fixtures/c_inlined_function.c, built with GCC 12.3 arm-none-eabi (-O2) and with clang
@@ -1848,6 +1863,35 @@ mod test {
         let (addr_ext, offset, event) = address("foo.counter");
         assert_eq!((addr_ext, offset), (3, 0));
         assert_eq!(event, Some(event_id("foo")));
+    }
+
+    // The captured local variables of a C++ event trigger: a const parameter and a reference are captured like any other variable,
+    // a captured struct keeps the name of its own type in the A2L file and not the one of any helper type of the capture macro
+    #[test]
+    fn test_register_captured_variables_cpp() {
+        let elf_reader = ElfReader::new(CPP_CAPTURES_ELF, 0, usize::MAX).expect("failed to load fixtures/cpp_captures.elf");
+        let mut reg = Registry::new();
+        elf_reader.register_events(&mut reg, 0).unwrap();
+        elf_reader.register_event_locations(&mut reg, 0).unwrap();
+        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "", None).unwrap();
+        elf_reader.register_captures(&mut reg, 0).unwrap();
+
+        let task = reg.event_list.find_event("task", 0).expect("event task").get_id();
+        let address = |name: &str| {
+            let instance = reg
+                .instance_list
+                .get_instance(name, McObjectType::Measurement, None)
+                .unwrap_or_else(|| panic!("instance '{name}' not registered"));
+            let (addr_ext, addr) = instance.get_address().get_a2l_addr(&reg);
+            (addr_ext, addr & McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK, instance.event_id())
+        };
+
+        assert_eq!(address("task.counter"), (3, 0, Some(task)));
+        assert_eq!(address("task.ratio"), (3, 4, Some(task))); // volatile variable
+        assert_eq!(address("task.s"), (3, 8, Some(task))); // struct
+        assert_eq!(address("task.ref"), (3, 16, Some(task))); // reference to a local variable
+        assert_eq!(address("task.param"), (3, 20, Some(task))); // const parameter
+        assert_eq!(instance_typedef(&reg, "task.s"), "test_struct");
     }
 
     // Metadata markers of local variables: a marker at file scope belongs to the global variable and not to the local variables of

@@ -13,7 +13,8 @@
 |
  ----------------------------------------------------------------------------*/
 
-#include <mutex> // for std::once_flag, std::call_once
+#include <mutex>       // for std::once_flag, std::call_once
+#include <type_traits> // for std::remove_cv_t, std::remove_reference_t
 
 #include "xcplib_cfg.h" // for OPTION_xxx, must include the correct configuration override file XCPLIB_CFG_OVERRIDE
 #ifndef XCPLITE_CONFIGURATION
@@ -285,6 +286,12 @@ template <typename T> class CalBlk {
 
 // =============================================================================
 // Helper macros
+
+// One pointer per captured variable of the capture macros (DaqTriggerEventCapture in xcplib.h), see XCP_CAP_MEMBER there.
+// decltype keeps the const qualifier and the reference of the variable: remove_reference_t gives the type of the object a
+// reference variable refers to, remove_const_t and the cast remove the const, because a const member would leave the capture
+// struct without a default constructor
+#define XCP_CAP_PTR(c, x) auto *xcp_cap_p__##x = const_cast<std::remove_const_t<std::remove_reference_t<decltype(x)>> *>(&(x));
 
 // Portable always inline attribute for C++
 // Critical for functions that use xcp_get_frame_addr() to ensure they capture the caller's stack frame

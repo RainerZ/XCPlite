@@ -140,6 +140,10 @@ as a measurement named `<function>.<member>`, with the event of the trigger as f
 member in the struct as address. The measurements look exactly like the stack frame relative ones, the metadata markers of the captured
 variables work unchanged. A variable which is captured is not registered a second time as a stack frame relative variable.
 
+The macros work in C and in C++. In C++ a reference variable is captured as the object it refers to and a `const` variable as its
+value, the copy is byte wise so the captured objects must be trivially copyable. In C a `const` variable can not be captured, and in
+both languages a bitfield member can not.
+
 Captured variables do not depend on the stack frame of their function, so a function which only captures may be inlined. Asynchronous
 access (polling) works like for any other event based relative address, the pending command is executed in the next trigger of the event,
 while the capture struct is alive. One capture per event: if the same event is triggered with a capture in several functions, the first

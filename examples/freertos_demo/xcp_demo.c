@@ -213,27 +213,31 @@ XCP_NOINLINE void foo(void) {
     volatile static uint16_t static_counter = 0;
 
     // Local measurement variable
-    XCP_COMMENT(counter, "Local measurement variable in function `foo`");
-    volatile uint32_t counter = 0;
+    XCP_COMMENT(counter, "Local captured measurement variable in function `foo`");
+    uint32_t counter = 0;
 
     // More local measurement variables
-    volatile float test_float = 0.1f;
-    volatile double test_double = 0.2;
-    volatile uint8_t test_uint8 = 1;
-    volatile uint16_t test_uint16 = 2;
-    volatile uint32_t test_uint32 = 3;
-    volatile uint64_t test_uint64 = 4;
-    volatile int8_t test_int8 = -1;
-    volatile int16_t test_int16 = -2;
-    volatile int32_t test_int32 = -3;
-    volatile uint64_t test_int64 = 1;
-    volatile struct test_struct test_struct = {1, -2, 0.3f, {1, 2, 3}};
-    volatile uint8_t test_array[3] = {1, 2, 3};
+
+    // Measured via capture
+    float test_float = 0.1f;
+    double test_double = 0.2;
+    uint8_t test_uint8 = 1;
+    uint16_t test_uint16 = 2;
+    uint32_t test_uint32 = 3;
+    uint64_t test_uint64 = 4;
+    struct test_struct test_struct = {1, -2, 0.3f, {1, 2, 3}};
+    uint8_t test_array[3] = {1, 2, 3};
+
+    // Measure directly from stack, registers spilled to stack
+    XCP_MEAS int8_t test_int8 = -1;
+    XCP_MEAS int16_t test_int16 = -2;
+    XCP_MEAS int32_t test_int32 = -3;
+    XCP_MEAS uint64_t test_int64 = 1;
 
     static_counter = static_counter + 1;
     counter = static_counter;
 
-    DaqCreateAndTriggerEvent(foo);
+    DaqCreateAndTriggerEventCapture(foo, counter, test_float, test_double, test_uint8, test_uint16, test_uint32, test_uint64, test_struct, test_array);
 }
 
 //----------------------------------------------------------------------------------------------------
