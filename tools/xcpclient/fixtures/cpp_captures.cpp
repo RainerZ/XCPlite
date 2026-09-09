@@ -1,7 +1,7 @@
 // C++ test fixture for the xcpclient unit tests in src/elf_reader/mod.rs (mod test).
 // Covers the captured local variables of an event trigger in C++, written out as the macro DaqTriggerEventCapture (inc/xcplib.h)
 // expands in C++, because the fixture can not include the headers: one pointer per captured variable before the capture struct,
-// with the const qualifier and the reference removed (see XCP_CAP_PTR in xcplib.hpp), and one member per pointer.
+// with the const qualifier and the reference removed (see XCP_CAP_PTR and xcp::cap_ptr in xcplib.hpp), and one member per pointer.
 // A const parameter, a reference and a struct are captured, cases which the C fixture c_captures.c can not cover.
 //
 // cpp_captures.elf is built from this file with GCC 12.3.1 (xPack arm-none-eabi), DWARF 5, no libraries:
@@ -9,7 +9,6 @@
 //       -Wl,--unresolved-symbols=ignore-all -o cpp_captures.elf cpp_captures.cpp
 //
 #include <cstdint>
-#include <type_traits>
 
 typedef struct {
     const char *name;
@@ -28,7 +27,11 @@ struct test_struct {
     float c;
 };
 
-#define XCP_CAP_PTR(x) auto *xcp_cap_p__##x = const_cast<std::remove_const_t<std::remove_reference_t<decltype(x)>> *>(&(x));
+namespace xcp {
+template <typename T> inline T *cap_ptr(T *p) { return p; }
+template <typename T> inline T *cap_ptr(const T *p) { return const_cast<T *>(p); }
+} // namespace xcp
+#define XCP_CAP_PTR(x) auto *xcp_cap_p__##x = xcp::cap_ptr(&(x));
 #define XCP_CAP_MEMBER(x) __typeof__(*xcp_cap_p__##x) x;
 #define XCP_CAP_COPY(c, x) __builtin_memcpy((void *)&(c).x, (const void *)&(x), sizeof(x));
 
