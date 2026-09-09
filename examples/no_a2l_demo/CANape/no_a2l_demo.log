@@ -24,9 +24,9 @@ Sections:
   Name: .text                Addr: 0x00001d00 Size: 41328 bytes Kind: Text 
   Name: .fini                Addr: 0x0000be70 Size: 20 bytes Kind: Text 
   Name: .rodata              Addr: 0x0000be88 Size: 13921 bytes Kind: ReadOnlyData 
-  Name: xcp_meta             Addr: 0x0000f4f0 Size: 340 bytes Kind: ReadOnlyData 
-  Name: .eh_frame_hdr        Addr: 0x0000f644 Size: 1668 bytes Kind: ReadOnlyData 
-  Name: .eh_frame            Addr: 0x0000fcc8 Size: 5940 bytes Kind: ReadOnlyData 
+  Name: xcp_meta             Addr: 0x0000f4f0 Size: 349 bytes Kind: ReadOnlyData 
+  Name: .eh_frame_hdr        Addr: 0x0000f650 Size: 1668 bytes Kind: ReadOnlyData 
+  Name: .eh_frame            Addr: 0x0000fcd8 Size: 5940 bytes Kind: ReadOnlyData 
   Name: .init_array          Addr: 0x0002fd48 Size: 16 bytes Kind: Elf(14) 
   Name: .fini_array          Addr: 0x0002fd58 Size: 8 bytes Kind: Elf(15) 
   Name: .dynamic             Addr: 0x0002fd60 Size: 528 bytes Kind: Metadata 
@@ -38,15 +38,15 @@ Sections:
   Name: xcp_epk              Addr: 0x00030310 Size: 8 bytes Kind: Data 
   Name: .bss                 Addr: 0x00030318 Size: 9976 bytes Kind: UninitializedData 
   Name: .comment             Addr: 0x00000000 Size: 67 bytes Kind: OtherString 
-  Name: .debug_info          Addr: 0x00000000 Size: 31249 bytes Kind: Other 
+  Name: .debug_info          Addr: 0x00000000 Size: 31352 bytes Kind: Other 
   Name: .debug_abbrev        Addr: 0x00000000 Size: 6858 bytes Kind: Other 
   Name: .debug_line          Addr: 0x00000000 Size: 24156 bytes Kind: Other 
-  Name: .debug_str           Addr: 0x00000000 Size: 13071 bytes Kind: OtherString 
+  Name: .debug_str           Addr: 0x00000000 Size: 13271 bytes Kind: OtherString 
   Name: .debug_addr          Addr: 0x00000000 Size: 5744 bytes Kind: Other 
   Name: .debug_line_str      Addr: 0x00000000 Size: 1149 bytes Kind: OtherString 
-  Name: .debug_loclists      Addr: 0x00000000 Size: 16316 bytes Kind: Other 
+  Name: .debug_loclists      Addr: 0x00000000 Size: 16328 bytes Kind: Other 
   Name: .debug_rnglists      Addr: 0x00000000 Size: 2080 bytes Kind: Other 
-  Name: .debug_str_offsets   Addr: 0x00000000 Size: 6836 bytes Kind: Other 
+  Name: .debug_str_offsets   Addr: 0x00000000 Size: 6872 bytes Kind: Other 
   Name: .symtab              Addr: 0x00000000 Size: 14712 bytes Kind: Metadata 
   Name: .strtab              Addr: 0x00000000 Size: 7169 bytes Kind: Metadata 
   Name: .shstrtab            Addr: 0x00000000 Size: 422 bytes Kind: Metadata 
@@ -58,7 +58,7 @@ Symbol table:
   `"$d"`: addr=278, Symbol { name: "$d", address: 632, size: 0, kind: Unknown, section: Section(SectionIndex(3)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"__abi_tag"`: addr=278, Symbol { name: "__abi_tag", address: 632, size: 32, kind: Data, section: Section(SectionIndex(3)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"$x"`: addr=1d40, Symbol { name: "$x", address: 7488, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d"`: addr=fcdc, Symbol { name: "$d", address: 64732, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=fcec, Symbol { name: "$d", address: 64748, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d"`: addr=be88, Symbol { name: "$d", address: 48776, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"crti.o"`: addr=0, Symbol { name: "crti.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x"`: addr=1d74, Symbol { name: "$x", address: 7540, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
@@ -73,7 +73,7 @@ Symbol table:
   `"init_have_lse_atomics"`: addr=1d00, Symbol { name: "init_have_lse_atomics", address: 7424, size: 36, kind: Text, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
   `"$d"`: addr=2fd50, Symbol { name: "$d", address: 195920, size: 0, kind: Unknown, section: Section(SectionIndex(20)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d"`: addr=32a08, Symbol { name: "$d", address: 207368, size: 0, kind: Unknown, section: Section(SectionIndex(29)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d"`: addr=113d8, Symbol { name: "$d", address: 70616, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=113e8, Symbol { name: "$d", address: 70632, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"crtstuff.c"`: addr=0, Symbol { name: "crtstuff.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x"`: addr=1d90, Symbol { name: "$x", address: 7568, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"deregister_tm_clones"`: addr=1d90, Symbol { name: "deregister_tm_clones", address: 7568, size: 0, kind: Text, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
@@ -86,7 +86,7 @@ Symbol table:
   `"frame_dummy"`: addr=1e50, Symbol { name: "frame_dummy", address: 7760, size: 0, kind: Text, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
   `"$d"`: addr=2fd48, Symbol { name: "$d", address: 195912, size: 0, kind: Unknown, section: Section(SectionIndex(20)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"__frame_dummy_init_array_entry"`: addr=2fd48, Symbol { name: "__frame_dummy_init_array_entry", address: 195912, size: 0, kind: Data, section: Section(SectionIndex(20)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
-  `"$d"`: addr=fcf0, Symbol { name: "$d", address: 64752, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=fd00, Symbol { name: "$d", address: 64768, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d"`: addr=30318, Symbol { name: "$d", address: 197400, size: 0, kind: Unknown, section: Section(SectionIndex(29)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"main.c"`: addr=0, Symbol { name: "main.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x.0"`: addr=1e54, Symbol { name: "$x.0", address: 7764, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
@@ -120,9 +120,9 @@ Symbol table:
   `"task.xcp_meta__comment__counter"`: addr=f579, Symbol { name: "task.xcp_meta__comment__counter", address: 62841, size: 53, kind: Data, section: Section(SectionIndex(17)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"$d.7"`: addr=302d0, Symbol { name: "$d.7", address: 197328, size: 0, kind: Unknown, section: Section(SectionIndex(27)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"foo.xcp_meta__comment__static_counter"`: addr=f5ae, Symbol { name: "foo.xcp_meta__comment__static_counter", address: 62894, size: 52, kind: Data, section: Section(SectionIndex(17)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
-  `"foo.xcp_meta__comment__foo__counter"`: addr=f5e2, Symbol { name: "foo.xcp_meta__comment__foo__counter", address: 62946, size: 45, kind: Data, section: Section(SectionIndex(17)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"foo.xcp_meta__comment__foo__counter"`: addr=f5e2, Symbol { name: "foo.xcp_meta__comment__foo__counter", address: 62946, size: 54, kind: Data, section: Section(SectionIndex(17)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"$d.8"`: addr=30310, Symbol { name: "$d.8", address: 197392, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"main.xcp_meta__comment__static_counter"`: addr=f60f, Symbol { name: "main.xcp_meta__comment__static_counter", address: 62991, size: 53, kind: Data, section: Section(SectionIndex(17)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"main.xcp_meta__comment__static_counter"`: addr=f618, Symbol { name: "main.xcp_meta__comment__static_counter", address: 63000, size: 53, kind: Data, section: Section(SectionIndex(17)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"main.calseg__counter_control"`: addr=30290, Symbol { name: "main.calseg__counter_control", address: 197264, size: 32, kind: Data, section: Section(SectionIndex(26)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"$d.9"`: addr=0, Symbol { name: "$d.9", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.10"`: addr=0, Symbol { name: "$d.10", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(32)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
@@ -132,7 +132,7 @@ Symbol table:
   `"$d.14"`: addr=0, Symbol { name: "$d.14", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(34)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.15"`: addr=0, Symbol { name: "$d.15", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(35)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.16"`: addr=26, Symbol { name: "$d.16", address: 38, size: 0, kind: Unknown, section: Section(SectionIndex(30)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.17"`: addr=fd50, Symbol { name: "$d.17", address: 64848, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.17"`: addr=fd60, Symbol { name: "$d.17", address: 64864, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.18"`: addr=0, Symbol { name: "$d.18", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(33)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.19"`: addr=0, Symbol { name: "$d.19", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(36)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"xcpappl.c"`: addr=0, Symbol { name: "xcpappl.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
@@ -159,15 +159,15 @@ Symbol table:
   `"$d.1"`: addr=c0c3, Symbol { name: "$d.1", address: 49347, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.2"`: addr=30330, Symbol { name: "$d.2", address: 197424, size: 0, kind: Unknown, section: Section(SectionIndex(29)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.3"`: addr=c0c9, Symbol { name: "$d.3", address: 49353, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.4"`: addr=bb, Symbol { name: "$d.4", address: 187, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.4"`: addr=c7, Symbol { name: "$d.4", address: 199, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.5"`: addr=2ad, Symbol { name: "$d.5", address: 685, size: 0, kind: Unknown, section: Section(SectionIndex(32)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.6"`: addr=a16, Symbol { name: "$d.6", address: 2582, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.6"`: addr=a7d, Symbol { name: "$d.6", address: 2685, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.7"`: addr=43, Symbol { name: "$d.7", address: 67, size: 0, kind: Unknown, section: Section(SectionIndex(38)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.8"`: addr=290, Symbol { name: "$d.8", address: 656, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.8"`: addr=2b4, Symbol { name: "$d.8", address: 692, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.9"`: addr=0, Symbol { name: "$d.9", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(34)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.10"`: addr=280, Symbol { name: "$d.10", address: 640, size: 0, kind: Unknown, section: Section(SectionIndex(35)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.11"`: addr=26, Symbol { name: "$d.11", address: 38, size: 0, kind: Unknown, section: Section(SectionIndex(30)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.12"`: addr=fd50, Symbol { name: "$d.12", address: 64848, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.12"`: addr=fd60, Symbol { name: "$d.12", address: 64864, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.13"`: addr=32b, Symbol { name: "$d.13", address: 811, size: 0, kind: Unknown, section: Section(SectionIndex(33)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.14"`: addr=0, Symbol { name: "$d.14", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(36)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"xcplite.c"`: addr=0, Symbol { name: "xcplite.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
@@ -195,15 +195,15 @@ Symbol table:
   `"$d.4"`: addr=c84c, Symbol { name: "$d.4", address: 51276, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"XcpInit.calseg__epk"`: addr=302b0, Symbol { name: "XcpInit.calseg__epk", address: 197296, size: 32, kind: Data, section: Section(SectionIndex(26)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"$d.5"`: addr=302b0, Symbol { name: "$d.5", address: 197296, size: 0, kind: Unknown, section: Section(SectionIndex(26)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.6"`: addr=5d3, Symbol { name: "$d.6", address: 1491, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.6"`: addr=5df, Symbol { name: "$d.6", address: 1503, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.7"`: addr=61e, Symbol { name: "$d.7", address: 1566, size: 0, kind: Unknown, section: Section(SectionIndex(32)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.8"`: addr=159e, Symbol { name: "$d.8", address: 5534, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.8"`: addr=1605, Symbol { name: "$d.8", address: 5637, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.9"`: addr=63, Symbol { name: "$d.9", address: 99, size: 0, kind: Unknown, section: Section(SectionIndex(38)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.10"`: addr=5dc, Symbol { name: "$d.10", address: 1500, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.10"`: addr=600, Symbol { name: "$d.10", address: 1536, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.11"`: addr=0, Symbol { name: "$d.11", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(34)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.12"`: addr=5b0, Symbol { name: "$d.12", address: 1456, size: 0, kind: Unknown, section: Section(SectionIndex(35)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.13"`: addr=26, Symbol { name: "$d.13", address: 38, size: 0, kind: Unknown, section: Section(SectionIndex(30)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.14"`: addr=fd38, Symbol { name: "$d.14", address: 64824, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.14"`: addr=fd48, Symbol { name: "$d.14", address: 64840, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.15"`: addr=a8d, Symbol { name: "$d.15", address: 2701, size: 0, kind: Unknown, section: Section(SectionIndex(33)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.16"`: addr=0, Symbol { name: "$d.16", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(36)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"xcpethserver.c"`: addr=0, Symbol { name: "xcpethserver.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
@@ -215,15 +215,15 @@ Symbol table:
   `"XcpServerReceiveThread.last_time"`: addr=32968, Symbol { name: "XcpServerReceiveThread.last_time", address: 207208, size: 8, kind: Data, section: Section(SectionIndex(29)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"$d.1"`: addr=32930, Symbol { name: "$d.1", address: 207152, size: 0, kind: Unknown, section: Section(SectionIndex(29)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.2"`: addr=dcb8, Symbol { name: "$d.2", address: 56504, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.3"`: addr=1bd8, Symbol { name: "$d.3", address: 7128, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.3"`: addr=1be4, Symbol { name: "$d.3", address: 7140, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.4"`: addr=b6d, Symbol { name: "$d.4", address: 2925, size: 0, kind: Unknown, section: Section(SectionIndex(32)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.5"`: addr=3bd3, Symbol { name: "$d.5", address: 15315, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.5"`: addr=3c3a, Symbol { name: "$d.5", address: 15418, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.6"`: addr=35b, Symbol { name: "$d.6", address: 859, size: 0, kind: Unknown, section: Section(SectionIndex(38)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.7"`: addr=be8, Symbol { name: "$d.7", address: 3048, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.7"`: addr=c0c, Symbol { name: "$d.7", address: 3084, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.8"`: addr=0, Symbol { name: "$d.8", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(34)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.9"`: addr=d70, Symbol { name: "$d.9", address: 3440, size: 0, kind: Unknown, section: Section(SectionIndex(35)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.10"`: addr=26, Symbol { name: "$d.10", address: 38, size: 0, kind: Unknown, section: Section(SectionIndex(30)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.11"`: addr=fd28, Symbol { name: "$d.11", address: 64808, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.11"`: addr=fd38, Symbol { name: "$d.11", address: 64824, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.12"`: addr=3082, Symbol { name: "$d.12", address: 12418, size: 0, kind: Unknown, section: Section(SectionIndex(33)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.13"`: addr=0, Symbol { name: "$d.13", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(36)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"xcpethtl.c"`: addr=0, Symbol { name: "xcpethtl.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
@@ -233,44 +233,44 @@ Symbol table:
   `"handleXcpCommand"`: addr=7f70, Symbol { name: "handleXcpCommand", address: 32624, size: 708, kind: Text, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
   `"$d.1"`: addr=32970, Symbol { name: "$d.1", address: 207216, size: 0, kind: Unknown, section: Section(SectionIndex(29)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.2"`: addr=de58, Symbol { name: "$d.2", address: 56920, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.3"`: addr=1cc0, Symbol { name: "$d.3", address: 7360, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.3"`: addr=1ccc, Symbol { name: "$d.3", address: 7372, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.4"`: addr=d6f, Symbol { name: "$d.4", address: 3439, size: 0, kind: Unknown, section: Section(SectionIndex(32)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.5"`: addr=3fd9, Symbol { name: "$d.5", address: 16345, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.5"`: addr=4040, Symbol { name: "$d.5", address: 16448, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.6"`: addr=385, Symbol { name: "$d.6", address: 901, size: 0, kind: Unknown, section: Section(SectionIndex(38)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.7"`: addr=d20, Symbol { name: "$d.7", address: 3360, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.7"`: addr=d44, Symbol { name: "$d.7", address: 3396, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.8"`: addr=0, Symbol { name: "$d.8", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(34)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.9"`: addr=e88, Symbol { name: "$d.9", address: 3720, size: 0, kind: Unknown, section: Section(SectionIndex(35)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.10"`: addr=26, Symbol { name: "$d.10", address: 38, size: 0, kind: Unknown, section: Section(SectionIndex(30)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.11"`: addr=fd10, Symbol { name: "$d.11", address: 64784, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.11"`: addr=fd20, Symbol { name: "$d.11", address: 64800, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.12"`: addr=3418, Symbol { name: "$d.12", address: 13336, size: 0, kind: Unknown, section: Section(SectionIndex(33)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.13"`: addr=0, Symbol { name: "$d.13", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(36)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"queue64v.c"`: addr=0, Symbol { name: "queue64v.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x.0"`: addr=86e8, Symbol { name: "$x.0", address: 34536, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.1"`: addr=e442, Symbol { name: "$d.1", address: 58434, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.2"`: addr=204f, Symbol { name: "$d.2", address: 8271, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.2"`: addr=205b, Symbol { name: "$d.2", address: 8283, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.3"`: addr=ff4, Symbol { name: "$d.3", address: 4084, size: 0, kind: Unknown, section: Section(SectionIndex(32)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.4"`: addr=493f, Symbol { name: "$d.4", address: 18751, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.4"`: addr=49a6, Symbol { name: "$d.4", address: 18854, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.5"`: addr=409, Symbol { name: "$d.5", address: 1033, size: 0, kind: Unknown, section: Section(SectionIndex(38)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.6"`: addr=f4c, Symbol { name: "$d.6", address: 3916, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.6"`: addr=f70, Symbol { name: "$d.6", address: 3952, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.7"`: addr=0, Symbol { name: "$d.7", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(34)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.8"`: addr=1090, Symbol { name: "$d.8", address: 4240, size: 0, kind: Unknown, section: Section(SectionIndex(35)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.9"`: addr=26, Symbol { name: "$d.9", address: 38, size: 0, kind: Unknown, section: Section(SectionIndex(30)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.10"`: addr=fcf8, Symbol { name: "$d.10", address: 64760, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.10"`: addr=fd08, Symbol { name: "$d.10", address: 64776, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.11"`: addr=3b68, Symbol { name: "$d.11", address: 15208, size: 0, kind: Unknown, section: Section(SectionIndex(33)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.12"`: addr=0, Symbol { name: "$d.12", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(36)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"cal.c"`: addr=0, Symbol { name: "cal.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x.0"`: addr=8da8, Symbol { name: "$x.0", address: 36264, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"XcpCreateCalSeg_"`: addr=8ff8, Symbol { name: "XcpCreateCalSeg_", address: 36856, size: 1040, kind: Text, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
   `"$d.1"`: addr=e5e2, Symbol { name: "$d.1", address: 58850, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.2"`: addr=258b, Symbol { name: "$d.2", address: 9611, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.2"`: addr=2597, Symbol { name: "$d.2", address: 9623, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.3"`: addr=1206, Symbol { name: "$d.3", address: 4614, size: 0, kind: Unknown, section: Section(SectionIndex(32)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.4"`: addr=4f07, Symbol { name: "$d.4", address: 20231, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.4"`: addr=4f6e, Symbol { name: "$d.4", address: 20334, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.5"`: addr=474, Symbol { name: "$d.5", address: 1140, size: 0, kind: Unknown, section: Section(SectionIndex(38)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.6"`: addr=10c0, Symbol { name: "$d.6", address: 4288, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.6"`: addr=10e4, Symbol { name: "$d.6", address: 4324, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.7"`: addr=0, Symbol { name: "$d.7", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(34)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.8"`: addr=1140, Symbol { name: "$d.8", address: 4416, size: 0, kind: Unknown, section: Section(SectionIndex(35)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.9"`: addr=26, Symbol { name: "$d.9", address: 38, size: 0, kind: Unknown, section: Section(SectionIndex(30)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.10"`: addr=fce8, Symbol { name: "$d.10", address: 64744, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.10"`: addr=fcf8, Symbol { name: "$d.10", address: 64760, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.11"`: addr=4009, Symbol { name: "$d.11", address: 16393, size: 0, kind: Unknown, section: Section(SectionIndex(33)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.12"`: addr=0, Symbol { name: "$d.12", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(36)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"platform.c"`: addr=0, Symbol { name: "platform.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
@@ -280,58 +280,58 @@ Symbol table:
   `"__gClock"`: addr=329d8, Symbol { name: "__gClock", address: 207320, size: 16, kind: Data, section: Section(SectionIndex(29)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"$d.1"`: addr=eb8b, Symbol { name: "$d.1", address: 60299, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.2"`: addr=329d8, Symbol { name: "$d.2", address: 207320, size: 0, kind: Unknown, section: Section(SectionIndex(29)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.3"`: addr=35af, Symbol { name: "$d.3", address: 13743, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.3"`: addr=35bb, Symbol { name: "$d.3", address: 13755, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.4"`: addr=15dd, Symbol { name: "$d.4", address: 5597, size: 0, kind: Unknown, section: Section(SectionIndex(32)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.5"`: addr=620e, Symbol { name: "$d.5", address: 25102, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.5"`: addr=6275, Symbol { name: "$d.5", address: 25205, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.6"`: addr=679, Symbol { name: "$d.6", address: 1657, size: 0, kind: Unknown, section: Section(SectionIndex(38)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.7"`: addr=14d0, Symbol { name: "$d.7", address: 5328, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.7"`: addr=14f4, Symbol { name: "$d.7", address: 5364, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.8"`: addr=0, Symbol { name: "$d.8", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(34)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.9"`: addr=1368, Symbol { name: "$d.9", address: 4968, size: 0, kind: Unknown, section: Section(SectionIndex(35)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.10"`: addr=26, Symbol { name: "$d.10", address: 38, size: 0, kind: Unknown, section: Section(SectionIndex(30)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.11"`: addr=fcd0, Symbol { name: "$d.11", address: 64720, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.11"`: addr=fce0, Symbol { name: "$d.11", address: 64736, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.12"`: addr=4ff3, Symbol { name: "$d.12", address: 20467, size: 0, kind: Unknown, section: Section(SectionIndex(33)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.13"`: addr=0, Symbol { name: "$d.13", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(36)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"sockets.c"`: addr=0, Symbol { name: "sockets.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x.0"`: addr=aba8, Symbol { name: "$x.0", address: 43944, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.1"`: addr=ec23, Symbol { name: "$d.1", address: 60451, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.2"`: addr=3732, Symbol { name: "$d.2", address: 14130, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.2"`: addr=373e, Symbol { name: "$d.2", address: 14142, size: 0, kind: Unknown, section: Section(SectionIndex(37)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.3"`: addr=183b, Symbol { name: "$d.3", address: 6203, size: 0, kind: Unknown, section: Section(SectionIndex(32)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.4"`: addr=690e, Symbol { name: "$d.4", address: 26894, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.4"`: addr=6975, Symbol { name: "$d.4", address: 26997, size: 0, kind: Unknown, section: Section(SectionIndex(31)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.5"`: addr=694, Symbol { name: "$d.5", address: 1684, size: 0, kind: Unknown, section: Section(SectionIndex(38)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.6"`: addr=1690, Symbol { name: "$d.6", address: 5776, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.6"`: addr=16b4, Symbol { name: "$d.6", address: 5812, size: 0, kind: Unknown, section: Section(SectionIndex(39)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.7"`: addr=0, Symbol { name: "$d.7", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(34)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.8"`: addr=14e8, Symbol { name: "$d.8", address: 5352, size: 0, kind: Unknown, section: Section(SectionIndex(35)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.9"`: addr=26, Symbol { name: "$d.9", address: 38, size: 0, kind: Unknown, section: Section(SectionIndex(30)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d.10"`: addr=fcc0, Symbol { name: "$d.10", address: 64704, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d.10"`: addr=fcd0, Symbol { name: "$d.10", address: 64720, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.11"`: addr=53b0, Symbol { name: "$d.11", address: 21424, size: 0, kind: Unknown, section: Section(SectionIndex(33)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"$d.12"`: addr=0, Symbol { name: "$d.12", address: 0, size: 0, kind: Unknown, section: Section(SectionIndex(36)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"cas_4_1.o"`: addr=0, Symbol { name: "cas_4_1.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x"`: addr=bcb0, Symbol { name: "$x", address: 48304, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d"`: addr=11318, Symbol { name: "$d", address: 70424, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=11328, Symbol { name: "$d", address: 70440, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"cas_8_1.o"`: addr=0, Symbol { name: "cas_8_1.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x"`: addr=bcf0, Symbol { name: "$x", address: 48368, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d"`: addr=11330, Symbol { name: "$d", address: 70448, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=11340, Symbol { name: "$d", address: 70464, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"cas_1_3.o"`: addr=0, Symbol { name: "cas_1_3.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x"`: addr=bd30, Symbol { name: "$x", address: 48432, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d"`: addr=11348, Symbol { name: "$d", address: 70472, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=11358, Symbol { name: "$d", address: 70488, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"cas_1_4.o"`: addr=0, Symbol { name: "cas_1_4.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x"`: addr=bd70, Symbol { name: "$x", address: 48496, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d"`: addr=11360, Symbol { name: "$d", address: 70496, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=11370, Symbol { name: "$d", address: 70512, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"ldadd_1_1.o"`: addr=0, Symbol { name: "ldadd_1_1.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x"`: addr=bdb0, Symbol { name: "$x", address: 48560, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d"`: addr=11378, Symbol { name: "$d", address: 70520, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=11388, Symbol { name: "$d", address: 70536, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"swp_8_1.o"`: addr=0, Symbol { name: "swp_8_1.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x"`: addr=bde0, Symbol { name: "$x", address: 48608, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d"`: addr=11390, Symbol { name: "$d", address: 70544, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=113a0, Symbol { name: "$d", address: 70560, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"ldadd_8_1.o"`: addr=0, Symbol { name: "ldadd_8_1.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x"`: addr=be10, Symbol { name: "$x", address: 48656, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d"`: addr=113a8, Symbol { name: "$d", address: 70568, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=113b8, Symbol { name: "$d", address: 70584, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"ldadd_8_3.o"`: addr=0, Symbol { name: "ldadd_8_3.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
   `"$x"`: addr=be40, Symbol { name: "$x", address: 48704, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"$d"`: addr=113c0, Symbol { name: "$d", address: 70592, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=113d0, Symbol { name: "$d", address: 70608, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"crtstuff.c"`: addr=0, Symbol { name: "crtstuff.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
-  `"$d"`: addr=113f8, Symbol { name: "$d", address: 70648, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
-  `"__FRAME_END__"`: addr=113f8, Symbol { name: "__FRAME_END__", address: 70648, size: 0, kind: Data, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=11408, Symbol { name: "$d", address: 70664, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"__FRAME_END__"`: addr=11408, Symbol { name: "__FRAME_END__", address: 70664, size: 0, kind: Data, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"__aarch64_cas8_relax"`: addr=bcf0, Symbol { name: "__aarch64_cas8_relax", address: 48368, size: 52, kind: Text, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
   `"__aarch64_cas4_relax"`: addr=bcb0, Symbol { name: "__aarch64_cas4_relax", address: 48304, size: 52, kind: Text, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
   `"__aarch64_cas1_acq_rel"`: addr=bd70, Symbol { name: "__aarch64_cas1_acq_rel", address: 48496, size: 52, kind: Text, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
@@ -340,7 +340,7 @@ Symbol table:
   `"__aarch64_ldadd8_rel"`: addr=be40, Symbol { name: "__aarch64_ldadd8_rel", address: 48704, size: 48, kind: Text, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
   `"__aarch64_cas1_rel"`: addr=bd30, Symbol { name: "__aarch64_cas1_rel", address: 48432, size: 52, kind: Text, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
   `"_DYNAMIC"`: addr=2fd60, Symbol { name: "_DYNAMIC", address: 195936, size: 0, kind: Data, section: Absolute, scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
-  `"__GNU_EH_FRAME_HDR"`: addr=f644, Symbol { name: "__GNU_EH_FRAME_HDR", address: 63044, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"__GNU_EH_FRAME_HDR"`: addr=f650, Symbol { name: "__GNU_EH_FRAME_HDR", address: 63056, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"_GLOBAL_OFFSET_TABLE_"`: addr=2ff70, Symbol { name: "_GLOBAL_OFFSET_TABLE_", address: 196464, size: 0, kind: Data, section: Absolute, scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"__aarch64_ldadd8_relax"`: addr=be10, Symbol { name: "__aarch64_ldadd8_relax", address: 48656, size: 48, kind: Text, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
   `"$x"`: addr=18b0, Symbol { name: "$x", address: 6320, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
@@ -634,12 +634,12 @@ DebugData information summary:
   Compiler: Debian clang version 14.0.6
   Sections: 29
   Endianness: Little Endian
-  Variables 582 with 248 unique names
+  Variables 591 with 257 unique names
   Demangled names: 0 entries
   Type names: 116 named types
-  Types: 461 total types
+  Types: 468 total types
   EPK string: `V2.1.10` at address 0x00030310
-  XCP metadata section (xcp_meta) found at address 0x0000F4F0, 340 bytes
+  XCP metadata section (xcp_meta) found at address 0x0000F4F0, 349 bytes
 
 ====================================================================================================
 Compilation units in debug_data.unit_names:
@@ -671,10 +671,10 @@ DWARF sections by address:
   '.text': 0x00001d00, 1104 bytes (48752)
   '.fini': 0x0000be70, 41328 bytes (48772)
   '.rodata': 0x0000be88, 24 bytes (62697)
-  'xcp_meta': 0x0000f4f0, 13928 bytes (63044)
-  '.eh_frame_hdr': 0x0000f644, 340 bytes (64712)
-  '.eh_frame': 0x0000fcc8, 1668 bytes (70652)
-  '.init_array': 0x0002fd48, 131200 bytes (195928)
+  'xcp_meta': 0x0000f4f0, 13928 bytes (63053)
+  '.eh_frame_hdr': 0x0000f650, 352 bytes (64724)
+  '.eh_frame': 0x0000fcd8, 1672 bytes (70668)
+  '.init_array': 0x0002fd48, 131184 bytes (195928)
   '.fini_array': 0x0002fd58, 16 bytes (195936)
   '.dynamic': 0x0002fd60, 8 bytes (196464)
   '.got': 0x0002ff70, 528 bytes (196584)
@@ -760,6 +760,15 @@ test_uint64 1:
 test_struct 1: 
 test_array 1: 
 cap__foo 1: 
+xcp_cap_p__test_struct 1: 
+xcp_cap_p__counter 1: 
+xcp_cap_p__test_float 1: 
+xcp_cap_p__test_double 1: 
+xcp_cap_p__test_uint8 1: 
+xcp_cap_p__test_uint16 1: 
+xcp_cap_p__test_uint32 1: 
+xcp_cap_p__test_uint64 1: 
+xcp_cap_p__test_array 1: 
 evt__bar 1: 
 trg__AAS__bar 1: 
 calseg_id_counter_control 1: 
@@ -1003,6 +1012,7 @@ Calibration segment 'counter_control' type information found, type=counter_contr
   Add measurement instance for captured foo.test_uint16: addr = 3:0x00400012
   Add measurement instance for captured foo.test_uint32: addr = 3:0x00400014
   Add measurement instance for captured foo.test_uint64: addr = 3:0x00400018
+  Add measurement instance for captured foo.test_struct: addr = 3:0x00400020
   Add measurement instance for captured foo.test_array: addr = 3:0x0040002c
   Metadata xcp_meta__min__params__delay_us applied to typedef field 'params.delay_us'
   Metadata xcp_meta__max__params__delay_us applied to typedef field 'params.delay_us'
