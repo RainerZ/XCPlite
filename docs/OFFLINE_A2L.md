@@ -70,8 +70,9 @@ file and generate the A2L file. The command line reference is in [tools/xcpclien
 
 ### Calibration segment addressing
 
-The addressing scheme of the target is read from the `XCPLITE__<signature>` variable in the ELF file and written as `PROJECT_NO` into
-the A2L header:
+The addressing scheme of the target is read from the `XCPLITE__<signature>` variable of the XCPlite library and written as `PROJECT_NO`
+into the A2L header. The variable is an exported global, so it is read from the symbol table and found even when the debug information of
+the library is not parsed (`--elf-unit-limit`) or the library was built without `-g`:
 
 - `XCPLITE__ACSDD` (`OPTION_CAL_SEGMENTS_ABS` defined): calibration parameters are addressed by the absolute address of their default
   page with address extension 0. This is the usual choice for microcontrollers. The default pages of all segments must be in the 32 bit
@@ -219,6 +220,9 @@ Not supported, future extensions, cases skipped and reported as warnings (log le
 
 ## Diagnostics
 
+The compilers which built the ELF file are logged as `Compiler: ...` (the `DW_AT_producer` of the compilation units), with their
+version and the command line options which matter here, in particular the optimization level and the frame pointer.
+
 Messages worth knowing when a variable is missing or looks wrong in the A2L file:
 
 | Message | Meaning |
@@ -229,6 +233,7 @@ Messages worth knowing when a variable is missing or looks wrong in the A2L file
 | `Global variable 'x' not registered, address ... out of the 32 bit XCP address range` | The variable is outside the addressable range, see the addressing modes. |
 | `Metadata 'xcp_meta__...': no matching registry entry for '...'` | The annotated variable was not registered, or the name does not match. Check the scope prefix and the `__` path. |
 | `Metadata variable '...' address is 0` | The marker has no DWARF location and no resolveable symbol. |
+| `No target signature found in ELF file` | The `XCPLITE__<signature>` variable of the XCPlite library is missing, absolute addressing of calibration segments is assumed. A build with segment relative addressing (`CASDD`, `CXSDD`) then gets wrong calibration addresses. |
 | `New event '...' found, created with undefined event id ...` | No `xcp_evts` section and no linker symbols. Connect to the target to get the ids. |
 | `Calibration segment reference page variable 'x' has N usable definitions, expected 1` | The name of the default page variable is ambiguous, restrict the compilation units with `--elf-unit-filter`. |
 | `EPK mismatch: A2L file '...' has EPK '...', target reports EPK '...'` | The A2L file does not belong to the running build. `--yes` overrides the check. |

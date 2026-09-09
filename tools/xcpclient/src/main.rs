@@ -817,6 +817,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                 // Read ELF file and DWARF debug information, compilation unit number may be limited to reduce processing time and memory needed
                 info!("Reading ELF file: {}", elf_filename);
                 let elf_reader = ElfReader::new(&elf_filename, verbose, elf_idx_unit_limit).map_err(|e| format!("Failed to read ELF file '{}': {}", elf_filename, e))?;
+                elf_reader.log_compilers();
                 if verbose > 0 {
                     elf_reader.debug_data.print_debug_info(verbose, elf_idx_unit_limit); // print only variables <= compilation unit 0
                 }

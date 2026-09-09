@@ -71,7 +71,10 @@ use crate::elf_reader::debuginfo::{DbgDataType, DebugData, FrameBase, TypeInfo, 
 
 mod attributes;
 pub(super) use attributes::get_low_pc_attribute;
-use attributes::{get_abstract_origin_attribute, get_linkage_name_attribute, get_location_attribute, get_name_attribute, get_specification_attribute, get_typeref_attribute};
+use attributes::{
+    get_abstract_origin_attribute, get_linkage_name_attribute, get_location_attribute, get_name_attribute, get_producer_attribute, get_specification_attribute,
+    get_typeref_attribute,
+};
 
 mod typereader;
 
@@ -89,6 +92,7 @@ struct DebugDataReader<'elffile> {
     verbose: usize,
     units: UnitList<'elffile>,                              // the compilation units seen so far, filled while load_variables iterates
     unit_names: Vec<Option<String>>,                        // DW_AT_name of each unit, by unit index
+    producers: Vec<Option<String>>,                         // DW_AT_producer (compiler, version and options) of each unit, by unit index
     endian: Endianness,                                     // byte order of the target, needed for bitfield offsets
     sections: HashMap<String, (u64, u64)>,                  // ELF section name -> (start, end)
     architecture: object::Architecture,                     // target architecture, for the frame pointer register (FrameBase)
@@ -117,7 +121,8 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
     let elffile = load_elf_file(&filename.to_string_lossy(), &filedata, verbose)?;
 
     // print symbol table
-    if verbose >= 1 {
+    if verbose >= 3 {
+        println!("===============================================================");
         println!("\nSymbol table:");
         for symbol in elffile.symbols() {
             let Ok(name) = symbol.name() else {
@@ -128,6 +133,7 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
             }
             println!("  `{:?}`: addr={:x}, {:?}", name, symbol.address(), symbol);
         }
+        println!("");
     }
 
     // verify that the elf file contains DWARF debug info
@@ -184,6 +190,7 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
         verbose,
         units: UnitList::new(),
         unit_names: Vec::new(),
+        producers: Vec::new(),
         endian: elffile.endianness(),
         sections,
         architecture: elffile.architecture(),
@@ -237,10 +244,12 @@ fn load_elf_file<'data>(filename: &str, filedata: &'data [u8], verbose: usize) -
     match object::File::parse(filedata) {
         Ok(object_file) => {
             if verbose >= 1 {
-                println!("\nParsed object file file: {}", filename);
-                println!("ELF file format: {:?}", object_file.format());
+                println!("\n====================================================================================================");
+                println!("Parsed ELF object file: {}", filename);
+                println!("File format: {:?}", object_file.format());
                 println!("Architecture: {:?}", object_file.architecture());
                 println!("Endianness: {:?}", object_file.endianness());
+                println!("");
                 println!("\nSections:");
                 for section in object_file.sections() {
                     let kind = section.kind();
@@ -252,7 +261,7 @@ fn load_elf_file<'data>(filename: &str, filedata: &'data [u8], verbose: usize) -
                         kind
                     );
                 }
-                println!("\n");
+                println!("");
             }
 
             Ok(object_file)
@@ -518,6 +527,7 @@ impl DebugDataReader<'_> {
         let varname_list: Vec<&String> = variables.keys().collect();
         let demangled_names = demangle_cpp_varnames(&varname_list);
         let unit_names = std::mem::take(&mut self.unit_names);
+        let producers = std::mem::take(&mut self.producers);
 
         DebugData {
             variables,
@@ -526,6 +536,7 @@ impl DebugDataReader<'_> {
             qualified_type_names,
             demangled_names,
             unit_names,
+            producers,
             sections: self.sections,
             symbol_addresses: self.symbol_addresses,
             epk_string: self.epk_string,
@@ -579,6 +590,7 @@ impl DebugDataReader<'_> {
                     }
                 };
                 self.unit_names.push(unit_name);
+                self.producers.push(get_producer_attribute(entry, &self.dwarf, unit).ok());
             }
 
             // traverse all entries in depth-first order

@@ -6,6 +6,8 @@
 [INFO ] Generate A2L file /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l with ELF/DWARF information only,  offline mode 
 [INFO ] Reading ELF file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.elf
 [INFO ] Loading debug information from ELF file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.elf
+[INFO ] Compiler: GNU C++17 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c++17 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fasynchronous-unwind-tables
+[INFO ] Compiler: GNU C11 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c11 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fasynchronous-unwind-tables
 [INFO ] ===============================================================
 [INFO ] Target signature found: ACSDD
 [INFO ] Using absolute addressing for calibration segments

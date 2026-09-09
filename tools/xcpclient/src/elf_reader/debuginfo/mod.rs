@@ -140,6 +140,7 @@ pub(crate) struct DebugData {
     pub(crate) qualified_type_names: HashMap<usize, String>, // type reference -> scope qualified name (motor_control.Input) of the struct/class types whose name is used in different scopes
     pub(crate) demangled_names: HashMap<String, String>,     // demangled name -> mangled name, for the variable names which are mangled C++ symbols
     pub(crate) unit_names: Vec<Option<String>>,              // list of compilation unit names by unit index, the DW_AT_name of the unit (usually the source file path)
+    pub(crate) producers: Vec<Option<String>>,               // the DW_AT_producer of each unit by unit index: compiler, version and command line options
     pub(crate) sections: HashMap<String, (u64, u64)>,        // ELF section name -> (start address, end address), only sections with an address
     pub(crate) symbol_addresses: HashMap<String, u64>,       // ELF symbol name -> address, the symbol table (.symtab), C++ names are mangled
     pub(crate) epk_string: Option<String>,                   // EPK string read from xcp_epk ELF section
@@ -210,7 +211,13 @@ impl DebugData {
         println!("\n====================================================================================================");
         println!("DebugData information summary:");
         println!("  Compilation units: {} units", self.unit_names.len());
-        println!("  Sections: {} sections", self.sections.len());
+        let mut compilers: Vec<&str> = self.producers.iter().flatten().map(String::as_str).collect();
+        compilers.sort_unstable();
+        compilers.dedup();
+        for compiler in compilers {
+            println!("  Compiler: {}", compiler);
+        }
+        println!("  Sections: {}", self.sections.len());
         print!("  Endianness: ");
         if self.is_little_endian {
             println!("Little Endian");
@@ -233,9 +240,10 @@ impl DebugData {
         }
     }
 
+    // Print debuf info, called if verbose >0
     // level 0 .. 5 stats, variables, variable types, demangled names, type names, types
-    // level >= 1 print variables
-    // level >= 2 print variable types
+    // level >= 2 print variables
+    // level >= 2 print variables details
     // level >= 3 print demangled names
     // level >= 4 print type names
     // level >= 5 print types
@@ -254,11 +262,10 @@ impl DebugData {
                 println!("  Unit {}: {}", idx, unit_name.as_ref().unwrap());
             }
         }
-        println!();
 
         // Print sections sorted by address
         println!("\n====================================================================================================");
-        println!("Memory Sections in debug_data.sections:");
+        println!("DWARF sections by address:");
         let mut sections: Vec<(&String, &(u64, u64))> = self.sections.iter().collect();
         sections.sort_by_key(|&(_, (addr, _))| *addr);
         let mut last_addr: u64 = 0;
@@ -270,7 +277,7 @@ impl DebugData {
         if level >= 4 {
             //Print type names
             println!("\n====================================================================================================");
-            println!("Type names in debug_data.typenames:");
+            println!("DWARF type names:");
             for (type_name, type_refs) in &self.typenames {
                 println!("Type name '{}': {} references", type_name, type_refs.len());
                 for type_ref in type_refs {
@@ -290,7 +297,7 @@ impl DebugData {
             if level >= 5 {
                 // Print types
                 println!("\n====================================================================================================");
-                println!("Types in debug_data.types:");
+                println!("DWARF types:");
                 for (type_ref, type_info) in &self.types {
                     let type_name = if let Some(name) = &type_info.name { name } else { "" };
                     println!(
@@ -342,6 +349,7 @@ impl DebugData {
                 );
             }
         }
+        println!("");
 
         // Print all variables
         if level >= 2 {

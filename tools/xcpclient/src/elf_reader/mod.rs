@@ -308,17 +308,30 @@ impl ElfReader {
 
     // Find the addressing mode marker variable (naming convention "XCPLITE__<signature>") and return the signature, if found
     // (CASDD, ACSDD, ...)
+    // Addressing mode signature of the target build (CASDD, ACSDD, AXSDD, CXSDD), from the marker variable XCPLITE__<signature>
+    // of the XCPlite library (xcplite.c). It is an exported global variable, so the symbol table has it even when the debug
+    // information of the library is not parsed (--elf-unit-limit) or was not built with -g. The DWARF variables are the fallback
     pub fn get_target_signature(&self) -> Option<&str> {
-        // Iterate over variables and look for XCPlite addressing mode marker
-        for (var_name, var_infos) in &self.debug_data.variables {
-            if !var_name.starts_with("XCPLITE__") {
-                continue;
-            }
-            if let Some(signature) = var_name.strip_prefix("XCPLITE__") {
-                return Some(signature);
+        let from_symbols = self.debug_data.symbol_addresses.keys().filter_map(|name| name.strip_prefix("XCPLITE__")).min();
+        if from_symbols.is_some() {
+            return from_symbols;
+        }
+        self.debug_data.variables.keys().find_map(|name| name.strip_prefix("XCPLITE__"))
+    }
+
+    // Log the compilers which built the ELF file, from the DW_AT_producer of the compilation units: compiler, version and the
+    // command line options which matter here, in particular the optimization level and the frame pointer
+    pub fn log_compilers(&self) {
+        let mut logged: Vec<&str> = Vec::new();
+        for producer in self.debug_data.producers.iter().flatten() {
+            if !logged.contains(&producer.as_str()) {
+                logged.push(producer);
+                info!("Compiler: {}", producer);
             }
         }
-        return None;
+        if logged.is_empty() {
+            debug!("No compiler information (DW_AT_producer) in the debug information of the ELF file");
+        }
     }
 
     // Get the EPK string and address from debug_data and set it in the registry application version information, if available
@@ -719,10 +732,7 @@ impl ElfReader {
                     format!("{evt_unit_idx}")
                 };
                 let evt_function = if let Some(f) = var_info.function.as_ref() { f.as_str() } else { "" };
-                info!(
-                    "  Event {} trigger found in {}:{}, address resolver mode {}",
-                    evt_name, evt_unit_name, evt_function, evt_mode
-                );
+                info!("Event {} trigger found in {}:{}, address resolver mode {}", evt_name, evt_unit_name, evt_function, evt_mode);
                 if var_info.inlined {
                     warn!(
                         "Event '{}' is triggered in function '{}', which the compiler inlined: the stack frame of an inlined function is ambiguous, \
@@ -1074,7 +1084,7 @@ impl ElfReader {
                                 Ok(_) => {
                                     if verbose >= 1 {
                                         println!(
-                                            "  Registered variable '{}' type_name = '{}', size = {}, event_id = {:?}",
+                                            "        Registered variable '{}' type_name = '{}', size = {}, event_id = {:?}",
                                             a2l_name,
                                             type_name.as_ref().unwrap_or(&"<unnamed>".to_string()),
                                             type_size,
@@ -1683,6 +1693,32 @@ mod test {
         assert_eq!(comment("foo.counter"), "");
     }
 
+    // The addressing mode signature is read from the symbol table, so it is found even when the debug information of the XCPlite
+    // library is not parsed (--elf-unit-limit) or the library was built without it. The DWARF variables are the fallback
+    #[test]
+    fn test_get_target_signature() {
+        assert_eq!(ElfReader::from_debug_data(empty_debug_data()).get_target_signature(), None);
+
+        let mut debug_data = empty_debug_data();
+        debug_data.symbol_addresses.insert("XCPLITE__CASDD".to_string(), 0xF840);
+        assert_eq!(ElfReader::from_debug_data(debug_data).get_target_signature(), Some("CASDD"));
+
+        let mut debug_data = empty_debug_data();
+        debug_data.variables.insert(
+            "XCPLITE__ACSDD".to_string(),
+            vec![VarInfo {
+                address: (0, 0xF840),
+                typeref: 0,
+                unit_idx: 0,
+                function: None,
+                namespaces: Vec::new(),
+                inlined: false,
+                frame_base: FrameBase::Unknown,
+            }],
+        );
+        assert_eq!(ElfReader::from_debug_data(debug_data).get_target_signature(), Some("ACSDD"));
+    }
+
     // Global variables get the default event when one is specified, otherwise no event
     #[test]
     fn test_register_variables_default_event() {
@@ -1708,6 +1744,7 @@ mod test {
             qualified_type_names: HashMap::new(),
             demangled_names: HashMap::new(),
             unit_names: vec![Some("main.c".to_string())],
+            producers: vec![Some("GNU C17 12.3.1".to_string())],
             sections: HashMap::new(),
             symbol_addresses: HashMap::new(),
             epk_string: None,

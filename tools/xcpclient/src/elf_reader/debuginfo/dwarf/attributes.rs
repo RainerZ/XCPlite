@@ -49,6 +49,16 @@ pub(crate) fn get_low_pc_attribute<R: gimli::Reader>(
     }
 }
 
+// The DW_AT_producer of a compilation unit: the compiler, its version and its command line options
+pub(crate) fn get_producer_attribute(
+    entry: &DebuggingInformationEntry<SliceType, usize>,
+    dwarf: &gimli::Dwarf<EndianSlice<RunTimeEndian>>,
+    unit_header: &gimli::UnitHeader<EndianSlice<RunTimeEndian>>,
+) -> Result<String, String> {
+    let producer_attr = get_attr_value(entry, gimli::constants::DW_AT_producer).ok_or_else(|| "failed to get producer attribute".to_string())?;
+    decode_string_attribute(producer_attr, dwarf, unit_header)
+}
+
 // try to get the attribute of the type attrtype for the DIE
 pub(crate) fn get_attr_value<'data>(entry: &DebuggingInformationEntry<SliceType<'data>, usize>, attrtype: gimli::DwAt) -> OptionalAttribute<'data> {
     entry.attr_value(attrtype)
