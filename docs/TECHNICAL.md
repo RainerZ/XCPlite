@@ -130,14 +130,14 @@ static const tXcpEventDescriptor evt__name;     // in section xcp_evts
 static tXcpEventId evt_id_name;
 static THREAD_LOCAL tXcpEventId evt__dynname;   // DaqCreateEventInstance(name), one event instance per thread
 
-// Event trigger anchor, from DaqTriggerEvent(name), DaqTriggerEventExt(name, base), DaqEventVar(name, ...), see below
+// Event trigger anchor, from DaqTriggerEvent(name), DaqTriggerEventExt(name, base), DaqEventVar(name, ...), DaqTriggerEventCapture(name, ...), see below
 static tXcpEventId trg__<modes>__name;          // in the function which triggers the event
 
 // Metadata, from XCP_COMMENT(name, text), XCP_UNIT(name, unit), XCP_LIMITS(name, min, max), XCP_READ_WRITE(name)
 static const char xcp_meta__comment__name[];    // in section xcp_meta, also xcp_meta__unit__, xcp_meta__min__, xcp_meta__max__, xcp_meta__read_write__
 
-// Capture buffer, from DaqCapture(event, var)
-static __typeof__(var) daq__event__var;
+// Capture struct, from DaqTriggerEventCapture(event, var, ...), one member per captured variable
+struct { __typeof__(var) var; ... } cap__event;
 ```
 
 ### `xcp_evts` section — event descriptors
@@ -196,6 +196,7 @@ The letters between `trg__` and the trailing `__name` form a sequence where
 | `C` | any | **Calibration-segment relative** — offset within a named `CalSeg` |
 | `S` | 2 | **Stack frame relative** — offset from `xcp_get_frame_addr()` |
 | `D` | 3+ | **Dynamic** — offset from an individually supplied base pointer; supports both synchronous and asynchronous access |
+| `R` | 3 | **Capture struct relative** — offset of a member in the capture struct `cap__<event>` which the trigger passes as base pointer, a `D` slot with a known layout |
 
 The trailing `__name` (double underscore) identifies the event and separates it from the
 mode sequence so a tool can split them unambiguously.
@@ -207,6 +208,7 @@ mode sequence so a tool can split them unambiguously.
 | `trg__AAS__name` | `DaqTriggerEvent`, `DaqCreateAndTriggerEvent`, `DaqEventVar` (C) | ext=0,1: Absolute — ext=2: Stack |
 | `trg__AASD__name` | `DaqTriggerEventExt` | ext=0,1: Absolute — ext=2: Stack — ext=3: Dynamic base pointer |
 | `trg__AASDD__name` | `DaqEventVar`, `DaqEventAtVar` (C++) | ext=0,1: Absolute — ext=2: Stack — ext=3+: Dynamic (one slot per measurement variable) |
+| `trg__AASR__name` | `DaqTriggerEventCapture`, `DaqTriggerEventCaptureAt`, `DaqCreateAndTriggerEventCapture` | ext=0,1: Absolute — ext=2: Stack — ext=3: the capture struct `cap__name` |
 
 ---
 

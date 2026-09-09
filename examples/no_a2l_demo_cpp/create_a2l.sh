@@ -33,7 +33,6 @@ ELFFILE="$REPO_ROOT/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.elf"
 # Build type for target executable: Release, RelWithDebInfo or Debug
 # RelWithDebInfo is default to demonstrate operation with with -O1 and NDEBUG
 # Optimization level >= -O1 keeps variables in registers whenever possible, so local variables cannot be measured
-# The most efficient solution to keep local variables measurable is to use the DaqCapture macro, another option is mto ark the variable as volatile (with the provided macro XCP_MEA
 # Debug mode is the least efficient but keeps all variables and stack frames intact
 BUILD_TYPE="RelWithDebInfo"
 # -O0

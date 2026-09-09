@@ -51,8 +51,7 @@ ELFFILE="$REPO_ROOT/examples/freertos_demo/freertos_emu_demo/CANape/freertos_dem
 
 # Build type for target executable: Release, RelWithDebInfo or Debug
 # RelWithDebInfo is default to demonstrate operation with with -O1 and NDEBUG
-# Optimization level >= -O1 keeps variables in registers whenever possible, so local variables cannot be measured
-# The most efficient solution to keep local variables measurable is to use the DaqCapture macro, another option is mto ark the variable as volatile (with the provided macro XCP_MEA
+# Optimization level >= -O1 keeps variables in registers whenever possible, so these local variables cannot be measured
 # Debug mode is the least efficient but keeps all variables and stack frames intact
 BUILD_TYPE="RelWithDebInfo"
 # -O0

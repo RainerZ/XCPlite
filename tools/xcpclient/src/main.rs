@@ -862,6 +862,8 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                         default_event_id = Some(event.resolve(&reg)?);
                     }
                     elf_reader.register_variables(&mut reg, segment_relative, verbose, elf_idx_unit_limit, &elf_var_filter, &elf_unit_filter, default_event_id)?;
+                    // Register the captured local variables of the event triggers (DaqTriggerEventCapture)
+                    elf_reader.register_captures(&mut reg, verbose)?;
                     // Apply metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the xcp_meta ELF section
                     elf_reader.register_metadata(&mut reg, verbose)?;
                     // Optionally remove all variables without any metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the registry

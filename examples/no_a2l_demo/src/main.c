@@ -197,27 +197,30 @@ XCP_NOINLINE void foo(void) {
 
     // Local measurement variable
     XCP_COMMENT(foo__counter, "Local measurement variable in function `foo`"); // Example for meta data annotation as code
-    volatile uint32_t counter = 0;
+    uint32_t counter = 0;
 
     // More local measurement variables
-    volatile float test_float = 0.1f;
-    volatile double test_double = 0.2;
-    volatile uint8_t test_uint8 = 1;
-    volatile uint16_t test_uint16 = 2;
-    volatile uint32_t test_uint32 = 3;
-    volatile uint64_t test_uint64 = 4;
-    volatile int8_t test_int8 = -1;
-    volatile int16_t test_int16 = -2;
-    volatile int32_t test_int32 = -3;
-    volatile uint64_t test_int64 = 1;
-    volatile struct test_struct test_struct = {1, -2, 0.3f, {1, 2, 3}};
-    volatile uint8_t test_array[3] = {1, 2, 3};
+    // Measured via capture, variables stay in their registers
+    float test_float = 0.1f;
+    double test_double = 0.2;
+    uint8_t test_uint8 = 1;
+    uint16_t test_uint16 = 2;
+    uint32_t test_uint32 = 3;
+    uint64_t test_uint64 = 4;
+    struct test_struct test_struct = {1, -2, 0.3f, {1, 2, 3}};
+    uint8_t test_array[3] = {1, 2, 3};
+
+    // Measure via stack, register variables spilled to stack
+    XCP_MEAS int8_t test_int8 = -1;
+    XCP_MEAS int16_t test_int16 = -2;
+    XCP_MEAS int32_t test_int32 = -3;
+    XCP_MEAS uint64_t test_int64 = 1;
 
     global_counter++;
     static_counter++;
     counter = global_counter;
 
-    DaqCreateAndTriggerEvent(foo);
+    DaqCreateAndTriggerEventCapture(foo, counter, test_float, test_double, test_uint8, test_uint16, test_uint32, test_uint64, test_struct, test_array);
 }
 
 // Never called

@@ -30,8 +30,7 @@ ELFFILE="$REPO_ROOT/examples/no_a2l_demo/CANape/no_a2l_demo.elf"
 
 # Build type for target executable: Release, RelWithDebInfo or Debug
 # RelWithDebInfo is default to demonstrate operation with with -O1 and NDEBUG
-# Optimization level >= -O1 keeps variables in registers whenever possible, so local variables cannot be measured
-# The most efficient solution to keep local variables measurable is to use the DaqCapture macro, another option is mto ark the variable as volatile (with the provided macro XCP_MEA
+# Optimization level >= -O1 keeps variables in registers whenever possible, so these local variables cannot be measured
 # Debug mode is the least efficient but keeps all variables and stack frames intact
 BUILD_TYPE="RelWithDebInfo"
 # -O0
@@ -98,9 +97,9 @@ fi
 # Build on target
 # Always a clean build: if the target has no NTP its clock may skew
 echo "Clean build executable on Target ..."
-ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
+#ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
 #ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=gcc CXX=g++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
-#ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=clang CXX=clang++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
+ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=clang CXX=clang++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: Build on target"
     exit 1
@@ -129,7 +128,7 @@ echo "==========================================================================
 echo ""
 # Remove the A2L file of a previous run, so a failed generation can not leave a stale A2L file behind
 rm -f "$A2LFILE"
-XCPCLIENT_ARGS=(--log-level=3 --verbose=1 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE" --default-event=mainloop)
+XCPCLIENT_ARGS=(--log-level=1 --verbose=3 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE" --default-event=mainloop)
 echo "Command: $XCPCLIENT ${XCPCLIENT_ARGS[*]}"
 "$XCPCLIENT" "${XCPCLIENT_ARGS[@]}" >> "$LOGFILE"
 if [ $? -ne 0 ] || [ ! -f "$A2LFILE" ]; then

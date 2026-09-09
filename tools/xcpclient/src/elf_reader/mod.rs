@@ -123,6 +123,24 @@ Possible future improvements:
 mod debuginfo;
 use debuginfo::{DbgDataType, DebugData, FrameBase, TypeInfo, VarInfo};
 
+// Variables which never become A2L objects: the internals of the compiler and of the standard library, the global XCPlite
+// variables and the marker variables of the sections and macros (see the module comment)
+fn is_internal_variable(name: &str) -> bool {
+    name.starts_with("__")
+        || name.starts_with("gXcp")
+        || name.starts_with("gA2l")
+        || name.starts_with("calseg__")
+        || name.starts_with("calblk__")
+        || name.starts_with("evt__")
+        || name.starts_with("trg__")
+        || name.starts_with("cap__")
+        || name.starts_with("xcp_meta__")
+}
+
+// XCP address extension of the captured variables: the first dynamic base address (XCP_ADDR_EXT_DYN + 1 in src/xcp_cfg.h),
+// which the capture trigger macros pass as the address of the capture struct
+const XCP_ADDR_EXT_CAPTURE: u8 = 3;
+
 //------------------------------------------------------------------------
 //  ELF reader and A2L creator
 
@@ -696,6 +714,10 @@ impl ElfReader {
         info!("Registering event locations:");
         info!("===============================================================");
 
+        // The captured variables of a function do not depend on its stack frame, so the diagnostics about the stack frame below
+        // are only relevant when the function has stack relative variables which are not captured
+        let captured = self.capture_member_names();
+
         // Iterate over variables
         for (var_name, var_infos) in &self.debug_data.variables {
             // Skip standard library variables and system/compiler internals (__<name>)s
@@ -733,12 +755,29 @@ impl ElfReader {
                 };
                 let evt_function = if let Some(f) = var_info.function.as_ref() { f.as_str() } else { "" };
                 info!("Event {} trigger found in {}:{}, address resolver mode {}", evt_name, evt_unit_name, evt_function, evt_mode);
+                // Stack relative variables of this function which are not captured: they are the ones the diagnostics below are about,
+                // the captured variables are addressed relative to the capture struct and do not depend on the stack frame
+                let has_uncaptured_stack_variables = self.debug_data.variables.iter().any(|(name, var_infos)| {
+                    !is_internal_variable(name)
+                        && !captured.contains(&(evt_unit_idx, evt_function, name.as_str()))
+                        && var_infos
+                            .iter()
+                            .any(|v| v.address.0 == 2 && v.unit_idx == evt_unit_idx && v.function.as_deref() == Some(evt_function))
+                });
+
                 if var_info.inlined {
-                    warn!(
-                        "Event '{}' is triggered in function '{}', which the compiler inlined: the stack frame of an inlined function is ambiguous, \
-                         its stack relative variables are not registered. Mark the function XCP_NOINLINE (inc/xcplib.h) to measure them",
-                        evt_name, evt_function
-                    );
+                    // Each copy of an inlined function has its own stack frame, the offsets of its local variables are not the same
+                    // in all of them. The captured variables are not affected, the trigger passes the capture struct of its own copy
+                    if has_uncaptured_stack_variables {
+                        warn!(
+                            "Event '{}' is triggered in function '{}', which the compiler inlined: the stack frame of an inlined function is ambiguous, \
+                             its stack relative variables are not registered. Mark the function XCP_NOINLINE (inc/xcplib.h) to measure them, \
+                             or capture them with DaqTriggerEventCapture",
+                            evt_name, evt_function
+                        );
+                    } else {
+                        info!("Event '{}' is triggered in function '{}', which the compiler inlined", evt_name, evt_function);
+                    }
                 }
 
                 // Find the event in the registry
@@ -747,11 +786,12 @@ impl ElfReader {
                     // which has to be the frame address the trigger macro passes to the target, see FrameBase
                     match var_info.frame_base {
                         FrameBase::Cfa | FrameBase::FramePointer => {}
-                        other => warn!(
+                        other if has_uncaptured_stack_variables => warn!(
                             "Event '{}' is triggered in function '{}' whose frame base is {:?}, not the frame address the trigger passes: \
                              the stack relative variables of this function are not registered",
                             evt_name, evt_function, other
                         ),
+                        other => debug!("Event '{}' is triggered in function '{}' whose frame base is {:?}", evt_name, evt_function, other),
                     }
                     if verbose >= 1 {
                         println!("  Event '{}' trigger in function '{}', frame base {:?}", evt_name, evt_function, var_info.frame_base);
@@ -851,19 +891,14 @@ impl ElfReader {
             }
         };
 
+        // Local variables which their function captures at an event trigger are registered from the capture struct in
+        // register_captures, the stack variable of the same name is not registered a second time
+        let captured = self.capture_member_names();
+
         // Iterate over variables
         for (var_name, var_infos) in &self.debug_data.variables {
-            // Skip standard library variables and system/compiler internals (__<name>)
-            // Skip global XCP variables (gXCP.. and gA2L..) and special marker variables (calseg__, evt__, trg__, xcp_meta__)
-            if var_name.starts_with("__")
-                || var_name.starts_with("gXcp")
-                || var_name.starts_with("gA2l")
-                || var_name.starts_with("calseg__")
-                || var_name.starts_with("calblk__")
-                || var_name.starts_with("evt__")
-                || var_name.starts_with("trg__")
-                || var_name.starts_with("xcp_meta__")
-            {
+            // Skip the internal and marker variables, they never become A2L objects
+            if is_internal_variable(var_name) {
                 continue;
             }
 
@@ -968,6 +1003,22 @@ impl ElfReader {
                         continue;
                     } else {
                         let var_function_name = var_function.unwrap();
+                        if captured.contains(&(var_info.unit_idx, var_function_name, var_name.as_str())) {
+                            debug!(
+                                "Local variable '{}' in function '{}' is captured, the stack variable is not registered",
+                                var_name, var_function_name
+                            );
+                            continue;
+                        }
+                        // Each copy of an inlined function has its own stack frame layout and the event may be triggered from any copy,
+                        // so there is no stack frame relative address which is valid for all of them, see register_event_locations
+                        if var_info.inlined {
+                            debug!(
+                                "Local variable '{}' of the inlined function '{}' is not registered, the stack frame of an inlined function is ambiguous",
+                                var_name, var_function_name
+                            );
+                            continue;
+                        }
                         if !matches!(var_info.frame_base, FrameBase::Cfa | FrameBase::FramePointer) {
                             debug!("Local variable '{}' in function {:?} skipped, frame base {:?}", var_name, var_function, var_info.frame_base);
                             continue;
@@ -1154,6 +1205,134 @@ impl ElfReader {
                 }
             }
         } // var_infos
+        Ok(())
+    }
+
+    // Names of the captured variables: (compilation unit, function, variable name) of every member of every capture struct
+    fn capture_member_names(&self) -> HashSet<(usize, &str, &str)> {
+        let mut names = HashSet::new();
+        for (var_name, var_infos) in &self.debug_data.variables {
+            if !var_name.starts_with("cap__") {
+                continue;
+            }
+            for var_info in var_infos {
+                if let Some(function) = var_info.function.as_deref()
+                    && let Some(type_info) = self.debug_data.types.get(&var_info.typeref)
+                    && let DbgDataType::Struct { members, .. } = &type_info.datatype
+                {
+                    for member_name in members.keys() {
+                        names.insert((var_info.unit_idx, function, member_name.as_str()));
+                    }
+                }
+            }
+        }
+        names
+    }
+
+    /// Register the captured local variables of the event triggers (DaqTriggerEventCapture in inc/xcplib.h)
+    ///
+    /// The macro declares a struct cap__<event> in the function, copies the given variables into it when the event is triggered and
+    /// passes the address of the struct to the target as the base address of address extension 3. So the XCP address of a captured
+    /// variable is the offset of its member in the struct, and the variables themselves may stay in registers.
+    /// The members are registered with the name of the original variable, qualified with the function like a local variable
+    /// (foo.counter), and with the event of the trigger as fixed event. Unlike stack frame relative variables they do not depend on
+    /// the stack frame of the function, so the function may be inlined
+    pub fn register_captures(&self, reg: &mut Registry, verbose: usize) -> Result<(), Box<dyn Error>> {
+        info!("===============================================================");
+        info!("Registering captured variables:");
+        info!("===============================================================");
+
+        for (var_name, var_infos) in &self.debug_data.variables {
+            let Some(event_name) = var_name.strip_prefix("cap__") else {
+                continue;
+            };
+            let Some(var_info) = var_infos.first() else {
+                continue;
+            };
+            // The copies of an inlined function have the same capture struct and the same function, they are one capture site
+            let sites: HashSet<(usize, Option<&str>)> = var_infos.iter().map(|v| (v.unit_idx, v.function.as_deref())).collect();
+            if sites.len() > 1 {
+                warn!(
+                    "Event '{}' is triggered with a capture in {} functions, only the one in function {:?} is used, the others are lost",
+                    event_name,
+                    sites.len(),
+                    var_info.function
+                );
+            }
+            let Some(function) = var_info.function.as_deref() else {
+                warn!("Capture struct '{}' is not in a function, the captured variables are not registered", var_name);
+                continue;
+            };
+
+            // The event of the trigger is the fixed event of all captured variables
+            let Some(event_id) = reg.event_list.find_event(event_name, 0).map(|event| event.get_id()) else {
+                error!(
+                    "Event '{}' of the capture in function '{}' is not defined, the captured variables are not registered",
+                    event_name, function
+                );
+                continue;
+            };
+
+            // The members of the capture struct are the captured variables
+            let Some(type_info) = self.debug_data.types.get(&var_info.typeref) else {
+                warn!("Capture struct '{}' in function '{}' has no type information", var_name, function);
+                continue;
+            };
+            let DbgDataType::Struct { members, .. } = &type_info.datatype else {
+                warn!("Capture struct '{}' in function '{}' is not a struct: {}", var_name, function, type_info);
+                continue;
+            };
+            info!("Capture of event '{}' in function '{}' with {} variables", event_name, function, members.len());
+
+            for (member_name, (member_type, offset)) in members {
+                let a2l_name = format!("{}.{}", function, member_name);
+
+                // The XCP address is the offset of the member in the capture struct, with the event id in the high bits, the target
+                // adds the address of the struct it received from the trigger of this event (address extension 3)
+                if *offset > McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK as u64 {
+                    warn!("Captured variable '{}' skipped, its offset {} in the capture struct is out of range", a2l_name, offset);
+                    continue;
+                }
+                let a2l_addr = (*offset & McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK as u64) | ((event_id as u64) << McAddress::XCP_ADDR_EXT_DYN_OFFSET_BITS);
+                let mc_addr = McAddress::new_a2l_with_event(event_id, a2l_addr as u32, XCP_ADDR_EXT_CAPTURE);
+
+                let mc_support_data = match &member_type.datatype {
+                    DbgDataType::Uint8
+                    | DbgDataType::Uint16
+                    | DbgDataType::Uint32
+                    | DbgDataType::Uint64
+                    | DbgDataType::Sint8
+                    | DbgDataType::Sint16
+                    | DbgDataType::Sint32
+                    | DbgDataType::Sint64
+                    | DbgDataType::Float
+                    | DbgDataType::Double
+                    | DbgDataType::Array { .. }
+                    | DbgDataType::Struct { .. } => McSupportData::new(McObjectType::Measurement),
+                    // Enums are measured as their integer type with the enumerators as conversion table, see register_variables
+                    DbgDataType::Enum { enumerators, .. } => match enumerators_to_unit_string(enumerators) {
+                        Some(unit_string) => McSupportData::new(McObjectType::Measurement).set_unit(unit_string),
+                        None => McSupportData::new(McObjectType::Measurement),
+                    },
+                    _ => {
+                        warn!("Captured variable '{}' has unsupported type: {}", a2l_name, member_type);
+                        continue;
+                    }
+                };
+
+                if verbose >= 2 {
+                    println!("  Add measurement instance for captured {}: addr = {}:0x{:08x}", a2l_name, XCP_ADDR_EXT_CAPTURE, a2l_addr);
+                }
+                let dim_type = self.get_dim_type(reg, member_type, McObjectType::Measurement);
+                match reg.instance_list.add_instance(a2l_name.clone(), dim_type, mc_support_data, mc_addr) {
+                    Ok(_) => info!(
+                        "Captured variable '{}' in function '{}', event id = {}, offset = {}",
+                        member_name, function, event_id, offset
+                    ),
+                    Err(e) => error!("Failed to register captured variable '{}': {}", a2l_name, e),
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1416,6 +1595,8 @@ mod test {
     const CPP_TYPE_NAME_COLLISIONS_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_type_name_collisions.elf");
     // C test fixture with two compilation units, see fixtures/c_local_types_a.c (GCC 12.3 arm-none-eabi, DWARF 5)
     const C_LOCAL_TYPES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_local_types.elf");
+    // C test fixture with captured local variables, see fixtures/c_captures.c (GCC 12.3 arm-none-eabi, DWARF 5, -O2)
+    const C_CAPTURES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_captures.elf");
     // C test fixture with metadata markers of local variables, see fixtures/c_meta_markers.c (GCC 12.3 arm-none-eabi, DWARF 5, -O1)
     const C_META_MARKERS_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_meta_markers.elf");
     // C test fixture with an inlined function, see fixtures/c_inlined_function.c, built with GCC 12.3 arm-none-eabi (-O2) and with clang
@@ -1625,6 +1806,48 @@ mod test {
         assert!(instance("bar.test_float").is_none());
         let bar_id = reg.event_list.find_event("bar", 0).unwrap().get_id();
         assert_eq!(instance("bar.static_counter").expect("bar.static_counter").event_id(), Some(bar_id));
+    }
+
+    // The captured local variables of an event trigger are registered from the members of the capture struct, with the name of the
+    // original variable qualified with its function, address extension 3 and the offset of the member as address. A variable which
+    // is captured is not registered a second time as a stack variable, and a capture in an inlined function works
+    #[test]
+    fn test_register_captured_variables() {
+        let elf_reader = ElfReader::new(C_CAPTURES_ELF, 0, usize::MAX).expect("failed to load fixtures/c_captures.elf");
+        let mut reg = Registry::new();
+        elf_reader.register_events(&mut reg, 0).unwrap();
+        elf_reader.register_event_locations(&mut reg, 0).unwrap();
+        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "", None).unwrap();
+        elf_reader.register_captures(&mut reg, 0).unwrap();
+
+        let event_id = |name: &str| reg.event_list.find_event(name, 0).unwrap_or_else(|| panic!("event {name}")).get_id();
+        // (address extension, offset from the base address, event id) of a measurement
+        let address = |name: &str| {
+            let instance = reg
+                .instance_list
+                .get_instance(name, McObjectType::Measurement, None)
+                .unwrap_or_else(|| panic!("instance '{name}' not registered"));
+            let (addr_ext, addr) = instance.get_address().get_a2l_addr(&reg);
+            (addr_ext, addr & McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK, instance.event_id())
+        };
+
+        // The captured variables of task: the offsets are the offsets of the members in the capture struct
+        let task = event_id("task");
+        assert_eq!(address("task.counter"), (3, 0, Some(task)));
+        assert_eq!(address("task.ratio"), (3, 4, Some(task)));
+        assert_eq!(address("task.flags"), (3, 8, Some(task)));
+
+        // 'both' is on the stack and captured, the capture wins and it is registered once
+        assert_eq!(address("task.both"), (3, 12, Some(task)));
+        assert_eq!(reg.instance_list.iter().filter(|i| i.get_name() == "task.both").count(), 1);
+
+        // 'stack_var' is not captured, it keeps its stack frame relative address
+        assert_eq!(address("task.stack_var").0, 2);
+
+        // foo is inlined, its captured variable is measurable nevertheless
+        let (addr_ext, offset, event) = address("foo.counter");
+        assert_eq!((addr_ext, offset), (3, 0));
+        assert_eq!(event, Some(event_id("foo")));
     }
 
     // Metadata markers of local variables: a marker at file scope belongs to the global variable and not to the local variables of

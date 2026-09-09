@@ -659,14 +659,6 @@ impl DebugDataReader<'_> {
                     let (function, function_linkage, namespaces, inlined, frame_base) = get_varinfo_from_context(&context);
                     match self.get_variable(entry, unit, abbreviations, function.is_some(), function_linkage.as_deref(), &namespaces) {
                         Ok((name, typeref, address)) => {
-                            // Stack relative variables of an inlined function are not loaded: each copy of the function has its own
-                            // stack frame layout and the event may be triggered from any copy, so there is no stack relative address
-                            // which is valid for all of them. The static variables and the event trigger marker are loaded,
-                            // the marker tells register_event_locations to warn
-                            if inlined && address.0 != 0 {
-                                log::debug!("Local variable '{}' of the inlined function {:?} not loaded, the stack frame is ambiguous", name, function);
-                                continue;
-                            }
                             let var_infos = variables.entry(name).or_default();
                             // A static variable of an inlined function may be described in the abstract instance and again in each copy
                             if inlined && address.0 == 0 && address.1 != 0 && var_infos.iter().any(|v| v.unit_idx == unit_idx && v.address == address && v.function == function) {

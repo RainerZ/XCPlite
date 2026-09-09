@@ -618,6 +618,97 @@ extern const uint8_t *gXcpBaseAddr;
     }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// Capture of local variables
+
+// A local variable which the compiler keeps in a register has no memory location and can not be measured. Instead of forcing it
+// into memory for its whole lifetime with 'volatile', the capture macros copy the given variables into a struct on the stack when
+// the event is triggered, and pass the address of that struct as the base address of address extension 3.
+// The offline A2L generator (xcpclient) unfolds the struct and registers its members with the names of the original variables,
+// see docs/OFFLINE_A2L.md. The originals stay in registers, the copy of a scalar is a single store instruction.
+// The capture struct is alive while the event is triggered, which is when the XCP server reads it, synchronously for DAQ and
+// asynchronously for polling (the pending command is executed in the trigger).
+// Restrictions: up to XCP_CAPTURE_MAX_COUNT variables, each given as a plain identifier of a local variable, a parameter or a
+// global variable. Bitfield members and const qualified variables can not be captured. Not available with MSVC.
+// A function with a capture may be inlined, unlike a function which measures its local variables on the stack.
+
+#define XCP_CAPTURE_MAX_COUNT 16
+
+#define XCP_CAP_CAT_(a, b) a##b
+#define XCP_CAP_CAT(a, b) XCP_CAP_CAT_(a, b)
+
+// Number of arguments (1 to XCP_CAPTURE_MAX_COUNT)
+#define XCP_CAP_NARG(...) XCP_CAP_NARG_(__VA_ARGS__, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
+#define XCP_CAP_NARG_(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, N, ...) N
+
+// Apply m(c, x) to each argument x, with the context c
+#define XCP_CAP_FE_1(m, c, x) m(c, x)
+#define XCP_CAP_FE_2(m, c, x, ...) m(c, x) XCP_CAP_FE_1(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_3(m, c, x, ...) m(c, x) XCP_CAP_FE_2(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_4(m, c, x, ...) m(c, x) XCP_CAP_FE_3(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_5(m, c, x, ...) m(c, x) XCP_CAP_FE_4(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_6(m, c, x, ...) m(c, x) XCP_CAP_FE_5(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_7(m, c, x, ...) m(c, x) XCP_CAP_FE_6(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_8(m, c, x, ...) m(c, x) XCP_CAP_FE_7(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_9(m, c, x, ...) m(c, x) XCP_CAP_FE_8(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_10(m, c, x, ...) m(c, x) XCP_CAP_FE_9(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_11(m, c, x, ...) m(c, x) XCP_CAP_FE_10(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_12(m, c, x, ...) m(c, x) XCP_CAP_FE_11(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_13(m, c, x, ...) m(c, x) XCP_CAP_FE_12(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_14(m, c, x, ...) m(c, x) XCP_CAP_FE_13(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_15(m, c, x, ...) m(c, x) XCP_CAP_FE_14(m, c, __VA_ARGS__)
+#define XCP_CAP_FE_16(m, c, x, ...) m(c, x) XCP_CAP_FE_15(m, c, __VA_ARGS__)
+#define XCP_CAP_FOR_EACH(m, c, ...) XCP_CAP_CAT(XCP_CAP_FE_, XCP_CAP_NARG(__VA_ARGS__))(m, c, __VA_ARGS__)
+
+// One struct member per captured variable, with the name and the type of the variable
+#define XCP_CAP_MEMBER(c, x) __typeof__(x) x;
+
+// Copy one variable into the capture struct. The casts avoid a discarded qualifier warning for a volatile variable, the builtin
+// is expanded inline for the constant size, so the address of the variable does not force it into memory
+#define XCP_CAP_COPY(c, x) __builtin_memcpy((void *)&(c).x, (const void *)&(x), sizeof(x));
+
+// Declare the capture struct cap__<event_name> and fill it
+#define XCP_CAPTURE(event_name, ...)                                                                                                                                               \
+    struct {                                                                                                                                                                       \
+        XCP_CAP_FOR_EACH(XCP_CAP_MEMBER, 0, __VA_ARGS__)                                                                                                                           \
+    } cap__##event_name;                                                                                                                                                           \
+    XCP_CAP_FOR_EACH(XCP_CAP_COPY, cap__##event_name, __VA_ARGS__)
+
+/// Trigger the XCP event 'event_name' and capture the given local variables for measurement, AASR
+/// @param event_name Name given as identifier, the event must exist (DaqCreateEvent)
+/// @param ... The local variables to capture, plain identifiers, up to XCP_CAPTURE_MAX_COUNT
+#define DaqTriggerEventCapture(event_name, ...)                                                                                                                                    \
+    {                                                                                                                                                                              \
+        XCP_CAPTURE(event_name, __VA_ARGS__)                                                                                                                                       \
+        static tXcpEventId trg__AASR__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                         \
+        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASR__##event_name);                                                                                                      \
+        XcpEventExt_Var(trg__AASR__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)&cap__##event_name);                                                                    \
+    }
+
+/// Trigger the XCP event 'event_name' with a given timestamp and capture the given local variables for measurement, AASR
+/// @param event_name Name given as identifier, the event must exist (DaqCreateEvent)
+/// @param clock Timestamp of the event
+/// @param ... The local variables to capture, plain identifiers, up to XCP_CAPTURE_MAX_COUNT
+#define DaqTriggerEventCaptureAt(event_name, clock, ...)                                                                                                                           \
+    {                                                                                                                                                                              \
+        XCP_CAPTURE(event_name, __VA_ARGS__)                                                                                                                                       \
+        static tXcpEventId trg__AASR__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                         \
+        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASR__##event_name);                                                                                                      \
+        XcpEventExtAt_Var(trg__AASR__##event_name, clock, 2, xcp_get_frame_addr(), (const uint8_t *)&cap__##event_name);                                                           \
+    }
+
+/// Create and trigger the XCP event 'event_name' and capture the given local variables for measurement, AASR
+/// @param event_name Name given as identifier
+/// @param ... The local variables to capture, plain identifiers, up to XCP_CAPTURE_MAX_COUNT
+#define DaqCreateAndTriggerEventCapture(event_name, ...)                                                                                                                           \
+    {                                                                                                                                                                              \
+        XCP_CAPTURE(event_name, __VA_ARGS__)                                                                                                                                       \
+        static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                      \
+        static tXcpEventId trg__AASR__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                         \
+        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASR__##event_name);                                                                                                      \
+        XcpEventExt_Var(trg__AASR__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)&cap__##event_name);                                                                    \
+    }
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Enable/disable events
 
 /// Enable the XCP event 'name'
@@ -679,15 +770,15 @@ extern const uint8_t *gXcpBaseAddr;
 // Note on local variable and function parameter visibility:
 // When runtime A2L generation is not used, the compiler may optimize local variables and function parameters to be stored in CPU registers only, without a memory location on the
 // stack In this case, XCPlite can not measure these variables since there is no memory location to read from, reading the register value is not supported yet To prevent this
-// optimization, the variable must be marked as 'volatile' to force the compiler to always read and write it from/to memory The XCP_MEA and XCP_MEAS macros mark a (local) variable
-// as volatile for this purpose An alternative is to use the DaqCapture macro to capture the variable in a hidden static variable for measurement
+// optimization, the variable must be marked as 'volatile' to force the compiler to always read and write it from/to memory The XCP_MEAS macros mark a (local) variable
+// as volatile for this purpose An alternative is to trigger the event with DaqTriggerEventCapture, which copies the variables into a capture struct on
+// the stack and leaves the originals in their registers
 
 // The A2L updater/creator in xcpclient can handle only simple location expressions such as absolute addresses, stack relative addresses (CFA) and calibration segment relative
-// addresses For complex cases, use the DaqCapture macro to capture the variable in a hidden static variable
+// addresses For complex cases, use DaqTriggerEventCapture to capture the variables in a capture struct
 
 /// Attribute to mark a local variable as measurable
 /// Example usage: XCP_MEAS int32_t my_var = 0;
-#define XCP_MEA volatile
 #define XCP_MEAS volatile
 
 // Macro to force a function parameter to be stored on the stack
@@ -695,16 +786,6 @@ extern const uint8_t *gXcpBaseAddr;
 
 // Compiler memory barrier to prevent reordering of memory accesses across this point
 #define XCP_MEMORY_BARRIER() asm volatile("" ::: "memory")
-
-/// Capture a local variable for measurement with a specific event
-/// The variable must be in scope when the event is triggered with DaqTriggerEvent
-/// The build time A2L file generator will find the hidden static variable 'daq__##event##__##var' and create the measurement with approriate addressing mode and
-/// event association
-#define DaqCapture(event, var)                                                                                                                                                     \
-    do {                                                                                                                                                                           \
-        static __typeof__(var) daq__##event##__##var;                                                                                                                              \
-        daq__##event##__##var = var;                                                                                                                                               \
-    } while (0)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Misc

@@ -22,6 +22,7 @@ The instrumentation macros place information in the ELF file at compile and link
 | `xcp_meta` section | `XCP_UNIT`, `XCP_LIMITS`, `XCP_COMMENT`, `XCP_READ_WRITE` | Metadata of measurement and calibration objects |
 | DWARF scope of the `trg__<modes>__<event>` anchor variables | `DaqTriggerEvent`, `DaqCreateAndTriggerEvent`, `DaqTriggerEventExt`, `DaqEventVar` | The function in which an event is triggered, its stack frame and the addressing modes available at the trigger point |
 | `XCPLITE__<signature>` variable | libxcplite | The addressing scheme of the target (`CASDD`, `ACSDD`, `AXSDD`, `CXSDD`), see [addressing modes](TECHNICAL.md#addressing-modes) |
+| DWARF type of the `cap__<event>` capture structs | `DaqTriggerEventCapture`, `DaqCreateAndTriggerEventCapture` | The captured local variables of an event trigger, with their names, types and offsets in the capture struct |
 | DWARF variables and types, ELF symbol table | Compiler and linker | Names, addresses, stack frame offsets and types of all global, static and local variables |
 
 The macro expansions and the naming conventions of the markers are the contract between the library and the generator, they are
@@ -127,6 +128,23 @@ a function without frame pointer under clang, gets a warning and its stack frame
 a local variable relative to the stack pointer when that is closer to the variable than the frame pointer, such variables are not
 measurable, they are reported at debug level.
 
+### Captured local variables
+
+A local variable which the compiler keeps in a register has no address and can not be measured. Marking it `volatile` gives it a memory
+location for its whole lifetime. The alternative is to capture it: `DaqTriggerEventCapture(event, counter, ratio)` declares a struct
+`cap__<event>` in the function, copies the given variables into it and passes the address of the struct to the target as the base address
+of address extension 3. The originals stay in their registers, the copy of a scalar is a single store instruction.
+
+The generator takes the DWARF type of `cap__<event>`, which is a struct with one member per captured variable, and registers every member
+as a measurement named `<function>.<member>`, with the event of the trigger as fixed event, address extension 3 and the offset of the
+member in the struct as address. The measurements look exactly like the stack frame relative ones, the metadata markers of the captured
+variables work unchanged. A variable which is captured is not registered a second time as a stack frame relative variable.
+
+Captured variables do not depend on the stack frame of their function, so a function which only captures may be inlined. Asynchronous
+access (polling) works like for any other event based relative address, the pending command is executed in the next trigger of the event,
+while the capture struct is alive. One capture per event: if the same event is triggered with a capture in several functions, the first
+one is used and the others are reported.
+
 A function with an event trigger must not be inlined. An inlined function has a copy at each call site and possibly an out of line copy,
 each with its own stack frame layout, and the event may be triggered from any of them, so there is no stack frame relative address which
 is valid for all copies. xcpclient warns when the trigger of an event is found in an inlined function (an abstract instance with
@@ -213,7 +231,7 @@ Not supported, future extensions, cases skipped and reported as warnings (log le
 - Variables addressed relative to a base pointer (`DaqTriggerEventExt`, the dynamic slots of `DaqEventVar`, address extension 3 and
   above) are not generated yet, only absolute and stack frame relative addressing is.
   (@@@@ TODO: Create a concept how to handle this)
-- Thread local variables, function parameters and the capture buffers of `DaqCapture` are not evaluated yet.
+- Thread local variables are not evaluated yet.
   (@@@@ TODO: future feature ?)
 - Local variable in functions without events are skipped
   (@@@@ TODO: future feature ?, trigger if called by ?, with stack unwinding check)
@@ -233,6 +251,7 @@ Messages worth knowing when a variable is missing or looks wrong in the A2L file
 | `Global variable 'x' not registered, address ... out of the 32 bit XCP address range` | The variable is outside the addressable range, see the addressing modes. |
 | `Metadata 'xcp_meta__...': no matching registry entry for '...'` | The annotated variable was not registered, or the name does not match. Check the scope prefix and the `__` path. |
 | `Metadata variable '...' address is 0` | The marker has no DWARF location and no resolveable symbol. |
+| `Event '...' is triggered with a capture in N functions, only the one in function ... is used` | The same event is triggered with `DaqTriggerEventCapture` in several functions, whose capture structs have different layouts. Use one event per capture. |
 | `No target signature found in ELF file` | The `XCPLITE__<signature>` variable of the XCPlite library is missing, absolute addressing of calibration segments is assumed. A build with segment relative addressing (`CASDD`, `CXSDD`) then gets wrong calibration addresses. |
 | `New event '...' found, created with undefined event id ...` | No `xcp_evts` section and no linker symbols. Connect to the target to get the ids. |
 | `Calibration segment reference page variable 'x' has N usable definitions, expected 1` | The name of the default page variable is ambiguous, restrict the compilation units with `--elf-unit-filter`. |
