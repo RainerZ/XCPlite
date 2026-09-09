@@ -25,11 +25,10 @@ The code is layered top down:
     v
   DebugData (debuginfo/mod.rs)          Plain data extracted from the ELF file: every variable with name, scope, address and
     |                                   type, every type used by a variable, the compilation unit names, the ELF sections
-    |                                   and symbols, the stack frame information of functions.
+    |                                   and symbols.
     v
   DebugDataReader (debuginfo/dwarf/)    The parser. Opens the ELF file with the `object` crate (sections, symbol table) and
                                         reads the DWARF debug information with the `gimli` crate (variables, types, functions).
-  cfa.rs (debuginfo/cfa.rs)             A second, independent DWARF pass which determines the stack frame layout of functions.
 
 An ELF file carries two kinds of information which are used here:
 
@@ -122,7 +121,7 @@ Possible future improvements:
 // Original code licensed under MIT/Apache-2.0
 // Copyright (c) DanielT
 mod debuginfo;
-use debuginfo::{DbgDataType, DebugData, TypeInfo, VarInfo};
+use debuginfo::{DbgDataType, DebugData, FrameBase, TypeInfo, VarInfo};
 
 //------------------------------------------------------------------------
 //  ELF reader and A2L creator
@@ -734,25 +733,22 @@ impl ElfReader {
 
                 // Find the event in the registry
                 if let Some(_evt) = reg.event_list.find_event(evt_name, 0) {
-                    // Try to lookup the canonical stack frame address offset from the function name
-                    let mut evt_cfa: i32 = 0;
-                    for cfa_info in self.debug_data.cfa_info.iter() {
-                        if cfa_info.unit_idx == evt_unit_idx && cfa_info.function == evt_function {
-                            if let Some(x) = cfa_info.cfa_offset {
-                                evt_cfa = x as i32;
-                            } else {
-                                warn!("Could not determine CFA offset for function '{}'", evt_function);
-                            }
-                            break;
-                        }
+                    // The stack variables of the function are registered with their DWARF offsets from the frame base of the function,
+                    // which has to be the frame address the trigger macro passes to the target, see FrameBase
+                    match var_info.frame_base {
+                        FrameBase::Cfa | FrameBase::FramePointer => {}
+                        other => warn!(
+                            "Event '{}' is triggered in function '{}' whose frame base is {:?}, not the frame address the trigger passes: \
+                             the stack relative variables of this function are not registered",
+                            evt_name, evt_function, other
+                        ),
                     }
-
                     if verbose >= 1 {
-                        println!("  Event '{}' trigger in function '{}', cfa = {}", evt_name, evt_function, evt_cfa);
+                        println!("  Event '{}' trigger in function '{}', frame base {:?}", evt_name, evt_function, var_info.frame_base);
                     }
 
-                    // Store the unit and function name and canonical stack frame address offset for this event trigger
-                    match reg.event_list.set_event_location(evt_name, evt_unit_idx, evt_function, evt_cfa) {
+                    // Store the unit and function name of this event trigger (the stack frame offset is always 0, see FrameBase)
+                    match reg.event_list.set_event_location(evt_name, evt_unit_idx, evt_function, 0) {
                         Ok(_) => {}
                         Err(e) => {
                             error!("Failed to set event location for event '{}': {}", evt_name, e);
@@ -954,39 +950,40 @@ impl ElfReader {
                     // Encode stack relative addressing mode
                     // The DWARF reader evaluated the location of the variable with a dummy frame base of 0x80000000 (see evaluate_exprloc
                     // in attributes.rs), so address - 0x80000000 is the offset of the variable from the frame base of its function.
-                    // The event trigger in the function passes the frame address to the target, and the CFA offset found in cfa.rs
-                    // corrects the difference between the frame base used by DWARF and the frame address passed by the trigger macro.
-                    // The variable is only measurable at the trigger point, on the event of its function
+                    // The event trigger in the function passes this frame base to the target as frame address (see FrameBase), so the
+                    // offset is used as it is. The variable is only measurable at the trigger point, on the event of its function
                     // Find an event id for this local variable
                     if var_function.is_none() {
                         warn!("Local variable '{}' skipped - function name is required for relative addressing mode", var_name);
                         continue;
                     } else {
                         let var_function_name = var_function.unwrap();
+                        if !matches!(var_info.frame_base, FrameBase::Cfa | FrameBase::FramePointer) {
+                            debug!("Local variable '{}' in function {:?} skipped, frame base {:?}", var_name, var_function, var_info.frame_base);
+                            continue;
+                        }
                         if let Some(event) = reg.event_list.find_event_by_location(var_info.unit_idx, var_function_name) {
                             // Set the event id for this function
                             // Prefix the variable with the function name
                             xcp_event_id = Some(event.id);
-                            let cfa: i64 = event.cfa as i64;
                             if let Some(f) = var_function {
                                 a2l_name = format!("{}.{}", f, var_name);
                             } else {
                                 a2l_name = var_name.to_string();
                             }
                             info!(
-                                "Local variable '{}' in function '{:?}', event id = {:?}, dwarf_offset = {} cfa = {}",
+                                "Local variable '{}' in function '{:?}', event id = {:?}, offset = {}",
                                 var_name,
                                 var_function,
                                 xcp_event_id,
-                                (var_info.address.1 as i64 - 0x80000000),
-                                cfa
+                                (var_info.address.1 as i64 - 0x80000000)
                             );
 
                             // @@@@ TODO: Create functions instead of constants for relative address encoding
                             // Encode dyn addressing mode A2L/XCP address from offset and event id: the low XCP_ADDR_EXT_DYN_OFFSET_BITS bits
                             // are the offset, biased by XCP_ADDR_EXT_DYN_OFFSET_OFFSET so that negative offsets (below the frame address) fit,
                             // the high bits are the event id. The target adds the frame address it received from the trigger of this event
-                            let offset: i64 = var_info.address.1 as i64 - 0x80000000 + cfa;
+                            let offset: i64 = var_info.address.1 as i64 - 0x80000000;
                             if offset < -(McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64)
                                 || offset > (McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK as i64 - McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64)
                             {
@@ -1395,6 +1392,8 @@ mod test {
     // C test fixture with an inlined function, see fixtures/c_inlined_function.c, built with GCC 12.3 arm-none-eabi (-O2) and with clang
     const C_INLINED_FUNCTION_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_inlined_function.elf");
     const C_INLINED_FUNCTION_CLANG_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_inlined_function_clang.elf");
+    // The same clang build without frame pointer, the frame base of the functions is the stack pointer
+    const C_INLINED_FUNCTION_CLANG_NOFP_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_inlined_function_clang_nofp.elf");
 
     // Load a fixture ELF file and register all its variables
     fn load_fixture(elf_file: &str) -> (ElfReader, Registry) {
@@ -1533,13 +1532,16 @@ mod test {
     // GCC describes the static variables and the markers in the abstract instance, clang in the out of line copy
     #[test]
     fn test_register_inlined_function_variables() {
-        for elf_file in [C_INLINED_FUNCTION_ELF, C_INLINED_FUNCTION_CLANG_ELF] {
-            register_inlined_function_variables(elf_file);
+        // GCC: frame base CFA, all locals frame base relative. clang: frame base r11, counter frame base relative, test_float
+        // stack pointer relative and therefore not measurable
+        for (elf_file, bar_counter_offset, test_float_measurable) in [(C_INLINED_FUNCTION_ELF, -24, true), (C_INLINED_FUNCTION_CLANG_ELF, -4, false)] {
+            register_inlined_function_variables(elf_file, bar_counter_offset, test_float_measurable);
         }
     }
 
-    // The checks of test_register_inlined_function_variables for one fixture ELF file (GCC or clang build of the same source)
-    fn register_inlined_function_variables(elf_file: &str) {
+    // The checks of test_register_inlined_function_variables for one fixture ELF file (GCC or clang build of the same source),
+    // bar_counter_offset is the DW_OP_fbreg offset of the variable counter in bar
+    fn register_inlined_function_variables(elf_file: &str, bar_counter_offset: i64, test_float_measurable: bool) {
         let elf_reader = ElfReader::new(elf_file, 0, usize::MAX).unwrap_or_else(|e| panic!("failed to load {elf_file}: {e}"));
         let mut reg = Registry::new();
         elf_reader.register_events(&mut reg, 0).unwrap();
@@ -1548,11 +1550,18 @@ mod test {
         let event_id = |name: &str| reg.event_list.find_event(name, 0).unwrap_or_else(|| panic!("event {name}")).get_id();
         let instance = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None);
 
-        // bar is not inlined: stack and static variables with the event triggered in bar, the stack frame offset (CFA) of the trigger
-        // is found in the CFI for GCC and clang (DWARF 5 with indexed strings and addresses) alike
-        assert_eq!(reg.event_list.find_event("bar", 0).unwrap().cfa, 24, "{elf_file}");
-        assert_eq!(instance("bar.counter").expect("bar.counter").event_id(), Some(event_id("bar")));
-        assert_eq!(instance("bar.test_float").expect("bar.test_float").event_id(), Some(event_id("bar")));
+        // bar is not inlined: stack and static variables with the event triggered in bar. The stack variables are addressed with
+        // their DWARF offset from the frame base of bar, the CFA for GCC and the frame pointer for clang, both without correction
+        let bar_counter = instance("bar.counter").expect("bar.counter");
+        assert_eq!(bar_counter.event_id(), Some(event_id("bar")));
+        let (addr_ext, addr) = bar_counter.get_address().get_a2l_addr(&reg);
+        assert_eq!(addr_ext, 2, "{elf_file}");
+        assert_eq!(
+            (addr & McAddress::XCP_ADDR_EXT_DYN_OFFSET_MASK) as i64 - McAddress::XCP_ADDR_EXT_DYN_OFFSET_OFFSET as i64,
+            bar_counter_offset,
+            "{elf_file}"
+        );
+        assert_eq!(instance("bar.test_float").is_some(), test_float_measurable, "{elf_file}");
         assert_eq!(instance("bar.static_counter").expect("bar.static_counter").event_id(), Some(event_id("bar")));
 
         // foo is inlined into main and emitted out of line: the trigger marker is flagged, the stack variables of both copies are
@@ -1568,6 +1577,25 @@ mod test {
         }
         assert_eq!(instance("foo.static_counter").expect("foo.static_counter").event_id(), Some(event_id("foo")));
         assert_eq!(elf_reader.debug_data.variables["static_counter"].len(), 2);
+    }
+
+    // A function without frame pointer (clang -O0 without -fno-omit-frame-pointer) describes its local variables relative to the
+    // stack pointer, which is not the frame address the trigger macro passes: the stack variables are not registered, the static
+    // variables keep the function scope and the event
+    #[test]
+    fn test_register_stack_variables_without_frame_pointer() {
+        let elf_reader = ElfReader::new(C_INLINED_FUNCTION_CLANG_NOFP_ELF, 0, usize::MAX).expect("failed to load fixtures/c_inlined_function_clang_nofp.elf");
+        let mut reg = Registry::new();
+        elf_reader.register_events(&mut reg, 0).unwrap();
+        elf_reader.register_event_locations(&mut reg, 0).unwrap();
+        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "", None).unwrap();
+        let instance = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None);
+
+        assert_eq!(elf_reader.debug_data.variables["trg__AAS__bar"][0].frame_base, FrameBase::Register(13));
+        assert!(instance("bar.counter").is_none());
+        assert!(instance("bar.test_float").is_none());
+        let bar_id = reg.event_list.find_event("bar", 0).unwrap().get_id();
+        assert_eq!(instance("bar.static_counter").expect("bar.static_counter").event_id(), Some(bar_id));
     }
 
     // Global variables get the default event when one is specified, otherwise no event
@@ -1597,7 +1625,6 @@ mod test {
             unit_names: vec![Some("main.c".to_string())],
             sections: HashMap::new(),
             symbol_addresses: HashMap::new(),
-            cfa_info: Vec::new(),
             epk_string: None,
             epk_addr: 0,
             xcp_meta_data: None,
@@ -1633,6 +1660,7 @@ mod test {
             function: None,
             namespaces: Vec::new(),
             inlined: false,
+            frame_base: FrameBase::Cfa,
         };
         let mut debug_data = empty_debug_data();
         debug_data.unit_names = vec![Some("a.c".to_string()), Some("b.c".to_string())];
@@ -1685,6 +1713,7 @@ mod test {
                 function: None,
                 namespaces: vec!["motor_control".to_string()],
                 inlined: false,
+                frame_base: FrameBase::Cfa,
             }]
         };
         let mut debug_data = empty_debug_data();
@@ -1733,6 +1762,7 @@ mod test {
             function: None,
             namespaces: vec![namespace.to_string()],
             inlined: false,
+            frame_base: FrameBase::Cfa,
         };
         let mut debug_data = empty_debug_data();
         debug_data.xcp_meta_data = Some((meta_base, meta));
@@ -1772,6 +1802,7 @@ mod test {
                 function: function.map(str::to_string),
                 namespaces: namespaces.iter().map(|s| s.to_string()).collect(),
                 inlined: false,
+                frame_base: FrameBase::Cfa,
             }]
         };
         let mut debug_data = empty_debug_data();
@@ -1927,6 +1958,7 @@ mod test {
                 function: Some(function.to_string()),
                 namespaces: Vec::new(),
                 inlined: false,
+                frame_base: FrameBase::Cfa,
             });
         }
         if let Some(range) = event_section {

@@ -180,8 +180,10 @@ their exact layout in memory — without any A2L registration calls in the appli
 Every event trigger macro emits a **named static local variable** whose name encodes
 the set of addressing modes active at that trigger point. An A2L tool reads this name from
 the DWARF to know how to decode the XCP address for each measurement variable. The base address the macros pass for the stack
-frame relative addressing mode is `xcp_get_frame_addr()`: `__builtin_frame_address(0)` minus `XCP_FRAME_ADDR_OFFSET`, on Xtensa
-`__builtin_dwarf_cfa()` minus `XCP_FRAME_ADDR_OFFSET`, see `inc/xcplib.h`.
+frame relative addressing mode is `xcp_get_frame_addr()`: the frame base the compiler uses in the DWARF locations of the local
+variables (`DW_AT_frame_base`) minus `XCP_FRAME_ADDR_OFFSET`, see `inc/xcplib.h`. This is `__builtin_frame_address(0)` under clang,
+which describes the local variables relative to the frame pointer register, and `__builtin_dwarf_cfa()` under GCC, which describes
+them relative to the canonical frame address (CFA). The offsets from the DWARF are used without correction.
 
 #### Naming convention
 

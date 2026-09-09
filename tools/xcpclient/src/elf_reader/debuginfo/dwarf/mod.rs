@@ -67,8 +67,7 @@ use object::{Endianness, Object};
 use gimli::{Abbreviations, DebuggingInformationEntry, Dwarf, UnitHeader};
 use gimli::{EndianSlice, RunTimeEndian};
 
-use crate::elf_reader::debuginfo::cfa::{CfaInfo, get_cfa_from_object};
-use crate::elf_reader::debuginfo::{DbgDataType, DebugData, TypeInfo, VarInfo};
+use crate::elf_reader::debuginfo::{DbgDataType, DebugData, FrameBase, TypeInfo, VarInfo};
 
 mod attributes;
 pub(super) use attributes::get_low_pc_attribute;
@@ -92,7 +91,7 @@ struct DebugDataReader<'elffile> {
     unit_names: Vec<Option<String>>,             // DW_AT_name of each unit, by unit index
     endian: Endianness,                          // byte order of the target, needed for bitfield offsets
     sections: HashMap<String, (u64, u64)>,       // ELF section name -> (start, end)
-    cfa_info: Vec<CfaInfo>,                      // stack frame information of the functions, from cfa.rs
+    architecture: object::Architecture,          // target architecture, for the frame pointer register (FrameBase)
     epk_string: Option<String>,                  // content of the xcp_epk section, the EPK version string of the application
     epk_addr: u64,                               // address of the xcp_epk section, 0 if there is none
     symbol_addresses: HashMap<String, u64>,      // ELF symbol table: name -> address, for variables without a DWARF location
@@ -177,22 +176,6 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
     }
     let is_little_endian = elffile.endianness() == Endianness::Little;
 
-    // get CFA information for DebugDataReader
-    let mut cfa_info = Vec::new();
-    let res = get_cfa_from_object(&elffile, &mut cfa_info, verbose, unit_idx_limit);
-    match res {
-        Ok(cfa) => {
-            if cfa > 0 {
-                log::debug!("CFA data found in {cfa} functions");
-            } else {
-                log::warn!("CFA data not found");
-            }
-        }
-        Err(err) => {
-            log::error!("CFA parser error: {err}");
-        }
-    }
-
     // create the debug data reader
     log::debug!("Creating debug data reader");
     let dbg_reader = DebugDataReader {
@@ -202,7 +185,7 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
         unit_names: Vec::new(),
         endian: elffile.endianness(),
         sections,
-        cfa_info,
+        architecture: elffile.architecture(),
         epk_string,
         epk_addr,
         symbol_addresses: get_symbol_addresses(&elffile),
@@ -465,7 +448,6 @@ impl DebugDataReader<'_> {
             unit_names,
             sections: self.sections,
             symbol_addresses: self.symbol_addresses,
-            cfa_info: self.cfa_info,
             epk_string: self.epk_string,
             epk_addr: self.epk_addr,
             xcp_meta_data: self.xcp_meta_data,
@@ -538,6 +520,7 @@ impl DebugDataReader<'_> {
                         linkage_name: None,
                         offset,
                         inlined: false,
+                        frame_base: FrameBase::Unknown,
                     },
                     gimli::constants::DW_TAG_subprogram | gimli::constants::DW_TAG_inlined_subroutine => {
                         // A function which the compiler inlined is described by an abstract instance (DW_AT_inline, GCC keeps the static
@@ -553,6 +536,7 @@ impl DebugDataReader<'_> {
                             linkage_name: self.get_subprogram_linkage_name(entry, unit, abbreviations),
                             offset,
                             inlined,
+                            frame_base: get_frame_base(self.architecture, entry, unit.encoding()),
                         }
                     }
                     _ => Scope {
@@ -561,6 +545,7 @@ impl DebugDataReader<'_> {
                         linkage_name: None,
                         offset,
                         inlined: false,
+                        frame_base: FrameBase::Unknown,
                     },
                 };
                 context.push(scope);
@@ -579,7 +564,7 @@ impl DebugDataReader<'_> {
 
                 if entry.tag() == gimli::constants::DW_TAG_variable {
                     // Get variable information
-                    let (function, function_linkage, namespaces, inlined) = get_varinfo_from_context(&context);
+                    let (function, function_linkage, namespaces, inlined, frame_base) = get_varinfo_from_context(&context);
                     match self.get_variable(entry, unit, abbreviations, function.is_some(), function_linkage.as_deref(), &namespaces) {
                         Ok((name, typeref, address)) => {
                             // Stack relative variables of an inlined function are not loaded: each copy of the function has its own
@@ -614,6 +599,7 @@ impl DebugDataReader<'_> {
                                     function,
                                     namespaces,
                                     inlined,
+                                    frame_base,
                                 });
                             }
                         }
@@ -914,6 +900,48 @@ struct Scope {
     linkage_name: Option<String>, // mangled name of a C++ function, used to resolve the symbols of its static variables
     offset: usize,                // .debug_info offset
     inlined: bool,                // a function which the compiler inlined: its abstract instance, an inlined copy or the out of line copy
+    frame_base: FrameBase,        // functions only: what the locations of the local variables are relative to
+}
+
+// Frame base of a function (DW_AT_frame_base), see FrameBase
+fn get_frame_base(architecture: object::Architecture, entry: &DebuggingInformationEntry<SliceType, usize>, encoding: gimli::Encoding) -> FrameBase {
+    match entry.attr_value(gimli::constants::DW_AT_frame_base) {
+        Some(gimli::AttributeValue::Exprloc(expression)) => classify_frame_base(architecture, expression, encoding),
+        _ => FrameBase::Unknown,
+    }
+}
+
+// Classify a frame base expression: the CFA, the frame pointer register of the architecture, another register or unknown
+fn classify_frame_base(architecture: object::Architecture, expression: gimli::Expression<SliceType>, encoding: gimli::Encoding) -> FrameBase {
+    let mut operations = expression.operations(encoding);
+    let (Ok(Some(operation)), Ok(None)) = (operations.next(), operations.next()) else {
+        return FrameBase::Unknown;
+    };
+    let register = match operation {
+        gimli::Operation::CallFrameCFA => return FrameBase::Cfa,
+        gimli::Operation::Register { register } => register.0,
+        gimli::Operation::RegisterOffset { register, offset: 0, .. } => register.0,
+        _ => return FrameBase::Unknown,
+    };
+    if frame_pointer_registers(architecture).contains(&register) {
+        FrameBase::FramePointer
+    } else {
+        FrameBase::Register(register)
+    }
+}
+
+// DWARF register numbers of the frame pointer register of an architecture
+fn frame_pointer_registers(architecture: object::Architecture) -> &'static [u16] {
+    match architecture {
+        object::Architecture::X86_64 => &[6],                                  // rbp
+        object::Architecture::I386 => &[5],                                    // ebp
+        object::Architecture::Aarch64 => &[29],                                // x29
+        object::Architecture::Arm => &[7, 11],                                 // r7 (Thumb), r11 (ARM)
+        object::Architecture::Riscv32 | object::Architecture::Riscv64 => &[8], // s0 / fp
+        object::Architecture::Xtensa => &[7, 15],                              // a7 (windowed ABI), a15 (call0 ABI)
+        object::Architecture::PowerPc | object::Architecture::PowerPc64 => &[31],
+        _ => &[],
+    }
 }
 
 // The entry is the abstract instance of an inlined function (DW_AT_inline)
@@ -924,9 +952,9 @@ fn is_inlined_subprogram(entry: &DebuggingInformationEntry<SliceType, usize>) ->
     )
 }
 
-// Get the innermost enclosing function (a subprogram or the inlined copy of a function) with its linkage name, the enclosing
-// namespaces (outermost first) and whether the variable belongs to an inlined function, from the traversal context
-fn get_varinfo_from_context(context: &[Scope]) -> (Option<String>, Option<String>, Vec<String>, bool) {
+// Get the innermost enclosing function (a subprogram or the inlined copy of a function) with its linkage name and frame base,
+// the enclosing namespaces (outermost first) and whether the variable belongs to an inlined function, from the traversal context
+fn get_varinfo_from_context(context: &[Scope]) -> (Option<String>, Option<String>, Vec<String>, bool, FrameBase) {
     let function_scope = context
         .iter()
         .rev()
@@ -938,7 +966,8 @@ fn get_varinfo_from_context(context: &[Scope]) -> (Option<String>, Option<String
         .filter_map(|s| (s.tag == gimli::constants::DW_TAG_namespace).then(|| s.name.clone()).flatten())
         .collect();
     let inlined = context.iter().any(|s| s.inlined);
-    (function, function_linkage, namespaces, inlined)
+    let frame_base = function_scope.map_or(FrameBase::Unknown, |s| s.frame_base);
+    (function, function_linkage, namespaces, inlined, frame_base)
 }
 
 // Demangle the variable names which are mangled C++ symbols (_ZN13motor_control5inputE -> motor_control::input), for the
@@ -1003,6 +1032,31 @@ impl<'a> Index<usize> for UnitList<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    // Frame base expressions: the CFA (GCC), the frame pointer register of the architecture (clang), other registers and expressions
+    #[test]
+    fn test_classify_frame_base() {
+        use object::Architecture::{Aarch64, Arm, X86_64};
+        let encoding = gimli::Encoding {
+            format: gimli::Format::Dwarf32,
+            version: 5,
+            address_size: 8,
+        };
+        let classify = |architecture, bytes: &[u8]| classify_frame_base(architecture, gimli::Expression(EndianSlice::new(bytes, RunTimeEndian::Little)), encoding);
+        assert_eq!(classify(Aarch64, &[0x9c]), FrameBase::Cfa); // DW_OP_call_frame_cfa
+        assert_eq!(classify(Aarch64, &[0x50 + 29]), FrameBase::FramePointer); // DW_OP_reg29 x29
+        assert_eq!(classify(Aarch64, &[0x50 + 31]), FrameBase::Register(31)); // DW_OP_reg31 sp
+        assert_eq!(classify(Aarch64, &[0x90, 29]), FrameBase::FramePointer); // DW_OP_regx 29
+        assert_eq!(classify(Arm, &[0x50 + 7]), FrameBase::FramePointer); // r7 (Thumb)
+        assert_eq!(classify(Arm, &[0x50 + 11]), FrameBase::FramePointer); // r11 (ARM)
+        assert_eq!(classify(Arm, &[0x50 + 13]), FrameBase::Register(13)); // sp
+        assert_eq!(classify(X86_64, &[0x50 + 6]), FrameBase::FramePointer); // rbp
+        assert_eq!(classify(X86_64, &[0x70 + 6, 0]), FrameBase::FramePointer); // DW_OP_breg6 0
+        assert_eq!(classify(X86_64, &[0x70 + 6, 0x10]), FrameBase::Unknown); // DW_OP_breg6 16
+        assert_eq!(classify(X86_64, &[0x91, 0x10]), FrameBase::Unknown); // DW_OP_fbreg 16
+        assert_eq!(classify(X86_64, &[0x9c, 0x23, 0x08]), FrameBase::Unknown); // CFA plus constant
+        assert_eq!(classify(X86_64, &[]), FrameBase::Unknown);
+    }
 
     // C++ type test fixture, see fixtures/cpp_types.cpp
     static ELF_FILE_NAMES: [&str; 1] = [concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_types.elf")];

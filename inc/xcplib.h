@@ -474,15 +474,20 @@ void XcpEventEnable(tXcpEventId event, bool enable);
 // This defines the maximum stack frame size which can be accessed
 #define XCP_FRAME_ADDR_OFFSET 0x10000
 
-// Xtensa GCC: DWARF locations are relative to CFA, while __builtin_frame_address(0) returns the frame pointer after the entry instruction.
-#if (defined(__GNUC__) || defined(__clang__)) && defined(__XTENSA__)
-
-#define xcp_get_frame_addr() (const uint8_t *)((uint8_t *)__builtin_dwarf_cfa() - XCP_FRAME_ADDR_OFFSET)
-
-// Linux, MACOS gnu and clang compiler
-#elif defined(__GNUC__) || defined(__clang__)
+// The frame address must be the frame base which the compiler uses in the DWARF locations of the local variables (DW_AT_frame_base),
+// the offline A2L generator (xcpclient) takes the variable offsets from there without any further correction:
+// - clang describes the local variables relative to the frame pointer register, __builtin_frame_address(0) is the frame pointer and
+//   forces the function to keep one
+// - GCC describes the local variables relative to the canonical frame address (CFA, DW_OP_call_frame_cfa), __builtin_dwarf_cfa() is
+//   the CFA on every architecture and does not force a frame pointer
+// The on-target A2L generation uses the same macro for the registration and for the trigger, any consistent value works there
+#if defined(__clang__)
 
 #define xcp_get_frame_addr() (const uint8_t *)((uint8_t *)__builtin_frame_address(0) - XCP_FRAME_ADDR_OFFSET)
+
+#elif defined(__GNUC__)
+
+#define xcp_get_frame_addr() (const uint8_t *)((uint8_t *)__builtin_dwarf_cfa() - XCP_FRAME_ADDR_OFFSET)
 
 // MSVC compiler
 #elif defined(_MSC_VER)

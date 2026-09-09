@@ -115,13 +115,16 @@ are measurements.
 ### Trigger points and local variables
 
 The trigger macros emit a static variable `trg__<modes>__<event>` in the function in which the event is triggered. Its DWARF scope gives
-the function, the canonical frame address (CFA) of the function at the trigger point and the addressing modes available there (the mode
-letters, see the marker contract). Local variables of that function are registered with stack frame relative addresses (address
-extension 2) and the event as fixed event, static variables in the function get the event as well. The DWARF locations of local
-variables are relative to the canonical frame address (CFA) of the function. The trigger macros pass the frame pointer
-(`__builtin_frame_address(0)`) as base address, so the generator adds the distance between the frame pointer and the CFA, which it
-reads from the call frame information of the function. On Xtensa (ESP32) the macros pass the CFA itself (`__builtin_dwarf_cfa()`)
-and no offset is added.
+the function and the addressing modes available there (the mode letters, see the marker contract). Local variables of that function are
+registered with stack frame relative addresses (address extension 2) and the event as fixed event, static variables in the function get
+the event as well. The DWARF locations of local variables are relative to the frame base of the function (`DW_AT_frame_base`), and the
+trigger macros pass exactly this frame base to the target (`xcp_get_frame_addr()` in `inc/xcplib.h`): the canonical frame address
+(`__builtin_dwarf_cfa()`) for GCC, which describes the locals relative to the CFA, and the frame pointer (`__builtin_frame_address(0)`)
+for clang, which describes them relative to the frame pointer register. The generator checks the frame base of the function of every
+trigger and uses the offsets from the DWARF as they are. A function whose frame base is something else, for example the stack pointer of
+a function without frame pointer under clang, gets a warning and its stack frame relative variables are not registered. clang describes
+a local variable relative to the stack pointer when that is closer to the variable than the frame pointer, such variables are not
+measurable, they are reported at debug level.
 
 A function with an event trigger must not be inlined. An inlined function has a copy at each call site and possibly an out of line copy,
 each with its own stack frame layout, and the event may be triggered from any of them, so there is no stack frame relative address which

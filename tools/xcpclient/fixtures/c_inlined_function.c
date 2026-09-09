@@ -10,9 +10,14 @@
 // GCC keeps the static variables and the markers of foo in the abstract instance (DW_AT_inline).
 //
 // c_inlined_function_clang.elf is built with clang (Apple clang 21.0.0), DWARF 5 with indexed addresses and strings,
-// and linked with the GCC toolchain the same way. clang keeps the static variables and the markers of foo in the out of line copy:
-//   clang --target=armv7m-none-eabi -ffreestanding -g -gdwarf-5 -O0 -fdebug-prefix-map=$(pwd)=. -c -o c_inlined_function_clang.o c_inlined_function.c
+// and linked with the GCC toolchain the same way. clang keeps the static variables and the markers of foo in the out of line copy.
+// With a frame pointer the frame base of the functions is the frame pointer register r11 and counter is frame pointer relative
+// (test_float is stack pointer relative, clang addresses each local from the closer register, such locals are not measurable):
+//   clang --target=arm-none-eabi -march=armv4t -marm -ffreestanding -g -gdwarf-5 -O0 -fno-omit-frame-pointer -fdebug-prefix-map=$(pwd)=. \
+//       -c -o c_inlined_function_clang.o c_inlined_function.c
 //   arm-none-eabi-gcc -nostdlib -nostartfiles -Wl,-e,main -Wl,--unresolved-symbols=ignore-all -o c_inlined_function_clang.elf c_inlined_function_clang.o
+// c_inlined_function_clang_nofp.elf is the same without a frame pointer, the frame base of the functions is the stack pointer:
+//   clang --target=armv7m-none-eabi -ffreestanding -g -gdwarf-5 -O0 -fdebug-prefix-map=$(pwd)=. -c -o c_inlined_function_clang.o c_inlined_function.c
 //
 #include <stdint.h>
 

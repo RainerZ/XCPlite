@@ -1,0 +1,861 @@
+
+[INFO ] xcp_client - version 4.0.0
+[INFO ] Default event mainloop for variables without a fixed event
+[INFO ] Using A2L file name from command line argument: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l
+[INFO ] A2L path: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l
+[INFO ] Generate A2L file /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l with ELF/DWARF information only,  offline mode 
+[INFO ] Reading ELF file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.elf
+[INFO ] Loading debug information from ELF file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.elf
+
+Parsed object file file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.elf
+ELF file format: Elf
+Architecture: Aarch64
+Endianness: Little
+
+Sections:
+  Name: .interp              Addr: 0x00000238 Size: 27 bytes Kind: ReadOnlyData 
+  Name: .note.gnu.build-id   Addr: 0x00000254 Size: 36 bytes Kind: Note 
+  Name: .note.ABI-tag        Addr: 0x00000278 Size: 32 bytes Kind: Note 
+  Name: .gnu.hash            Addr: 0x00000298 Size: 28 bytes Kind: Elf(1879048182) 
+  Name: .dynsym              Addr: 0x000002b8 Size: 1656 bytes Kind: Metadata 
+  Name: .dynstr              Addr: 0x00000930 Size: 734 bytes Kind: Metadata 
+  Name: .gnu.version         Addr: 0x00000c0e Size: 138 bytes Kind: Elf(1879048191) 
+  Name: .gnu.version_r       Addr: 0x00000c98 Size: 48 bytes Kind: Elf(1879048190) 
+  Name: .rela.dyn            Addr: 0x00000cc8 Size: 744 bytes Kind: Metadata 
+  Name: .rela.plt            Addr: 0x00000fb0 Size: 1512 bytes Kind: Metadata 
+  Name: .init                Addr: 0x00001598 Size: 24 bytes Kind: Text 
+  Name: .plt                 Addr: 0x000015b0 Size: 1040 bytes Kind: Text 
+  Name: .text                Addr: 0x000019c0 Size: 48624 bytes Kind: Text 
+  Name: .fini                Addr: 0x0000d7b0 Size: 20 bytes Kind: Text 
+  Name: .rodata              Addr: 0x0000d7c8 Size: 14895 bytes Kind: ReadOnlyData 
+  Name: xcp_meta             Addr: 0x000111f8 Size: 368 bytes Kind: ReadOnlyData 
+  Name: .eh_frame_hdr        Addr: 0x00011368 Size: 1644 bytes Kind: ReadOnlyData 
+  Name: .eh_frame            Addr: 0x000119d8 Size: 7948 bytes Kind: ReadOnlyData 
+  Name: .init_array          Addr: 0x0002fd78 Size: 16 bytes Kind: Elf(14) 
+  Name: .fini_array          Addr: 0x0002fd88 Size: 8 bytes Kind: Elf(15) 
+  Name: .dynamic             Addr: 0x0002fd90 Size: 480 bytes Kind: Metadata 
+  Name: .got                 Addr: 0x0002ff70 Size: 120 bytes Kind: Data 
+  Name: .got.plt             Addr: 0x0002ffe8 Size: 528 bytes Kind: Data 
+  Name: .data                Addr: 0x000301f8 Size: 100 bytes Kind: Data 
+  Name: xcp_cals             Addr: 0x00030260 Size: 96 bytes Kind: Data 
+  Name: xcp_epk              Addr: 0x000302c0 Size: 8 bytes Kind: Data 
+  Name: xcp_evts             Addr: 0x000302c8 Size: 64 bytes Kind: Data 
+  Name: .bss                 Addr: 0x00030308 Size: 9976 bytes Kind: UninitializedData 
+  Name: .comment             Addr: 0x00000000 Size: 39 bytes Kind: OtherString 
+  Name: .debug_aranges       Addr: 0x00000000 Size: 432 bytes Kind: Other 
+  Name: .debug_info          Addr: 0x00000000 Size: 76193 bytes Kind: Other 
+  Name: .debug_abbrev        Addr: 0x00000000 Size: 8954 bytes Kind: Other 
+  Name: .debug_line          Addr: 0x00000000 Size: 28096 bytes Kind: Other 
+  Name: .debug_str           Addr: 0x00000000 Size: 12949 bytes Kind: OtherString 
+  Name: .debug_line_str      Addr: 0x00000000 Size: 1249 bytes Kind: OtherString 
+  Name: .debug_loclists      Addr: 0x00000000 Size: 26215 bytes Kind: Other 
+  Name: .debug_rnglists      Addr: 0x00000000 Size: 1261 bytes Kind: Other 
+  Name: .symtab              Addr: 0x00000000 Size: 12432 bytes Kind: Metadata 
+  Name: .strtab              Addr: 0x00000000 Size: 6913 bytes Kind: Metadata 
+  Name: .shstrtab            Addr: 0x00000000 Size: 406 bytes Kind: Metadata 
+
+
+
+Symbol table:
+  `"Scrt1.o"`: addr=0, Symbol { name: "Scrt1.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$d"`: addr=278, Symbol { name: "$d", address: 632, size: 0, kind: Unknown, section: Section(SectionIndex(3)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"__abi_tag"`: addr=278, Symbol { name: "__abi_tag", address: 632, size: 32, kind: Data, section: Section(SectionIndex(3)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$x"`: addr=1a00, Symbol { name: "$x", address: 6656, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=119ec, Symbol { name: "$d", address: 72172, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=d7c8, Symbol { name: "$d", address: 55240, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"crti.o"`: addr=0, Symbol { name: "crti.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=1a34, Symbol { name: "$x", address: 6708, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"call_weak_fn"`: addr=1a34, Symbol { name: "call_weak_fn", address: 6708, size: 20, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$x"`: addr=1598, Symbol { name: "$x", address: 5528, size: 0, kind: Unknown, section: Section(SectionIndex(11)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$x"`: addr=d7b0, Symbol { name: "$x", address: 55216, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"crtn.o"`: addr=0, Symbol { name: "crtn.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=15a8, Symbol { name: "$x", address: 5544, size: 0, kind: Unknown, section: Section(SectionIndex(11)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$x"`: addr=d7bc, Symbol { name: "$x", address: 55228, size: 0, kind: Unknown, section: Section(SectionIndex(14)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"lse-init.o"`: addr=0, Symbol { name: "lse-init.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=19c0, Symbol { name: "$x", address: 6592, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"init_have_lse_atomics"`: addr=19c0, Symbol { name: "init_have_lse_atomics", address: 6592, size: 36, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$d"`: addr=2fd80, Symbol { name: "$d", address: 195968, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=329f8, Symbol { name: "$d", address: 207352, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=138c0, Symbol { name: "$d", address: 80064, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"crtstuff.c"`: addr=0, Symbol { name: "crtstuff.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=1a50, Symbol { name: "$x", address: 6736, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"deregister_tm_clones"`: addr=1a50, Symbol { name: "deregister_tm_clones", address: 6736, size: 0, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"register_tm_clones"`: addr=1a80, Symbol { name: "register_tm_clones", address: 6784, size: 0, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$d"`: addr=30200, Symbol { name: "$d", address: 197120, size: 0, kind: Unknown, section: Section(SectionIndex(24)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"__do_global_dtors_aux"`: addr=1ac0, Symbol { name: "__do_global_dtors_aux", address: 6848, size: 0, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"completed.0"`: addr=30308, Symbol { name: "completed.0", address: 197384, size: 1, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=2fd88, Symbol { name: "$d", address: 195976, size: 0, kind: Unknown, section: Section(SectionIndex(20)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"__do_global_dtors_aux_fini_array_entry"`: addr=2fd88, Symbol { name: "__do_global_dtors_aux_fini_array_entry", address: 195976, size: 0, kind: Data, section: Section(SectionIndex(20)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"frame_dummy"`: addr=1b10, Symbol { name: "frame_dummy", address: 6928, size: 0, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$d"`: addr=2fd78, Symbol { name: "$d", address: 195960, size: 0, kind: Unknown, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"__frame_dummy_init_array_entry"`: addr=2fd78, Symbol { name: "__frame_dummy_init_array_entry", address: 195960, size: 0, kind: Data, section: Section(SectionIndex(19)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=11a00, Symbol { name: "$d", address: 72192, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=30308, Symbol { name: "$d", address: 197384, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"main.c"`: addr=0, Symbol { name: "main.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=1b14, Symbol { name: "$x", address: 6932, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"sig_handler"`: addr=1b14, Symbol { name: "sig_handler", address: 6932, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$d"`: addr=d7d0, Symbol { name: "$d", address: 55248, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=d9e0, Symbol { name: "$d", address: 55776, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=d9e8, Symbol { name: "$d", address: 55784, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=30208, Symbol { name: "$d", address: 197128, size: 0, kind: Unknown, section: Section(SectionIndex(24)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"global_running"`: addr=30208, Symbol { name: "global_running", address: 197128, size: 1, kind: Data, section: Section(SectionIndex(24)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"calseg_id_params"`: addr=3020a, Symbol { name: "calseg_id_params", address: 197130, size: 2, kind: Data, section: Section(SectionIndex(24)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"calseg_id_counter_control.3"`: addr=3020c, Symbol { name: "calseg_id_counter_control.3", address: 197132, size: 2, kind: Data, section: Section(SectionIndex(24)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=3030a, Symbol { name: "$d", address: 197386, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"static_counter.8"`: addr=3030a, Symbol { name: "static_counter.8", address: 197386, size: 2, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"static_counter.6"`: addr=3030e, Symbol { name: "static_counter.6", address: 197390, size: 2, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"static_counter.1"`: addr=30312, Symbol { name: "static_counter.1", address: 197394, size: 2, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=30260, Symbol { name: "$d", address: 197216, size: 0, kind: Unknown, section: Section(SectionIndex(25)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"calseg__counter_control.11"`: addr=30260, Symbol { name: "calseg__counter_control.11", address: 197216, size: 32, kind: Data, section: Section(SectionIndex(25)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"calseg__params"`: addr=30280, Symbol { name: "calseg__params", address: 197248, size: 32, kind: Data, section: Section(SectionIndex(25)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=302c0, Symbol { name: "$d", address: 197312, size: 0, kind: Unknown, section: Section(SectionIndex(26)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"gXcpEpkString.13"`: addr=302c0, Symbol { name: "gXcpEpkString.13", address: 197312, size: 8, kind: Data, section: Section(SectionIndex(26)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=302c8, Symbol { name: "$d", address: 197320, size: 0, kind: Unknown, section: Section(SectionIndex(27)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"evt__task.18"`: addr=302c8, Symbol { name: "evt__task.18", address: 197320, size: 16, kind: Data, section: Section(SectionIndex(27)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"evt__foo.15"`: addr=302d8, Symbol { name: "evt__foo.15", address: 197336, size: 16, kind: Data, section: Section(SectionIndex(27)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"evt__bar.14"`: addr=302e8, Symbol { name: "evt__bar.14", address: 197352, size: 16, kind: Data, section: Section(SectionIndex(27)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"evt__mainloop.10"`: addr=302f8, Symbol { name: "evt__mainloop.10", address: 197368, size: 16, kind: Data, section: Section(SectionIndex(27)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=111f8, Symbol { name: "$d", address: 70136, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"xcp_meta__comment__static_counter.12"`: addr=111f8, Symbol { name: "xcp_meta__comment__static_counter.12", address: 70136, size: 53, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__comment__counter.16"`: addr=11230, Symbol { name: "xcp_meta__comment__counter.16", address: 70192, size: 45, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__comment__static_counter.17"`: addr=11260, Symbol { name: "xcp_meta__comment__static_counter.17", address: 70240, size: 52, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__comment__counter.19"`: addr=11298, Symbol { name: "xcp_meta__comment__counter.19", address: 70296, size: 53, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__comment__static_counter.20"`: addr=112d0, Symbol { name: "xcp_meta__comment__static_counter.20", address: 70352, size: 60, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__read_write__global_counter"`: addr=1130c, Symbol { name: "xcp_meta__read_write__global_counter", address: 70412, size: 1, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__comment__global_counter"`: addr=11310, Symbol { name: "xcp_meta__comment__global_counter", address: 70416, size: 28, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__read_write__counter"`: addr=1132c, Symbol { name: "xcp_meta__read_write__counter", address: 70444, size: 1, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__comment__counter"`: addr=11330, Symbol { name: "xcp_meta__comment__counter", address: 70448, size: 28, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__unit__params__delay_us"`: addr=11350, Symbol { name: "xcp_meta__unit__params__delay_us", address: 70480, size: 3, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__max__params__delay_us"`: addr=11358, Symbol { name: "xcp_meta__max__params__delay_us", address: 70488, size: 8, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__min__params__delay_us"`: addr=11360, Symbol { name: "xcp_meta__min__params__delay_us", address: 70496, size: 8, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=11a60, Symbol { name: "$d", address: 72288, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"xcpappl.c"`: addr=0, Symbol { name: "xcpappl.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=209c, Symbol { name: "$x", address: 8348, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"dump_phdr"`: addr=209c, Symbol { name: "dump_phdr", address: 8348, size: 44, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$d"`: addr=da48, Symbol { name: "$d", address: 55880, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"closeFile"`: addr=20c8, Symbol { name: "closeFile", address: 8392, size: 80, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$d"`: addr=30318, Symbol { name: "$d", address: 197400, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"gModuleAddr"`: addr=30318, Symbol { name: "gModuleAddr", address: 197400, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"gModuleAddrValid"`: addr=30320, Symbol { name: "gModuleAddrValid", address: 197408, size: 1, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"gXcpFile"`: addr=30328, Symbol { name: "gXcpFile", address: 197416, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_idle"`: addr=30330, Symbol { name: "__callback_idle", address: 197424, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_connect"`: addr=30338, Symbol { name: "__callback_connect", address: 197432, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_prepare_daq"`: addr=30340, Symbol { name: "__callback_prepare_daq", address: 197440, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_start_daq"`: addr=30348, Symbol { name: "__callback_start_daq", address: 197448, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_stop_daq"`: addr=30350, Symbol { name: "__callback_stop_daq", address: 197456, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_get_cal_page"`: addr=30358, Symbol { name: "__callback_get_cal_page", address: 197464, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_set_cal_page"`: addr=30360, Symbol { name: "__callback_set_cal_page", address: 197472, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_init_cal"`: addr=30368, Symbol { name: "__callback_init_cal", address: 197480, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_check"`: addr=30370, Symbol { name: "__callback_check", address: 197488, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_get_clock"`: addr=30378, Symbol { name: "__callback_get_clock", address: 197496, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_get_clock_state"`: addr=30380, Symbol { name: "__callback_get_clock_state", address: 197504, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__callback_get_clock_info_grandmaster"`: addr=30388, Symbol { name: "__callback_get_clock_info_grandmaster", address: 197512, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"gXcpA2lName"`: addr=303a0, Symbol { name: "gXcpA2lName", address: 197536, size: 256, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"gXcpElfName"`: addr=304a0, Symbol { name: "gXcpElfName", address: 197792, size: 256, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"gXcpFileLength"`: addr=305a0, Symbol { name: "gXcpFileLength", address: 198048, size: 4, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=11b28, Symbol { name: "$d", address: 72488, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"xcplite.c"`: addr=0, Symbol { name: "xcplite.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$d"`: addr=ddf8, Symbol { name: "$d", address: 56824, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$x"`: addr=2c90, Symbol { name: "$x", address: 11408, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"XcpCheckMemory"`: addr=2c90, Symbol { name: "XcpCheckMemory", address: 11408, size: 120, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"XcpPushCommand"`: addr=2d08, Symbol { name: "XcpPushCommand", address: 11528, size: 96, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"XcpClearDaq"`: addr=2d68, Symbol { name: "XcpClearDaq", address: 11624, size: 112, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"XcpStopDaq"`: addr=2dd8, Symbol { name: "XcpStopDaq", address: 11736, size: 132, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"XcpStopDaqList"`: addr=2e5c, Symbol { name: "XcpStopDaqList", address: 11868, size: 112, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"XcpSendResponse"`: addr=2ecc, Symbol { name: "XcpSendResponse", address: 11980, size: 1048, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$d"`: addr=f488, Symbol { name: "$d", address: 62600, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"XcpTriggerDaqEvent_"`: addr=32e4, Symbol { name: "XcpTriggerDaqEvent_", address: 13028, size: 684, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"XcpAddOdtEntry"`: addr=3694, Symbol { name: "XcpAddOdtEntry", address: 13972, size: 664, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"XcpAsyncCommand"`: addr=43c8, Symbol { name: "XcpAsyncCommand", address: 17352, size: 7516, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"XcpProcessPendingCommand"`: addr=6124, Symbol { name: "XcpProcessPendingCommand", address: 24868, size: 192, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$d"`: addr=30258, Symbol { name: "$d", address: 197208, size: 0, kind: Unknown, section: Section(SectionIndex(24)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"calseg_id_epk.0"`: addr=3025a, Symbol { name: "calseg_id_epk.0", address: 197210, size: 2, kind: Data, section: Section(SectionIndex(24)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=305a8, Symbol { name: "$d", address: 198056, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"gXcpCRC16CCITTtab"`: addr=f640, Symbol { name: "gXcpCRC16CCITTtab", address: 63040, size: 512, kind: Data, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=302a0, Symbol { name: "$d", address: 197280, size: 0, kind: Unknown, section: Section(SectionIndex(25)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"calseg__epk.1"`: addr=302a0, Symbol { name: "calseg__epk.1", address: 197280, size: 32, kind: Data, section: Section(SectionIndex(25)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=12000, Symbol { name: "$d", address: 73728, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"xcpethserver.c"`: addr=0, Symbol { name: "xcpethserver.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$d"`: addr=f848, Symbol { name: "$d", address: 63560, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$x"`: addr=6f60, Symbol { name: "$x", address: 28512, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"XcpServerTransmitThread"`: addr=6f60, Symbol { name: "XcpServerTransmitThread", address: 28512, size: 204, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"XcpServerReceiveThread"`: addr=702c, Symbol { name: "XcpServerReceiveThread", address: 28716, size: 296, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$d"`: addr=32920, Symbol { name: "$d", address: 207136, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"gXcpServer"`: addr=32920, Symbol { name: "gXcpServer", address: 207136, size: 48, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"ctr.1"`: addr=32950, Symbol { name: "ctr.1", address: 207184, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"last_time.0"`: addr=32958, Symbol { name: "last_time.0", address: 207192, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=128a0, Symbol { name: "$d", address: 75936, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"xcpethtl.c"`: addr=0, Symbol { name: "xcpethtl.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$d"`: addr=fa08, Symbol { name: "$d", address: 64008, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$x"`: addr=8440, Symbol { name: "$x", address: 33856, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"XcpEthTlSendV"`: addr=8440, Symbol { name: "XcpEthTlSendV", address: 33856, size: 228, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"handleXcpCommand"`: addr=8524, Symbol { name: "handleXcpCommand", address: 34084, size: 772, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$d"`: addr=32960, Symbol { name: "$d", address: 207200, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"gXcpTl"`: addr=32960, Symbol { name: "gXcpTl", address: 207200, size: 104, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=12988, Symbol { name: "$d", address: 76168, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"queue64v.c"`: addr=0, Symbol { name: "queue64v.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=934c, Symbol { name: "$x", address: 37708, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=10050, Symbol { name: "$d", address: 65616, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=12be0, Symbol { name: "$d", address: 76768, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"cal.c"`: addr=0, Symbol { name: "cal.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$d"`: addr=10200, Symbol { name: "$d", address: 66048, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$x"`: addr=98f4, Symbol { name: "$x", address: 39156, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"XcpCalSegPublish"`: addr=98f4, Symbol { name: "XcpCalSegPublish", address: 39156, size: 288, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"XcpCreateCalSeg_"`: addr=9ba0, Symbol { name: "XcpCreateCalSeg_", address: 39840, size: 1072, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$d"`: addr=12d28, Symbol { name: "$d", address: 77096, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"platform.c"`: addr=0, Symbol { name: "platform.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=bfb8, Symbol { name: "$x", address: 49080, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=10820, Symbol { name: "$d", address: 67616, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=329c8, Symbol { name: "$d", address: 207304, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"__gClock"`: addr=329c8, Symbol { name: "__gClock", address: 207304, size: 16, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__gClockMonotonic"`: addr=329d8, Symbol { name: "__gClockMonotonic", address: 207320, size: 16, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__gClockRealtime"`: addr=329e8, Symbol { name: "__gClockRealtime", address: 207336, size: 16, kind: Data, section: Section(SectionIndex(28)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"$d"`: addr=13250, Symbol { name: "$d", address: 78416, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"sockets.c"`: addr=0, Symbol { name: "sockets.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=c558, Symbol { name: "$x", address: 50520, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=108d8, Symbol { name: "$d", address: 67800, size: 0, kind: Unknown, section: Section(SectionIndex(15)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=13468, Symbol { name: "$d", address: 78952, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"cas_4_1.o"`: addr=0, Symbol { name: "cas_4_1.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=d5f0, Symbol { name: "$x", address: 54768, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=13800, Symbol { name: "$d", address: 79872, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"cas_8_1.o"`: addr=0, Symbol { name: "cas_8_1.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=d630, Symbol { name: "$x", address: 54832, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=13818, Symbol { name: "$d", address: 79896, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"cas_1_3.o"`: addr=0, Symbol { name: "cas_1_3.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=d670, Symbol { name: "$x", address: 54896, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=13830, Symbol { name: "$d", address: 79920, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"cas_1_4.o"`: addr=0, Symbol { name: "cas_1_4.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=d6b0, Symbol { name: "$x", address: 54960, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=13848, Symbol { name: "$d", address: 79944, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"ldadd_1_1.o"`: addr=0, Symbol { name: "ldadd_1_1.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=d6f0, Symbol { name: "$x", address: 55024, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=13860, Symbol { name: "$d", address: 79968, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"swp_8_1.o"`: addr=0, Symbol { name: "swp_8_1.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=d720, Symbol { name: "$x", address: 55072, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=13878, Symbol { name: "$d", address: 79992, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"ldadd_8_1.o"`: addr=0, Symbol { name: "ldadd_8_1.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=d750, Symbol { name: "$x", address: 55120, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=13890, Symbol { name: "$d", address: 80016, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"ldadd_8_3.o"`: addr=0, Symbol { name: "ldadd_8_3.o", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$x"`: addr=d780, Symbol { name: "$x", address: 55168, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$d"`: addr=138a8, Symbol { name: "$d", address: 80040, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"crtstuff.c"`: addr=0, Symbol { name: "crtstuff.c", address: 0, size: 0, kind: File, section: None, scope: Compilation, weak: false, flags: Elf { st_info: 4, st_other: 0 } }
+  `"$d"`: addr=138e0, Symbol { name: "$d", address: 80096, size: 0, kind: Unknown, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"__FRAME_END__"`: addr=138e0, Symbol { name: "__FRAME_END__", address: 80096, size: 0, kind: Data, section: Section(SectionIndex(18)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__aarch64_cas8_relax"`: addr=d630, Symbol { name: "__aarch64_cas8_relax", address: 54832, size: 52, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"__aarch64_cas4_relax"`: addr=d5f0, Symbol { name: "__aarch64_cas4_relax", address: 54768, size: 52, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"__aarch64_cas1_acq_rel"`: addr=d6b0, Symbol { name: "__aarch64_cas1_acq_rel", address: 54960, size: 52, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"__aarch64_swp8_relax"`: addr=d720, Symbol { name: "__aarch64_swp8_relax", address: 55072, size: 44, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"__aarch64_ldadd1_relax"`: addr=d6f0, Symbol { name: "__aarch64_ldadd1_relax", address: 55024, size: 48, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"__aarch64_ldadd8_rel"`: addr=d780, Symbol { name: "__aarch64_ldadd8_rel", address: 55168, size: 48, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"__aarch64_cas1_rel"`: addr=d670, Symbol { name: "__aarch64_cas1_rel", address: 54896, size: 52, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"_DYNAMIC"`: addr=2fd90, Symbol { name: "_DYNAMIC", address: 195984, size: 0, kind: Data, section: Absolute, scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__GNU_EH_FRAME_HDR"`: addr=11368, Symbol { name: "__GNU_EH_FRAME_HDR", address: 70504, size: 0, kind: Unknown, section: Section(SectionIndex(17)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"_GLOBAL_OFFSET_TABLE_"`: addr=2ff70, Symbol { name: "_GLOBAL_OFFSET_TABLE_", address: 196464, size: 0, kind: Data, section: Absolute, scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"__aarch64_ldadd8_relax"`: addr=d750, Symbol { name: "__aarch64_ldadd8_relax", address: 55120, size: 48, kind: Text, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 2, st_other: 0 } }
+  `"$x"`: addr=7440, Symbol { name: "$x", address: 29760, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$x"`: addr=afb8, Symbol { name: "$x", address: 44984, size: 0, kind: Unknown, section: Section(SectionIndex(13)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"$x"`: addr=15b0, Symbol { name: "$x", address: 5552, size: 0, kind: Unknown, section: Section(SectionIndex(12)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
+  `"memcpy@GLIBC_2.17"`: addr=0, Symbol { name: "memcpy@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"queueAcquire"`: addr=9570, Symbol { name: "queueAcquire", address: 38256, size: 272, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"queueDeinit"`: addr=953c, Symbol { name: "queueDeinit", address: 38204, size: 52, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"global_test_uint16"`: addr=30254, Symbol { name: "global_test_uint16", address: 197204, size: 2, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"XcpTlSendCrm"`: addr=8828, Symbol { name: "XcpTlSendCrm", address: 34856, size: 132, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEthServerDebugInfo"`: addr=7438, Symbol { name: "XcpEthServerDebugInfo", address: 29752, size: 4, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"global_test_int64"`: addr=30238, Symbol { name: "global_test_int64", address: 197176, size: 8, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"__stop_xcp_evts"`: addr=30308, Symbol { name: "__stop_xcp_evts", address: 197384, size: 0, kind: Unknown, section: Section(SectionIndex(27)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 3 } }
+  `"XcpEthTlGetInfo"`: addr=9024, Symbol { name: "XcpEthTlGetInfo", address: 36900, size: 64, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"getifaddrs@GLIBC_2.17"`: addr=0, Symbol { name: "getifaddrs@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetSessionStatus"`: addr=363c, Symbol { name: "XcpGetSessionStatus", address: 13884, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetCalSegCount"`: addr=9a7c, Symbol { name: "XcpGetCalSegCount", address: 39548, size: 48, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"sendto@GLIBC_2.17"`: addr=0, Symbol { name: "sendto@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetSegPageInfo"`: addr=ab08, Symbol { name: "XcpGetSegPageInfo", address: 43784, size: 176, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpGetBaseAddr"`: addr=24b4, Symbol { name: "ApplXcpGetBaseAddr", address: 9396, size: 56, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"strlen@GLIBC_2.17"`: addr=0, Symbol { name: "strlen@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetEventCycleTime"`: addr=3e54, Symbol { name: "XcpGetEventCycleTime", address: 15956, size: 36, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketRecv"`: addr=ccfc, Symbol { name: "socketRecv", address: 52476, size: 720, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetCalSegBaseAddress"`: addr=a308, Symbol { name: "XcpGetCalSegBaseAddress", address: 41736, size: 76, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__libc_start_main@GLIBC_2.34"`: addr=0, Symbol { name: "__libc_start_main@GLIBC_2.34", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"queueRelease"`: addr=98a4, Symbol { name: "queueRelease", address: 39076, size: 80, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"queuePush"`: addr=9680, Symbol { name: "queuePush", address: 38528, size: 60, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpSetA2lName"`: addr=2668, Symbol { name: "XcpSetA2lName", address: 9832, size: 128, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"listen@GLIBC_2.17"`: addr=0, Symbol { name: "listen@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"_ITM_deregisterTMCloneTable"`: addr=0, Symbol { name: "_ITM_deregisterTMCloneTable", address: 0, size: 0, kind: Unknown, section: Undefined, scope: Unknown, weak: true, flags: Elf { st_info: 32, st_other: 0 } }
+  `"data_start"`: addr=301f8, Symbol { name: "data_start", address: 197112, size: 0, kind: Unknown, section: Section(SectionIndex(24)), scope: Dynamic, weak: true, flags: Elf { st_info: 32, st_other: 0 } }
+  `"socketClose"`: addr=c89c, Symbol { name: "socketClose", address: 51356, size: 60, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"clockGetRealtimeNs"`: addr=c2bc, Symbol { name: "clockGetRealtimeNs", address: 49852, size: 64, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"clockInit"`: addr=c2fc, Symbol { name: "clockInit", address: 49916, size: 284, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"strnlen@GLIBC_2.17"`: addr=0, Symbol { name: "strnlen@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__bss_start__"`: addr=30308, Symbol { name: "__bss_start__", address: 197384, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 0 } }
+  `"socketSendToV"`: addr=d240, Symbol { name: "socketSendToV", address: 53824, size: 516, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketStartup"`: addr=c56c, Symbol { name: "socketStartup", address: 50540, size: 8, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetEvent"`: addr=3df0, Symbol { name: "XcpGetEvent", address: 15856, size: 44, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterFreezeDaqCallback"`: addr=2154, Symbol { name: "ApplXcpRegisterFreezeDaqCallback", address: 8532, size: 4, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketSetTimeout"`: addr=c974, Symbol { name: "socketSetTimeout", address: 51572, size: 176, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpGetId"`: addr=2880, Symbol { name: "ApplXcpGetId", address: 10368, size: 1040, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"bind@GLIBC_2.17"`: addr=0, Symbol { name: "bind@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"global_test_uint64"`: addr=30248, Symbol { name: "global_test_uint64", address: 197192, size: 8, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"XcpCalSegReadMemory"`: addr=a664, Symbol { name: "XcpCalSegReadMemory", address: 42596, size: 272, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ftell@GLIBC_2.17"`: addr=0, Symbol { name: "ftell@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__cxa_finalize@GLIBC_2.17"`: addr=0, Symbol { name: "__cxa_finalize@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: true, flags: Elf { st_info: 34, st_other: 0 } }
+  `"socketShutdown"`: addr=c870, Symbol { name: "socketShutdown", address: 51312, size: 44, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetA2lName"`: addr=26e8, Symbol { name: "XcpGetA2lName", address: 9960, size: 16, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpUserCommand"`: addr=255c, Symbol { name: "ApplXcpUserCommand", address: 9564, size: 28, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"clock_gettime@GLIBC_2.17"`: addr=0, Symbol { name: "clock_gettime@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"global_test_int32"`: addr=30240, Symbol { name: "global_test_int32", address: 197184, size: 4, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"XcpSendEvent"`: addr=6714, Symbol { name: "XcpSendEvent", address: 26388, size: 228, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"stderr@GLIBC_2.17"`: addr=0, Symbol { name: "stderr@GLIBC_2.17", address: 0, size: 0, kind: Data, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"_bss_end__"`: addr=32a00, Symbol { name: "_bss_end__", address: 207360, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 0 } }
+  `"global_test_bool"`: addr=30223, Symbol { name: "global_test_bool", address: 197155, size: 1, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"ApplXcpReadFile"`: addr=2768, Symbol { name: "ApplXcpReadFile", address: 10088, size: 280, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpGetCalPage"`: addr=25ac, Symbol { name: "ApplXcpGetCalPage", address: 9644, size: 52, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEthTlShutdown"`: addr=8fd4, Symbol { name: "XcpEthTlShutdown", address: 36820, size: 80, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"_edata"`: addr=30308, Symbol { name: "_edata", address: 197384, size: 0, kind: Unknown, section: Section(SectionIndex(27)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 0 } }
+  `"socketListen"`: addr=ca24, Symbol { name: "socketListen", address: 51748, size: 120, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"bar"`: addr=1d54, Symbol { name: "bar", address: 7508, size: 60, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"clockGetMonotonicUsLast"`: addr=c494, Symbol { name: "clockGetMonotonicUsLast", address: 50324, size: 60, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetLocalEpk"`: addr=3a24, Symbol { name: "XcpGetLocalEpk", address: 14884, size: 84, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEventExtAt_"`: addr=61e4, Symbol { name: "XcpEventExtAt_", address: 25060, size: 148, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"fexists"`: addr=c52c, Symbol { name: "fexists", address: 50476, size: 44, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketSendV"`: addr=d444, Symbol { name: "socketSendV", address: 54340, size: 428, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"snprintf@GLIBC_2.17"`: addr=0, Symbol { name: "snprintf@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"global_test_uint32"`: addr=30250, Symbol { name: "global_test_uint32", address: 197200, size: 4, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"clockGetString"`: addr=c0b8, Symbol { name: "clockGetString", address: 49336, size: 264, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketGetErrorString"`: addr=c558, Symbol { name: "socketGetErrorString", address: 50520, size: 20, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__start_xcp_cals"`: addr=30260, Symbol { name: "__start_xcp_cals", address: 197216, size: 0, kind: Unknown, section: Section(SectionIndex(25)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 3 } }
+  `"socketRecvFrom"`: addr=cbf8, Symbol { name: "socketRecvFrom", address: 52216, size: 260, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"global_test_uint8"`: addr=30256, Symbol { name: "global_test_uint8", address: 197206, size: 1, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"ApplXcpRegisterGetCalPageCallback"`: addr=2158, Symbol { name: "ApplXcpRegisterGetCalPageCallback", address: 8536, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterIdleCallback"`: addr=2118, Symbol { name: "ApplXcpRegisterIdleCallback", address: 8472, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"_fini"`: addr=d7b0, Symbol { name: "_fini", address: 55216, size: 0, kind: Text, section: Section(SectionIndex(14)), scope: Linkage, weak: false, flags: Elf { st_info: 18, st_other: 2 } }
+  `"XcpLockCalSeg"`: addr=a450, Symbol { name: "XcpLockCalSeg", address: 42064, size: 328, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__bss_end__"`: addr=32a00, Symbol { name: "__bss_end__", address: 207360, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 0 } }
+  `"XcpSendTerminateSessionEvent"`: addr=67f8, Symbol { name: "XcpSendTerminateSessionEvent", address: 26616, size: 32, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"signal@GLIBC_2.17"`: addr=0, Symbol { name: "signal@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"fclose@GLIBC_2.17"`: addr=0, Symbol { name: "fclose@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"global_test_int8"`: addr=30246, Symbol { name: "global_test_int8", address: 197190, size: 1, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"fopen@GLIBC_2.17"`: addr=0, Symbol { name: "fopen@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterFlushCallback"`: addr=2194, Symbol { name: "ApplXcpRegisterFlushCallback", address: 8596, size: 4, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"malloc@GLIBC_2.17"`: addr=0, Symbol { name: "malloc@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEthServerInit"`: addr=71b0, Symbol { name: "XcpEthServerInit", address: 29104, size: 384, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketAccept"`: addr=ca9c, Symbol { name: "socketAccept", address: 51868, size: 60, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterFreezeCalCallback"`: addr=2170, Symbol { name: "ApplXcpRegisterFreezeCalCallback", address: 8560, size: 4, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEthTlHandleCommands"`: addr=88ac, Symbol { name: "XcpEthTlHandleCommands", address: 34988, size: 1348, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpBackgroundTasks"`: addr=666c, Symbol { name: "XcpBackgroundTasks", address: 26220, size: 168, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"setsockopt@GLIBC_2.17"`: addr=0, Symbol { name: "setsockopt@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpCheckMemory"`: addr=2578, Symbol { name: "ApplXcpCheckMemory", address: 9592, size: 52, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpSetElfName"`: addr=26f8, Symbol { name: "XcpSetElfName", address: 9976, size: 96, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterInitCalCallback"`: addr=2174, Symbol { name: "ApplXcpRegisterInitCalCallback", address: 8564, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpIsDaqEventRunning"`: addr=392c, Symbol { name: "XcpIsDaqEventRunning", address: 14636, size: 140, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"pthread_mutexattr_settype@GLIBC_2.34"`: addr=0, Symbol { name: "pthread_mutexattr_settype@GLIBC_2.34", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpConnect"`: addr=2198, Symbol { name: "ApplXcpConnect", address: 8600, size: 96, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketJoin"`: addr=cad8, Symbol { name: "socketJoin", address: 51928, size: 288, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketEnableTimestamps"`: addr=c824, Symbol { name: "socketEnableTimestamps", address: 51236, size: 76, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetCalSegIndex"`: addr=a1bc, Symbol { name: "XcpGetCalSegIndex", address: 41404, size: 116, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterStopDaqCallback"`: addr=2148, Symbol { name: "ApplXcpRegisterStopDaqCallback", address: 8520, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpCalSegSetCalPage"`: addr=acb4, Symbol { name: "XcpCalSegSetCalPage", address: 44212, size: 376, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"queuePeek"`: addr=96f4, Symbol { name: "queuePeek", address: 38644, size: 432, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpStopDaq"`: addr=2304, Symbol { name: "ApplXcpStopDaq", address: 8964, size: 68, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"counter_control"`: addr=da40, Symbol { name: "counter_control", address: 55872, size: 4, kind: Data, section: Section(SectionIndex(15)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"XcpCheckDaqLists"`: addr=3f28, Symbol { name: "XcpCheckDaqLists", address: 16168, size: 824, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"recvfrom@GLIBC_2.17"`: addr=0, Symbol { name: "recvfrom@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpWriteMta"`: addr=3a8c, Symbol { name: "XcpWriteMta", address: 14988, size: 240, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"aligned_alloc@GLIBC_2.17"`: addr=0, Symbol { name: "aligned_alloc@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpDeinit"`: addr=6f34, Symbol { name: "XcpDeinit", address: 28468, size: 44, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEvent"`: addr=4260, Symbol { name: "XcpEvent", address: 16992, size: 120, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpGetModuleAddr"`: addr=2418, Symbol { name: "ApplXcpGetModuleAddr", address: 9240, size: 64, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"clockGetRealtimeNsLast"`: addr=c4d0, Symbol { name: "clockGetRealtimeNsLast", address: 50384, size: 32, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"memset@GLIBC_2.17"`: addr=0, Symbol { name: "memset@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"gmtime_r@GLIBC_2.17"`: addr=0, Symbol { name: "gmtime_r@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpRegisterSectionCalSegs"`: addr=9fd0, Symbol { name: "XcpRegisterSectionCalSegs", address: 40912, size: 356, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"sleep@GLIBC_2.17"`: addr=0, Symbol { name: "sleep@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpIsDaqRunning"`: addr=3668, Symbol { name: "XcpIsDaqRunning", address: 13928, size: 44, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetEventCount"`: addr=3dbc, Symbol { name: "XcpGetEventCount", address: 15804, size: 52, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"accept@GLIBC_2.17"`: addr=0, Symbol { name: "accept@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"clockGetMonotonicNsLast"`: addr=c474, Symbol { name: "clockGetMonotonicNsLast", address: 50292, size: 32, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpGetAddrExt"`: addr=2410, Symbol { name: "ApplXcpGetAddrExt", address: 9232, size: 8, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"sendmsg@GLIBC_2.17"`: addr=0, Symbol { name: "sendmsg@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterGetClockInfoGrandmasterCallback"`: addr=23d8, Symbol { name: "ApplXcpRegisterGetClockInfoGrandmasterCallback", address: 9176, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"gXcpLocalData"`: addr=305a8, Symbol { name: "gXcpLocalData", address: 198056, size: 280, kind: Data, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"XcpGetCalSeg"`: addr=9ad0, Symbol { name: "XcpGetCalSeg", address: 39632, size: 72, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterPrepareDaqCallback"`: addr=2130, Symbol { name: "ApplXcpRegisterPrepareDaqCallback", address: 8496, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetMemSegCount"`: addr=9aac, Symbol { name: "XcpGetMemSegCount", address: 39596, size: 36, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpCopyCalPage"`: addr=2618, Symbol { name: "ApplXcpCopyCalPage", address: 9752, size: 80, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpReadMta"`: addr=3b7c, Symbol { name: "XcpReadMta", address: 15228, size: 232, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__data_start"`: addr=301f8, Symbol { name: "__data_start", address: 197112, size: 0, kind: Unknown, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 0 } }
+  `"ApplXcpGetClockInfoGrandmaster"`: addr=23e4, Symbol { name: "ApplXcpGetClockInfoGrandmaster", address: 9188, size: 44, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpCalSegBeginAtomicTransaction"`: addr=aef0, Symbol { name: "XcpCalSegBeginAtomicTransaction", address: 44784, size: 128, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterReadCallback"`: addr=218c, Symbol { name: "ApplXcpRegisterReadCallback", address: 8588, size: 4, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"shutdown@GLIBC_2.17"`: addr=0, Symbol { name: "shutdown@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"strerror@GLIBC_2.17"`: addr=0, Symbol { name: "strerror@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"pthread_mutex_init@GLIBC_2.17"`: addr=0, Symbol { name: "pthread_mutex_init@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"close@GLIBC_2.17"`: addr=0, Symbol { name: "close@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterSetCalPageCallback"`: addr=2164, Symbol { name: "ApplXcpRegisterSetCalPageCallback", address: 8548, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpFindCalSegByAddr"`: addr=a134, Symbol { name: "XcpFindCalSegByAddr", address: 41268, size: 136, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"strrchr@GLIBC_2.17"`: addr=0, Symbol { name: "strrchr@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"recv@GLIBC_2.17"`: addr=0, Symbol { name: "recv@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__gmon_start__"`: addr=0, Symbol { name: "__gmon_start__", address: 0, size: 0, kind: Unknown, section: Undefined, scope: Unknown, weak: true, flags: Elf { st_info: 32, st_other: 0 } }
+  `"XcpGetEventName"`: addr=3e1c, Symbol { name: "XcpGetEventName", address: 15900, size: 56, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__dso_handle"`: addr=30200, Symbol { name: "__dso_handle", address: 197120, size: 0, kind: Data, section: Section(SectionIndex(24)), scope: Linkage, weak: false, flags: Elf { st_info: 17, st_other: 2 } }
+  `"__getauxval@GLIBC_2.17"`: addr=0, Symbol { name: "__getauxval@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"fseek@GLIBC_2.17"`: addr=0, Symbol { name: "fseek@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"abort@GLIBC_2.17"`: addr=0, Symbol { name: "abort@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpIsActivated"`: addr=3620, Symbol { name: "XcpIsActivated", address: 13856, size: 16, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpCreateCalBlk"`: addr=a40c, Symbol { name: "XcpCreateCalBlk", address: 41996, size: 68, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpFindEvent"`: addr=3e9c, Symbol { name: "XcpFindEvent", address: 16028, size: 140, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"_IO_stdin_used"`: addr=d7c8, Symbol { name: "_IO_stdin_used", address: 55240, size: 4, kind: Data, section: Section(SectionIndex(15)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"XcpCalSegCopyCalPage"`: addr=ae2c, Symbol { name: "XcpCalSegCopyCalPage", address: 44588, size: 196, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"gXcpData"`: addr=306c0, Symbol { name: "gXcpData", address: 198336, size: 8800, kind: Data, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"ApplXcpGetClock64"`: addr=2378, Symbol { name: "ApplXcpGetClock64", address: 9080, size: 40, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"access@GLIBC_2.17"`: addr=0, Symbol { name: "access@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"global_test_double"`: addr=30228, Symbol { name: "global_test_double", address: 197160, size: 8, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"global_counter"`: addr=3030c, Symbol { name: "global_counter", address: 197388, size: 2, kind: Data, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"puts@GLIBC_2.17"`: addr=0, Symbol { name: "puts@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpStart"`: addr=6cb4, Symbol { name: "XcpStart", address: 27828, size: 640, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpIsConnected"`: addr=3658, Symbol { name: "XcpIsConnected", address: 13912, size: 16, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"memcmp@GLIBC_2.17"`: addr=0, Symbol { name: "memcmp@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"freeifaddrs@GLIBC_2.17"`: addr=0, Symbol { name: "freeifaddrs@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpCommand"`: addr=664c, Symbol { name: "XcpCommand", address: 26188, size: 32, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"strcmp@GLIBC_2.17"`: addr=0, Symbol { name: "strcmp@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"params"`: addr=d9f8, Symbol { name: "params", address: 55800, size: 72, kind: Data, section: Section(SectionIndex(15)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"pthread_detach@GLIBC_2.34"`: addr=0, Symbol { name: "pthread_detach@GLIBC_2.34", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"fread@GLIBC_2.17"`: addr=0, Symbol { name: "fread@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"gXcpLogLevel"`: addr=30258, Symbol { name: "gXcpLogLevel", address: 197208, size: 1, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"__stop_xcp_cals"`: addr=302c0, Symbol { name: "__stop_xcp_cals", address: 197312, size: 0, kind: Unknown, section: Section(SectionIndex(25)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 3 } }
+  `"clockGetMonotonicUs"`: addr=c260, Symbol { name: "clockGetMonotonicUs", address: 49760, size: 92, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__aarch64_have_lse_atomics"`: addr=329f8, Symbol { name: "__aarch64_have_lse_atomics", address: 207352, size: 1, kind: Data, section: Section(SectionIndex(28)), scope: Linkage, weak: false, flags: Elf { st_info: 17, st_other: 2 } }
+  `"foo"`: addr=1c60, Symbol { name: "foo", address: 7264, size: 244, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"clock_getres@GLIBC_2.17"`: addr=0, Symbol { name: "clock_getres@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpCalSegPublishAll"`: addr=a774, Symbol { name: "XcpCalSegPublishAll", address: 42868, size: 176, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterStartDaqCallback"`: addr=213c, Symbol { name: "ApplXcpRegisterStartDaqCallback", address: 8508, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketBind"`: addr=c6e8, Symbol { name: "socketBind", address: 50920, size: 316, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"dl_iterate_phdr@GLIBC_2.17"`: addr=0, Symbol { name: "dl_iterate_phdr@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetProjectName"`: addr=39d0, Symbol { name: "XcpGetProjectName", address: 14800, size: 84, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpCalSegGetCalPage"`: addr=abb8, Symbol { name: "XcpCalSegGetCalPage", address: 43960, size: 252, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpDeinitCalSegList"`: addr=9a5c, Symbol { name: "XcpDeinitCalSegList", address: 39516, size: 32, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"_end"`: addr=32a00, Symbol { name: "_end", address: 207360, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 0 } }
+  `"XcpEventExtAt_Var"`: addr=64e0, Symbol { name: "XcpEventExtAt_Var", address: 25824, size: 364, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"free@GLIBC_2.17"`: addr=0, Symbol { name: "free@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"_start"`: addr=1a00, Symbol { name: "_start", address: 6656, size: 52, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpStartDaq"`: addr=22c0, Symbol { name: "ApplXcpStartDaq", address: 8896, size: 68, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"counter"`: addr=30310, Symbol { name: "counter", address: 197392, size: 2, kind: Data, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"clockGetRealtimeUsLast"`: addr=c4f0, Symbol { name: "clockGetRealtimeUsLast", address: 50416, size: 60, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpTlWaitForTransmitQueueEmpty"`: addr=92d0, Symbol { name: "XcpTlWaitForTransmitQueueEmpty", address: 37584, size: 100, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpIsStarted"`: addr=3648, Symbol { name: "XcpIsStarted", address: 13896, size: 16, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"gXcpBaseAddr"`: addr=30390, Symbol { name: "gXcpBaseAddr", address: 197520, size: 8, kind: Data, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"XcpGetElfName"`: addr=2758, Symbol { name: "XcpGetElfName", address: 10072, size: 16, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"sleepUs"`: addr=bfb8, Symbol { name: "sleepUs", address: 49080, size: 68, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEventExt_"`: addr=62b0, Symbol { name: "XcpEventExt_", address: 25264, size: 152, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketSendTo"`: addr=cfcc, Symbol { name: "socketSendTo", address: 53196, size: 372, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__end__"`: addr=32a00, Symbol { name: "__end__", address: 207360, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 0 } }
+  `"ApplXcpSetCalPage"`: addr=25e0, Symbol { name: "ApplXcpSetCalPage", address: 9696, size: 56, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"nanosleep@GLIBC_2.17"`: addr=0, Symbol { name: "nanosleep@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"queueInit"`: addr=9518, Symbol { name: "queueInit", address: 38168, size: 36, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpTlGetCtr"`: addr=9334, Symbol { name: "XcpTlGetCtr", address: 37684, size: 24, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"send@GLIBC_2.17"`: addr=0, Symbol { name: "send@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"sleepMs"`: addr=bffc, Symbol { name: "sleepMs", address: 49148, size: 84, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketGetMAC"`: addr=c8d8, Symbol { name: "socketGetMAC", address: 51416, size: 156, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__bss_start"`: addr=30308, Symbol { name: "__bss_start", address: 197384, size: 0, kind: Unknown, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 0 } }
+  `"ApplXcpDisconnect"`: addr=21f8, Symbol { name: "ApplXcpDisconnect", address: 8696, size: 52, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpInit"`: addr=69a4, Symbol { name: "XcpInit", address: 27044, size: 784, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterGetClockCallback"`: addr=236c, Symbol { name: "ApplXcpRegisterGetClockCallback", address: 9068, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"main"`: addr=1d90, Symbol { name: "main", address: 7568, size: 780, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetDaqStartTime"`: addr=39b8, Symbol { name: "XcpGetDaqStartTime", address: 14776, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpSetLogLevel"`: addr=3590, Symbol { name: "XcpSetLogLevel", address: 13712, size: 144, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"clockGetRealtimeUs"`: addr=c418, Symbol { name: "clockGetRealtimeUs", address: 50200, size: 92, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"fwrite@GLIBC_2.17"`: addr=0, Symbol { name: "fwrite@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"pthread_create@GLIBC_2.34"`: addr=0, Symbol { name: "pthread_create@GLIBC_2.34", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"gXcpBaseAddrValid"`: addr=30398, Symbol { name: "gXcpBaseAddrValid", address: 197528, size: 1, kind: Data, section: Section(SectionIndex(28)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"XcpGetCalSegName"`: addr=a278, Symbol { name: "XcpGetCalSegName", address: 41592, size: 72, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socket@GLIBC_2.17"`: addr=0, Symbol { name: "socket@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpGetAddr"`: addr=24ec, Symbol { name: "ApplXcpGetAddr", address: 9452, size: 112, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterWriteCallback"`: addr=2190, Symbol { name: "ApplXcpRegisterWriteCallback", address: 8592, size: 4, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpUnlockCalSeg"`: addr=a598, Symbol { name: "XcpUnlockCalSeg", address: 42392, size: 204, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"pthread_mutex_destroy@GLIBC_2.17"`: addr=0, Symbol { name: "pthread_mutex_destroy@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpBackgroundTasks"`: addr=2348, Symbol { name: "ApplXcpBackgroundTasks", address: 9032, size: 36, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetCalSegNumber"`: addr=a230, Symbol { name: "XcpGetCalSegNumber", address: 41520, size: 72, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEthServerShutdown"`: addr=7330, Symbol { name: "XcpEthServerShutdown", address: 29488, size: 264, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"global_test_struct"`: addr=30210, Symbol { name: "global_test_struct", address: 197136, size: 12, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"__start_xcp_evts"`: addr=302c8, Symbol { name: "__start_xcp_evts", address: 197320, size: 0, kind: Unknown, section: Section(SectionIndex(27)), scope: Dynamic, weak: false, flags: Elf { st_info: 16, st_other: 3 } }
+  `"socketSend"`: addr=d140, Symbol { name: "socketSend", address: 53568, size: 256, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpCreateCalSeg"`: addr=a3c8, Symbol { name: "XcpCreateCalSeg", address: 41928, size: 68, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"task"`: addr=1b20, Symbol { name: "task", address: 6944, size: 320, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpCalSegWriteMemory"`: addr=a824, Symbol { name: "XcpCalSegWriteMemory", address: 43044, size: 352, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterConnectCallback"`: addr=2124, Symbol { name: "ApplXcpRegisterConnectCallback", address: 8484, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"clockGetMonotonicNs"`: addr=c220, Symbol { name: "clockGetMonotonicNs", address: 49696, size: 64, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpGetClockState"`: addr=23ac, Symbol { name: "ApplXcpGetClockState", address: 9132, size: 44, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpPrint"`: addr=6818, Symbol { name: "XcpPrint", address: 26648, size: 396, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"queueInitFromMemory"`: addr=9394, Symbol { name: "queueInitFromMemory", address: 37780, size: 388, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpSetMta"`: addr=3c64, Symbol { name: "XcpSetMta", address: 15460, size: 344, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"global_test_float"`: addr=30230, Symbol { name: "global_test_float", address: 197168, size: 4, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"if_nametoindex@GLIBC_2.17"`: addr=0, Symbol { name: "if_nametoindex@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterCheckCallback"`: addr=2180, Symbol { name: "ApplXcpRegisterCheckCallback", address: 8576, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetEcuEpk"`: addr=3a78, Symbol { name: "XcpGetEcuEpk", address: 14968, size: 20, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetSegInfo"`: addr=a984, Symbol { name: "XcpGetSegInfo", address: 43396, size: 388, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEventExtAt"`: addr=6278, Symbol { name: "XcpEventExtAt", address: 25208, size: 56, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEthTlInit"`: addr=8df0, Symbol { name: "XcpEthTlInit", address: 36336, size: 484, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"queueClear"`: addr=934c, Symbol { name: "queueClear", address: 37708, size: 72, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__TMC_END__"`: addr=30260, Symbol { name: "__TMC_END__", address: 197216, size: 0, kind: Data, section: Section(SectionIndex(25)), scope: Linkage, weak: false, flags: Elf { st_info: 17, st_other: 2 } }
+  `"XcpEventAt"`: addr=42d8, Symbol { name: "XcpEventAt", address: 17112, size: 104, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpCalSegEndAtomicTransaction"`: addr=af70, Symbol { name: "XcpCalSegEndAtomicTransaction", address: 44912, size: 72, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"strncpy@GLIBC_2.17"`: addr=0, Symbol { name: "strncpy@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"global_test_array"`: addr=30220, Symbol { name: "global_test_array", address: 197152, size: 3, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"_ITM_registerTMCloneTable"`: addr=0, Symbol { name: "_ITM_registerTMCloneTable", address: 0, size: 0, kind: Unknown, section: Undefined, scope: Unknown, weak: true, flags: Elf { st_info: 32, st_other: 0 } }
+  `"global_test_int16"`: addr=30244, Symbol { name: "global_test_int16", address: 197188, size: 2, kind: Data, section: Section(SectionIndex(24)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"XcpInitCalSegList"`: addr=9a14, Symbol { name: "XcpInitCalSegList", address: 39444, size: 72, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"pthread_self@GLIBC_2.17"`: addr=0, Symbol { name: "pthread_self@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"mutexInit"`: addr=c050, Symbol { name: "mutexInit", address: 49232, size: 84, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"pthread_mutexattr_init@GLIBC_2.34"`: addr=0, Symbol { name: "pthread_mutexattr_init@GLIBC_2.34", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"printf@GLIBC_2.17"`: addr=0, Symbol { name: "printf@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"clockGet"`: addr=c1c0, Symbol { name: "clockGet", address: 49600, size: 64, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"__errno_location@GLIBC_2.17"`: addr=0, Symbol { name: "__errno_location@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpRegisterGetClockStateCallback"`: addr=23a0, Symbol { name: "ApplXcpRegisterGetClockStateCallback", address: 9120, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpDisconnect"`: addr=4340, Symbol { name: "XcpDisconnect", address: 17216, size: 136, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"pthread_join@GLIBC_2.34"`: addr=0, Symbol { name: "pthread_join@GLIBC_2.34", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XCPLITE__ACSDD"`: addr=f840, Symbol { name: "XCPLITE__ACSDD", address: 63552, size: 2, kind: Data, section: Section(SectionIndex(15)), scope: Dynamic, weak: false, flags: Elf { st_info: 17, st_other: 0 } }
+  `"mutexDestroy"`: addr=c0a4, Symbol { name: "mutexDestroy", address: 49316, size: 20, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"putchar@GLIBC_2.17"`: addr=0, Symbol { name: "putchar@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEthServerStatus"`: addr=7154, Symbol { name: "XcpEthServerStatus", address: 29012, size: 92, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpFindCalSeg"`: addr=9b18, Symbol { name: "XcpFindCalSeg", address: 39704, size: 136, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpTlHandleTransmitQueue"`: addr=9064, Symbol { name: "XcpTlHandleTransmitQueue", address: 36964, size: 620, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"pthread_cancel@GLIBC_2.34"`: addr=0, Symbol { name: "pthread_cancel@GLIBC_2.34", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"pthread_mutex_lock@GLIBC_2.17"`: addr=0, Symbol { name: "pthread_mutex_lock@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpPrepareDaq"`: addr=222c, Symbol { name: "ApplXcpPrepareDaq", address: 8748, size: 148, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetInitMode"`: addr=3630, Symbol { name: "XcpGetInitMode", address: 13872, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"ApplXcpSetBaseAddr"`: addr=2458, Symbol { name: "ApplXcpSetBaseAddr", address: 9304, size: 92, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"_init"`: addr=1598, Symbol { name: "_init", address: 5528, size: 0, kind: Text, section: Section(SectionIndex(11)), scope: Linkage, weak: false, flags: Elf { st_info: 18, st_other: 2 } }
+  `"pthread_mutex_unlock@GLIBC_2.17"`: addr=0, Symbol { name: "pthread_mutex_unlock@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetDaqOverflowCount"`: addr=39c4, Symbol { name: "XcpGetDaqOverflowCount", address: 14788, size: 12, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"clockGetLast"`: addr=c200, Symbol { name: "clockGetLast", address: 49664, size: 32, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetCalSegSize"`: addr=a2c0, Symbol { name: "XcpGetCalSegSize", address: 41664, size: 72, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"fprintf@GLIBC_2.17"`: addr=0, Symbol { name: "fprintf@GLIBC_2.17", address: 0, size: 0, kind: Text, section: Undefined, scope: Unknown, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpGetEventPriority"`: addr=3e78, Symbol { name: "XcpGetEventPriority", address: 15992, size: 36, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpCreateCalSegPreloaded"`: addr=a354, Symbol { name: "XcpCreateCalSegPreloaded", address: 41812, size: 116, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEventExt"`: addr=6348, Symbol { name: "XcpEventExt", address: 25416, size: 52, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketCleanup"`: addr=c574, Symbol { name: "socketCleanup", address: 50548, size: 4, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"socketOpen"`: addr=c578, Symbol { name: "socketOpen", address: 50552, size: 368, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"queueLevel"`: addr=96bc, Symbol { name: "queueLevel", address: 38588, size: 56, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+  `"XcpEventExt_Var"`: addr=637c, Symbol { name: "XcpEventExt_Var", address: 25468, size: 356, kind: Text, section: Section(SectionIndex(13)), scope: Dynamic, weak: false, flags: Elf { st_info: 18, st_other: 0 } }
+
+====================================================================================================
+DebugData information summary:
+  Compilation units: 1 units
+  Sections: 28 sections
+  Endianness: Little Endian
+  Variables 71 with 62 unique names
+  Demangled names: 0 entries
+  Type names: 38 named types
+  Types: 90 total types
+  EPK string: `V2.1.10` at address 0x000302C0
+  XCP metadata section (xcp_meta) found at address 0x000111F8, 368 bytes
+
+====================================================================================================
+Compilation units in debug_data.unit_names:
+  Unit 0: main_c
+
+
+====================================================================================================
+Memory Sections in debug_data.sections:
+  '.interp': 0x00000238, 568 bytes (595)
+  '.note.gnu.build-id': 0x00000254, 28 bytes (632)
+  '.note.ABI-tag': 0x00000278, 36 bytes (664)
+  '.gnu.hash': 0x00000298, 32 bytes (692)
+  '.dynsym': 0x000002b8, 32 bytes (2352)
+  '.dynstr': 0x00000930, 1656 bytes (3086)
+  '.gnu.version': 0x00000c0e, 734 bytes (3224)
+  '.gnu.version_r': 0x00000c98, 138 bytes (3272)
+  '.rela.dyn': 0x00000cc8, 48 bytes (4016)
+  '.rela.plt': 0x00000fb0, 744 bytes (5528)
+  '.init': 0x00001598, 1512 bytes (5552)
+  '.plt': 0x000015b0, 24 bytes (6592)
+  '.text': 0x000019c0, 1040 bytes (55216)
+  '.fini': 0x0000d7b0, 48624 bytes (55236)
+  '.rodata': 0x0000d7c8, 24 bytes (70135)
+  'xcp_meta': 0x000111f8, 14896 bytes (70504)
+  '.eh_frame_hdr': 0x00011368, 368 bytes (72148)
+  '.eh_frame': 0x000119d8, 1648 bytes (80100)
+  '.init_array': 0x0002fd78, 123808 bytes (195976)
+  '.fini_array': 0x0002fd88, 16 bytes (195984)
+  '.dynamic': 0x0002fd90, 8 bytes (196464)
+  '.got': 0x0002ff70, 480 bytes (196584)
+  '.got.plt': 0x0002ffe8, 120 bytes (197112)
+  '.data': 0x000301f8, 528 bytes (197212)
+  'xcp_cals': 0x00030260, 104 bytes (197312)
+  'xcp_epk': 0x000302c0, 96 bytes (197320)
+  'xcp_evts': 0x000302c8, 8 bytes (197384)
+  '.bss': 0x00030308, 64 bytes (207360)
+
+====================================================================================================
+A2L Creator variables:
+calseg__params':  main_c:'<global>' : addr=0:0x00030280
+xcp_meta__min__params__delay_us':  main_c:'<global>' : addr=0:0x00011360
+xcp_meta__max__params__delay_us':  main_c:'<global>' : addr=0:0x00011358
+xcp_meta__unit__params__delay_us':  main_c:'<global>' : addr=0:0x00011350
+3 instances of 'xcp_meta__comment__counter' found, skipped
+xcp_meta__read_write__counter':  main_c:'<global>' : addr=0:0x0001132C
+xcp_meta__comment__global_counter':  main_c:'<global>' : addr=0:0x00011310
+xcp_meta__read_write__global_counter':  main_c:'<global>' : addr=0:0x0001130C
+3 instances of 'xcp_meta__comment__static_counter' found, skipped
+calseg__counter_control':  main_c:'main' : addr=0:0x00030260
+evt__mainloop':  main_c:'main' : addr=0:0x000302F8
+trg__AAS__mainloop':  main_c:'main' : addr=0:0x00000000
+evt__bar':  main_c:'bar' : addr=0:0x000302E8
+trg__AAS__bar':  main_c:'bar' : addr=0:0x00000000
+evt__foo':  main_c:'foo' : addr=0:0x000302D8
+trg__AAS__foo':  main_c:'foo' : addr=0:0x00000000
+evt__task':  main_c:'task' : addr=0:0x000302C8
+trg__AASD__task':  main_c:'task' : addr=0:0x00000000
+
+====================================================================================================
+Variables:
+  (Skipping system variables '__<name>' and global XCP variables 'gXcp..' and 'gA2l..')
+global_running 1: 
+counter_control 1: 
+params 1: 
+calseg_id_params 1: 
+calseg__params 1: 
+xcp_meta__min__params__delay_us 1: 
+xcp_meta__max__params__delay_us 1: 
+xcp_meta__unit__params__delay_us 1: 
+xcp_meta__comment__counter 3: 
+xcp_meta__read_write__counter 1: 
+counter 3: 
+xcp_meta__comment__global_counter 1: 
+xcp_meta__read_write__global_counter 1: 
+global_counter 1: 
+global_test_uint8 1: 
+global_test_uint16 1: 
+global_test_uint32 1: 
+global_test_uint64 1: 
+global_test_int8 1: 
+global_test_int16 1: 
+global_test_int32 1: 
+global_test_int64 1: 
+global_test_float 1: 
+global_test_double 1: 
+global_test_bool 1: 
+global_test_array 1: 
+global_test_struct 1: 
+xcp_meta__comment__static_counter 3: 
+static_counter 3: 
+calseg_id_counter_control 1: 
+calseg__counter_control 1: 
+evt__mainloop 1: 
+evt_id_mainloop 1: 
+xcp_epk_keep 1: 
+p_counter_control 1: 
+p_params 1: 
+delay 2: 
+trg__AAS__mainloop 1: 
+evt__bar 1: 
+trg__AAS__bar 1: 
+test_float 1: 
+test_double 1: 
+test_uint8 1: 
+test_uint16 1: 
+test_uint32 1: 
+test_uint64 1: 
+test_int8 1: 
+test_int16 1: 
+test_int32 1: 
+test_int64 1: 
+test_struct 1: 
+test_array 1: 
+evt__foo 1: 
+trg__AAS__foo 1: 
+heap_struct 1: 
+evt__task 1: 
+evt_id_task 1: 
+trg__AASD__task 1: 
+[INFO ] ===============================================================
+[WARN ] No target signature found in ELF file
+[INFO ] Using absolute addressing for calibration segments
+[INFO ] ===============================================================
+[INFO ] EPK segment memory section found at address = 0x000302C0
+[INFO ] EPK string: 'V2.1.10'
+[INFO ] ===============================================================
+[INFO ] Registering event information:
+[INFO ] ===============================================================
+[INFO ] Found XCP event descriptor memory section at address = 0x000302C8, size = 64 bytes
+[INFO ] Event definition for event 'mainloop' found in main_c:main, addr = 0x302f8
+[INFO ] New event 'mainloop' found: event id = 3
+[INFO ] Event definition for event 'bar' found in main_c:bar, addr = 0x302e8
+[INFO ] New event 'bar' found: event id = 2
+[INFO ] Event definition for event 'foo' found in main_c:foo, addr = 0x302d8
+[INFO ] New event 'foo' found: event id = 1
+[INFO ] Event definition for event 'task' found in main_c:task, addr = 0x302c8
+[INFO ] New event 'task' found: event id = 0
+[INFO ] ===============================================================
+[INFO ] Registering segment information (absolute addressing mode):
+[INFO ] ===============================================================
+Found 2 segment definition marker variables:
+0: 'counter_control' - number=Some(0), addr=00030260'
+  found in main_c:'main'
+1: 'params' - number=Some(1), addr=00030280'
+  found in main_c:''
+Calibration segment 'counter_control' type information found, type=counter_control, size = 4
+  type = Struct counter_control(2 members)
+[INFO ] Calibration segment 'counter_control' default page variable found in debug data: Address = 0xda40, Size = 0x4
+[INFO ] Calibration segment 'counter_control' not yet defined in registry
+[INFO ] Created segment 0: 'counter_control':  addr = 0x0000DA40, size = 4, mem_addr = 0x0000DA40
+Calibration segment 'params' type information found, type=params, size = 72
+  type = Struct params(9 members)
+[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xd9f8, Size = 0x48
+[INFO ] Calibration segment 'params' not yet defined in registry
+[INFO ] Created segment 1: 'params':  addr = 0x0000D9F8, size = 72, mem_addr = 0x0000D9F8
+[INFO ] ===============================================================
+[INFO ] Registering event locations:
+[INFO ] ===============================================================
+[INFO ]   Event mainloop trigger found in main_c:main, address resolver mode AAS
+  Event 'mainloop' trigger in function 'main', frame base Cfa
+[INFO ]   Event bar trigger found in main_c:bar, address resolver mode AAS
+  Event 'bar' trigger in function 'bar', frame base Cfa
+[INFO ]   Event foo trigger found in main_c:foo, address resolver mode AAS
+  Event 'foo' trigger in function 'foo', frame base Cfa
+[INFO ]   Event task trigger found in main_c:task, address resolver mode AASD
+  Event 'task' trigger in function 'task', frame base Cfa
+[INFO ] ===============================================================
+[INFO ] Registering variables:
+[INFO ] ===============================================================
+[INFO ] Default event 'mainloop' (id 3) for global and static variables without an event trigger
+[INFO ] Compilation unit filter: 'main'
+[INFO ] Global variable 'global_running', event id = Some(3)
+  Add measurement instance for global_running: addr = 0:0x00030208
+  Registered variable 'global_running' type_name = '_Bool', size = 1, event_id = Some(3)
+[INFO ] Global variable 'counter_control', event id = Some(3)
+  Add characteristic instance for counter_control: addr = 0:0x0000da40
+  Registered variable 'counter_control' type_name = 'counter_control', size = 4, event_id = Some(3)
+[INFO ] Global variable 'params', event id = Some(3)
+  Add characteristic instance for params: addr = 0:0x0000d9f8
+  Registered variable 'params' type_name = 'params', size = 72, event_id = Some(3)
+[INFO ] Global variable 'calseg_id_params', event id = Some(3)
+  Add measurement instance for calseg_id_params: addr = 0:0x0003020a
+  Registered variable 'calseg_id_params' type_name = 'tXcpCalSegIndex', size = 2, event_id = Some(3)
+[INFO ] Global variable 'counter', event id = Some(3)
+  Add measurement instance for counter: addr = 0:0x00030310
+  Registered variable 'counter' type_name = 'uint16_t', size = 2, event_id = Some(3)
+[INFO ] Local variable 'counter' in function 'Some("foo")', event id = Some(1), offset = -4
+  Add measurement instance for foo.counter: addr = 2:0x0040fffc
+  Registered variable 'foo.counter' type_name = 'uint32_t', size = 4, event_id = Some(1)
+[INFO ] Local variable 'counter' in function 'Some("task")', event id = Some(0), offset = -4
+  Add measurement instance for task.counter: addr = 2:0x0000fffc
+  Registered variable 'task.counter' type_name = 'uint32_t', size = 4, event_id = Some(0)
+[INFO ] Global variable 'global_counter', event id = Some(3)
+  Add measurement instance for global_counter: addr = 0:0x0003030c
+  Registered variable 'global_counter' type_name = 'uint16_t', size = 2, event_id = Some(3)
+[INFO ] Global variable 'global_test_uint8', event id = Some(3)
+  Add measurement instance for global_test_uint8: addr = 0:0x00030256
+  Registered variable 'global_test_uint8' type_name = 'uint8_t', size = 1, event_id = Some(3)
+[INFO ] Global variable 'global_test_uint16', event id = Some(3)
+  Add measurement instance for global_test_uint16: addr = 0:0x00030254
+  Registered variable 'global_test_uint16' type_name = 'uint16_t', size = 2, event_id = Some(3)
+[INFO ] Global variable 'global_test_uint32', event id = Some(3)
+  Add measurement instance for global_test_uint32: addr = 0:0x00030250
+  Registered variable 'global_test_uint32' type_name = 'uint32_t', size = 4, event_id = Some(3)
+[INFO ] Global variable 'global_test_uint64', event id = Some(3)
+  Add measurement instance for global_test_uint64: addr = 0:0x00030248
+  Registered variable 'global_test_uint64' type_name = 'uint64_t', size = 8, event_id = Some(3)
+[INFO ] Global variable 'global_test_int8', event id = Some(3)
+  Add measurement instance for global_test_int8: addr = 0:0x00030246
+  Registered variable 'global_test_int8' type_name = 'int8_t', size = 1, event_id = Some(3)
+[INFO ] Global variable 'global_test_int16', event id = Some(3)
+  Add measurement instance for global_test_int16: addr = 0:0x00030244
+  Registered variable 'global_test_int16' type_name = 'int16_t', size = 2, event_id = Some(3)
+[INFO ] Global variable 'global_test_int32', event id = Some(3)
+  Add measurement instance for global_test_int32: addr = 0:0x00030240
+  Registered variable 'global_test_int32' type_name = 'int32_t', size = 4, event_id = Some(3)
+[INFO ] Global variable 'global_test_int64', event id = Some(3)
+  Add measurement instance for global_test_int64: addr = 0:0x00030238
+  Registered variable 'global_test_int64' type_name = 'int64_t', size = 8, event_id = Some(3)
+[INFO ] Global variable 'global_test_float', event id = Some(3)
+  Add measurement instance for global_test_float: addr = 0:0x00030230
+  Registered variable 'global_test_float' type_name = 'float', size = 4, event_id = Some(3)
+[INFO ] Global variable 'global_test_double', event id = Some(3)
+  Add measurement instance for global_test_double: addr = 0:0x00030228
+  Registered variable 'global_test_double' type_name = 'double', size = 8, event_id = Some(3)
+[INFO ] Global variable 'global_test_bool', event id = Some(3)
+  Add measurement instance for global_test_bool: addr = 0:0x00030223
+  Registered variable 'global_test_bool' type_name = '_Bool', size = 1, event_id = Some(3)
+[INFO ] Global variable 'global_test_array', event id = Some(3)
+  Add measurement instance for global_test_array: addr = 0:0x00030220
+  Registered variable 'global_test_array' type_name = 'uint8_t', size = 3, event_id = Some(3)
+[INFO ] Global variable 'global_test_struct', event id = Some(3)
+  Add measurement instance for global_test_struct: addr = 0:0x00030210
+  Registered variable 'global_test_struct' type_name = 'test_struct', size = 12, event_id = Some(3)
+[INFO ] Static variable 'static_counter' local to function 'Some("main")', event id = 3
+  Add measurement instance for main.static_counter: addr = 0:0x00030312
+  Registered variable 'main.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(3)
+[INFO ] Static variable 'static_counter' local to function 'Some("foo")', event id = 1
+  Add measurement instance for foo.static_counter: addr = 0:0x0003030e
+  Registered variable 'foo.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(1)
+[INFO ] Static variable 'static_counter' local to function 'Some("task")', event id = 0
+  Add measurement instance for task.static_counter: addr = 0:0x0003030a
+  Registered variable 'task.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(0)
+[INFO ] Static variable 'calseg_id_counter_control' local to function 'Some("main")', event id = 3
+  Add measurement instance for calseg_id_counter_control: addr = 0:0x0003020c
+  Registered variable 'calseg_id_counter_control' type_name = 'tXcpCalSegIndex', size = 2, event_id = Some(3)
+[INFO ] Local variable 'xcp_epk_keep' in function 'Some("main")', event id = Some(3), offset = -17
+  Add measurement instance for main.xcp_epk_keep: addr = 2:0x00c0ffef
+  Registered variable 'main.xcp_epk_keep' type_name = 'char', size = 1, event_id = Some(3)
+[INFO ] Local variable 'test_float' in function 'Some("foo")', event id = Some(1), offset = -8
+  Add measurement instance for foo.test_float: addr = 2:0x0040fff8
+  Registered variable 'foo.test_float' type_name = 'float', size = 4, event_id = Some(1)
+[INFO ] Local variable 'test_double' in function 'Some("foo")', event id = Some(1), offset = -16
+  Add measurement instance for foo.test_double: addr = 2:0x0040fff0
+  Registered variable 'foo.test_double' type_name = 'double', size = 8, event_id = Some(1)
+[INFO ] Local variable 'test_uint8' in function 'Some("foo")', event id = Some(1), offset = -17
+  Add measurement instance for foo.test_uint8: addr = 2:0x0040ffef
+  Registered variable 'foo.test_uint8' type_name = 'uint8_t', size = 1, event_id = Some(1)
+[INFO ] Local variable 'test_uint16' in function 'Some("foo")', event id = Some(1), offset = -20
+  Add measurement instance for foo.test_uint16: addr = 2:0x0040ffec
+  Registered variable 'foo.test_uint16' type_name = 'uint16_t', size = 2, event_id = Some(1)
+[INFO ] Local variable 'test_uint32' in function 'Some("foo")', event id = Some(1), offset = -24
+  Add measurement instance for foo.test_uint32: addr = 2:0x0040ffe8
+  Registered variable 'foo.test_uint32' type_name = 'uint32_t', size = 4, event_id = Some(1)
+[INFO ] Local variable 'test_uint64' in function 'Some("foo")', event id = Some(1), offset = -32
+  Add measurement instance for foo.test_uint64: addr = 2:0x0040ffe0
+  Registered variable 'foo.test_uint64' type_name = 'uint64_t', size = 8, event_id = Some(1)
+[INFO ] Local variable 'test_int8' in function 'Some("foo")', event id = Some(1), offset = -33
+  Add measurement instance for foo.test_int8: addr = 2:0x0040ffdf
+  Registered variable 'foo.test_int8' type_name = 'int8_t', size = 1, event_id = Some(1)
+[INFO ] Local variable 'test_int16' in function 'Some("foo")', event id = Some(1), offset = -36
+  Add measurement instance for foo.test_int16: addr = 2:0x0040ffdc
+  Registered variable 'foo.test_int16' type_name = 'int16_t', size = 2, event_id = Some(1)
+[INFO ] Local variable 'test_int32' in function 'Some("foo")', event id = Some(1), offset = -40
+  Add measurement instance for foo.test_int32: addr = 2:0x0040ffd8
+  Registered variable 'foo.test_int32' type_name = 'int32_t', size = 4, event_id = Some(1)
+[INFO ] Local variable 'test_int64' in function 'Some("foo")', event id = Some(1), offset = -48
+  Add measurement instance for foo.test_int64: addr = 2:0x0040ffd0
+  Registered variable 'foo.test_int64' type_name = 'uint64_t', size = 8, event_id = Some(1)
+[INFO ] Local variable 'test_struct' in function 'Some("foo")', event id = Some(1), offset = -64
+  Add measurement instance for foo.test_struct: addr = 2:0x0040ffc0
+  Registered variable 'foo.test_struct' type_name = 'test_struct', size = 12, event_id = Some(1)
+[INFO ] Local variable 'test_array' in function 'Some("foo")', event id = Some(1), offset = -72
+  Add measurement instance for foo.test_array: addr = 2:0x0040ffb8
+  Registered variable 'foo.test_array' type_name = 'uint8_t', size = 3, event_id = Some(1)
+[INFO ] Local variable 'heap_struct' in function 'Some("task")', event id = Some(0), offset = -16
+[WARN ] Variable 'heap_struct' has unsupported type: Pointer(...)
+[INFO ] ===============================================================
+[INFO ] Registering metadata from xcp_meta section:
+[INFO ] ===============================================================
+  Metadata xcp_meta__min__params__delay_us applied to typedef field 'params.delay_us'
+  Metadata xcp_meta__max__params__delay_us applied to typedef field 'params.delay_us'
+  Metadata xcp_meta__unit__params__delay_us applied to typedef field 'params.delay_us'
+  Metadata comment xcp_meta__comment__counter applied to instance 'counter'
+  Metadata comment xcp_meta__comment__counter applied to instance 'foo.counter'
+  Metadata comment xcp_meta__comment__counter applied to instance 'task.counter'
+  Metadata comment xcp_meta__comment__counter applied to instance 'foo.counter'
+  Metadata comment xcp_meta__comment__counter applied to instance 'task.counter'
+  Metadata read_write xcp_meta__read_write__counter applied to instance 'counter'
+  Metadata read_write xcp_meta__read_write__counter applied to instance 'foo.counter'
+  Metadata read_write xcp_meta__read_write__counter applied to instance 'task.counter'
+  Metadata comment xcp_meta__comment__global_counter applied to instance 'global_counter'
+  Metadata read_write xcp_meta__read_write__global_counter applied to instance 'global_counter'
+[WARN ] Metadata variable 'xcp_meta__comment__static_counter' address is 0
+[INFO ] ===============================================================
+[INFO ] Write A2L file "/Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l"
+[INFO ] A2L writer: transport layer: UDP 192.168.0.206:5555
+[INFO ] Check A2L file "/Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l"
+[INFO ] A2L file check ok
+[INFO ] Created A2L with file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l ELF/DWARF information only,  offline mode
+[INFO ] Default event 'mainloop' resolved to event id 3

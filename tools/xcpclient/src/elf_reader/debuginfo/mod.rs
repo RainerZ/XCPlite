@@ -19,8 +19,19 @@ use std::fmt::Display;
 
 mod dwarf;
 
-mod cfa;
-use cfa::CfaInfo;
+// What the DWARF locations of the local variables of a function are relative to (DW_AT_frame_base of the function), and
+// whether this is the frame address which the event trigger macro passes to the target (xcp_get_frame_addr() in inc/xcplib.h):
+// GCC uses the canonical frame address and the macro passes __builtin_dwarf_cfa(), clang uses the frame pointer register and
+// the macro passes __builtin_frame_address(0). In both cases the variable offsets from the DWARF are used as they are. Any other
+// frame base (under clang a function without frame pointer describes its locals relative to the stack pointer) is not what
+// the target passes, the stack variables of such a function are not registered, see register_event_locations
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FrameBase {
+    Cfa,           // DW_OP_call_frame_cfa (GCC)
+    FramePointer,  // the frame pointer register of the architecture (clang)
+    Register(u16), // another register, e.g. the stack pointer, DWARF register number
+    Unknown,       // no or a complex frame base expression, or not a function scope
+}
 
 // VarInfo holds information about one definition of a variable. DebugData.variables maps a variable name to a list of
 // VarInfo, because the same name may be defined in several compilation units, functions or namespaces, and because a
@@ -39,6 +50,7 @@ use cfa::CfaInfo;
 // >= 0x80 are internal to this tool
 #[derive(Debug)]
 pub(crate) struct VarInfo {
+    pub(crate) frame_base: FrameBase,    // frame base of the function of a local variable, Unknown for global variables
     pub(crate) address: (u8, u64),       // (address extension, address), see above
     pub(crate) typeref: usize,           // the type of the variable: key of the TypeInfo in DebugData.types (a .debug_info offset)
     pub(crate) unit_idx: usize,          // compilation unit index, index into DebugData.unit_names
@@ -130,11 +142,10 @@ pub(crate) struct DebugData {
     pub(crate) unit_names: Vec<Option<String>>,              // list of compilation unit names by unit index, the DW_AT_name of the unit (usually the source file path)
     pub(crate) sections: HashMap<String, (u64, u64)>,        // ELF section name -> (start address, end address), only sections with an address
     pub(crate) symbol_addresses: HashMap<String, u64>,       // ELF symbol name -> address, the symbol table (.symtab), C++ names are mangled
-    pub(crate) cfa_info: Vec<CfaInfo>, // CFA information for functions which contain an event trigger, the CFA is valid for  the location of the event trigger
-    pub(crate) epk_string: Option<String>, // EPK string read from xcp_epk ELF section
-    pub(crate) epk_addr: u64,          // Address of the xcp_epk ELF section (0 if not found)
-    pub(crate) xcp_meta_data: Option<(u64, Vec<u8>)>, // (section_base_addr, raw_bytes) of xcp_meta section
-    pub(crate) is_little_endian: bool, // ELF endianness
+    pub(crate) epk_string: Option<String>,                   // EPK string read from xcp_epk ELF section
+    pub(crate) epk_addr: u64,                                // Address of the xcp_epk ELF section (0 if not found)
+    pub(crate) xcp_meta_data: Option<(u64, Vec<u8>)>,        // (section_base_addr, raw_bytes) of xcp_meta section
+    pub(crate) is_little_endian: bool,                       // ELF endianness
 }
 
 // load_dwarf - loads and parses the DWARF debug information from an ELF file
@@ -214,7 +225,6 @@ impl DebugData {
         println!("  Demangled names: {} entries", self.demangled_names.len());
         println!("  Type names: {} named types", self.typenames.len());
         println!("  Types: {} total types", self.types.len());
-        println!("  CFA info: {} entries", self.cfa_info.len());
         println!("  EPK string: `{}` at address 0x{:08X}", self.epk_string.as_deref().unwrap_or("<not found>"), self.epk_addr);
         if let Some((addr, data)) = &self.xcp_meta_data {
             println!("  XCP metadata section (xcp_meta) found at address 0x{:08X}, {} bytes", addr, data.len());
@@ -383,26 +393,6 @@ impl DebugData {
                         }
                         println!();
                     }
-                }
-            }
-        }
-
-        // Print all functions grouped by compilation unit
-        if level >= 2 {
-            println!("\n====================================================================================================");
-            println!("Functions and CFA information by compilation unit:");
-            let mut by_cu: HashMap<usize, Vec<&CfaInfo>> = HashMap::new();
-            for func in &self.cfa_info {
-                by_cu.entry(func.unit_idx).or_default().push(func);
-            }
-            for (cu_idx, cu_functions) in by_cu {
-                println!("Compilation Unit {}: {} functions", cu_idx, cu_functions.len());
-                for func in cu_functions {
-                    let cfa_info = match func.cfa_offset {
-                        Some(offset) => format!("CFA+{}", offset),
-                        None => "CFA unknown".to_string(),
-                    };
-                    println!("  {} (0x{:08x}-0x{:08x}) [{}]", func.function, func.low_pc, func.high_pc, cfa_info);
                 }
             }
         }

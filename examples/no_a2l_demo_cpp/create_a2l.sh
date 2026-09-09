@@ -102,9 +102,9 @@ fi
 # Always a clean build: if the target has no NTP its clock may skew
 # Optionally force gnu or clang
 echo "Clean build executable on Target ..."
-#ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
+ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
 #ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=gcc CXX=g++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
-ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=clang CXX=clang++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
+#ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=clang CXX=clang++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: Build on target"
     exit 1
