@@ -46,12 +46,12 @@ Sections:
   Name: .debug_info          Addr: 0x00000000 Size: 76193 bytes Kind: Other 
   Name: .debug_abbrev        Addr: 0x00000000 Size: 8954 bytes Kind: Other 
   Name: .debug_line          Addr: 0x00000000 Size: 28096 bytes Kind: Other 
-  Name: .debug_str           Addr: 0x00000000 Size: 12949 bytes Kind: OtherString 
+  Name: .debug_str           Addr: 0x00000000 Size: 12981 bytes Kind: OtherString 
   Name: .debug_line_str      Addr: 0x00000000 Size: 1249 bytes Kind: OtherString 
   Name: .debug_loclists      Addr: 0x00000000 Size: 26215 bytes Kind: Other 
   Name: .debug_rnglists      Addr: 0x00000000 Size: 1261 bytes Kind: Other 
   Name: .symtab              Addr: 0x00000000 Size: 12432 bytes Kind: Metadata 
-  Name: .strtab              Addr: 0x00000000 Size: 6913 bytes Kind: Metadata 
+  Name: .strtab              Addr: 0x00000000 Size: 6918 bytes Kind: Metadata 
   Name: .shstrtab            Addr: 0x00000000 Size: 406 bytes Kind: Metadata 
 
 
@@ -117,7 +117,7 @@ Symbol table:
   `"evt__mainloop.10"`: addr=302f8, Symbol { name: "evt__mainloop.10", address: 197368, size: 16, kind: Data, section: Section(SectionIndex(27)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"$d"`: addr=111f8, Symbol { name: "$d", address: 70136, size: 0, kind: Unknown, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 0, st_other: 0 } }
   `"xcp_meta__comment__static_counter.12"`: addr=111f8, Symbol { name: "xcp_meta__comment__static_counter.12", address: 70136, size: 53, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
-  `"xcp_meta__comment__counter.16"`: addr=11230, Symbol { name: "xcp_meta__comment__counter.16", address: 70192, size: 45, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
+  `"xcp_meta__comment__foo__counter.16"`: addr=11230, Symbol { name: "xcp_meta__comment__foo__counter.16", address: 70192, size: 45, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"xcp_meta__comment__static_counter.17"`: addr=11260, Symbol { name: "xcp_meta__comment__static_counter.17", address: 70240, size: 52, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"xcp_meta__comment__counter.19"`: addr=11298, Symbol { name: "xcp_meta__comment__counter.19", address: 70296, size: 53, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
   `"xcp_meta__comment__static_counter.20"`: addr=112d0, Symbol { name: "xcp_meta__comment__static_counter.20", address: 70352, size: 60, kind: Data, section: Section(SectionIndex(16)), scope: Compilation, weak: false, flags: Elf { st_info: 1, st_other: 0 } }
@@ -542,7 +542,7 @@ DebugData information summary:
   Compilation units: 1 units
   Sections: 28 sections
   Endianness: Little Endian
-  Variables 71 with 62 unique names
+  Variables 71 with 63 unique names
   Demangled names: 0 entries
   Type names: 38 named types
   Types: 90 total types
@@ -591,7 +591,7 @@ calseg__params':  main_c:'<global>' : addr=0:0x00030280
 xcp_meta__min__params__delay_us':  main_c:'<global>' : addr=0:0x00011360
 xcp_meta__max__params__delay_us':  main_c:'<global>' : addr=0:0x00011358
 xcp_meta__unit__params__delay_us':  main_c:'<global>' : addr=0:0x00011350
-3 instances of 'xcp_meta__comment__counter' found, skipped
+2 instances of 'xcp_meta__comment__counter' found, skipped
 xcp_meta__read_write__counter':  main_c:'<global>' : addr=0:0x0001132C
 xcp_meta__comment__global_counter':  main_c:'<global>' : addr=0:0x00011310
 xcp_meta__read_write__global_counter':  main_c:'<global>' : addr=0:0x0001130C
@@ -601,6 +601,7 @@ evt__mainloop':  main_c:'main' : addr=0:0x000302F8
 trg__AAS__mainloop':  main_c:'main' : addr=0:0x00000000
 evt__bar':  main_c:'bar' : addr=0:0x000302E8
 trg__AAS__bar':  main_c:'bar' : addr=0:0x00000000
+xcp_meta__comment__foo__counter':  main_c:'foo' : addr=0:0x00011230
 evt__foo':  main_c:'foo' : addr=0:0x000302D8
 trg__AAS__foo':  main_c:'foo' : addr=0:0x00000000
 evt__task':  main_c:'task' : addr=0:0x000302C8
@@ -617,7 +618,7 @@ calseg__params 1:
 xcp_meta__min__params__delay_us 1: 
 xcp_meta__max__params__delay_us 1: 
 xcp_meta__unit__params__delay_us 1: 
-xcp_meta__comment__counter 3: 
+xcp_meta__comment__counter 2: 
 xcp_meta__read_write__counter 1: 
 counter 3: 
 xcp_meta__comment__global_counter 1: 
@@ -649,6 +650,7 @@ delay 2:
 trg__AAS__mainloop 1: 
 evt__bar 1: 
 trg__AAS__bar 1: 
+xcp_meta__comment__foo__counter 1: 
 test_float 1: 
 test_double 1: 
 test_uint8 1: 
@@ -842,16 +844,14 @@ Calibration segment 'params' type information found, type=params, size = 72
   Metadata xcp_meta__max__params__delay_us applied to typedef field 'params.delay_us'
   Metadata xcp_meta__unit__params__delay_us applied to typedef field 'params.delay_us'
   Metadata comment xcp_meta__comment__counter applied to instance 'counter'
-  Metadata comment xcp_meta__comment__counter applied to instance 'foo.counter'
-  Metadata comment xcp_meta__comment__counter applied to instance 'task.counter'
-  Metadata comment xcp_meta__comment__counter applied to instance 'foo.counter'
   Metadata comment xcp_meta__comment__counter applied to instance 'task.counter'
   Metadata read_write xcp_meta__read_write__counter applied to instance 'counter'
-  Metadata read_write xcp_meta__read_write__counter applied to instance 'foo.counter'
-  Metadata read_write xcp_meta__read_write__counter applied to instance 'task.counter'
   Metadata comment xcp_meta__comment__global_counter applied to instance 'global_counter'
   Metadata read_write xcp_meta__read_write__global_counter applied to instance 'global_counter'
-[WARN ] Metadata variable 'xcp_meta__comment__static_counter' address is 0
+  Metadata comment xcp_meta__comment__static_counter applied to instance 'main.static_counter'
+  Metadata comment xcp_meta__comment__static_counter applied to instance 'foo.static_counter'
+  Metadata comment xcp_meta__comment__static_counter applied to instance 'task.static_counter'
+  Metadata comment xcp_meta__comment__foo__counter applied to instance 'foo.counter'
 [INFO ] ===============================================================
 [INFO ] Write A2L file "/Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l"
 [INFO ] A2L writer: transport layer: UDP 192.168.0.206:5555

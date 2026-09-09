@@ -174,7 +174,17 @@ the tree and names the typedefs as follows:
 Each metadata macro emits a constant named `xcp_meta__<kind>__<name>` into the `xcp_meta` section, with `<kind>` one of `unit`, `min`,
 `max`, `comment` or `read_write`. After the variables are registered, the constants are matched to their A2L objects: the name is looked
 up qualified with the scope of the marker first (its namespace, or its function for a local variable), then unqualified. `__` in the name
-is the path separator for the fields of typedef instances (`params__delay_us`, `motor_control__input__speed`). Metadata never adds
+is the path separator for the fields of typedef instances (`params__delay_us`, `motor_control__input__speed`).
+
+A marker in a function annotates a variable of this function, written plain (`XCP_COMMENT(counter, ...)` in `foo` annotates `foo.counter`)
+or with the scope prefix (`XCP_COMMENT(foo__counter, ...)`). If the function has no variable of that name, the marker annotates the object
+of that name outside the function, for example a global variable used there. A marker at file scope annotates the global variable and
+never a local variable of the same name in a function, it reaches a typedef field only when no object has its plain name.
+
+GCC gives the `static const` marker constants inside a function no `DW_AT_location` and names their symbols `<name>.<number>`, so their
+addresses come from the symbol table. Markers with the same name in several functions are told apart by their size, which differs as soon
+as the annotation strings differ. Markers of the same name, function and size cannot be told apart, xcpclient warns and asks for the scope
+prefixed form. Metadata never adds
 objects, it only annotates variables which were registered from the sources above. With `--elf-skip-no-metadata` every variable without
 any annotation is removed from the A2L file, a convenient way to publish only explicitly curated signals.
 

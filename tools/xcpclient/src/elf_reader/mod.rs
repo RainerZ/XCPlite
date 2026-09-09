@@ -69,7 +69,7 @@ Useful tools to look at an ELF file while debugging this code (the GNU or LLVM v
 use indexmap::IndexMap;
 use regex::Regex;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::ffi::OsStr;
 
@@ -1164,6 +1164,9 @@ impl ElfReader {
             }
         };
         let meta_end = meta_base_addr + meta_data.len() as u64;
+
+        // The names of all functions, to keep a marker at file scope away from the local variables of a function, see below
+        let function_names: HashSet<&str> = self.debug_data.variables.values().flatten().filter_map(|v| v.function.as_deref()).collect();
         let is_le = self.debug_data.is_little_endian;
         assert!(is_le, "Big endian is not supported for meta data registration");
 
@@ -1206,7 +1209,11 @@ impl ElfReader {
                 // The name is looked up qualified with the scope of the metadata marker first, then unqualified:
                 // a marker in the same namespace as the variable (XCP_COMMENT(input, ...) in namespace motor_control) refers to motor_control.input,
                 // a marker in the same function as a local variable (XCP_COMMENT(counter, ...) in foo) refers to foo.counter.
-                // The unqualified lookup keeps markers with an explicit prefix (foo__counter) and markers at file scope working.
+                // The unqualified lookup keeps markers with an explicit prefix (foo__counter -> foo.counter), markers for the field of
+                // an instance (params__delay_us -> params.delay_us), markers in a function for a variable which is not one of its own
+                // (a global variable used there) and markers at file scope working.
+                // It is left out when the function of the marker has a variable of this name: the marker belongs to that variable and
+                // must not be applied to a global variable of the same name when the local variable is not measurable and has no instance
                 let scope = match &marker.function {
                     Some(function) => function.clone(),
                     None => marker.namespaces.join("."),
@@ -1215,7 +1222,15 @@ impl ElfReader {
                 if !scope.is_empty() {
                     candidates.push(format!("{scope}.{dot_path}"));
                 }
-                candidates.push(dot_path);
+                let names_own_variable = marker.function.is_some()
+                    && self
+                        .debug_data
+                        .variables
+                        .get(base_name)
+                        .is_some_and(|vars| vars.iter().any(|v| v.function == marker.function && v.unit_idx == marker.unit_idx));
+                if !names_own_variable {
+                    candidates.push(dot_path);
+                }
 
                 let mut applied = false;
                 for path in &candidates {
@@ -1233,18 +1248,20 @@ impl ElfReader {
                     }
 
                     // Path B — direct instance metadata (simple variable or flattened typedef)
-                    // Matches instances whose A2L name equals the path or ends with ".{path}".
-                    // The path already has . separators so it matches both "delay_us" and "params.delay_us".
-                    // A marker in a function refers to a variable of this function only: the qualified candidate covers a prefixed
-                    // static local (foo.static_counter), the exact path an unprefixed one (static_counter) or an explicit prefix
-                    // (foo__counter). The wildcard prefix would attach the marker to a same-named variable in another function.
+                    // The instance with exactly this name first: a marker in a function refers to a variable of this function only,
+                    // the qualified candidate covers a prefixed static local (foo.static_counter), the exact path an unprefixed one
+                    // (static_counter) or an explicit prefix (foo__counter). A marker at file scope names the global variable
+                    // (counter) and not the local variables of the same name in functions (foo.counter, task.counter).
                     let escaped = path.replace('.', "\\.");
-                    let pattern = if marker.function.is_some() {
-                        format!(r"^{}$", escaped)
-                    } else {
-                        format!(r"^(.*\.)?{}$", escaped)
-                    };
-                    let names: Vec<String> = reg.instance_list.find_instances_regex(&pattern, McObjectType::Unspecified, None);
+                    let mut names: Vec<String> = reg.instance_list.find_instances_regex(&format!(r"^{escaped}$"), McObjectType::Unspecified, None);
+
+                    // A marker at file scope with no instance of this name also matches an instance whose name ends with ".{path}",
+                    // which is how a marker reaches a field of a typedef instance (delay_us -> params.delay_us). Instances qualified
+                    // with a function name are excluded, the local variables of a function are named by a marker in that function
+                    if names.is_empty() && marker.function.is_none() {
+                        names = reg.instance_list.find_instances_regex(&format!(r"^(.*\.)?{escaped}$"), McObjectType::Unspecified, None);
+                        names.retain(|name| !name.split_once('.').is_some_and(|(prefix, _)| function_names.contains(prefix)));
+                    }
                     for name in &names {
                         if let Some(inst) = reg.instance_list.get_instance_mut(name, None) {
                             apply_instance_metadata(inst, kind, meta_data, offset, is_le);
@@ -1389,6 +1406,8 @@ mod test {
     const CPP_TYPE_NAME_COLLISIONS_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_type_name_collisions.elf");
     // C test fixture with two compilation units, see fixtures/c_local_types_a.c (GCC 12.3 arm-none-eabi, DWARF 5)
     const C_LOCAL_TYPES_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_local_types.elf");
+    // C test fixture with metadata markers of local variables, see fixtures/c_meta_markers.c (GCC 12.3 arm-none-eabi, DWARF 5, -O1)
+    const C_META_MARKERS_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_meta_markers.elf");
     // C test fixture with an inlined function, see fixtures/c_inlined_function.c, built with GCC 12.3 arm-none-eabi (-O2) and with clang
     const C_INLINED_FUNCTION_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_inlined_function.elf");
     const C_INLINED_FUNCTION_CLANG_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_inlined_function_clang.elf");
@@ -1596,6 +1615,72 @@ mod test {
         assert!(instance("bar.test_float").is_none());
         let bar_id = reg.event_list.find_event("bar", 0).unwrap().get_id();
         assert_eq!(instance("bar.static_counter").expect("bar.static_counter").event_id(), Some(bar_id));
+    }
+
+    // Metadata markers of local variables: a marker at file scope belongs to the global variable and not to the local variables of
+    // the same name in functions, a marker in a function to the variable of this function, written in the plain form (task) or with
+    // the scope prefix (foo). GCC gives the markers in a function no DW_AT_location, their addresses come from the symbol table,
+    // the two markers named static_counter are told apart by their size
+    #[test]
+    fn test_register_metadata_local_variable_markers() {
+        let elf_reader = ElfReader::new(C_META_MARKERS_ELF, 0, usize::MAX).expect("failed to load fixtures/c_meta_markers.elf");
+        let mut reg = Registry::new();
+        elf_reader.register_events(&mut reg, 0).unwrap();
+        elf_reader.register_event_locations(&mut reg, 0).unwrap();
+        elf_reader.register_variables(&mut reg, false, 0, usize::MAX, "", "", None).unwrap();
+        elf_reader.register_metadata(&mut reg, 0).unwrap();
+
+        let comment = |name: &str| {
+            reg.instance_list
+                .get_instance(name, McObjectType::Measurement, None)
+                .unwrap_or_else(|| panic!("instance '{name}' not registered"))
+                .comment()
+        };
+        assert_eq!(comment("counter"), "Global measurement variable");
+        assert_eq!(comment("task.counter"), "Local measurement variable in thread function task");
+        assert_eq!(comment("foo.counter"), "Local measurement variable in function foo");
+        assert_eq!(comment("task.static_counter"), "Static local measurement variable in thread function task");
+        assert_eq!(comment("foo.static_counter"), "Local static measurement variable in function foo");
+    }
+
+    // A marker at file scope which names no instance reaches the field of a typedef instance (delay_us -> params.delay_us),
+    // but never a local variable of a function (foo.counter), which is named by a marker in that function
+    #[test]
+    fn test_register_metadata_file_scope_marker_fallback() {
+        let meta_base: u64 = 0xF000;
+        let meta: Vec<u8> = b"Delay Counter in foo ".to_vec(); // offsets 0 and 6
+        let marker = |addr: u64, function: Option<&str>| {
+            vec![VarInfo {
+                address: (0, addr),
+                typeref: 0,
+                unit_idx: 0,
+                function: function.map(str::to_string),
+                namespaces: Vec::new(),
+                inlined: false,
+                frame_base: FrameBase::Cfa,
+            }]
+        };
+        let mut debug_data = empty_debug_data();
+        debug_data.xcp_meta_data = Some((meta_base, meta));
+        debug_data.variables.insert("xcp_meta__comment__delay_us".to_string(), marker(meta_base, None));
+        debug_data.variables.insert("xcp_meta__comment__counter".to_string(), marker(meta_base + 6, None));
+        debug_data.variables.insert("counter".to_string(), marker(0x30400, Some("foo"))); // makes 'foo' a known function name
+        let elf = ElfReader::from_debug_data(debug_data);
+
+        let mut reg = Registry::new();
+        let measurement = || McSupportData::new(McObjectType::Measurement);
+        let ulong = || McDimType::new(McValueType::Ulong, 1, 1);
+        reg.instance_list
+            .add_instance("params.delay_us", ulong(), measurement(), McAddress::new_a2l(0x30388, 0))
+            .unwrap();
+        reg.instance_list
+            .add_instance("foo.counter", ulong(), measurement(), McAddress::new_a2l(0x30400, 2))
+            .unwrap();
+        elf.register_metadata(&mut reg, 0).unwrap();
+
+        let comment = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None).unwrap().comment();
+        assert_eq!(comment("params.delay_us"), "Delay");
+        assert_eq!(comment("foo.counter"), "");
     }
 
     // Global variables get the default event when one is specified, otherwise no event

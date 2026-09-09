@@ -196,7 +196,7 @@ XCP_NOINLINE void foo(void) {
     volatile static uint16_t static_counter = 0;
 
     // Local measurement variable
-    XCP_COMMENT(counter, "Local measurement variable in function `foo`"); // Example for meta data annotation as code
+    XCP_COMMENT(foo__counter, "Local measurement variable in function `foo`"); // Example for meta data annotation as code
     volatile uint32_t counter = 0;
 
     // More local measurement variables

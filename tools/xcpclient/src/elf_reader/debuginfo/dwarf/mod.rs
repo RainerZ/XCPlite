@@ -87,17 +87,18 @@ pub(crate) struct UnitList<'a> {
 struct DebugDataReader<'elffile> {
     dwarf: Dwarf<EndianSlice<'elffile, RunTimeEndian>>, // the .debug_* sections, the entry point to everything gimli reads
     verbose: usize,
-    units: UnitList<'elffile>,                   // the compilation units seen so far, filled while load_variables iterates
-    unit_names: Vec<Option<String>>,             // DW_AT_name of each unit, by unit index
-    endian: Endianness,                          // byte order of the target, needed for bitfield offsets
-    sections: HashMap<String, (u64, u64)>,       // ELF section name -> (start, end)
-    architecture: object::Architecture,          // target architecture, for the frame pointer register (FrameBase)
-    epk_string: Option<String>,                  // content of the xcp_epk section, the EPK version string of the application
-    epk_addr: u64,                               // address of the xcp_epk section, 0 if there is none
-    symbol_addresses: HashMap<String, u64>,      // ELF symbol table: name -> address, for variables without a DWARF location
-    global_symbol_names: HashSet<String>,        // names of the symbols with global (or weak) binding
-    function_symbol_names: HashMap<u64, String>, // address -> mangled name of a C++ function symbol
-    xcp_meta_data: Option<(u64, Vec<u8>)>,       // (section_base_addr, raw_bytes)
+    units: UnitList<'elffile>,                              // the compilation units seen so far, filled while load_variables iterates
+    unit_names: Vec<Option<String>>,                        // DW_AT_name of each unit, by unit index
+    endian: Endianness,                                     // byte order of the target, needed for bitfield offsets
+    sections: HashMap<String, (u64, u64)>,                  // ELF section name -> (start, end)
+    architecture: object::Architecture,                     // target architecture, for the frame pointer register (FrameBase)
+    epk_string: Option<String>,                             // content of the xcp_epk section, the EPK version string of the application
+    epk_addr: u64,                                          // address of the xcp_epk section, 0 if there is none
+    symbol_addresses: HashMap<String, u64>,                 // ELF symbol table: name -> address, for variables without a DWARF location
+    local_static_symbols: HashMap<String, Vec<(u64, u64)>>, // the symbols of the static variables in functions: variable name -> [(address, size)], see resolve_local_static_addresses
+    global_symbol_names: HashSet<String>,                   // names of the symbols with global (or weak) binding
+    function_symbol_names: HashMap<u64, String>,            // address -> mangled name of a C++ function symbol
+    xcp_meta_data: Option<(u64, Vec<u8>)>,                  // (section_base_addr, raw_bytes)
     is_little_endian: bool,
     scope_parent: HashMap<usize, usize>, // .debug_info offset of a named type or scope -> offset of its enclosing scope (namespace, struct, class, union or function)
 }
@@ -189,6 +190,7 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: u
         epk_string,
         epk_addr,
         symbol_addresses: get_symbol_addresses(&elffile),
+        local_static_symbols: get_local_static_symbols(&elffile),
         global_symbol_names: get_global_symbol_names(&elffile),
         function_symbol_names: get_function_symbol_names(&elffile),
         xcp_meta_data,
@@ -294,6 +296,27 @@ fn get_symbol_addresses(elffile: &object::read::File) -> HashMap<String, u64> {
         if addr != 0 {
             map.insert(name.to_string(), addr);
         }
+    }
+    map
+}
+
+// The symbols of the static variables in functions, by the name of the variable: GCC names them <name>.<number> (the number
+// disambiguates the variables of the same name in different functions, it is unrelated to anything in the DWARF), clang names
+// them <function>.<name>, which the unique suffix search finds. Only symbols with local binding are collected, a global symbol
+// belongs to a different variable. See resolve_local_static_addresses
+fn get_local_static_symbols(elffile: &object::read::File) -> HashMap<String, Vec<(u64, u64)>> {
+    let mut map: HashMap<String, Vec<(u64, u64)>> = HashMap::new();
+    for symbol in elffile.symbols().filter(|symbol| !symbol.is_global() && symbol.address() != 0) {
+        let Ok(name) = symbol.name() else {
+            continue;
+        };
+        let Some((var_name, suffix)) = name.rsplit_once('.') else {
+            continue;
+        };
+        if var_name.is_empty() || suffix.is_empty() || !suffix.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        map.entry(var_name.to_string()).or_default().push((symbol.address(), symbol.size()));
     }
     map
 }
@@ -404,7 +427,12 @@ impl DebugDataReader<'_> {
         {
             return Some(addr);
         }
-        if let Some(addr) = self.symbol_address(var_name, local_only) {
+        // A symbol with exactly the name of a variable which is local to a function belongs to a different variable, a static at
+        // file scope with the same name (both have local binding, so global_symbol_names does not tell them apart). The symbol of
+        // a static variable in a function is <name>.<number> under GCC, it is resolved in resolve_local_static_addresses
+        if !(local_only && self.local_static_symbols.contains_key(var_name))
+            && let Some(addr) = self.symbol_address(var_name, local_only)
+        {
             return Some(addr);
         }
         // GCC emits no linkage name for variables with internal linkage in a namespace (static const in a namespace, e.g. the XCP_COMMENT
@@ -425,15 +453,67 @@ impl DebugDataReader<'_> {
         {
             return Some(addr);
         }
+        // The address of a static variable in a function which has a <name>.<number> symbol is resolved in
+        // resolve_local_static_addresses, where the size of the variable is known. The suffix search below would find the
+        // file scope static of the same name, whose symbol name ends with the variable name as well
+        if local_only && self.local_static_symbols.contains_key(var_name) {
+            return None;
+        }
         self.resolve_address_by_unique_suffix(var_name, local_only)
+    }
+
+    // Resolve the addresses of the static variables in functions which have no DW_AT_location, from the symbols GCC names
+    // <name>.<number> (see get_local_static_symbols). GCC emits no location for a static const variable in a function, which is
+    // how the metadata markers (XCP_COMMENT in inc/xcplib.h) inside a function are declared, so without this they are all lost.
+    // The number in the symbol name has no relation to the DWARF, several variables of the same name in different functions can
+    // only be told apart by their size. This runs after the types are loaded, because the size of the variable is needed
+    fn resolve_local_static_addresses(&self, variables: &mut IndexMap<String, Vec<VarInfo>>, types: &HashMap<usize, TypeInfo>) {
+        for (var_name, var_infos) in variables.iter_mut() {
+            let Some(symbols) = self.local_static_symbols.get(var_name) else {
+                continue;
+            };
+            // Only variables local to a function and without an address, the ones with a location are already resolved
+            let unresolved = var_infos.iter().filter(|v| v.address == (0, 0) && v.function.is_some()).count();
+            if unresolved == 0 {
+                continue;
+            }
+            for var_info in var_infos.iter_mut().filter(|v| v.address == (0, 0) && v.function.is_some()) {
+                // The size of the variable identifies the symbol when several static variables of this name exist, and confirms
+                // the symbol when there is only one. A symbol without size and a variable whose type is not known are accepted
+                let size = types.get(&var_info.typeref).map(TypeInfo::get_size);
+                let mut matching = symbols.iter().filter(|(_, symbol_size)| *symbol_size == 0 || size.is_none_or(|s| s == *symbol_size));
+                let address = matching.next().filter(|_| matching.next().is_none()).map(|(addr, _)| *addr);
+                match address {
+                    Some(addr) => {
+                        log::debug!(
+                            "Static variable '{}' in function {:?} resolved to {:#x} from the symbol table",
+                            var_name,
+                            var_info.function,
+                            addr
+                        );
+                        var_info.address = (0, addr);
+                    }
+                    None => log::warn!(
+                        "Static variable '{}' in function {:?} has no address, its symbol can not be identified: several static \
+                         variables of this name and size, or none of the matching size. A metadata marker for it is lost, \
+                         use the scope prefixed marker name ('{}__{}')",
+                        var_name,
+                        var_info.function,
+                        var_info.function.as_deref().unwrap_or(""),
+                        var_name
+                    ),
+                }
+            }
+        }
     }
 
     // Traverse DWARF entries and finalize collected parser state into DebugData.
     // The order matters: the variables are loaded first, then only the types referenced by variables (loading all types of a
     // large ELF file would take far longer), then the scope qualified names of the types whose plain name is ambiguous
     fn collect_debug_data(mut self, unit_idx_limit: usize) -> DebugData {
-        let variables = self.load_variables(unit_idx_limit);
+        let mut variables = self.load_variables(unit_idx_limit);
         let (types, typenames) = self.load_types(&variables);
+        self.resolve_local_static_addresses(&mut variables, &types);
         let qualified_type_names = self.load_qualified_type_names(&types, &typenames);
         let varname_list: Vec<&String> = variables.keys().collect();
         let demangled_names = demangle_cpp_varnames(&varname_list);
