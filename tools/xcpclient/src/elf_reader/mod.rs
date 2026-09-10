@@ -125,6 +125,12 @@ Possible future improvements:
 mod debuginfo;
 use debuginfo::{DbgDataType, DebugData, FrameBase, TypeInfo, VarInfo};
 
+// The name of the variable a capture struct member was copied from: the macro appends one underscore to it, so exactly one
+// trailing underscore is removed here, and a variable which ends with an underscore itself keeps it
+fn capture_member_variable_name(member_name: &str) -> &str {
+    member_name.strip_suffix('_').unwrap_or(member_name)
+}
+
 // Variables which never become A2L objects: the internals of the compiler and of the standard library, the global XCPlite
 // variables and the marker variables of the sections and macros (see the module comment)
 fn is_internal_variable(name: &str) -> bool {
@@ -1224,7 +1230,7 @@ impl ElfReader {
                     && let DbgDataType::Struct { members, .. } = &type_info.datatype
                 {
                     for member_name in members.keys() {
-                        names.insert((var_info.unit_idx, function, member_name.as_str()));
+                        names.insert((var_info.unit_idx, function, capture_member_variable_name(member_name)));
                     }
                 }
             }
@@ -1288,7 +1294,9 @@ impl ElfReader {
             info!("Capture of event '{}' in function '{}' with {} variables", event_name, function, members.len());
 
             for (member_name, (member_type, offset)) in members {
-                let a2l_name = format!("{}.{}", function, member_name);
+                // The macro appends one underscore to the name of the variable, see XCP_CAP_MEMBER in inc/xcplib.h
+                let var_name = capture_member_variable_name(member_name);
+                let a2l_name = format!("{}.{}", function, var_name);
 
                 // A member of struct or union type refers to the loaded type instead of repeating it, see the type reader
                 let member_type = match &member_type.datatype {
@@ -1340,10 +1348,7 @@ impl ElfReader {
                 }
                 let dim_type = self.get_dim_type(reg, member_type, McObjectType::Measurement);
                 match reg.instance_list.add_instance(a2l_name.clone(), dim_type, mc_support_data, mc_addr) {
-                    Ok(_) => info!(
-                        "Captured variable '{}' in function '{}', event id = {}, offset = {}",
-                        member_name, function, event_id, offset
-                    ),
+                    Ok(_) => info!("Captured variable '{}' in function '{}', event id = {}, offset = {}", var_name, function, event_id, offset),
                     Err(e) => error!("Failed to register captured variable '{}': {}", a2l_name, e),
                 }
             }

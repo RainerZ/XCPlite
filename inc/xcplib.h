@@ -628,8 +628,9 @@ extern const uint8_t *gXcpBaseAddr;
 // The capture struct is alive while the event is triggered, which is when the XCP server reads it, synchronously for DAQ and
 // asynchronously for polling (the pending command is executed in the trigger).
 // Restrictions: up to XCP_CAPTURE_MAX_COUNT variables, each given as a plain identifier of a local variable, a parameter or a
-// global variable. Bitfield members can not be captured, const qualified variables only in C++, where the const is removed.
-// Not available with MSVC. In C++ the captured objects must be trivially copyable, they are copied byte wise.
+// global variable. Bitfield members can not be captured, and const qualified variables only in C, in C++ a const member would
+// leave the capture struct without a default constructor. Not available with MSVC.
+// In C++ the captured objects must be trivially copyable, they are copied byte wise.
 // A function with a capture may be inlined, unlike a function which measures its local variables on the stack.
 
 #define XCP_CAPTURE_MAX_COUNT 16
@@ -660,26 +661,18 @@ extern const uint8_t *gXcpBaseAddr;
 #define XCP_CAP_FE_16(m, c, x, ...) m(c, x) XCP_CAP_FE_15(m, c, __VA_ARGS__)
 #define XCP_CAP_FOR_EACH(m, c, ...) XCP_CAP_CAT(XCP_CAP_FE_, XCP_CAP_NARG(__VA_ARGS__))(m, c, __VA_ARGS__)
 
-// One pointer per captured variable, declared before the capture struct. The member below is declared with the type the pointer
-// points to, because the type expression must not name the variable inside the struct: in C++ a name must not change its meaning
-// within a class scope, and a member declared with the name of the variable in its own type expression does exactly that (GCC
-// rejects it). The pointer is optimized away and does not force the variable into memory.
-// C++ removes the const qualifier here, a const member would leave the capture struct without a default constructor, and resolves
-// a reference variable to the type of the object it refers to, see the definition of XCP_CAP_PTR in xcplib.hpp
-#ifndef __cplusplus
-#define XCP_CAP_PTR(c, x) __typeof__(x) *xcp_cap_p__##x = &(x);
-#endif
-
-// One struct member per captured variable, with the name of the variable and the type of the pointer target
-#define XCP_CAP_MEMBER(c, x) __typeof__(*xcp_cap_p__##x) x;
+// One struct member per captured variable, with the type of the variable and its name with a trailing underscore. The trailing
+// underscore is needed in C++: a name must not change its meaning within a class scope, and a member named like the variable in
+// its own type expression does exactly that, GCC rejects it. The offline A2L generator removes the trailing underscore again and
+// registers the member with the name of the variable, see docs/OFFLINE_A2L.md
+#define XCP_CAP_MEMBER(c, x) __typeof__(x) x##_;
 
 // Copy one variable into the capture struct. The casts avoid a discarded qualifier warning for a volatile variable, the builtin
 // is expanded inline for the constant size, so the address of the variable does not force it into memory
-#define XCP_CAP_COPY(c, x) __builtin_memcpy((void *)&(c).x, (const void *)&(x), sizeof(x));
+#define XCP_CAP_COPY(c, x) __builtin_memcpy((void *)&(c).x##_, (const void *)&(x), sizeof(x));
 
 // Declare the capture struct cap__<event_name> and fill it
 #define XCP_CAPTURE(event_name, ...)                                                                                                                                               \
-    XCP_CAP_FOR_EACH(XCP_CAP_PTR, 0, __VA_ARGS__)                                                                                                                                  \
     struct {                                                                                                                                                                       \
         XCP_CAP_FOR_EACH(XCP_CAP_MEMBER, 0, __VA_ARGS__)                                                                                                                           \
     } cap__##event_name;                                                                                                                                                           \

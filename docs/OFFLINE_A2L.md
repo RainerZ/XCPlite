@@ -137,12 +137,13 @@ of address extension 3. The originals stay in their registers, the copy of a sca
 
 The generator takes the DWARF type of `cap__<event>`, which is a struct with one member per captured variable, and registers every member
 as a measurement named `<function>.<member>`, with the event of the trigger as fixed event, address extension 3 and the offset of the
-member in the struct as address. The measurements look exactly like the stack frame relative ones, the metadata markers of the captured
+member in the struct as address. The member is named like the variable with one trailing underscore, which the generator removes again:
+a member may not be named like the variable used in its own type expression, C++ forbids it. The measurements look exactly like the stack frame relative ones, the metadata markers of the captured
 variables work unchanged. A variable which is captured is not registered a second time as a stack frame relative variable.
 
-The macros work in C and in C++. In C++ a reference variable is captured as the object it refers to and a `const` variable as its
-value, the copy is byte wise so the captured objects must be trivially copyable. In C a `const` variable can not be captured, and in
-both languages a bitfield member can not.
+The macros work in C and in C++. In C++ a reference variable is captured as the object it refers to, and the captured objects must be
+trivially copyable, since they are copied byte wise. A `const` variable can only be captured in C, in C++ a const member would leave the
+capture struct without a default constructor. A bitfield member can not be captured in either language.
 
 Captured variables do not depend on the stack frame of their function, so a function which only captures may be inlined. Asynchronous
 access (polling) works like for any other event based relative address, the pending command is executed in the next trigger of the event,

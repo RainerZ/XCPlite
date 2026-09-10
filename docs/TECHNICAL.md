@@ -136,8 +136,9 @@ static tXcpEventId trg__<modes>__name;          // in the function which trigger
 // Metadata, from XCP_COMMENT(name, text), XCP_UNIT(name, unit), XCP_LIMITS(name, min, max), XCP_READ_WRITE(name)
 static const char xcp_meta__comment__name[];    // in section xcp_meta, also xcp_meta__unit__, xcp_meta__min__, xcp_meta__max__, xcp_meta__read_write__
 
-// Capture struct, from DaqTriggerEventCapture(event, var, ...), one member per captured variable
-struct { __typeof__(var) var; ... } cap__event;
+// Capture struct, from DaqTriggerEventCapture(event, var, ...), one member per captured variable,
+// named like the variable with a trailing underscore, which an A2L tool removes again
+struct { __typeof__(var) var_; ... } cap__event;
 ```
 
 ### `xcp_evts` section — event descriptors
@@ -196,7 +197,7 @@ The letters between `trg__` and the trailing `__name` form a sequence where
 | `C` | any | **Calibration-segment relative** — offset within a named `CalSeg` |
 | `S` | 2 | **Stack frame relative** — offset from `xcp_get_frame_addr()` |
 | `D` | 3+ | **Dynamic** — offset from an individually supplied base pointer; supports both synchronous and asynchronous access |
-| `R` | 3 | **Capture struct relative** — offset of a member in the capture struct `cap__<event>` which the trigger passes as base pointer, a `D` slot with a known layout |
+| `R` | 3 | **Capture struct relative** — offset of a member in the capture struct `cap__<event>` which the trigger passes as base pointer, a `D` slot with a known layout. The member names carry a trailing underscore |
 
 The trailing `__name` (double underscore) identifies the event and separates it from the
 mode sequence so a tool can split them unambiguously.

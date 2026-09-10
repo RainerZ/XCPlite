@@ -281,22 +281,10 @@ template <typename T> class CalBlk {
 /// Usage: auto calval = CalVal(initial_value);
 #define CalBlkCreate(value) xcp::CalBlk<decltype(value)>(#value, &value)
 
-// Pointer to a captured variable of the capture macros (DaqTriggerEventCapture in xcplib.h), see XCP_CAP_PTR below.
-// The overloads deduce the type of the variable and remove the const qualifier from it, without naming any helper type: a const
-// member would leave the capture struct without a default constructor, and a helper type would appear as the type of the member
-// in the debug information and in the A2L file instead of the type of the variable
-template <typename T> inline T *cap_ptr(T *p) { return p; }
-template <typename T> inline T *cap_ptr(const T *p) { return const_cast<T *>(p); }
-
 } // namespace xcp
 
 // =============================================================================
 // Helper macros
-
-// One pointer per captured variable of the capture macros (DaqTriggerEventCapture in xcplib.h), see XCP_CAP_MEMBER there.
-// A reference variable resolves to the object it refers to, taking its address gives a pointer to that object, and xcp::cap_ptr
-// removes the const qualifier of a const variable
-#define XCP_CAP_PTR(c, x) auto *xcp_cap_p__##x = xcp::cap_ptr(&(x));
 
 // Portable always inline attribute for C++
 // Critical for functions that use xcp_get_frame_addr() to ensure they capture the caller's stack frame

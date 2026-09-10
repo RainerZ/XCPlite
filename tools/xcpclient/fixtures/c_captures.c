@@ -1,7 +1,7 @@
 // C test fixture for the xcpclient unit tests in src/elf_reader/mod.rs (mod test).
-// Covers the captured local variables of an event trigger: the pointers, the struct cap__<event> and the trigger marker
-// trg__AASR__<event> as the macro DaqTriggerEventCapture (inc/xcplib.h) emits them, written out here because the fixture can not
-// include xcplib.h.
+// Covers the captured local variables of an event trigger: the struct cap__<event> with one member per captured variable, named
+// like the variable with a trailing underscore, and the trigger marker trg__AASR__<event>, as the macro DaqTriggerEventCapture
+// (inc/xcplib.h) emits them, written out here because the fixture can not include xcplib.h.
 //   - task: captured variables which stay in registers, a variable which is only on the stack (stack_var) and a variable which is
 //     captured although it is on the stack as well (both), where the capture wins
 //   - foo: a capture in a function which the compiler inlines, the captured variables are measurable nevertheless
@@ -39,20 +39,16 @@ __attribute__((noinline)) void task(uint32_t n) {
         stack_var = (uint16_t)counter;
         both = counter;
         {
-            __typeof__(counter) *xcp_cap_p__counter = &(counter);
-            __typeof__(ratio) *xcp_cap_p__ratio = &(ratio);
-            __typeof__(flags) *xcp_cap_p__flags = &(flags);
-            __typeof__(both) *xcp_cap_p__both = &(both);
             struct {
-                __typeof__(*xcp_cap_p__counter) counter;
-                __typeof__(*xcp_cap_p__ratio) ratio;
-                __typeof__(*xcp_cap_p__flags) flags;
-                __typeof__(*xcp_cap_p__both) both;
+                __typeof__(counter) counter_;
+                __typeof__(ratio) ratio_;
+                __typeof__(flags) flags_;
+                __typeof__(both) both_;
             } cap__task;
-            __builtin_memcpy((void *)&cap__task.counter, (const void *)&(counter), sizeof(counter));
-            __builtin_memcpy((void *)&cap__task.ratio, (const void *)&(ratio), sizeof(ratio));
-            __builtin_memcpy((void *)&cap__task.flags, (const void *)&(flags), sizeof(flags));
-            __builtin_memcpy((void *)&cap__task.both, (const void *)&(both), sizeof(both));
+            __builtin_memcpy((void *)&cap__task.counter_, (const void *)&(counter), sizeof(counter));
+            __builtin_memcpy((void *)&cap__task.ratio_, (const void *)&(ratio), sizeof(ratio));
+            __builtin_memcpy((void *)&cap__task.flags_, (const void *)&(flags), sizeof(flags));
+            __builtin_memcpy((void *)&cap__task.both_, (const void *)&(both), sizeof(both));
             static const tXcpEventDescriptor __attribute__((section("xcp_evts"), used)) evt__task = {"task", 0, 0, {0}};
             static volatile uint16_t __attribute__((used)) trg__AASR__task = 0;
             XcpEventExt_Var(trg__AASR__task, 2, xcp_get_frame_addr(), (const uint8_t *)&cap__task);
@@ -65,11 +61,10 @@ __attribute__((noinline)) void task(uint32_t n) {
 __attribute__((always_inline)) void foo(void) {
     uint32_t counter = input();
     {
-        __typeof__(counter) *xcp_cap_p__counter = &(counter);
         struct {
-            __typeof__(*xcp_cap_p__counter) counter;
+            __typeof__(counter) counter_;
         } cap__foo;
-        __builtin_memcpy((void *)&cap__foo.counter, (const void *)&(counter), sizeof(counter));
+        __builtin_memcpy((void *)&cap__foo.counter_, (const void *)&(counter), sizeof(counter));
         static const tXcpEventDescriptor __attribute__((section("xcp_evts"), used)) evt__foo = {"foo", 0, 0, {0}};
         static volatile uint16_t __attribute__((used)) trg__AASR__foo = 0;
         XcpEventExt_Var(trg__AASR__foo, 2, xcp_get_frame_addr(), (const uint8_t *)&cap__foo);
