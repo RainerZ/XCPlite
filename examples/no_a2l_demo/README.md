@@ -149,11 +149,11 @@ cmake --build build-no_a2l
 # and are rejected by xcpclient, see create_a2l.sh for a remote build on a Linux target
 # Example:
 # Add all variables
-xcpclient  --offline --elf build-no_a2l/no_a2l_demo --a2l no_a2l_demo.a2l --create-a2l --verbose 1
+xcpclient  --offline --elf build-no_a2l/no_a2l_demo --a2l no_a2l_demo.a2l --create-a2l --default-event=mainloop --verbose 1
 # Add the given IP address:port and protocol to the generated A2L file
-xcpclient --udp --dest-addr 192.168.0.206  --offline --elf build-no_a2l/no_a2l_demo  --a2l no_a2l_demo.a2l  --create-a2l 
+xcpclient --udp --dest-addr 192.168.0.206  --offline --elf build-no_a2l/no_a2l_demo  --a2l no_a2l_demo.a2l  --create-a2l --default-event=mainloop
 # Filter on specific variables and compilation units
-xcpclient --offline --udp --dest-addr 192.168.0.206 --elf build-no_a2l/no_a2l_demo   --a2l no_a2l_demo.a2l --create-a2l --elf-unit-filter main --elf-var-filter "^(counter|params)"
+xcpclient --offline --udp --dest-addr 192.168.0.206 --elf build-no_a2l/no_a2l_demo   --a2l no_a2l_demo.a2l --create-a2l --default-event=mainloop --elf-unit-filter main --elf-var-filter "^(counter|params)"
 
 
 # Connect to the XCP on UDP server on 192.168.0.206:5555, upload ELF file from target (requires OPTION_ENABLE_ELF_UPLOAD) and create the A2L file

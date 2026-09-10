@@ -219,20 +219,20 @@ XCP_NOINLINE void foo(void) {
     // More local measurement variables
 
     // Measured via capture
-    float test_float = 0.1f;
-    double test_double = 0.2;
+    float test_float = 0.001f * static_counter;
+    double test_double = 0.002 * static_counter;
     uint8_t test_uint8 = 1;
-    uint16_t test_uint16 = 2;
-    uint32_t test_uint32 = 3;
-    uint64_t test_uint64 = 4;
-    struct test_struct test_struct = {1, -2, 0.3f, {1, 2, 3}};
-    uint8_t test_array[3] = {1, 2, 3};
+    uint16_t test_uint16 = static_counter + 2;
+    uint32_t test_uint32 = static_counter + 3;
+    uint64_t test_uint64 = static_counter + 4;
+    struct test_struct test_struct = {1, -2, 0.003f * static_counter, {1, 2, 3}};
+    uint8_t test_array[3] = {1, 2, static_counter & 0xff};
 
     // Measure directly from stack, registers spilled to stack
-    XCP_MEAS int8_t test_int8 = -1;
-    XCP_MEAS int16_t test_int16 = -2;
-    XCP_MEAS int32_t test_int32 = -3;
-    XCP_MEAS uint64_t test_int64 = 1;
+    XCP_MEAS int8_t test_int8 = static_counter - 1;
+    XCP_MEAS int16_t test_int16 = static_counter -2;
+    XCP_MEAS int32_t test_int32 = static_counter -3;
+    XCP_MEAS uint64_t test_int64 = static_counter -4;
 
     static_counter = static_counter + 1;
     counter = static_counter;

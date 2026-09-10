@@ -779,7 +779,7 @@ bool clockInit(void) {
         char ts[64]; // @@@@ STACK buffer for clock value
         t = clockGet();
         clockGetString(ts, sizeof(ts), t);
-        printf("  Now = %I64u (%I64u per us) %s\n", t, (CLOCK_TICKS_PER_S / 1000000), ts);
+        printf("  Now = %" PRIu64 " (%" PRIu64 " per us) %s\n", t, (uint64_t)(CLOCK_TICKS_PER_S / 1000000), ts);
     }
 #endif
 

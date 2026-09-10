@@ -69,17 +69,17 @@
 #include <unistd.h> // for getpid()
 #endif
 
-#include "dbg_print.h"   // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
+#include "dbg_print.h" // for DBG_LEVEL, DBG_PRINT3, DBG_PRINTF4, DBG...
 #ifdef OPTION_ENABLE_PERSISTENCE
 #include "persistence.h" // for XcpBinFreezeCalSeg
 #endif
-#include "platform.h"    // for atomics
-#include "queue.h"       // for QueueXxx transport queue layer interface
+#include "platform.h" // for atomics
+#include "queue.h"    // for QueueXxx transport queue layer interface
 #ifdef OPTION_SHM_MODE
 #include "shm.h" // for shared memory management, declares nothing outside SHM mode
 #endif
-#include "xcp.h"         // XCP protocol definitions
-#include "xcptl.h"       // for transport layer abstraction XcpTlWaitForTransmitQueueEmpty and XcpTlSendCrm
+#include "xcp.h"   // XCP protocol definitions
+#include "xcptl.h" // for transport layer abstraction XcpTlWaitForTransmitQueueEmpty and XcpTlSendCrm
 
 #ifdef OPTION_CAL_SEGMENTS
 #include "cal.h" // for XcpCalSegXxx
@@ -1015,7 +1015,7 @@ uint16_t XcpGetEventCount(void) {
     const tXcpEventDescriptor *begin = __start_xcp_evts;
     const tXcpEventDescriptor *end = __stop_xcp_evts;
     if (begin != NULL && end != NULL && begin < end) {
-        return (end - begin);
+        return ((uint16_t)(end - begin));
     } else {
         return 0;
     }
@@ -2621,7 +2621,7 @@ static uint8_t XcpAsyncCommand(bool async, const uint32_t *cmdBuf, uint8_t cmdLe
             check_error(XcpAddOdtEntry(CRO_WRITE_DAQ_ADDR, CRO_WRITE_DAQ_EXT, CRO_WRITE_DAQ_SIZE));
         } break;
 
-#if XCP_PROTOCOL_LAYER_VERSION >= 0x0101        
+#if XCP_PROTOCOL_LAYER_VERSION >= 0x0101
         case CC_WRITE_DAQ_MULTIPLE: {
             check_len(CRO_WRITE_DAQ_MULTIPLE_LEN(1));
             uint8_t n = CRO_WRITE_DAQ_MULTIPLE_NODAQ;
@@ -2852,13 +2852,13 @@ static uint8_t XcpAsyncCommand(bool async, const uint32_t *cmdBuf, uint8_t cmdLe
                 CRM_GET_DAQ_CLOCK_SYNCH_STATE = ApplXcpGetClockState();
 #endif
                 if (CRM_LEN > XCPTL_MAX_CTO_SIZE)
-                    error(CRC_CMD_UNKNOWN); // Extended mode needs enough CTO size
-            } else {                                                                 // Legacy format
+                    error(CRC_CMD_UNKNOWN);                                   // Extended mode needs enough CTO size
+            } else {                                                          // Legacy format
                 CRM_GET_DAQ_CLOCK_PAYLOAD_FMT = DAQ_CLOCK_PAYLOAD_FMT_SLV_32; // FMT_XCP_SLV = size of timestamp is DWORD
                 CRM_LEN = CRM_GET_DAQ_CLOCK_LEN;
                 CRM_GET_DAQ_CLOCK_TIME = (uint32_t)ApplXcpGetClock64();
             }
-#endif                                                                        // >= 0x0103            
+#endif // >= 0x0103
         } break;
 
 #if XCP_PROTOCOL_LAYER_VERSION >= 0x0104

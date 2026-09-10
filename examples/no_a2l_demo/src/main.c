@@ -175,7 +175,7 @@ THREAD_FUNC_RETURN task(void *p) {
         DaqTriggerEventExt(task, heap_struct);
 
         // Sleep for a tunable amount of time (not inside the lock for the calibration parameter block, to not block the XCP server or other threads unnecessarily long)
-        uint32_t delay = ((const struct params *)CalSegLock(params))->delay_us;
+        uint32_t delay = CalSegLock(params)->delay_us;
         CalSegUnlock(params);
         sleepUs(delay);
     }
@@ -321,7 +321,7 @@ int main(int argc, char *argv[]) {
         DaqTriggerEvent(mainloop);
 
         // Sleep for a tunable amount of time (not inside the lock for the calibration parameter block, to not block the XCP server or other threads unnecessarily long)
-        uint32_t delay = ((const struct params *)CalSegLock(params))->delay_us;
+        uint32_t delay = CalSegLock(params)->delay_us;
         CalSegUnlock(params);
         sleepUs(delay);
 

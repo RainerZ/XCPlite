@@ -90,9 +90,9 @@ xcpclient --offline --udp --dest-addr <ip-addr> --elf <elf-file>  --elf-unit-fil
 
 # Automatically add all possible measurement variables and calibration parameters in calibration parameter segments from compilation unit 'xcp_demo'
 # Example freertos_stm32_demo:
-xcpclient --offline --udp --dest-addr 192.168.0.207 --elf build/Debug/STM32H753EthDemo.elf --a2l CANape/stm32_freertos_demo.a2l --elf-unit-filter xcp_demo
+xcpclient --offline --udp --dest-addr 192.168.0.207 --elf build/Debug/STM32H753EthDemo.elf --a2l CANape/stm32_freertos_demo.a2l --default-event=mainloop --elf-unit-filter xcp_demo
 # Example freertos_emu_demo (Linux build only: an executable built on macOS contains no DWARF debug information and is rejected by xcpclient):
-xcpclient --offline --udp --dest-addr 127.0.0.1 --elf build-rtos/Debug/freertos_emu_demo --a2l examples/freertos_demo/freertos_emu_demo/CANape/freertos_demo.a2l --elf-unit-filter xcp_demo
+xcpclient --offline --udp --dest-addr 127.0.0.1 --elf build-rtos/Debug/freertos_emu_demo --a2l examples/freertos_demo/freertos_emu_demo/CANape/freertos_demo.a2l --default-event=mainloop --elf-unit-filter xcp_demo
 ```
 
 See below how to obtain the xcpclient tool.  
