@@ -36,6 +36,7 @@ Within a chosen configuration, the following options control what gets built:
 | `XCPLITE_BUILD_TOOLS` | `OFF` | Build tool targets for the selected configuration (see table below) |
 | `XCPLITE_BUILD_RUST_TOOLS` | `OFF` | Build Rust tools `xcpclient` and `bintool` via cargo (any configuration; requires Rust toolchain) |
 | `XCPLITE_BUILD_BPF_DEMO` | `OFF` | Build `bpf_demo` (default configuration, Linux only; requires libbpf) |
+| `XCPLITE_INSTALL` | `ON` top-level, `OFF` as subproject | Generate install rules (`cmake --install`). Automatically `OFF` when xcplite is consumed via `add_subdirectory`/`FetchContent`, so a consuming project's install does not pull in xcplite unless requested |
 
 ### Targets per configuration
 
@@ -50,10 +51,11 @@ Within a chosen configuration, the following options control what gets built:
 
 ¹ Linux only  ² requires libbpf  ³ not supported on Windows
 
-### Standalone examples (built separately after install)
+### Standalone examples (built separately)
 
-These examples have their own `CMakeLists.txt` and use `find_package(xcplite)` against an installed library. They are **not** built from the root CMake project:
+These examples have their own `CMakeLists.txt` and consume xcplite either from an installed package (`find_package(xcplite)`) or directly from source (`FetchContent`). They are not built from the root CMake project:
 
+- **`examples/fetchcontent_example/`** — Minimal C/C++ consumer example using `FetchContent`. Clones and builds xcplite from git as part of the example's own build; no install step needed. See `examples/fetchcontent_example/README.md` and [Using xcplite via FetchContent](#using-xcplite-via-fetchcontent).
 - **`examples/silkit_demo/`** — Requires [SilKit](https://github.com/vectorgrp/sil-kit) and an installed xcplite (shm configuration recommended). See `examples/silkit_demo/README.md`.
 - **`examples/external_example/`** — Minimal C/C++ consumer example. Shows how to use xcplite from an installed package. See `examples/external_example/README.md`.
 - **`examples/esp32_freertos_demo/`** — ESP32 FreeRTOS target. Uses the same `xcplib_rtos_cfg.h` override as the `rtos` CMake configuration, but is built with [PlatformIO](https://platformio.org/). Not a CMake project. The CMake `rtos` configuration builds `freertos_emu_demo` instead, which runs the same FreeRTOS xcplite code on a POSIX simulator for host-side testing (Linux/macOS only).
@@ -280,6 +282,41 @@ target_link_libraries(your_target PRIVATE xcplite::xcplite)
 # Point CMake to the install location
 cmake -B build -S . -DCMAKE_PREFIX_PATH=/path/to/xcplite/build/install
 ```
+
+### Using xcplite via FetchContent
+
+Instead of installing xcplite first, a project can build it from source as part of its own build. CMake clones the repository at configure time into `<build>/_deps/xcplite-src` and adds it as a subdirectory:
+
+```cmake
+include(FetchContent)
+
+FetchContent_Declare(xcplite
+    GIT_REPOSITORY https://github.com/vectorgrp/XCPlite.git
+    GIT_TAG        V2.2.1
+    GIT_SHALLOW    TRUE
+)
+
+# Select the configuration and targets before FetchContent_MakeAvailable()
+# (the CACHE ... FORCE form works as well)
+set(XCPLITE_CONFIGURATION  "default")   # default | no_a2l | ptp | shm | raw
+set(XCPLITE_BUILD_EXAMPLES OFF)
+set(XCPLITE_BUILD_TESTS    OFF)
+
+FetchContent_MakeAvailable(xcplite)
+
+target_link_libraries(your_target PRIVATE xcplite::xcplite)
+```
+
+Notes:
+
+- `xcplite::xcplite` is provided by both consumption paths, so the link line is the same as with `find_package`. The plain target name `xcplite` also works in the FetchContent case.
+- When consumed this way xcplite does not touch the consuming project's `CMAKE_INSTALL_PREFIX` or `CMAKE_<LANG>_FLAGS_<CONFIG>` and, with the default `XCPLITE_INSTALL=OFF`, adds no install rules. Set `-DXCPLITE_INSTALL=ON` to install xcplite together with your project.
+- The library needs only a C compiler; the root project also enables C++ because the C++ examples and tests live in the same tree.
+- For local development against a checked-out source tree, skip the clone with the standard override `-DFETCHCONTENT_SOURCE_DIR_XCPLITE=/path/to/XCPlite`.
+- The `rtos` configuration requires the consuming project to provide the FreeRTOS and lwIP headers and to define `_FREE_RTOS` on the `xcplite` target; see `examples/freertos_demo/freertos_emu_demo/CMakeLists.txt` for the pattern.
+
+See `examples/fetchcontent_example/` for a complete standalone project.
+
 
 ### Building Standalone Examples Against the Installed Library
 

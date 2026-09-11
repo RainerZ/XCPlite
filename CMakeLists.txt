@@ -3,7 +3,14 @@ cmake_minimum_required(VERSION 3.14)
 
 project(xcplite VERSION 2.2.1 LANGUAGES C CXX)
 
-
+# Check if xcplite is the top-level project, or is it consumed as a subproject (add_subdirectory / FetchContent)
+# Settings which touch the global CMake cache (install prefix, per-build-type compiler flags, install rules) are applied only
+# when top-level, so they do not leak into a consuming project.
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    set(_xcplite_is_top_level ON)
+else()
+    set(_xcplite_is_top_level OFF)
+endif()
 
 # =============================================================================
 # Build configuration
@@ -26,7 +33,14 @@ project(xcplite VERSION 2.2.1 LANGUAGES C CXX)
 #   rtos     - Embedded RTOS targets (FreeRTOS), reduced footprint, no filesystem
 #   raw      - Raw Ethernet transport, UDP/IPv4 inside xcplib, no TCP/IP stack (Linux only)
 # =============================================================================
-set(XCPLITE_CONFIGURATION "default" CACHE STRING
+# A consuming project (add_subdirectory / FetchContent) may set XCPLITE_CONFIGURATION as a
+# normal variable before including xcplite. Honor it (CMP0077).
+if(DEFINED XCPLITE_CONFIGURATION AND NOT DEFINED CACHE{XCPLITE_CONFIGURATION})
+    set(_xcplite_cfg_default "${XCPLITE_CONFIGURATION}")
+else()
+    set(_xcplite_cfg_default "default")
+endif()
+set(XCPLITE_CONFIGURATION "${_xcplite_cfg_default}" CACHE STRING
     "Library build configuration: default | no_a2l | ptp | shm | rtos | raw")
 set_property(CACHE XCPLITE_CONFIGURATION PROPERTY STRINGS default no_a2l ptp shm rtos raw)
 
@@ -87,24 +101,31 @@ endif()
 #                -> xcpclient, bintool  (requires cargo)
 #   XCPLITE_BUILD_BPF_DEMO  (default configuration, Linux only)
 #                -> bpf_demo  (requires libbpf; set OFF to skip the slow find_library probe)
+#   XCPLITE_INSTALL  (any configuration)
+#                -> generate install/export rules; ON when xcplite is the top-level
+#                   project, OFF when consumed via add_subdirectory/FetchContent
+#
+# To consume xcplite from another CMake project see docs/BUILDING.md
 # =============================================================================
 option(XCPLITE_BUILD_EXAMPLES   "Build example targets for the selected configuration" OFF)
 option(XCPLITE_BUILD_TESTS      "Build test targets for the selected configuration" OFF)
 option(XCPLITE_BUILD_TOOLS      "Build tool targets for the selected configuration" OFF)
 option(XCPLITE_BUILD_RUST_TOOLS "Build Rust tool targets: xcpclient, bintool (requires cargo)" OFF)
 option(XCPLITE_BUILD_BPF_DEMO   "Build bpf_demo (default configuration, Linux only; requires libbpf)" OFF)
+option(XCPLITE_INSTALL          "Generate install rules for xcplite (default: ON when top-level, OFF when consumed via add_subdirectory/FetchContent)" ${_xcplite_is_top_level})
 
 # Find required packages
 find_package(Threads REQUIRED)
 
 # Enable compile commands for VS Code IntelliSense (standalone builds only; not propagated to consumers)
-if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+if(_xcplite_is_top_level)
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 
 # Set default install prefix to build/install for local staging (avoid system installation)
 # Users can override with: cmake -DCMAKE_INSTALL_PREFIX=/usr/local
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+# Top-level only: a consuming project owns its install prefix.
+if(_xcplite_is_top_level AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "Install prefix" FORCE)
     message(STATUS "CMAKE_INSTALL_PREFIX not set, using local staging: ${CMAKE_INSTALL_PREFIX}")
 endif()
@@ -156,7 +177,11 @@ elseif(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 # Custom build type configurations for debug symbols in release builds
-if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+# Top-level only: these overwrite the global CMAKE_<LANG>_FLAGS_<CONFIG> cache entries,
+# which must stay under the control of a consuming project.
+if(NOT _xcplite_is_top_level)
+    # keep the consumer's flags
+elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     # For Release builds: use -O2 optimization and remove debug symbols and assertions
     set(CMAKE_C_FLAGS_RELEASE "-O2  -DNDEBUG" CACHE STRING "C flags for Release build" FORCE)
     set(CMAKE_CXX_FLAGS_RELEASE "-O2  -DNDEBUG" CACHE STRING "C++ flags for Release build" FORCE)
@@ -184,6 +209,11 @@ set(xcplite_SOURCES src/xcpappl.c src/xcplite.c src/xcpethserver.c src/xcpethtl.
 
 # Create xcplite library
 add_library(xcplite ${xcplite_SOURCES})
+
+# Namespaced alias so that consumers can link xcplite::xcplite regardless of whether
+# xcplite comes from an installed package (find_package) or from the source tree
+# (add_subdirectory / FetchContent).
+add_library(xcplite::xcplite ALIAS xcplite)
 
 # Publish the selected build configuration to consumers of xcplite::xcplite.
 # This becomes a preprocessor define for downstream C/C++ targets.
@@ -503,7 +533,10 @@ endif() # XCPLITE_BUILD_RUST_TOOLS
 
 # ============================================================================
 # Installation Configuration
+# Skipped when XCPLITE_INSTALL=OFF (default when consumed via FetchContent), so
+# 'cmake --install' of a consuming project does not install xcplite as a side effect.
 # ============================================================================
+if(XCPLITE_INSTALL)
 
 include(GNUInstallDirs)
 
@@ -562,3 +595,7 @@ install(FILES
 )
 
 message(STATUS "xcplite will be installed to: ${CMAKE_INSTALL_PREFIX}")
+
+else()
+    message(STATUS "xcplite install rules disabled (XCPLITE_INSTALL=OFF)")
+endif() # XCPLITE_INSTALL

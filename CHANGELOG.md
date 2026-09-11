@@ -4,6 +4,12 @@ All notable changes to XCPlite are documented in this file.
 
 ## [V2.2.1] 
 
+- CMake: xcplite can now be consumed via `FetchContent`/`add_subdirectory` (as suggested by vectorgrp/XCPlite#132):
+    - New alias target `xcplite::xcplite`, the same name the installed package exports.
+    - Install prefix default and per-build-type compiler flags are only applied when xcplite is the top-level project.
+    - New option `XCPLITE_INSTALL` (default `ON` in top-level, `OFF` as subproject) controls the install rules.
+    - New standalone `examples/fetchcontent_example`, documented in `docs/BUILDING.md`.
+
 - New macros `DaqTriggerEventCapture`, `DaqTriggerEventCaptureAt` and `DaqCreateAndTriggerEventCapture` in `xcplib.h` to measure local variables which are not addressable via the frame pointer or which the user does not want to spill.
 
 - Split the large `platform.c/.h` into `platform.c/.h` (threads, mutex, clock, sleep, memory, atomics) and `sockets.c/.h` (socket abstraction for all platforms).

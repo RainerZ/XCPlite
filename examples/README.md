@@ -84,7 +84,8 @@ Demonstrates how to use a PTP (Precision Time Protocol) synchronized clock as XC
 
 ### [udp_raw_demo](udp_raw_demo/README.md)
 
-**Demonstrates XCP on UDP/IPv4 without any TCP/IP stack** - the transport is implemented inside xcplib on top of a thin raw Ethernet HAL.  
+Demonstrates XCP on UDP/IPv4 without any TCP/IP stack: 
+- Transport is implemented inside xcplib on top of a thin raw Ethernet HAL.  
 - For targets with no IP stack at all: a bare metal EMAC driver, or an RTOS Ethernet abstraction without lwIP.  
 - xcplib answers ARP and ICMP itself, so the target is pingable without a stack.  
 - Needs an explicit local IPv4 address, there is no DHCP and `0.0.0.0` (ANY) has no meaning.  
@@ -94,7 +95,8 @@ Demonstrates how to use a PTP (Precision Time Protocol) synchronized clock as XC
 
 ### [cmp_demo](cmp_demo/README.md)
 
-**Demonstrates supplying your own Ethernet HAL backend from outside the library** - a standalone project consuming an installed xcplite, like external_example.  
+Demonstrates supplying your own Ethernet HAL backend from outside the library: 
+- A standalone project consuming an installed xcplite, like external_example.  
 - Prepares XCP over ASAM CMP, for testing XCP tools which communicate through capture modules.  
 - Implements the six `eth_hal_*` functions of `src/socket_raw_hal.h` in the application; the built in AF_PACKET backend is then never pulled from the static library.  
 - The CMP envelope itself is not implemented yet and is a pass through, so the HAL plumbing is testable on its own.  
@@ -103,11 +105,21 @@ Demonstrates how to use a PTP (Precision Time Protocol) synchronized clock as XC
 
 ### [external_example](external_example/README.md)
 
-**Demonstrates using libxcplite as a pre-built external library** - independent from the main build system.  
+Demonstrates using libxcplite as a pre-built external library:
+- Independent from the main build system.  
 - Shows how to build against an installed libxcplite binary (system-wide or local staging).  
 - Independent CMakeLists.txt using `find_package(libxcplite)`.  
 - Typical workflow for production deployments where libxcplite is distributed as a library package.  
 - No system installation required for development - uses local staging directory.  
+
+
+### [fetchcontent_example](fetchcontent_example/README.md)
+
+Demonstrates building libxcplite from source on Github as part of your own project via CMake `FetchContent`: 
+- No install step.  
+- Independent CMakeLists.txt with `FetchContent_Declare(xcplite GIT_REPOSITORY ... GIT_TAG ...)`, pinned to a release tag.  
+- Same application code and the same `xcplite::xcplite` link target as external_example.  
+- Typical workflow for CI builds, cross-compiling and projects which want the xcplite version pinned in code.  
 
 
 ### [c_demo](c_demo/README.md)
