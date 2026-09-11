@@ -4,55 +4,50 @@ All notable changes to XCPlite are documented in this file.
 
 ## [V2.2.1] 
 
-- New macros `DaqTriggerEventCapture`, `DaqTriggerEventCaptureAt` and `DaqCreateAndTriggerEventCapture` in `xcplib.h` to measure local variables which the compiler keeps in registers, without marking them `volatile`. They copy the given variables into a capture struct on the stack when the event is triggered and pass its address as the base address of address extension 3, the originals stay in their registers. The offline A2L generator registers the members of the struct with the names of the captured variables (`<function>.<variable>`), see `docs/OFFLINE_A2L.md`. A function which captures may be inlined, and asynchronous access (polling) works. Up to 16 plain identifiers per trigger, in C and C++, not available with MSVC. Bitfields can not be captured, `const` variables only in C. The unimplemented `DaqCapture` macro, which copied a variable into a hidden static, is removed
-- xcpclient related changes (xcpclient version 4.0.0):
-    - The captured local variables of the event triggers are registered from the capture structs (`cap__<event>`). A captured variable is not registered a second time as a stack frame relative variable, and the diagnostics about the stack frame of an inlined function are only reported when the function has stack frame relative variables which are not captured
-    - The addressing mode signature of the target (`XCPLITE__<signature>`) is read from the ELF symbol table instead of the DWARF variables, so it is found when the debug information of the XCPlite library is not parsed (`--elf-unit-limit`) or the library was built without `-g`. Without the signature xcpclient assumes absolute addressing of the calibration segments, which is wrong for a `CASDD` or `CXSDD` build. The `--elf-unit-limit=0` of `examples/no_a2l_demo/create_a2l.sh` had this effect, it is removed
-    - The compilers which built the ELF file are logged as `Compiler: ...` (`DW_AT_producer` of the compilation units) with their version and command line options
-    - Metadata markers (`XCP_COMMENT`, `XCP_UNIT`, `XCP_LIMITS`, `XCP_READ_WRITE`) of local variables in C compilation units built with GCC are applied again. GCC gives the marker constants inside a function no `DW_AT_location` and names their symbols `<name>.<number>`, which no symbol lookup matched, so every marker written inside a C function was silently dropped. The address now comes from these symbols, markers of the same name in several functions are told apart by their size
-    - A metadata marker at file scope is no longer applied to the local variables of the same name in functions. `XCP_COMMENT(counter, ...)` and `XCP_READ_WRITE(counter)` for a global variable `counter` also annotated `foo.counter` and `task.counter`, which made local variables writable in the A2L file. A marker in a function is no longer applied to a global variable of the same name when its own local variable was not registered, it is reported instead
-    - Functions with an event trigger which the compiler inlined are detected (abstract instance, inlined copies and the out of line copy). The stack frame relative variables of such a function are not registered, as no address is valid for all copies of the function, and a warning asks to mark the function `noinline`. Previously the variables of the inlined copy were registered as local variables of the calling function with the default event, which measured a reused stack slot, and the static variables of the out of line copy lost their function scope, comment and event (clang inlines a function called once already at `-O1`, `no_a2l_demo` built with clang)
-    - DWARF 5 location lists referenced by index (`DW_FORM_loclistx`, clang) are evaluated like the location lists of DWARF 4. A location list is accepted only if all its entries describe the same memory location, as the trigger point of the event is not known: previously the first memory location in the list was used, which may be valid only in a part of the function. Variables in registers or with changing locations are not measurable, they are not looked up in the symbol table
-    - The stack frame relative addresses of local variables are the offsets from the DWARF frame base of the function (`DW_AT_frame_base`) without correction, the call frame information parser is removed. The trigger macros pass this frame base to the target: `xcp_get_frame_addr()` in `xcplib.h` is `__builtin_dwarf_cfa()` under GCC (canonical frame address, on every architecture, the Xtensa special case is gone) and `__builtin_frame_address(0)` under clang (frame pointer register). xcpclient checks the frame base of the function of every event trigger and warns when it is neither, for example the stack pointer of a function without frame pointer under clang, the stack frame relative variables of such a function are not registered. **GCC targets must be rebuilt with the new header, the A2L file of an older build does not match**. Previously the distance between the frame pointer and the CFA was read from the call frame information with heuristics which were wrong for clang builds (the frame base is the frame pointer, no distance to add) and for GCC AArch64 functions whose frame record is not at the stack pointer
-    - Location expressions of variables which can not be evaluated (register locations, entry values, optimized code in other compilation units) and variables without a name are reported at debug level instead of error/warning level
-    - New option `--default-event <id>` (also `default_event` in the TOML config file): event used for the DAQ measurement of variables without a fixed event, such as global variables in an A2L file generated from an ELF file. When an A2L file is created from an ELF file, the event is assigned to global variables and to static variables in functions without an event trigger as their default event
-- New attribute macro `XCP_NOINLINE` in `xcplib.h` for functions which trigger an event and measure their local variables, used by `foo()` in `no_a2l_demo` and `no_a2l_demo_cpp`. Such a function must not be inlined, see `docs/OFFLINE_A2L.md`
-- Split `platform.c/.h` into `platform.c/.h` (threads, mutex, clock, sleep, memory, atomics) and `sockets.c/.h` (socket abstraction for all platforms). `sockets.h` includes `platform.h`; files that use both include both explicitly (IWYU).
+- New macros `DaqTriggerEventCapture`, `DaqTriggerEventCaptureAt` and `DaqCreateAndTriggerEventCapture` in `xcplib.h` to measure local variables which are not addressable via the frame pointer or which the user does not want to spill.
+
+- Split the large `platform.c/.h` into `platform.c/.h` (threads, mutex, clock, sleep, memory, atomics) and `sockets.c/.h` (socket abstraction for all platforms).
+
+- IPv4 fragmentation is now prevented on the socket transport: `socketOpen` sets the DF bit on UDP sockets. Oversized segments now fail with `EMSGSIZE`. Default `OPTION_MTU` reduced to prevent immediate errors, as fragmentation is now detected.
+
+- Minor fixes:    
+    - `create_thread()` on Windows and Linux now returns 0 on success.
+    - Fixed `PLATFORM_32_BIT` typo in `xcplib_cfg.h`, which prevented the automatic selection of `OPTION_QUEUE_32` on 32 bit platforms.
+    - Fixed missing `#include <errno.h>` in `shm.c`, which broke the `shm` configuration build on macOS.
+    - Window build workaround to disable section based event pre-registration.
+    - Fixed older XCP protocol layer versions 0x0100 to 0x0102.
+
+- Improved and fixed freertos_stm32_demo:
+    - Tested on real hardware.
+    - CANape project updated.
+    - Missing xcp_meta section added to ld.
+    - The lwIP socket path now reports a segment that does not fit the link MTU. lwIP sets no DF option.
+
+- xcpclient related changes (V4.0.0):
+    - New option `--default-event <id>`: event used for the DAQ measurement of variables without a fixed event, such as global variables
+    - Captured local variables of the event triggers are registered from the capture structs (`cap__<event>`).     
+    - New command line option elf-unit-limit-min, to reduce large logs and unwanted A2L entries.
+    - Improved warnings for clangs non frame based based locals.
+    - The addressing mode signature of the target (`XCPLITE__<signature>`) is read from the ELF symbol table instead of the DWARF variables, so it is found when the debug information of the XCPlite library is not parsed or present.
+    - The compilers which built the ELF file are logged.
+    - Metadata markers (`XCP_COMMENT`, `XCP_UNIT`, `XCP_LIMITS`, `XCP_READ_WRITE`) of local variables in C compilation units built with GCC are applied again.
+    - A metadata marker at file scope is no longer applied to the local variables of the same name in functions.
+    - Functions with an event trigger which the compiler inlined are detected (abstract instance, inlined copies and the out of line copy) and stack frame relative variables are not registered.
+    - DWARF 5 location lists referenced by index (`DW_FORM_loclistx`, clang) are evaluated like the location lists of DWARF 4.
+    - A location list is accepted only if all its entries describe the same memory location, which replaces the previous unsafe heuristic approach.
+    - The relative addresses of local variables are now the offsets from the DWARF frame base without correction, the call frame information parser is removed. The trigger macros pass a matching base to the target.
+    - `xcp_get_frame_addr()` in `xcplib.h` is `__builtin_dwarf_cfa()` under GCC (CFA on every architecture) and `__builtin_frame_address(0)` under clang (frame pointer register).
+
 - New raw Ethernet transport `OPTION_ENABLE_UDP_RAW`: XCP on UDP/IPv4 implemented inside xcplib on top of a thin raw Ethernet HAL, for targets without a TCP/IP stack. See `docs/SOCKET_RAW.md`.
-    - New build configuration `raw` (`src/xcplib_raw_cfg.h`, `build-raw/`) with the new example `udp_raw_demo` and the unit test `socket_raw_test` (Linux only)
-    - `src/socket_raw.c` — UDP/IPv4 layer, answer-only ARP, ICMP Echo responder, receive filter with an absolute-deadline loop
-    - `src/socket_raw_hal.h` — raw Ethernet HAL interface, `src/socket_raw_hal_linux.c` — AF_PACKET backend (requires `CAP_NET_RAW`)
-    - `test/test_socket_raw.sh` — isolated veth/netns test setup with ARP, ping and XCP CONNECT checks
-    - Mutually exclusive with `OPTION_ENABLE_UDP`/`OPTION_ENABLE_TCP` and requires `OPTION_QUEUE_32`; both enforced by `#error` in `xcptl_cfg.h`, together with the SHM, multicast and MTU restrictions
-    - The `rtos` configuration keeps using the lwIP socket API - the raw transport is a separate configuration, not an override
-- Optional zero copy transmit for the raw Ethernet transport (`OPTION_UDP_RAW_ZERO_COPY`, on by default): headroom is reserved in front of every transmit queue3/queue32 segment so the Ethernet/IPv4/UDP header is written in place instead of copying the payload into a frame buffer.
-    - New generic queue concept `QUEUE_SEGMENT_HEADER_SIZE` in `queue.h` - reserved once per *segment*, as opposed to the existing per-*message* `QUEUE_ENTRY_USER_HEADER_SIZE`
-    - `queue32.c`/`queue32m.c` gain one guarded field; with the option off the queue entry layout is byte identical to before
-    - Command responses keep the copying path, they are built on the stack and are not hot
-- New `OPTION_UDP_RAW_HAL_EXTERNAL`: an application can supply its own raw Ethernet HAL from outside the library. xcplib then selects no backend and the `eth_hal_*` symbols stay undefined in `libxcplite` until the application links its own implementation. Intended for backends which do not belong in the library, for example ASAM CMP for testing XCP tools through capture modules, or a vendor specific interface such as XLAPI.
-    - Also lifts the Linux-only restriction of the raw transport: without a built in backend there is nothing platform specific left in it
-    - Depends on `libxcplite` being a **static** library, so the undefined `eth_hal_*` resolve at application link time with no indirection in the transmit path. A shared build would resolve them internally and the override would silently not take
-    - `socket_raw_hal_linux.c` is excluded by the same option, so the built in AF_PACKET backend is not linked in
-- `OPTION_MTU` in the `raw` configuration set to **1420**, below the 1500 of a standard Ethernet link, to leave headroom for a HAL backend which encapsulates the frame before putting it on the wire. `XCPTL_MAX_SEGMENT_SIZE` becomes 1392, the largest Ethernet frame 1434 and its IP packet 1420 bytes, i.e. `OPTION_MTU` exactly. An encapsulating backend then fits inside a 1500 byte path: `cmp_demo` wraps that 1434 byte frame in a 34 byte CMP envelope and 28 bytes of outer IPv4/UDP headers, reaching 1496 bytes. At the full link MTU a segment is 1472 bytes and the frame 1514, filling the path on its own, so an encapsulating backend has nothing left and the raw transport, which does not fragment, can only refuse the frame.
-    - The previous value was 1504, a leftover of the pre-V2.1.11 convention where `OPTION_MTU` was the link MTU rounded up to a multiple of 8. Since "Fix UDP segment size calculation from MTU" (V2.1.11) `XCPTL_MAX_SEGMENT_SIZE` is `(OPTION_MTU - 28) & ~7`, so `OPTION_MTU` is the true link MTU and 1504 gained nothing over 1500
-    - **Behaviour change:** `udp_raw_demo` now sends segments of 1392 instead of 1472 bytes
-- New example `cmp_demo`: an emulated **ASAM CMP** (Capture Module Protocol) capture module carrying XCP, for testing XCP tools which communicate through capture modules. Implemented against ASAM CMP Protocol Layer Specification V1.1.0. Nothing CMP specific is in `libxcplite` — the whole protocol lives in the example, behind the `eth_hal_*` interface.
-    - A standalone CMake project consuming an **installed** xcplite via `find_package(xcplite)`, not built from the root `CMakeLists.txt`
-    - CMP over UDP (6.4.2). CMP over raw Ethernet is a possible later step
-    - `src/cmp.c` — the envelope codec, verified byte exact against the sample PCAPNG files shipped with the specification
-    - Injection uses `TX_DATA_MSG` (message type `0x04`), which **CMP 1.1 introduced** and 1.0 does not have. Without it a capture module could only carry DAQ and XCP could never `CONNECT`. Note that a CMP 1.0 dissector reports it as an unknown message type
-    - `src/cmp_rest.c` — the mandatory REST interface (12.3), read only. Its `Transmitter` object is how a Data Sink detects that transmission is supported (7.2.2); without it a tool may never inject
-    - `src/cmp_discovery.c` — `CMP_CM_DISCOVERY` responder (12.1.1) on `239.255.0.0:5556`, serviced by the REST thread. Section 12 requires only one of three discovery approaches and permits static configuration with none, so this is optional
-    - `test/cmp_codec_test.c`, `test/fake_sink.py` (a minimal Data Sink), `test/discovery_probe.py`, `test/test_local.sh` (loopback) and `test.sh` (on target)
-- New `docs/XCP_DISCOVERY.md`: records what xcplib has for XCP's own multicast discovery today — `GET_SERVER_ID_EXTENDED` implemented, `GET_SERVER_ID` stubbed, both behind `XCPTL_ENABLE_MULTICAST`, which no shipped configuration enables and which the raw transport excludes — and the options for it. Nothing is decided or changed. Also records that `XCPTL_MULTICAST_PORT` is 5557 while ASAM CMP 12.1 states XCP uses 5556, which needs checking against ASAM MCD-1 XCP.
-- IPv4 fragmentation is now prevented on the socket transport: `socketOpen` sets the DF bit on UDP sockets (`IP_MTU_DISCOVER`/`IP_PMTUDISC_DO` on Linux, `IP_DONTFRAG` on macOS/BSD, `IP_DONTFRAGMENT` on Windows, no-op on lwIP). Fragmentation is harmful for DAQ - one lost fragment loses the whole datagram and reassembly adds jitter - and an `OPTION_MTU` larger than the path MTU previously degraded measurement silently. Oversized segments now fail with `EMSGSIZE` and a message naming the segment size and the `OPTION_MTU` to reduce. **Behaviour change:** a setup that relied on fragmentation will now report an error instead of silently fragmenting.
-- The lwIP socket path now reports a segment that does not fit the link MTU. lwIP sets no DF option - it has no `IP_DONTFRAG` - so unlike Linux, macOS/BSD, QNX and Windows it does not refuse an oversized datagram: it fragments or drops it according to its own `IP_FRAG` build setting, silently either way. That made lwIP the one transport where an `OPTION_MTU` larger than the link MTU degraded measurement with no diagnostic at all. `socketSendTo` now compares the segment plus 28 bytes of IPv4/UDP headers against `netif_default->mtu` and warns once, with the same wording as the socket path. It still sends: this is a diagnostic, not a guard, since refusing a datagram lwIP may well deliver would change behaviour. `netif_default` is not necessarily the interface routing to the destination on a multi-homed target, so a false report is possible there.
-- `create_thread()` on Windows now returns 0 on success, matching `pthread_create()`, instead of evaluating to the thread `HANDLE` where non-NULL meant success. The two conventions were inverted, so `if (create_thread(...) != 0)` read as an error on POSIX and as success on Windows. A *portable* check is still not possible - both FreeRTOS variants are `do {} while (0)` statements which assert - and `platform.h` now documents the contract per platform. No caller in the repository tests the result, so nothing changes in behaviour.
-- Version aligned to 2.2.1 in `CMakeLists.txt` (what `find_package(xcplite)` reports) and in `OPTION_VERSION_MAJOR`/`_MINOR`/`_PATCH` in `xcplib_cfg.h` (what `XCP_DRIVER_VERSION` reports to the XCP client). The two had drifted apart at 2.1.2 and 2.1.10.
-- Fixed `PLATFORM_32_BIT` typo in `xcplib_cfg.h`, which prevented the automatic selection of `OPTION_QUEUE_32` on 32 bit platforms
-- Fixed missing `#include <errno.h>` in `shm.c`, which broke the `shm` configuration build on macOS
-- Window build workaround to disable section based event pre-registration
-- Fixed older XCP protocol layer versions 0x0100 to 0x0102
+    - New build configuration `raw` (`src/xcplib_raw_cfg.h`, `build-raw/`) with the new example `udp_raw_demo` (for testing on Linux only)
+    - The `rtos` configuration keeps using the lwIP socket API - the raw transport is a separate configuration, not an override yet.
+    - Optional zero copy transmit for the raw Ethernet transport (`OPTION_UDP_RAW_ZERO_COPY`, on by default). Command responses keep the copying path.
+    - New `OPTION_UDP_RAW_HAL_EXTERNAL`: an application can supply its own raw Ethernet HAL from outside the library.
+    - Default OPTION_MTU in the `raw` configuration set to **1420**, below the 1500 of a standard Ethernet link, to leave headroom for a HAL backend like CMP which encapsulates the frame before putting it on the wire. 
+
+- New experimental example `cmp_demo`: an emulated **ASAM CMP** (Capture Module Protocol V1.1) capture module carrying XCP, for testing XCP tools which communicate through capture modules. Nothing CMP specific is in `libxcplite` — the whole protocol lives in the example, behind the new `eth_hal_*` interface.
+
+    
 
 ## [V2.1.14]
 
