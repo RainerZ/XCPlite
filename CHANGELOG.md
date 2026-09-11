@@ -9,6 +9,7 @@ All notable changes to XCPlite are documented in this file.
     - Install prefix default and per-build-type compiler flags are only applied when xcplite is the top-level project.
     - New option `XCPLITE_INSTALL` (default `ON` in top-level, `OFF` as subproject) controls the install rules.
     - New standalone `examples/fetchcontent_example`, documented in `docs/BUILDING.md`.
+    - The `DaqCreateEvent*` macros no longer use designated initializers (a C++20 extension flagged by `-pedantic` in C++17 when the headers are not system includes, e.g. via FetchContent).
 
 - New macros `DaqTriggerEventCapture`, `DaqTriggerEventCaptureAt` and `DaqCreateAndTriggerEventCapture` in `xcplib.h` to measure local variables which are not addressable via the frame pointer or which the user does not want to spill.
 

@@ -309,6 +309,10 @@ typedef struct {
     uint8_t priority;
     uint8_t res[16 - sizeof(char *) - 4 - 1];
 } tXcpEventDescriptor;
+
+// Positional initializer (field order as above). Designated initializers would be a C++20 extension
+// and are reported by -pedantic when this header is compiled as C++17 (e.g. consumers via FetchContent).
+#define XCP_EVENT_DESCRIPTOR_INIT(name_str, cycle_ns, prio) {(name_str), (cycle_ns), (prio), {0}}
 static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
 static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor res padding must not be zero; check pointer size vs struct layout");
 
@@ -391,7 +395,7 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 /// To create an XCP event with increased priority or specified expected cycle time, use DaqCreateEventExt
 /// @param name Name given as identifier
 #define DaqCreateEvent(event_name)                                                                                                                                                 \
-    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                          \
+    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, 0, 0);                                                      \
     static tXcpEventId evt_id_##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                                 \
     XCP_EVENT_SECTION_SET_ID(evt__##event_name, evt_id_##event_name);
 
@@ -400,7 +404,7 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 /// @param cycle_time Cycle time in microseconds (0 = sporadic)
 /// @param priority Priority of the event (0 = normal, >=1 = realtime)
 #define DaqCreateEventExt(event_name, cycle, prio)                                                                                                                                 \
-    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = (cycle) * 1000U, .priority = (prio)};                       \
+    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, (cycle) * 1000U, (prio));                                   \
     static tXcpEventId evt_id_##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                                 \
     XCP_EVENT_SECTION_SET_ID(evt__##event_name, evt_id_##event_name);
 
@@ -611,7 +615,7 @@ extern const uint8_t *gXcpBaseAddr;
 /// @param event_name Name given as identifier
 #define DaqCreateAndTriggerEvent(event_name)                                                                                                                                       \
     {                                                                                                                                                                              \
-        static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                      \
+        static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, 0, 0);                                                  \
         static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                          \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
         XcpEventExt_Var(trg__AAS__##event_name, 1, xcp_get_frame_addr());                                                                                                          \
@@ -707,7 +711,7 @@ extern const uint8_t *gXcpBaseAddr;
 #define DaqCreateAndTriggerEventCapture(event_name, ...)                                                                                                                           \
     {                                                                                                                                                                              \
         XCP_CAPTURE(event_name, __VA_ARGS__)                                                                                                                                       \
-        static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                      \
+        static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, 0, 0);                                                  \
         static tXcpEventId trg__AASR__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                         \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASR__##event_name);                                                                                                      \
         XcpEventExt_Var(trg__AASR__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)&cap__##event_name);                                                                    \
@@ -1159,7 +1163,7 @@ void clockGetPrintStatistic(void);
 /// Needs #define OPTION_DAQ_EVENT_LIST for on target A2L generation
 #define DaqEventVar(event_name, ...)                                                                                                                                               \
     do {                                                                                                                                                                           \
-        static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = {.name = #event_name, .cycle_time_ns = 0, .priority = 0};                                      \
+        static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, 0, 0);                                                  \
         static tXcpEventId trg__AAS__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                        \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
         if (XcpIsActivated()) {                                                                                                                                                    \

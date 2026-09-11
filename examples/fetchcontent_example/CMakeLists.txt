@@ -23,13 +23,12 @@ include(FetchContent)
 # ---------------------------------------------------------------------------
 # Where to fetch xcplite from
 #
-# Pin a released tag for reproducible builds. For local development against a
-# checked-out xcplite source tree, bypass the git clone with the standard
-# FetchContent override (this repository root is ../.. from here):
+# Pin a released tag for reproducible builds. 
+# For local development against a checked-out xcplite source tree, bypass the git clone with
 #   cmake -B build -S . -DFETCHCONTENT_SOURCE_DIR_XCPLITE=../..
 # ---------------------------------------------------------------------------
-set(XCPLITE_GIT_REPOSITORY "https://github.com/vectorgrp/XCPlite.git" CACHE STRING "xcplite git repository")
-set(XCPLITE_GIT_TAG        "V2.2.1"                                    CACHE STRING "xcplite git tag, branch or commit")
+set(XCPLITE_GIT_REPOSITORY "https://github.com/RainerZ/XCPlite.git" CACHE STRING "xcplite git repository")
+set(XCPLITE_GIT_TAG        "V2.2.2"                                 CACHE STRING "xcplite git tag, branch or commit")
 
 FetchContent_Declare(xcplite
     GIT_REPOSITORY ${XCPLITE_GIT_REPOSITORY}
