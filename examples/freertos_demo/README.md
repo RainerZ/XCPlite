@@ -6,7 +6,7 @@ There are 3 different demos:
 - freertos_esp32_demo for ESP32 with PlatformIO
 - freertos_stm32_demo for STM32 with CubeMX
 
-All examples are based on the same demo application code in `xcp_demo.c` and `xcp_demo.h`.  
+All examples are based on the same demo application code in `xcp_demo.c` and `xcp_demo.h`, which compiles as C or C++.  
 
 Refer to the README.md files in the demo folders for more specific details.  
 
@@ -20,14 +20,14 @@ The included CANape projects and the XCP instrumentation in `xcp_demo.c` show:
 - Create a high priority FreeRTOS task (fastTask) with precise cyclic execution timing
 - Create a lower priority FreeRTOS task (slowTask) for background work
 - Pin the tasks to the same core to watch scheduling in action
-- Trigger XCP event tracepoints in both tasks and acquire global and local measurement variables
+- Trigger XCP event tracepoints in both tasks and how to acquire global and local measurement variables
 - Provide high-resolution XCP measurement event timestamps
 - Display cycle time jitter of the tasks in CANape
 - Count task deadline overruns when calibrated periods are too aggressive
 - Create thread-safe calibration parameters accessible in both tasks
 - Calibrate task cycle times and some other demo parameters
 - Observe both task trigger points with a two-channel oscilloscope to evaluate XCP instrumentation cost
-- Create an A2L file or A2L file template for the user application code
+- Create an A2L file or A2L file template offline from the ELF file 
 
 | Feature | API functions |
 |---|---|

@@ -131,19 +131,21 @@ fn capture_member_variable_name(member_name: &str) -> &str {
     member_name.strip_suffix('_').unwrap_or(member_name)
 }
 
-// Variables which never become A2L objects: the internals of the compiler and of the standard library, the global XCPlite
-// variables and the marker variables of the sections and macros (see the module comment)
-fn is_internal_variable(name: &str) -> bool {
-    name.starts_with("__")
-        || name.starts_with("gXcp")
-        || name.starts_with("gA2l")
-        || name.starts_with("calseg__")
+// Variable which transport information for the A2L creator
+pub fn is_a2l_variable(name: &str) -> bool {
+    name.starts_with("calseg__")
         || name.starts_with("calblk__")
         || name.starts_with("evt__")
         || name.starts_with("trg__")
         || name.starts_with("cap__")
-        || name.starts_with("xcp_cap_p__")
         || name.starts_with("xcp_meta__")
+        || name.starts_with("XCPLITE__")
+}
+
+// Variables which never become A2L objects: the internals of the compiler and of the standard library, XCPlite internals and the A2L creator markers
+// variables and the marker variables of the sections and macros (see the module comment)
+pub fn is_internal_variable(name: &str) -> bool {
+    name.starts_with("__") || name.starts_with("gXcp") || name.starts_with("gA2l") || is_a2l_variable(name)
 }
 
 // XCP address extension of the captured variables: the first dynamic base address (XCP_ADDR_EXT_DYN + 1 in src/xcp_cfg.h),
@@ -163,7 +165,7 @@ pub(crate) struct ElfReader {
 impl ElfReader {
     // Load debug information from the ELF file
     // The error message describes why the file can not be used (not found, not an ELF file, no DWARF debug information, ...)
-    pub fn new(file_name: &str, verbose: usize, unit_idx_limit: usize) -> Result<ElfReader, String> {
+    pub fn new(file_name: &str, verbose: usize, unit_idx_limit: (usize, usize)) -> Result<ElfReader, String> {
         info!("Loading debug information from ELF file: {}", file_name);
         let debug_data = DebugData::load_dwarf(OsStr::new(file_name), verbose, unit_idx_limit)?;
         Ok(ElfReader::from_debug_data(debug_data))
@@ -846,7 +848,7 @@ impl ElfReader {
         reg: &mut Registry,
         seg_relative: bool,
         verbose: usize,
-        unit_idx_limit: usize,
+        unit_idx_limit: (usize, usize),
         name_filter: &str,
         unit_filter: &str,
         default_event: Option<u16>,
@@ -926,12 +928,12 @@ impl ElfReader {
             let mut xcp_event_id: Option<u16>;
             // Count the definitions of this name within the compilation unit limit (--elf-unit-limit), including definitions without
             // an address. More than one definition means the A2L name has to be qualified to be unique
-            let count = var_infos.iter().filter(|v| v.unit_idx <= unit_idx_limit).count();
+            let count = var_infos.iter().filter(|v| v.unit_idx >= unit_idx_limit.0 && v.unit_idx <= unit_idx_limit.1).count();
             // Count the distinct global or static variables with this name by their address
             // (declarations of the same variable in several compilation units resolve to the same address, local variables have no address)
             let mut addresses: Vec<u64> = var_infos
                 .iter()
-                .filter(|v| v.unit_idx <= unit_idx_limit && v.address.0 == 0 && v.address.1 != 0)
+                .filter(|v| v.unit_idx >= unit_idx_limit.0 && v.unit_idx <= unit_idx_limit.1 && v.address.0 == 0 && v.address.1 != 0)
                 .map(|v| v.address.1)
                 .collect();
             addresses.sort_unstable();
@@ -941,7 +943,7 @@ impl ElfReader {
             // Process all variables with this name in different scopes and namespaces
             for var_info in var_infos {
                 // @@@@ TODO: Create only variables from specified compilation unit
-                if var_info.unit_idx > unit_idx_limit {
+                if var_info.unit_idx < unit_idx_limit.0 || var_info.unit_idx > unit_idx_limit.1 {
                     continue;
                 }
 
@@ -1368,7 +1370,7 @@ impl ElfReader {
         let (meta_base_addr, meta_data) = match &self.debug_data.xcp_meta_data {
             Some(data) => data,
             None => {
-                info!("No xcp_meta section found, skipping metadata registration");
+                warn!("No xcp_meta section found, skipping metadata registration");
                 return Ok(());
             }
         };
@@ -1475,9 +1477,7 @@ impl ElfReader {
                         if let Some(inst) = reg.instance_list.get_instance_mut(name, None) {
                             apply_instance_metadata(inst, kind, meta_data, offset, is_le);
                             applied = true;
-                            if verbose >= 1 {
-                                println!("  Metadata {} {} applied to instance '{}'", kind, var_name, name);
-                            }
+                            info!("Metadata {} {} applied to instance '{}'", kind, var_name, name);
                         }
                     }
                     if applied {
@@ -1557,9 +1557,7 @@ fn apply_field_metadata(
 
     match reg.set_instance_field_support_data(instance_name, field_path, support_data) {
         Ok(()) => {
-            if verbose >= 1 {
-                println!("  Metadata {} applied to typedef field '{}.{}'", var_name, instance_name, field_path);
-            }
+            info!("  Metadata {} applied to typedef field '{}.{}'", var_name, instance_name, field_path);
             true
         }
         Err(RegistryError::NotFound(_)) => false, // no such instance or field — not an error, Path B will try

@@ -468,7 +468,7 @@ impl DebugDataReader<'_> {
                 // Union members and Dwarf 4/5 bitfields have no DW_AT_data_member_location.
                 // Zero is the correct default for union members; for bitfields the byte offset is
                 // derived from DW_AT_data_bit_offset in get_bitfield_entry() below.
-                let mut offset = get_data_member_location_attribute(self, child_entry, unit.encoding(), current_unit).unwrap_or(0);
+                let mut offset = get_data_member_location_attribute(self, child_entry, unit.encoding(), current_unit, opt_name.as_deref().unwrap_or("<anonymous>")).unwrap_or(0);
 
                 // get the type of the member
                 if let Some((new_cur_unit, new_dbginfo_offset)) = get_type_attribute(child_entry, &self.units, current_unit)?
@@ -592,7 +592,7 @@ impl DebugDataReader<'_> {
     ) -> Result<(String, TypeInfo, u64), String> {
         let (unit, _) = &self.units[current_unit];
         let data_location =
-            get_data_member_location_attribute(self, child_entry, unit.encoding(), current_unit).ok_or_else(|| "missing byte offset for inherited class".to_string())?;
+            get_data_member_location_attribute(self, child_entry, unit.encoding(), current_unit, "<inherited class>").ok_or_else(|| "missing byte offset for inherited class".to_string())?;
 
         let Some((new_cur_unit, new_dbginfo_offset)) = get_type_attribute(child_entry, &self.units, current_unit)? else {
             // a base class whose type is "nothing"?

@@ -230,6 +230,11 @@ struct Args {
     #[arg(long, default_value_t = usize::MAX)]
     elf_unit_limit: usize,
 
+    // --elf-unit-limit-min
+    /// Parse only compilations units >= n.
+    #[arg(long, default_value_t = 0)]
+    elf_unit_limit_min: usize,
+
     // --elf-var-filter
     /// Regex pattern to filter variable names when registering from an ELF file.
     /// Only variables whose names match the pattern are included in the A2L output.
@@ -584,7 +589,8 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
         fix_a2l,
         elf: elf_filename,
         upload_elf,
-        elf_unit_limit: elf_idx_unit_limit,
+        elf_unit_limit_min,
+        elf_unit_limit,
         elf_var_filter,
         elf_skip_no_metadata,
         elf_unit_filter,
@@ -816,10 +822,11 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
 
                 // Read ELF file and DWARF debug information, compilation unit number may be limited to reduce processing time and memory needed
                 info!("Reading ELF file: {}", elf_filename);
-                let elf_reader = ElfReader::new(&elf_filename, verbose, elf_idx_unit_limit).map_err(|e| format!("Failed to read ELF file '{}': {}", elf_filename, e))?;
+                let elf_reader =
+                    ElfReader::new(&elf_filename, verbose, (elf_unit_limit_min, elf_unit_limit)).map_err(|e| format!("Failed to read ELF file '{}': {}", elf_filename, e))?;
                 elf_reader.log_compilers();
                 if verbose > 0 {
-                    elf_reader.debug_data.print_debug_info(verbose, elf_idx_unit_limit); // print only variables <= compilation unit 0
+                    elf_reader.debug_data.print_debug_info(verbose, (elf_unit_limit_min, elf_unit_limit)); // print only variables <= compilation unit 0
                 }
 
                 // Detect addressing scheme for calibration segments
@@ -861,7 +868,15 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                     if let Some(event) = &default_event {
                         default_event_id = Some(event.resolve(&reg)?);
                     }
-                    elf_reader.register_variables(&mut reg, segment_relative, verbose, elf_idx_unit_limit, &elf_var_filter, &elf_unit_filter, default_event_id)?;
+                    elf_reader.register_variables(
+                        &mut reg,
+                        segment_relative,
+                        verbose,
+                        (elf_unit_limit_min, elf_unit_limit),
+                        &elf_var_filter,
+                        &elf_unit_filter,
+                        default_event_id,
+                    )?;
                     // Register the captured local variables of the event triggers (DaqTriggerEventCapture)
                     elf_reader.register_captures(&mut reg, verbose)?;
                     // Apply metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the xcp_meta ELF section
@@ -1337,6 +1352,7 @@ struct ConfigFile {
     upload_elf: Option<bool>,
     elf: Option<String>,
     elf_unit_limit: Option<usize>,
+    elf_unit_limit_min: Option<usize>,
     elf_var_filter: Option<String>,
     elf_unit_filter: Option<String>,
     bin: Option<String>,
@@ -1387,6 +1403,7 @@ fn merge_config(matches: &clap::ArgMatches, config: ConfigFile, args: &mut Args)
     apply!(upload_elf);
     apply!(elf);
     apply!(elf_unit_limit);
+    apply!(elf_unit_limit_min);
     apply!(elf_var_filter);
     apply!(elf_unit_filter);
     apply!(bin);

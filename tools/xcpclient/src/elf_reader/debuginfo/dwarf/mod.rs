@@ -111,7 +111,7 @@ struct DebugDataReader<'elffile> {
 // Load and validate ELF/DWARF input, then collect and return parsed DebugData.
 // This function constructs a temporary DebugDataReader that owns parser state
 // (units, transient names, symbol table cache) and finalizes it into DebugData.
-pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: usize) -> Result<DebugData, String> {
+pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: (usize, usize)) -> Result<DebugData, String> {
     log::debug!("load_elf_dwarf: {}", filename.to_string_lossy());
 
     // open the file and mmap its content
@@ -519,7 +519,7 @@ impl DebugDataReader<'_> {
     // Traverse DWARF entries and finalize collected parser state into DebugData.
     // The order matters: the variables are loaded first, then only the types referenced by variables (loading all types of a
     // large ELF file would take far longer), then the scope qualified names of the types whose plain name is ambiguous
-    fn collect_debug_data(mut self, unit_idx_limit: usize) -> DebugData {
+    fn collect_debug_data(mut self, unit_idx_limit: (usize, usize)) -> DebugData {
         let mut variables = self.load_variables(unit_idx_limit);
         let (types, typenames) = self.load_types(&variables);
         self.resolve_local_static_addresses(&mut variables, &types);
@@ -546,11 +546,11 @@ impl DebugDataReader<'_> {
         }
     }
 
-    // Load all variables from the dwarf data: every DW_TAG_variable entry of every compilation unit up to unit_idx_limit,
-    // with its enclosing function and namespaces. The traversal is depth first (next_dfs), the `context` stack mirrors the
-    // path from the unit root to the current entry (entry.depth() is the nesting level), so the scopes a variable is nested
-    // in are the entries currently on the stack
-    fn load_variables(&mut self, unit_idx_limit: usize) -> IndexMap<String, Vec<VarInfo>> {
+    // Load all variables from the dwarf data: every DW_TAG_variable entry of every compilation unit whose index is inside
+    // the inclusive range unit_idx_limit = (min, max), with its enclosing function and namespaces. The traversal is depth
+    // first (next_dfs), the `context` stack mirrors the path from the unit root to the current entry (entry.depth() is the
+    // nesting level), so the scopes a variable is nested in are the entries currently on the stack
+    fn load_variables(&mut self, unit_idx_limit: (usize, usize)) -> IndexMap<String, Vec<VarInfo>> {
         let mut variables = IndexMap::<String, Vec<VarInfo>>::new();
 
         let mut iter = self.dwarf.debug_info.units();
@@ -565,7 +565,8 @@ impl DebugDataReader<'_> {
             // store the unit for later reference
             self.units.add(unit, abbreviations);
             let unit_idx = self.units.list.len() - 1;
-            if unit_idx > unit_idx_limit {
+            // Unit indices increase monotonically, so once the upper limit is exceeded, no further unit can be in range: stop entirely
+            if unit_idx > unit_idx_limit.1 {
                 break;
             }
             let (unit, abbreviations) = &self.units[unit_idx];
@@ -589,8 +590,15 @@ impl DebugDataReader<'_> {
                         None
                     }
                 };
+                // Always recorded (even below the lower limit) so unit_names/producers stay index-aligned with self.units.list
                 self.unit_names.push(unit_name);
                 self.producers.push(get_producer_attribute(entry, &self.dwarf, unit).ok());
+            }
+
+            // Units below the lower limit are still registered above to keep unit indices aligned, but their variables are
+            // not collected
+            if unit_idx < unit_idx_limit.0 {
+                continue;
             }
 
             // traverse all entries in depth-first order
@@ -875,7 +883,7 @@ impl DebugDataReader<'_> {
             let name = get_name_attribute(&specification_entry, &self.dwarf, unit)?;
             log::debug!("get_variable '{}':", name);
             let typeref = get_typeref_attribute(&specification_entry, unit)?;
-            let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1).unwrap_or((0u8, 0u64));
+            let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1, &name).unwrap_or((0u8, 0u64));
             // The definition entry is at compilation unit level, the scope of the variable is the one of its declaration (specification)
             let specification_scopes = specification_entry
                 .offset()
@@ -900,7 +908,7 @@ impl DebugDataReader<'_> {
             let name = get_name_attribute(entry, &self.dwarf, unit).or_else(|_| get_name_attribute(&abstract_origin_entry, &self.dwarf, unit))?;
             log::debug!("'{}':", name);
             let typeref = get_typeref_attribute(entry, unit).or_else(|_| get_typeref_attribute(&abstract_origin_entry, unit))?;
-            let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1).unwrap_or((0u8, 0u64));
+            let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1, &name).unwrap_or((0u8, 0u64));
             if address == (0u8, 0u64)
                 && let Some(sym_addr) = self
                     .resolve_address_from_symbols(entry, unit, &name, local, function_linkage, namespaces)
@@ -919,7 +927,7 @@ impl DebugDataReader<'_> {
             let name = get_name_attribute(entry, &self.dwarf, unit)?;
             log::debug!("'{}':", name);
             let typeref = get_typeref_attribute(entry, unit)?;
-            let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1).unwrap_or((0u8, 0u64));
+            let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1, &name).unwrap_or((0u8, 0u64));
             if address == (0u8, 0u64)
                 && let Some(sym_addr) = self.resolve_address_from_symbols(entry, unit, &name, local, function_linkage, namespaces)
             {
@@ -1024,6 +1032,24 @@ fn frame_pointer_registers(architecture: object::Architecture) -> &'static [u16]
         object::Architecture::Riscv32 | object::Architecture::Riscv64 => &[8], // s0 / fp
         object::Architecture::Xtensa => &[7, 15],                              // a7 (windowed ABI), a15 (call0 ABI)
         object::Architecture::PowerPc | object::Architecture::PowerPc64 => &[31],
+        _ => &[],
+    }
+}
+
+// DWARF register numbers of the stack pointer register of an architecture, used in evaluate_exprloc to recognize a
+// variable location expressed directly as "DW_OP_breg<sp> <offset>" (seen with Clang, which sometimes emits this
+// instead of routing the local through DW_AT_frame_base/DW_OP_fbreg like GCC does). This is only used to make the
+// diagnostic more specific: the resulting offset is relative to the live SP value, which is a different reference
+// point than DW_AT_frame_base (they differ by the function's stack frame size), so it must NOT be treated as a
+// frame-base-relative offset (address extension 2) without further work.
+fn stack_pointer_registers(architecture: object::Architecture) -> &'static [u16] {
+    match architecture {
+        object::Architecture::X86_64 => &[7],                                    // rsp
+        object::Architecture::I386 => &[4],                                      // esp
+        object::Architecture::Aarch64 => &[31],                                  // sp
+        object::Architecture::Arm => &[13],                                      // sp
+        object::Architecture::Riscv32 | object::Architecture::Riscv64 => &[2],   // sp
+        object::Architecture::PowerPc | object::Architecture::PowerPc64 => &[1], // r1
         _ => &[],
     }
 }
@@ -1168,7 +1194,7 @@ mod test {
     #[test]
     fn test_load_qualified_type_names() {
         let filename = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_namespaces.elf");
-        let debugdata = DebugData::load_dwarf(OsStr::new(filename), 0, usize::MAX).unwrap();
+        let debugdata = DebugData::load_dwarf(OsStr::new(filename), 0, (0, usize::MAX)).unwrap();
         let type_name_of = |varinfo: &VarInfo| -> String {
             let type_info = debugdata.types.get(&varinfo.typeref).expect("type of variable");
             debugdata.get_type_name(type_info).expect("type name").to_string()
@@ -1212,7 +1238,7 @@ mod test {
     #[test]
     fn test_load_data() {
         for filename in ELF_FILE_NAMES {
-            let debugdata = DebugData::load_dwarf(OsStr::new(filename), 1, usize::MAX).unwrap();
+            let debugdata = DebugData::load_dwarf(OsStr::new(filename), 1, (0, usize::MAX)).unwrap();
             // 14 globals in cpp_types.cpp, compilers may add a few more (e.g. static members)
             assert!(debugdata.variables.len() >= 14, "only {} variables found", debugdata.variables.len());
             assert!(debugdata.variables.get("g_sink").is_some());
@@ -1228,199 +1254,6 @@ mod test {
             assert!(matches!(datatype_of("g_plain"), DbgDataType::Struct { is_class: false, .. }));
             assert!(matches!(datatype_of("g_pubclass"), DbgDataType::Struct { is_class: true, .. }));
             assert!(matches!(datatype_of("g_bigenum"), DbgDataType::Enum { signed: true, .. }));
-
-            /*
-            if let TypeInfo {
-                datatype: DbgDataType::Class { inheritance, members, .. },
-                ..
-            } = typeinfo
-            {
-                assert!(inheritance.contains_key("base1"));
-                assert!(inheritance.contains_key("base2"));
-                assert!(matches!(
-                    members.get("ss"),
-                    Some((
-                        TypeInfo {
-                            datatype: DbgDataType::Sint16,
-                            ..
-                        },
-                        _
-                    ))
-                ));
-                assert!(matches!(
-                    members.get("base1_var"),
-                    Some((
-                        TypeInfo {
-                            datatype: DbgDataType::Sint32,
-                            ..
-                        },
-                        _
-                    ))
-                ));
-                assert!(matches!(
-                    members.get("base2var"),
-                    Some((
-                        TypeInfo {
-                            datatype: DbgDataType::Sint32,
-                            ..
-                        },
-                        _
-                    ))
-                ));
-            }
-
-            let varinfo = debugdata.variables.get("class2").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            assert!(matches!(
-                typeinfo,
-                TypeInfo {
-                    datatype: DbgDataType::Class { .. },
-                    ..
-                }
-            ));
-
-            let varinfo = debugdata.variables.get("class3").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            assert!(matches!(
-                typeinfo,
-                TypeInfo {
-                    datatype: DbgDataType::Class { .. },
-                    ..
-                }
-            ));
-
-            let varinfo = debugdata.variables.get("class4").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            assert!(matches!(
-                typeinfo,
-                TypeInfo {
-                    datatype: DbgDataType::Class { .. },
-                    ..
-                }
-            ));
-
-            let varinfo = debugdata.variables.get("staticvar").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            assert!(matches!(
-                typeinfo,
-                TypeInfo {
-                    datatype: DbgDataType::Sint32,
-                    ..
-                }
-            ));
-
-            let varinfo = debugdata.variables.get("structvar").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            assert!(matches!(
-                typeinfo,
-                TypeInfo {
-                    datatype: DbgDataType::Struct { .. },
-                    ..
-                }
-            ));
-
-            let varinfo = debugdata.variables.get("bitfield").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            assert!(matches!(
-                typeinfo,
-                TypeInfo {
-                    datatype: DbgDataType::Struct { .. },
-                    ..
-                }
-            ));
-            if let TypeInfo {
-                datatype: DbgDataType::Struct { members, .. },
-                ..
-            } = typeinfo
-            {
-                assert!(matches!(
-                    members.get("var"),
-                    Some((
-                        TypeInfo {
-                            datatype: DbgDataType::Bitfield { bit_offset: 0, bit_size: 5, .. },
-                            ..
-                        },
-                        0
-                    ))
-                ));
-                assert!(matches!(
-                    members.get("var2"),
-                    Some((
-                        TypeInfo {
-                            datatype: DbgDataType::Bitfield { bit_offset: 5, bit_size: 5, .. },
-                            ..
-                        },
-                        0
-                    ))
-                ));
-                assert!(matches!(
-                    members.get("var3"),
-                    Some((
-                        TypeInfo {
-                            datatype: DbgDataType::Bitfield { bit_offset: 0, bit_size: 23, .. },
-                            ..
-                        },
-                        4
-                    ))
-                ));
-                assert!(matches!(
-                    members.get("var4"),
-                    Some((
-                        TypeInfo {
-                            datatype: DbgDataType::Bitfield { bit_offset: 23, bit_size: 1, .. },
-                            ..
-                        },
-                        4
-                    ))
-                ));
-            }
-            let varinfo = debugdata.variables.get("enum_var1").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            assert!(matches!(
-                typeinfo,
-                TypeInfo {
-                    datatype: DbgDataType::Enum { .. },
-                    ..
-                }
-            ));
-            let varinfo = debugdata.variables.get("enum_var2").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            assert!(matches!(
-                typeinfo,
-                TypeInfo {
-                    datatype: DbgDataType::Enum { .. },
-                    ..
-                }
-            ));
-            let varinfo = debugdata.variables.get("enum_var3").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            assert!(matches!(
-                typeinfo,
-                TypeInfo {
-                    datatype: DbgDataType::Enum { .. },
-                    ..
-                }
-            ));
-
-            let varinfo = debugdata.variables.get("var_array").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            let DbgDataType::Array { size, dim, arraytype, .. } = &typeinfo.datatype else {
-                panic!("Expected array type, got {:?}", typeinfo.datatype);
-            };
-            assert_eq!(*size, 33);
-            assert_eq!(dim.len(), 1);
-            assert_eq!(dim[0], 33);
-            assert!(matches!(arraytype.datatype, DbgDataType::Uint8));
-
-            let varinfo = debugdata.variables.get("var_multidim").unwrap();
-            let typeinfo = debugdata.types.get(&varinfo[0].typeref).unwrap();
-            let DbgDataType::Array { dim, arraytype, .. } = &typeinfo.datatype else {
-                panic!("Expected array type, got {:?}", typeinfo.datatype);
-            };
-            assert_eq!(dim.len(), 3);
-            assert_eq!(dim, &[10, 3, 7]);
-            assert!(matches!(arraytype.datatype, DbgDataType::Float));
-            */
         }
     }
 }

@@ -19,6 +19,8 @@ use std::fmt::Display;
 
 mod dwarf;
 
+use crate::elf_reader::is_a2l_variable;
+
 // What the DWARF locations of the local variables of a function are relative to (DW_AT_frame_base of the function), and
 // whether this is the frame address which the event trigger macro passes to the target (xcp_get_frame_addr() in inc/xcplib.h):
 // GCC uses the canonical frame address and the macro passes __builtin_dwarf_cfa(), clang uses the frame pointer register and
@@ -155,7 +157,7 @@ pub(crate) struct DebugData {
 // print_debug_stats - prints a summary of the debug information
 impl DebugData {
     /// load the debug info from an elf file
-    pub(crate) fn load_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: usize) -> Result<Self, String> {
+    pub(crate) fn load_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: (usize, usize)) -> Result<Self, String> {
         dwarf::load_elf_dwarf(filename, verbose, unit_idx_limit)
     }
 
@@ -247,7 +249,7 @@ impl DebugData {
     // level >= 3 print demangled names
     // level >= 4 print type names
     // level >= 5 print types
-    pub(crate) fn print_debug_info(&self, level: usize, unit_idx_limit: usize) {
+    pub(crate) fn print_debug_info(&self, level: usize, unit_idx_limit: (usize, usize)) {
         //
         self.print_debug_stats();
 
@@ -325,16 +327,7 @@ impl DebugData {
         println!("\n====================================================================================================");
         println!("A2L Creator variables:");
         for (var_name, var_info) in &self.variables {
-            if var_name.starts_with("xcp_meta__")
-                || var_name.starts_with("calblk__")
-                || var_name.starts_with("calseg__")
-                || var_name.starts_with("evt__")
-                || var_name.starts_with("trg__")
-            {
-                if var_info.len() != 1 {
-                    println!("{} instances of '{}' found, skipped", var_info.len(), var_name);
-                    continue;
-                }
+            if is_a2l_variable(var_name) {
                 let var = &var_info[0];
                 let unit_name = if let Some(name) = self.make_simple_unit_name(var.unit_idx) {
                     name
@@ -359,7 +352,7 @@ impl DebugData {
 
             for (var_name, var_info) in &self.variables {
                 // Count all variable in unit_idx
-                let count = var_info.iter().filter(|v| v.unit_idx <= unit_idx_limit).count();
+                let count = var_info.iter().filter(|v| v.unit_idx >= unit_idx_limit.0 && v.unit_idx <= unit_idx_limit.1).count();
 
                 // Skip standard library variables and system/compiler internals (__<name>)s
                 // Skip global XCP variables (gXCP.. and gA2L..)
@@ -367,8 +360,8 @@ impl DebugData {
                     continue;
                 }
 
-                // print only variables from compilation unit 0..=unit_idx
-                if count == 1 && var_info[0].unit_idx > unit_idx_limit {
+                // print only variables from compilation unit
+                if count == 1 && (var_info[0].unit_idx < unit_idx_limit.0 || var_info[0].unit_idx > unit_idx_limit.1) {
                     continue;
                 }
 
@@ -381,7 +374,7 @@ impl DebugData {
                     }
                     for var in var_info {
                         // print only variables from compilation unit 0..=unit_idx
-                        if var.unit_idx > unit_idx_limit {
+                        if var.unit_idx < unit_idx_limit.0 || var.unit_idx > unit_idx_limit.1 {
                             continue; // print only variables from compilation unit 0..=unit_idx
                         }
                         if count <= 1 {
