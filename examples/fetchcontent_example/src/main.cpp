@@ -13,12 +13,12 @@
 // XCP configuration
 
 #define OPTION_PROJECT_NAME "fetchcontent_example_cpp"
-#define OPTION_PROJECT_VERSION "V2.1.10"
+#define OPTION_PROJECT_VERSION "V100"
 #define OPTION_USE_TCP true
 #define OPTION_SERVER_PORT 5555
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}
 #define OPTION_QUEUE_SIZE (1024 * 32)
-#define OPTION_LOG_LEVEL 4
+#define OPTION_LOG_LEVEL 5
 
 //-----------------------------------------------------------------------------------------------------
 // Application variables
@@ -63,7 +63,7 @@ int main() {
     std::cout << "Connect CANape to this address to start measurement\n" << std::endl;
 
     // Enable A2L generation
-    if (!A2lInit(addr, OPTION_SERVER_PORT, OPTION_USE_TCP, A2L_MODE_WRITE_ALWAYS | A2L_MODE_FINALIZE_ON_CONNECT)) {
+    if (!A2lInit(addr, OPTION_SERVER_PORT, OPTION_USE_TCP, A2L_MODE_WRITE_ONCE | A2L_MODE_FINALIZE_ON_CONNECT)) {
         return 1;
     }
 
