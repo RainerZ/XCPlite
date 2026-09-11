@@ -17,13 +17,6 @@
 
 #include "platform.h" // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex, spinlock
 
-#include <stdlib.h> // for malloc, free
-#if !defined(_WIN)
-#include <errno.h> // for errno, EEXIST, strerror
-#include <fcntl.h> // for open, O_CREAT, O_RDONLY, O_RDWR, O_EXCL
-
-#endif
-
 #include "xcplib_cfg.h" // for OPTION_xxx ...
 
 #include "assert.h"    // for assert
@@ -168,7 +161,7 @@ void sleepMs(uint32_t ms) {
 #if defined(OPTION_SHM_MODE)
 
 #if !defined(_WIN)
-#include <sys/mman.h>
+#include <sys/mman.h> // for mmap, munmap
 #endif
 
 void *platformMemAlloc(size_t size) {
@@ -199,6 +192,9 @@ void platformMemFree(void *ptr, size_t size) {
 
 #if !defined(_WIN)
 
+#include <errno.h>    // for errno, EEXIST, strerror
+#include <fcntl.h>    // file I/O
+#include <stdlib.h>   // for malloc, free
 #include <sys/file.h> // for flock, LOCK_EX, LOCK_UN
 #include <sys/stat.h> // for S_IRUSR, S_IWUSR
 
