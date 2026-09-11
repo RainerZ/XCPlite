@@ -60,7 +60,7 @@ include(FetchContent)
 
 FetchContent_Declare(xcplite
     GIT_REPOSITORY https://github.com/vectorgrp/XCPlite.git
-    GIT_TAG        V2.2.1
+    GIT_TAG        V2.2.2
     GIT_SHALLOW    TRUE
 )
 

@@ -1,7 +1,7 @@
 
 cmake_minimum_required(VERSION 3.14)
 
-project(xcplite VERSION 2.2.1 LANGUAGES C CXX)
+project(xcplite VERSION 2.2.2 LANGUAGES C CXX)
 
 # Check if xcplite is the top-level project, or is it consumed as a subproject (add_subdirectory / FetchContent)
 # Settings which touch the global CMake cache (install prefix, per-build-type compiler flags, install rules) are applied only

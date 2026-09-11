@@ -2,7 +2,7 @@
 
 All notable changes to XCPlite are documented in this file.
 
-## [V2.2.1] 
+## [V2.2.2] 
 
 - CMake: xcplite can now be consumed via `FetchContent`/`add_subdirectory` (as suggested by vectorgrp/XCPlite#132):
     - New alias target `xcplite::xcplite`, the same name the installed package exports.
