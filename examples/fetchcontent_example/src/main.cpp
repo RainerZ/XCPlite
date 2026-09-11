@@ -1,13 +1,5 @@
 // fetchcontent_example_cpp - C++ version demonstrating libxcplite built from source via FetchContent
 
-// This example shows how to use libxcplite when it's installed as a binary
-// library (either system-wide or in a local staging directory).
-//
-// The code is designed to demonstrate:
-// - Including libxcplite headers from an installed location
-// - Linking against the pre-built libxcplite library
-// - Basic XCP measurement and calibration functionality for global variables
-
 #include <csignal>
 #include <cstdint>
 #include <iostream>
@@ -23,7 +15,7 @@
 #define OPTION_PROJECT_NAME "fetchcontent_example_cpp"
 #define OPTION_PROJECT_VERSION "V2.1.10"
 #define OPTION_USE_TCP true
-#define OPTION_SERVER_PORT 5556
+#define OPTION_SERVER_PORT 5555
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}
 #define OPTION_QUEUE_SIZE (1024 * 32)
 #define OPTION_LOG_LEVEL 4
@@ -58,7 +50,7 @@ int main() {
     XcpSetLogLevel(OPTION_LOG_LEVEL);
 
     // Initialize XCP
-    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_LOCAL);
+    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_PERSISTENCE | XCP_MODE_LOCAL);
 
     // Initialize XCP Ethernet server
     uint8_t addr[4] = OPTION_SERVER_ADDR;
@@ -75,12 +67,13 @@ int main() {
         return 1;
     }
 
-    // Create a global calibration parameter (not using a calibration segment, thread safety not guaranteed)
-    A2lCreateParameter(loop_delay_us, "Loop delay in microseconds", "us", 100, 100000);
-
     // Create measurement event and a global measurement variable
     DaqCreateEvent(MainTask);
+    A2lSetAbsoluteAddrMode(MainTask);
     A2lCreateMeasurement(counter_value, "Counter value");
+
+    // Create a global calibration parameter (not using a calibration segment, thread safety not guaranteed)
+    A2lCreateParameter(loop_delay_us, "Loop delay in microseconds", "us", 100, 100000);
 
     std::cout << "Starting main loop (press Ctrl+C to stop)...\n" << std::endl;
 
@@ -93,11 +86,6 @@ int main() {
 
         // Sleep
         usleep(loop_delay_us);
-
-        // Print status
-        if (counter_value % 1000 == 0) {
-            std::cout << "Counter: " << counter_value << ", Delay: " << loop_delay_us << " us" << std::endl;
-        }
     }
 
     XcpDisconnect();        // Force disconnect the XCP client
