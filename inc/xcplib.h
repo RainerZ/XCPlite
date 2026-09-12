@@ -361,7 +361,7 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 // Get the event id as compile-time constant for an event descriptor name (evt__<event_name>)
 #define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) ((tXcpEventId)(&(evt) - __start_xcp_evts))
 // Set the event id for an event descriptor at runtime not needed, the link-time id is already set
-#define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id)
+#define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id) (void)(evt_id)
 #else
 // With other compilers, the event id is not a compile-time constant, but a link-time constant, so it can be used as static initializer
 // Get the event id as compile-time constant for an event descriptor not possible

@@ -13,7 +13,7 @@
 // Runtime XCP configuration
 
 #ifndef __XCPLIB_CFG_H__
-#error "Default xcplib configuration not visible
+#error "Default xcplib configuration not visible"
 #endif
 
 #define OPTION_PROJECT_NAME "fetchcontent_example_cpp"

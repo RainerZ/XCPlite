@@ -15,7 +15,7 @@
 #include <xcplib.h>
 
 #ifndef __XCPLIB_CFG_H__
-#error "Default xcplib configuration not visible
+#error "Default xcplib configuration not visible"
 #endif
 
 //-----------------------------------------------------------------------------------------------------
