@@ -16,13 +16,16 @@
 |     #include "xcplib_no_a2l_cfg.h"
 |
 |   Main purpose of this example is to demonstrate fetchcontent
-|   With a minimal feature configuration
-|   - No thread-safe calibration segment management
-|   - No calibration persistence
-|   - UDP only
+|
+|   This example has a minimal user feature configuration
+|   - No thread-safe calibration segment management and RCU
+|   - No calibration data persistence
+|   - UDP only with ethernet MTU = 1500
 |   - No online A2L generation
 |   - No dynamic event creation
 |   - 32 bit queue with mutex
+|   - Reduced DAQ table memory
+|   - Log level limited to 3
 |
  ----------------------------------------------------------------------------*/
 
@@ -39,6 +42,8 @@
 // Disable calibration segment management and RCU completely
 #undef OPTION_CAL_SEGMENTS
 
+#ifdef OPTION_CAL_SEGMENTS
+
 // Absolute addressing mode for calibration segments (address extension 0 is absolute addressing)
 #define OPTION_CAL_SEGMENTS_ABS
 
@@ -52,22 +57,27 @@
 #undef OPTION_CAL_MEM_SIZE
 #define OPTION_CAL_MEM_SIZE (1024 * 1)
 
-// No calibration segment persistence — not supported in OPTION_CAL_SEGMENTS_ABS
-#undef OPTION_ENABLE_PERSISTENCE
+#endif
 
 //-------------------------------------------------------------------------------
 // Runtime A2L generation
 
-#undef OPTION_ENABLE_A2L_GENERATOR
-#undef OPTION_ENABLE_A2L_UPLOAD
+// #undef OPTION_ENABLE_A2L_GENERATOR
+// #undef OPTION_ENABLE_A2L_UPLOAD
 #undef OPTION_ENABLE_ELF_UPLOAD
 
 //-------------------------------------------------------------------------------
 // Events
 
-// No runtime DAQ event management
+// No runtime DAQ event management (dynamic event creation at runtime)
 // Disables tXcpEvent, XcpCreateIndexedEvent, XcpCreateEvent, XcpCreateEventInstance, XcpGetEventCount, XcpFindEvent, XcpGetEventName, XcpGetEventIndex, XcpGetEvent
 #undef OPTION_DAQ_EVENT_LIST
+
+//-------------------------------------------------------------------------------
+// Persistence
+
+// No persistence for (dynamic events and calibration segments and calibration data)
+#undef OPTION_ENABLE_PERSISTENCE
 
 //-------------------------------------------------------------------------------
 // DAQ
@@ -90,7 +100,8 @@
 // Ethernet MTU, no jumbo frames
 // Raise this, if your network path allows it. The default XCPlite configuration will error on fragmentation.
 #undef OPTION_MTU
-#define OPTION_MTU 1500
+// #define OPTION_MTU 1500
+#define OPTION_MTU 7000
 
 //-------------------------------------------------------------------------------
 // Transmit queue
