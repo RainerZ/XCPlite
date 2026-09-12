@@ -593,7 +593,7 @@ extern THREAD_FUNC_RETURN XcpTlMulticastThread(void *par) {
 bool XcpEthTlInit(const uint8_t *addr, uint16_t port, bool useTCP, tQueueHandle Queue) {
 
     DBG_PRINT3("Init XCP transport layer\n");
-    DBG_PRINTF3("  MAX_CTO_SIZE=%u\n", XCPTL_MAX_CTO_SIZE);
+    DBG_PRINTF3("  MAX_SEGMENT_SIZE=%u\n", XCPTL_MAX_SEGMENT_SIZE);
     DBG_PRINTF5("  sizeof(gXcpTl)=%u\n", (uint32_t)sizeof(gXcpTl));
 
 #ifdef XCPTL_ENABLE_MULTICAST

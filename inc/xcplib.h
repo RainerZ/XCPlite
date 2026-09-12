@@ -300,6 +300,17 @@ uint16_t XcpGetEventIndex(tXcpEventId event);
 #endif
 #endif // THREAD_LOCAL
 
+// Attribute for variables which are used only in some configurations or only by some of the instrumentation macros.
+#ifndef XCP_MAYBE_UNUSED
+#if defined(__cplusplus) && (__cplusplus >= 201703L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L))
+#define XCP_MAYBE_UNUSED [[maybe_unused]]
+#elif defined(__GNUC__) || defined(__clang__)
+#define XCP_MAYBE_UNUSED __attribute__((unused))
+#else
+#define XCP_MAYBE_UNUSED
+#endif
+#endif // XCP_MAYBE_UNUSED
+
 // Event descriptor used by DaqCreateEvent() for section-based pre-registration
 #ifndef __XCPLITE_H__ // Public API header guard
 
@@ -357,7 +368,7 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 // Link-time event id derived from the descriptor's position in the xcp_evts section
 // Only with clang on Linux, this is a link-time constant, usable as a static initializer
 #if defined(__ELF__) || defined(__APPLE__)
-#if defined(__clang__) && defined(_Linux)
+#if defined(__clang__) && defined(_LINUX)
 // Get the event id as compile-time constant for an event descriptor name (evt__<event_name>)
 #define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) ((tXcpEventId)(&(evt) - __start_xcp_evts))
 // Set the event id for an event descriptor at runtime not needed, the link-time id is already set
@@ -396,7 +407,7 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 /// @param name Name given as identifier
 #define DaqCreateEvent(event_name)                                                                                                                                                 \
     static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, 0, 0);                                                      \
-    static tXcpEventId evt_id_##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                                 \
+    XCP_MAYBE_UNUSED static tXcpEventId evt_id_##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                \
     XCP_EVENT_SECTION_SET_ID(evt__##event_name, evt_id_##event_name);
 
 /// Create an event with given expected cycle time and priority
@@ -405,7 +416,7 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 /// @param priority Priority of the event (0 = normal, >=1 = realtime)
 #define DaqCreateEventExt(event_name, cycle, prio)                                                                                                                                 \
     static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, (cycle) * 1000U, (prio));                                   \
-    static tXcpEventId evt_id_##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                                 \
+    XCP_MAYBE_UNUSED static tXcpEventId evt_id_##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                \
     XCP_EVENT_SECTION_SET_ID(evt__##event_name, evt_id_##event_name);
 
 #ifdef OPTION_DAQ_EVENT_LIST
