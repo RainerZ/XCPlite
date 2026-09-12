@@ -20,7 +20,7 @@
 // find_package(xcplite) reports to a consuming project.
 #define OPTION_VERSION_MAJOR 2
 #define OPTION_VERSION_MINOR 2
-#define OPTION_VERSION_PATCH 1
+#define OPTION_VERSION_PATCH 2
 
 // CANape version compatibility
 // Disable workarounds for CANape versions < 24SP2
@@ -135,8 +135,9 @@
 // 6 bytes per measurement signal (ODT entry) needed
 #define OPTION_DAQ_MEM_SIZE (512 * 6)
 
-// Create an cyclic DAQ event for asynchronous data acquisition
-// Needs OPTION_DAQ_EVENT_LIST
+// Create an cyclic default DAQ event with event id=0 for asynchronous data acquisition
+// May be used as default_event for xcpclient, since xcpclient V4.x explicitly specified as commandline option
+// (Needs OPTION_DAQ_EVENT_LIST)
 // #define OPTION_DAQ_ASYNC_EVENT
 
 // Transport layer queue, vectored IO, lockless with variable queue entry size
@@ -191,9 +192,12 @@
 // Overrides
 
 // Optional application-specific override — patches any of the above defaults.
-// Pass the filename of your override header via:
-//   cmake: target_compile_definitions(xcplite PRIVATE "XCPLIB_CFG_OVERRIDE=\"my_xcplib_overrides.h\"")
-// See xcplib_rtos_cfg.h and xcplib_no_a2l_cfg.h for example override files.
+// The header is selected at build time and must be seen identically by the library and the application:
+//   cmake: -DXCPLITE_CFG_OVERRIDE=/path/to/xcplib_app_cfg.h  (or set(XCPLITE_CFG_OVERRIDE ...) before
+//          add_subdirectory/FetchContent_MakeAvailable), which defines XCPLIB_CFG_OVERRIDE as a PUBLIC
+//          usage requirement of the xcplite target and adds the header's directory to the include path.
+// See xcplib_rtos_cfg.h and xcplib_no_a2l_cfg.h (shipped configurations) and
+// examples/fetchcontent_example/config/xcplib_app_cfg.h for example override files.
 #ifdef XCPLIB_CFG_OVERRIDE
 #include XCPLIB_CFG_OVERRIDE
 #endif

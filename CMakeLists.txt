@@ -65,7 +65,43 @@ else()
     set(_xcplib_cfg_override "")
 endif()
 
-if(_xcplib_cfg_override)
+# Application specific configuration override header (XCPLITE_CFG_OVERRIDE)
+# A path to a header which is included at the end of src/xcplib_cfg.h (XCPLIB_CFG_OVERRIDE) and
+# may #undef/#define any OPTION_* default, like the shipped src/xcplib_<name>_cfg.h files do.
+# Only valid with XCPLITE_CONFIGURATION=default; to build on a shipped configuration, #include
+# its header (e.g. "xcplib_no_a2l_cfg.h") at the top of the custom header.
+# Like XCPLITE_CONFIGURATION, a normal variable set by a consuming project is honored.
+if(DEFINED XCPLITE_CFG_OVERRIDE AND NOT DEFINED CACHE{XCPLITE_CFG_OVERRIDE})
+    set(_xcplite_cfg_override_init "${XCPLITE_CFG_OVERRIDE}")
+else()
+    set(_xcplite_cfg_override_init "")
+endif()
+set(XCPLITE_CFG_OVERRIDE "${_xcplite_cfg_override_init}" CACHE FILEPATH
+    "Application specific configuration override header, applied on top of src/xcplib_cfg.h (XCPLITE_CONFIGURATION=default only)")
+
+set(_xcplib_cfg_override_path "") # full path of the override header to install (shipped or custom)
+set(_xcplib_cfg_override_dir "")  # include directory of a custom override header
+if(XCPLITE_CFG_OVERRIDE)
+    if(NOT XCPLITE_CONFIGURATION STREQUAL "default")
+        message(FATAL_ERROR
+            "XCPLITE_CFG_OVERRIDE requires XCPLITE_CONFIGURATION=default (got '${XCPLITE_CONFIGURATION}'). "
+            "To build on a shipped configuration, #include its header (e.g. \"xcplib_${XCPLITE_CONFIGURATION}_cfg.h\") "
+            "at the top of your override header.")
+    endif()
+    get_filename_component(_xcplib_cfg_override_path "${XCPLITE_CFG_OVERRIDE}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+    if(NOT EXISTS "${_xcplib_cfg_override_path}")
+        message(FATAL_ERROR "XCPLITE_CFG_OVERRIDE='${XCPLITE_CFG_OVERRIDE}' not found (resolved to '${_xcplib_cfg_override_path}')")
+    endif()
+    get_filename_component(_xcplib_cfg_override "${_xcplib_cfg_override_path}" NAME)
+    get_filename_component(_xcplib_cfg_override_dir "${_xcplib_cfg_override_path}" DIRECTORY)
+    if(_xcplib_cfg_override MATCHES "^xcplib_(no_a2l_|ptp_|shm_|rtos_|raw_)?cfg\\.h$")
+        message(FATAL_ERROR
+            "XCPLITE_CFG_OVERRIDE '${_xcplib_cfg_override}' has the name of a header shipped in src/, "
+            "which is searched first. Use a distinct name, e.g. xcplib_app_cfg.h")
+    endif()
+    message(STATUS "xcplite configuration: ${XCPLITE_CONFIGURATION}  (application override XCPLIB_CFG_OVERRIDE=\"${_xcplib_cfg_override}\" from ${_xcplib_cfg_override_dir})")
+elseif(_xcplib_cfg_override)
+    set(_xcplib_cfg_override_path "${CMAKE_CURRENT_SOURCE_DIR}/src/${_xcplib_cfg_override}")
     message(STATUS "xcplite configuration: ${XCPLITE_CONFIGURATION}  (XCPLIB_CFG_OVERRIDE=\"${_xcplib_cfg_override}\")")
 else()
     message(STATUS "xcplite configuration: ${XCPLITE_CONFIGURATION}  (using default xcplib_cfg.h)")
@@ -104,6 +140,9 @@ endif()
 #   XCPLITE_INSTALL  (any configuration)
 #                -> generate install/export rules; ON when xcplite is the top-level
 #                   project, OFF when consumed via add_subdirectory/FetchContent
+#   XCPLITE_CFG_OVERRIDE  (configuration 'default' only)
+#                -> path to an application specific configuration override header,
+#                   applied on top of src/xcplib_cfg.h (see examples/fetchcontent_example)
 #
 # To consume xcplite from another CMake project see docs/BUILDING.md
 # =============================================================================
@@ -232,6 +271,13 @@ target_include_directories(xcplite PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:include>
 )
+
+# A custom override header (XCPLITE_CFG_OVERRIDE) lives outside the xcplite tree: make its
+# directory visible to the library and to consumers in the build tree. The installed copy
+# lands in include/ next to xcplib_cfg.h (see the install rules below).
+if(_xcplib_cfg_override_dir)
+    target_include_directories(xcplite PUBLIC $<BUILD_INTERFACE:${_xcplib_cfg_override_dir}>)
+endif()
 
 # Apply compiler-specific flags
 if(COMMON_WARNING_FLAGS)
@@ -561,9 +607,9 @@ install(FILES src/socket_raw_hal.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # Install the active configuration override header (if not default)
 # This documents which configuration was compiled into the installed library.
-if(_xcplib_cfg_override)
-    install(FILES "src/${_xcplib_cfg_override}" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-    message(STATUS "Installing configuration override header: ${_xcplib_cfg_override}")
+if(_xcplib_cfg_override_path)
+    install(FILES "${_xcplib_cfg_override_path}" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    message(STATUS "Installing configuration override header: ${_xcplib_cfg_override_path}")
 endif()
 
 # Install CMake package configuration files

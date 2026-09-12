@@ -15,6 +15,8 @@ For the alternative, consuming a pre-built and installed xcplite with `find_pack
 fetchcontent_example/
 ├── CMakeLists.txt          # Independent build configuration with FetchContent_Declare(xcplite ...)
 ├── build.sh                # Build script (optionally against the local working tree)
+├── config/
+│   └── xcplib_app_cfg.h    # Application specific xcplite configuration override
 ├── src/
 │   ├── main.c              # Simple XCP example application for C
 │   └── main.cpp            # Simple XCP example application for C++
@@ -68,6 +70,7 @@ FetchContent_Declare(xcplite
 set(XCPLITE_CONFIGURATION  "default")   # default | no_a2l | ptp | shm | raw
 set(XCPLITE_BUILD_EXAMPLES OFF)
 set(XCPLITE_BUILD_TESTS    OFF)
+set(XCPLITE_CFG_OVERRIDE   "${CMAKE_CURRENT_SOURCE_DIR}/config/xcplib_app_cfg.h")
 
 FetchContent_MakeAvailable(xcplite)
 
@@ -91,6 +94,30 @@ When xcplite detects that it is not the top-level project:
 `XCPLITE_CONFIGURATION` selects the library configuration (see [Build configurations](../../docs/BUILDING.md#build-configurations)). Set it as a normal variable before `FetchContent_MakeAvailable()`, as shown above, or use the cache form `set(XCPLITE_CONFIGURATION "no_a2l" CACHE STRING "" FORCE)`.
 
 The `rtos` configuration additionally requires the consuming project to provide the FreeRTOS kernel and lwIP headers to the `xcplite` target and to define `_FREE_RTOS`; see `examples/freertos_demo/freertos_emu_demo/CMakeLists.txt` for the pattern.
+
+
+### Application specific configuration override
+
+The tunables of the library (`OPTION_*` in `src/xcplib_cfg.h`, documented in [xcplib_cfg.md](../../docs/xcplib_cfg.md)) are compile time settings. The shipped configurations (`no_a2l`, `ptp`, ...) are nothing more than override headers `src/xcplib_<name>_cfg.h` which `xcplib_cfg.h` includes at its end when the preprocessor symbol `XCPLIB_CFG_OVERRIDE` names them.
+
+An application can provide such a header itself. This example does so with `config/xcplib_app_cfg.h`, which changes the default log level, the DAQ memory size and the calibration segment limits:
+
+```cmake
+set(XCPLITE_CFG_OVERRIDE "${CMAKE_CURRENT_SOURCE_DIR}/config/xcplib_app_cfg.h")
+FetchContent_MakeAvailable(xcplite)
+```
+
+xcplite then defines `XCPLIB_CFG_OVERRIDE="xcplib_app_cfg.h"` and adds `config/` to the include path, both as PUBLIC usage requirements of the `xcplite` target. That matters: the application includes the same `xcplib_cfg.h` through `xcplib.h`, and struct layouts and macro expansions depend on the options, so library and application must be compiled with identical settings. The example prints the effective values at startup:
+
+```
+xcplite configuration 'default' with application override 'xcplib_app_cfg.h': DAQ memory 8192 bytes, 2 calibration segments
+```
+
+Rules:
+
+- `XCPLITE_CFG_OVERRIDE` is only valid with `XCPLITE_CONFIGURATION "default"`. To build on a shipped configuration, start your header with e.g. `#include "xcplib_no_a2l_cfg.h"` and patch further below it.
+- Give the header a name distinct from the shipped ones (`xcplib_cfg.h`, `xcplib_<name>_cfg.h`), since xcplite's own `src/` directory is searched first.
+- The same variable works for a standalone library build (`cmake -B build -S . -DXCPLITE_CFG_OVERRIDE=/path/to/xcplib_app_cfg.h`); with `XCPLITE_INSTALL=ON` the header is installed next to `xcplib_cfg.h`, so `find_package` consumers get the identical configuration.
 
 ### Overriding the source location
 

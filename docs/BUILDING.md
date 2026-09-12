@@ -25,6 +25,27 @@ Each `src/xcplib_<name>_cfg.h` header documents the exact overrides applied on t
 
 > **Use a separate build directory per configuration.** Configurations apply different compile definitions to the library object files; mixing them in one build directory produces incorrect results.
 
+### Application specific configuration override
+
+The shipped configurations are override headers `src/xcplib_<name>_cfg.h`, which `src/xcplib_cfg.h` includes at its end when the preprocessor symbol `XCPLIB_CFG_OVERRIDE` names them. An application can supply its own header in the same style (`#undef`/`#define` of `OPTION_*`, see `docs/xcplib_cfg.md` for the tunables) via the CMake variable `XCPLITE_CFG_OVERRIDE`:
+
+```bash
+# Standalone library build
+cmake -B build -S . -DXCPLITE_CFG_OVERRIDE=/path/to/xcplib_app_cfg.h
+```
+
+```cmake
+# Consuming project (add_subdirectory / FetchContent), before FetchContent_MakeAvailable()
+set(XCPLITE_CFG_OVERRIDE "${CMAKE_CURRENT_SOURCE_DIR}/config/xcplib_app_cfg.h")
+```
+
+xcplite defines `XCPLIB_CFG_OVERRIDE="<file name>"` and adds the header's directory to the include path, both as PUBLIC usage requirements of the `xcplite` target, so the library and every consumer see the same options (struct layouts and macro expansions depend on them). With install rules enabled the header is installed next to `xcplib_cfg.h`, so `find_package` consumers get the identical configuration.
+
+- Only valid with `XCPLITE_CONFIGURATION=default`. To build on a shipped configuration, `#include` its header (e.g. `"xcplib_no_a2l_cfg.h"`) at the top of the custom header.
+- The file name must differ from the shipped headers, since `src/` is searched first.
+
+`examples/fetchcontent_example/config/xcplib_app_cfg.h` is a complete example.
+
 ## Build options
 
 Within a chosen configuration, the following options control what gets built:
@@ -37,6 +58,7 @@ Within a chosen configuration, the following options control what gets built:
 | `XCPLITE_BUILD_RUST_TOOLS` | `OFF` | Build Rust tools `xcpclient` and `bintool` via cargo (any configuration; requires Rust toolchain) |
 | `XCPLITE_BUILD_BPF_DEMO` | `OFF` | Build `bpf_demo` (default configuration, Linux only; requires libbpf) |
 | `XCPLITE_INSTALL` | `ON` top-level, `OFF` as subproject | Generate install rules (`cmake --install`). Automatically `OFF` when xcplite is consumed via `add_subdirectory`/`FetchContent`, so a consuming project's install does not pull in xcplite unless requested |
+| `XCPLITE_CFG_OVERRIDE` | *(empty)* | Path to an application specific configuration override header, applied on top of `src/xcplib_cfg.h`. Only with `XCPLITE_CONFIGURATION=default`; see [Application specific configuration override](#application-specific-configuration-override) |
 
 ### Targets per configuration
 
@@ -313,6 +335,7 @@ Notes:
 - When consumed this way xcplite does not touch the consuming project's `CMAKE_INSTALL_PREFIX` or `CMAKE_<LANG>_FLAGS_<CONFIG>` and, with the default `XCPLITE_INSTALL=OFF`, adds no install rules. Set `-DXCPLITE_INSTALL=ON` to install xcplite together with your project.
 - The library needs only a C compiler; the root project also enables C++ because the C++ examples and tests live in the same tree.
 - For local development against a checked-out source tree, skip the clone with the standard override `-DFETCHCONTENT_SOURCE_DIR_XCPLITE=/path/to/XCPlite`.
+- An application specific override header can be applied with `XCPLITE_CFG_OVERRIDE`, see [Application specific configuration override](#application-specific-configuration-override).
 - The `rtos` configuration requires the consuming project to provide the FreeRTOS and lwIP headers and to define `_FREE_RTOS` on the `xcplite` target; see `examples/freertos_demo/freertos_emu_demo/CMakeLists.txt` for the pattern.
 
 See `examples/fetchcontent_example/` for a complete standalone project.

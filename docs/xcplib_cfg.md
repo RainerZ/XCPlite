@@ -21,6 +21,8 @@ Most important parameters are:
 
 The size of the transmission queue is a runtime parameter.
 
+Changes are made in an override header which `xcplib_cfg.h` includes at its end (`#undef`/`#define` of the `OPTION_*` defaults). The shipped build configurations are such headers, `src/xcplib_<name>_cfg.h`, selected with the CMake variable `XCPLITE_CONFIGURATION`. An application specific header is selected with the CMake variable `XCPLITE_CFG_OVERRIDE` (path to the file, configuration `default` only), see [BUILDING.md](BUILDING.md#application-specific-configuration-override) and `examples/fetchcontent_example/config/xcplib_app_cfg.h`. The library and the application must be compiled with the same override, which CMake guarantees by applying it as a PUBLIC usage requirement of the `xcplite` target.
+
 ## 1 · xcplib_cfg.h
 
 This section describes the configuration parameters in xcplib_cfg.h.

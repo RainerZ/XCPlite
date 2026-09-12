@@ -10,15 +10,32 @@
 #include <xcplib.hpp>
 
 //-----------------------------------------------------------------------------------------------------
-// XCP configuration
+// Runtime XCP configuration
+
+#ifndef __XCPLIB_CFG_H__
+#error "Default xcplib configuration not visible
+#endif
 
 #define OPTION_PROJECT_NAME "fetchcontent_example_cpp"
 #define OPTION_PROJECT_VERSION "V100"
-#define OPTION_USE_TCP true
+#define OPTION_USE_TCP false
 #define OPTION_SERVER_PORT 5555
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}
-#define OPTION_QUEUE_SIZE (1024 * 32)
-#define OPTION_LOG_LEVEL 5
+#define OPTION_QUEUE_SIZE (1024 * 8)
+#define OPTION_LOG_LEVEL 4
+
+// With calibration segment persistence enabled (xcplib_cfg_app.h)
+#ifdef OPTION_ENABLE_A2L_GENERATOR
+#ifdef OPTION_ENABLE_PERSISTENCE
+#define OPTION_XCP_MODE (XCP_MODE_PERSISTENCE | XCP_MODE_LOCAL)
+#define OPTION_A2L_MODE (A2L_MODE_WRITE_ONCE | A2L_MODE_FINALIZE_ON_CONNECT)
+#else
+#define OPTION_XCP_MODE (XCP_MODE_LOCAL)
+#define OPTION_A2L_MODE (A2L_MODE_WRITE_ALWAYS | A2L_MODE_FINALIZE_ON_CONNECT)
+#endif
+#else
+#define OPTION_XCP_MODE (XCP_MODE_LOCAL)
+#endif
 
 //-----------------------------------------------------------------------------------------------------
 // Application variables
@@ -50,7 +67,7 @@ int main() {
     XcpSetLogLevel(OPTION_LOG_LEVEL);
 
     // Initialize XCP
-    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, XCP_MODE_PERSISTENCE | XCP_MODE_LOCAL);
+    XcpInit(OPTION_PROJECT_NAME, OPTION_PROJECT_VERSION, OPTION_XCP_MODE);
 
     // Initialize XCP Ethernet server
     uint8_t addr[4] = OPTION_SERVER_ADDR;
@@ -62,18 +79,21 @@ int main() {
     std::cout << "XCP server listening on " << (OPTION_USE_TCP ? "TCP" : "UDP") << " port " << OPTION_SERVER_PORT << std::endl;
     std::cout << "Connect CANape to this address to start measurement\n" << std::endl;
 
+    // Create measurement event and a global measurement variable
+    DaqCreateEvent(MainTask);
+
+#ifdef OPTION_ENABLE_A2L_GENERATOR
     // Enable A2L generation
-    if (!A2lInit(addr, OPTION_SERVER_PORT, OPTION_USE_TCP, A2L_MODE_WRITE_ONCE | A2L_MODE_FINALIZE_ON_CONNECT)) {
+    if (!A2lInit(addr, OPTION_SERVER_PORT, OPTION_USE_TCP, OPTION_A2L_MODE)) {
         return 1;
     }
 
-    // Create measurement event and a global measurement variable
-    DaqCreateEvent(MainTask);
     A2lSetAbsoluteAddrMode(MainTask);
     A2lCreateMeasurement(counter_value, "Counter value");
 
     // Create a global calibration parameter (not using a calibration segment, thread safety not guaranteed)
     A2lCreateParameter(loop_delay_us, "Loop delay in microseconds", "us", 100, 100000);
+#endif
 
     std::cout << "Starting main loop (press Ctrl+C to stop)...\n" << std::endl;
 
@@ -88,8 +108,10 @@ int main() {
         usleep(loop_delay_us);
     }
 
-    XcpDisconnect();        // Force disconnect the XCP client
-    A2lFinalize();          // Finalize A2L generation, if not done yet
+    XcpDisconnect(); // Force disconnect the XCP client
+#ifdef OPTION_ENABLE_A2L_GENERATOR
+    A2lFinalize(); // Finalize A2L generation, if not done yet
+#endif
     XcpEthServerShutdown(); // Stop the XCP server
 
     return 0;

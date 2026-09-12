@@ -52,6 +52,18 @@ set(XCPLITE_BUILD_EXAMPLES OFF)
 set(XCPLITE_BUILD_TESTS    OFF)
 set(XCPLITE_BUILD_TOOLS    OFF)
 
+# ---------------------------------------------------------------------------
+# Application specific configuration override
+#
+# XCPLITE_CFG_OVERRIDE names a header which xcplite includes at the end of its
+# src/xcplib_cfg.h. It may #undef/#define any OPTION_* default, in the same way
+# as the shipped src/xcplib_<name>_cfg.h configuration files do. xcplite adds
+# XCPLIB_CFG_OVERRIDE="xcplib_app_cfg.h" and the header's directory as PUBLIC
+# usage requirements of the library target, so library and application are
+# compiled with the same options. Only valid with XCPLITE_CONFIGURATION "default".
+# ---------------------------------------------------------------------------
+set(XCPLITE_CFG_OVERRIDE "${CMAKE_CURRENT_SOURCE_DIR}/config/xcplib_app_cfg.h")
+
 FetchContent_MakeAvailable(xcplite)
 
 # ---------------------------------------------------------------------------
@@ -78,3 +90,4 @@ endif()
 message(STATUS "Building fetchcontent_example (C and C++)")
 message(STATUS "  xcplite source: ${xcplite_SOURCE_DIR}")
 message(STATUS "  xcplite configuration: ${XCPLITE_CONFIGURATION}")
+message(STATUS "  xcplite config override: ${XCPLITE_CFG_OVERRIDE}")
