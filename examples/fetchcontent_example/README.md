@@ -32,10 +32,10 @@ cd examples/fetchcontent_example
 
 This clones xcplite from the repository and tag pinned in `CMakeLists.txt` into `build/_deps/xcplite-src/`, builds it, and builds the two example executables against it.
 
-To build against the xcplite source tree this example is part of (no clone, picks up local changes):
+For testing by building against the xcplite source tree this example is part of (no clone, picks up local changes):
 
 ```bash
-./build.sh local
+./test_build.sh local
 ```
 
 Run:
@@ -44,12 +44,6 @@ Run:
 ./build/fetchcontent_example
 ./build/fetchcontent_example_cpp
 ```
-
-Connect with CANape:
-- Protocol: XCP on Ethernet
-- Address: localhost
-- Port: 5555
-- Transport: TCP
 
 ## How It Works
 
@@ -67,7 +61,7 @@ FetchContent_Declare(xcplite
 )
 
 # xcplite build options, set before FetchContent_MakeAvailable()
-set(XCPLITE_CONFIGURATION  "default")   # default | no_a2l | ptp | shm | raw
+set(XCPLITE_CONFIGURATION  "default")   
 set(XCPLITE_BUILD_EXAMPLES OFF)
 set(XCPLITE_BUILD_TESTS    OFF)
 set(XCPLITE_CFG_OVERRIDE   "${CMAKE_CURRENT_SOURCE_DIR}/config/xcplib_app_cfg.h")
@@ -89,39 +83,40 @@ When xcplite detects that it is not the top-level project:
 - It generates no install rules (`XCPLITE_INSTALL` defaults to `OFF`). Pass `-DXCPLITE_INSTALL=ON` if `cmake --install` of your project should install xcplite too.
 - It does not enable `CMAKE_EXPORT_COMPILE_COMMANDS`.
 
-### Selecting the xcplite configuration
-
-`XCPLITE_CONFIGURATION` selects the library configuration (see [Build configurations](../../docs/BUILDING.md#build-configurations)). Set it as a normal variable before `FetchContent_MakeAvailable()`, as shown above, or use the cache form `set(XCPLITE_CONFIGURATION "no_a2l" CACHE STRING "" FORCE)`.
-
-The `rtos` configuration additionally requires the consuming project to provide the FreeRTOS kernel and lwIP headers to the `xcplite` target and to define `_FREE_RTOS`; see `examples/freertos_demo/freertos_emu_demo/CMakeLists.txt` for the pattern.
-
 
 ### Application specific configuration override
 
 The tunables of the library (`OPTION_*` in `src/xcplib_cfg.h`, documented in [xcplib_cfg.md](../../docs/xcplib_cfg.md)) are compile time settings. The shipped configurations (`no_a2l`, `ptp`, ...) are nothing more than override headers `src/xcplib_<name>_cfg.h` which `xcplib_cfg.h` includes at its end when the preprocessor symbol `XCPLIB_CFG_OVERRIDE` names them.
 
-An application can provide such a header itself. This example does so with `config/xcplib_app_cfg.h`, which changes the default log level, the DAQ memory size and the calibration segment limits:
+An application can provide such a header itself. This example does so with `config/xcplib_app_cfg.h`:
 
 ```cmake
 set(XCPLITE_CFG_OVERRIDE "${CMAKE_CURRENT_SOURCE_DIR}/config/xcplib_app_cfg.h")
 FetchContent_MakeAvailable(xcplite)
 ```
 
-xcplite then defines `XCPLIB_CFG_OVERRIDE="xcplib_app_cfg.h"` and adds `config/` to the include path, both as PUBLIC usage requirements of the `xcplite` target. That matters: the application includes the same `xcplib_cfg.h` through `xcplib.h`, and struct layouts and macro expansions depend on the options, so library and application must be compiled with identical settings. The example prints the effective values at startup:
+xcplite then defines `XCPLIB_CFG_OVERRIDE="xcplib_app_cfg.h"` and adds `config/` to the include path, both as PUBLIC usage requirements of the `xcplite` target. This is important, the application includes the same `xcplib_cfg.h` through `xcplib.h`, and struct layouts and macro expansions depend on the options, so library and application must be compiled with identical settings!
 
-```
-xcplite configuration 'default' with application override 'xcplib_app_cfg.h': DAQ memory 8192 bytes, 2 calibration segments
-```
 
 Rules:
 
-- `XCPLITE_CFG_OVERRIDE` is only valid with `XCPLITE_CONFIGURATION "default"`. To build on a shipped configuration, start your header with e.g. `#include "xcplib_no_a2l_cfg.h"` and patch further below it.
-- Give the header a name distinct from the shipped ones (`xcplib_cfg.h`, `xcplib_<name>_cfg.h`), since xcplite's own `src/` directory is searched first.
+- `XCPLITE_CFG_OVERRIDE` is only valid with `XCPLITE_CONFIGURATION "default"`. To build on a shipped configuration, just replicate it in your own configuration.
+- Give the header a name distinct from the shipped configurations (`xcplib_cfg.h`, `xcplib_<name>_cfg.h`), since xcplite's own `src/` directory is searched first!
 - The same variable works for a standalone library build (`cmake -B build -S . -DXCPLITE_CFG_OVERRIDE=/path/to/xcplib_app_cfg.h`); with `XCPLITE_INSTALL=ON` the header is installed next to `xcplib_cfg.h`, so `find_package` consumers get the identical configuration.
+
+### Build types
+
+`CMAKE_BUILD_TYPE` selects the build type as usual, e.g. `cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo`.
+
+For `RelWithDebInfo`, the two example executables are additionally compiled with `-O1 -fno-omit-frame-pointer -fno-optimize-sibling-calls`. These keep local variables frame based and preserve the stack frames of the event triggers, which stack relative measurement depends on. `-O1` is appended after the `-O2` of the build type and overrides it.
+
+The flags are set with `target_compile_options` on the application targets only. The measured local variables live in the application, the library needs none of this and is built with the CMake defaults of the build type. `Debug` and `Release` add nothing.
+
+They are also only needed for the event triggers which measure local variables directly on the stack, such as `DaqTriggerEvent` and `DaqEventVar`. The capture variants `DaqTriggerEventCapture` and `DaqCreateAndTriggerEventCapture` copy the variables into a capture struct, which is measured instead of the stack frame. An application which captures all its local variables needs neither `-fno-omit-frame-pointer` nor `-fno-optimize-sibling-calls`, and can be built with the default flags of the build type.
 
 ### Overriding the source location
 
-CMake's standard override lets you point FetchContent at an existing checkout instead of cloning. `./build.sh local` does exactly this:
+CMake's standard override lets you point FetchContent at an existing checkout instead of cloning. `./test_build.sh local` does exactly this:
 
 ```bash
 cmake -B build -S . -DFETCHCONTENT_SOURCE_DIR_XCPLITE=/path/to/XCPlite
@@ -130,7 +125,7 @@ cmake -B build -S . -DFETCHCONTENT_SOURCE_DIR_XCPLITE=/path/to/XCPlite
 The repository and tag can also be changed on the command line without editing the file:
 
 ```bash
-cmake -B build -S . -DXCPLITE_GIT_REPOSITORY=https://github.com/<fork>/XCPlite.git -DXCPLITE_GIT_TAG=main
+cmake -B build -S . -DXCPLITE_GIT_REPOSITORY=https://github.com/<fork>/XCPlite.git -DXCPLITE_GIT_TAG=V2.2.2
 ```
 
 ## See Also

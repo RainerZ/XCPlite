@@ -10,7 +10,6 @@ All notable changes to XCPlite are documented in this file.
     - New option `XCPLITE_INSTALL` (default `ON` in top-level, `OFF` as subproject) controls the install rules.
     - New standalone `examples/fetchcontent_example`, documented in `docs/BUILDING.md`.
     - New CMake variable `XCPLITE_CFG_OVERRIDE`: path to an application specific configuration override header, applied on top of `xcplib_cfg.h` (configuration `default` only). Demonstrated by `examples/fetchcontent_example/config/xcplib_app_cfg.h`.
-    - The `DaqCreateEvent*` macros no longer use designated initializers (a C++20 extension flagged by `-pedantic` in C++17 when the headers are not system includes, e.g. via FetchContent).
 
 - New macros `DaqTriggerEventCapture`, `DaqTriggerEventCaptureAt` and `DaqCreateAndTriggerEventCapture` in `xcplib.h` to measure local variables which are not addressable via the frame pointer or which the user does not want to spill.
 
@@ -180,7 +179,7 @@ All notable changes to XCPlite are documented in this file.
 - XCP event and segment descriptor memory sections to preregister events and calibration segments/block in XcpInit, for deterministic event numbers without .BIN file
 - The A2L generator in xcpclient can create an A2L file template with XCP events and segments from the ELF file only, by inspecting the event and segment descriptor memory sections
 - Optional custom GET_ID to download the ELF file instead of the A2L file
-- Addressing schema XCPLITE__AXSDD, memory access via callbacks, no calibration segment management 
+- Addressing scheme XCPLITE__AXSDD, memory access via callbacks, no calibration segment management 
 
 
 ## [V2.0.4]
@@ -307,7 +306,7 @@ void XcpInit(const char *name, const char *epk, bool activate);
 ### Added
 - Absolute or relative calibration parameter segment addressing (`OPTION_CAL_SEGMENTS_ABS` in `xcplib_cfg.h`)
 - More flexible addressing scheme configuration (see `xcp_cfg.h`)
-- Generated A2L file uses the `project_no` identifier to indicate the configured addressing schema (currently ACSDD or CASDD)
+- Generated A2L file uses the `project_no` identifier to indicate the configured addressing scheme (currently ACSDD or CASDD)
 - Support for more than one base address in relative address mode, variadic function to trigger event with multiple base addresses
 - Optional async event with 1ms cycle time and prescaler support (`OPTION_DAQ_ASYNC_EVENT` in `xcplib_cfg.h`)
 - Different options to control the behavior of calibration segment persistence and freeze

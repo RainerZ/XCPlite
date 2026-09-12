@@ -62,8 +62,8 @@
 //-------------------------------------------------------------------------------
 // Runtime A2L generation
 
-// #undef OPTION_ENABLE_A2L_GENERATOR
-// #undef OPTION_ENABLE_A2L_UPLOAD
+#undef OPTION_ENABLE_A2L_GENERATOR
+#undef OPTION_ENABLE_A2L_UPLOAD
 #undef OPTION_ENABLE_ELF_UPLOAD
 
 //-------------------------------------------------------------------------------
