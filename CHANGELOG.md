@@ -4,6 +4,10 @@ All notable changes to XCPlite are documented in this file.
 
 ## [V2.2.2] 
 
+- `xcplib.h`, `xcplib.hpp`: new `XCP_NO_TAIL_CALL()` barrier at the end of every event trigger macro which passes `xcp_get_frame_addr()`. A trigger as last statement of a function was turned into a tail call by clang (x86-64) and GCC at -O2, so the local variables were copied from an already released stack frame. Applications which call `XcpEventExt*()` directly with `xcp_get_frame_addr()` must add the barrier themselves.
+
+- CMake: `-fno-omit-frame-pointer` and `-fno-optimize-sibling-calls` removed from the RelWithDebInfo flags (root build and `fetchcontent_example`). The frame pointer is forced by `__builtin_frame_address()` in exactly the functions which trigger events (GCC needs none, it locates locals relative to the CFA), and tail calls are prevented by `XCP_NO_TAIL_CALL()`.
+
 - CMake: xcplite can now be consumed via `FetchContent`/`add_subdirectory` (as suggested by vectorgrp/XCPlite#132):
     - New alias target `xcplite::xcplite`, the same name the installed package exports.
     - Install prefix default and per-build-type compiler flags are only applied when xcplite is the top-level project.
@@ -11,7 +15,7 @@ All notable changes to XCPlite are documented in this file.
     - New standalone `examples/fetchcontent_example`, documented in `docs/BUILDING.md`.
     - New CMake variable `XCPLITE_CFG_OVERRIDE`: path to an application specific configuration override header, applied on top of `xcplib_cfg.h` (configuration `default` only). Demonstrated by `examples/fetchcontent_example/config/xcplib_app_cfg.h`.
 
-- New macros `DaqTriggerEventCapture`, `DaqTriggerEventCaptureAt` and `DaqCreateAndTriggerEventCapture` in `xcplib.h` to measure local variables which are not addressable via the frame pointer or which the user does not want to spill.
+- `xcplib.h`: New macros `DaqTriggerEventCapture`, `DaqTriggerEventCaptureAt` and `DaqCreateAndTriggerEventCapture` in `xcplib.h` to measure local variables which are not addressable via the frame pointer or which the user does not want to spill.
 
 - Split the large `platform.c/.h` into `platform.c/.h` (threads, mutex, clock, sleep, memory, atomics) and `sockets.c/.h` (socket abstraction for all platforms).
 

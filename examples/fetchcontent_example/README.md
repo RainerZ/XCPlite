@@ -108,11 +108,9 @@ Rules:
 
 `CMAKE_BUILD_TYPE` selects the build type as usual, e.g. `cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo`.
 
-For `RelWithDebInfo`, the two example executables are additionally compiled with `-O1 -fno-omit-frame-pointer -fno-optimize-sibling-calls`. These keep local variables frame based and preserve the stack frames of the event triggers, which stack relative measurement depends on. `-O1` is appended after the `-O2` of the build type and overrides it.
+For `RelWithDebInfo`, the two example executables are additionally compiled with `-O1`, appended after the `-O2` of the build type. It keeps more local variables addressable in memory, which matters for the event triggers that measure locals directly on the stack (`DaqTriggerEvent`, `DaqEventVar`). The capture variants `DaqTriggerEventCapture`, `DaqTriggerEventCaptureAt` and `DaqCreateAndTriggerEventCapture` copy the variables into a struct which is always in memory, an application which captures all its locals can use the plain build type flags. The library has no measured locals and is built with the CMake defaults of every build type.
 
-The flags are set with `target_compile_options` on the application targets only. The measured local variables live in the application, the library needs none of this and is built with the CMake defaults of the build type. `Debug` and `Release` add nothing.
-
-They are also only needed for the event triggers which measure local variables directly on the stack, such as `DaqTriggerEvent` and `DaqEventVar`. The capture variants `DaqTriggerEventCapture` and `DaqCreateAndTriggerEventCapture` copy the variables into a capture struct, which is measured instead of the stack frame. An application which captures all its local variables needs neither `-fno-omit-frame-pointer` nor `-fno-optimize-sibling-calls`, and can be built with the default flags of the build type.
+No frame pointer or tail call flags are needed. The functions which trigger events use `__builtin_frame_address()`, which forces a frame pointer in exactly these functions, and the trigger macros end with a compiler barrier (`XCP_NO_TAIL_CALL()`) so that a trigger as last statement of a function is not turned into a tail call.
 
 ### Overriding the source location
 

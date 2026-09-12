@@ -224,11 +224,10 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     # For Release builds: use -O2 optimization and remove debug symbols and assertions
     set(CMAKE_C_FLAGS_RELEASE "-O2  -DNDEBUG" CACHE STRING "C flags for Release build" FORCE)
     set(CMAKE_CXX_FLAGS_RELEASE "-O2  -DNDEBUG" CACHE STRING "C++ flags for Release build" FORCE)
-    # For RelWithDebInfo builds: release build with moderate optimization and with debug symbols, preserve stack frames
-    # -fno-omit-frame-pointer: Always generate frame pointer for better stack traces
-    # -fno-optimize-sibling-calls: Prevent tail call optimization that can confuse debuggers
-    set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -DNDEBUG" CACHE STRING "C flags for RelWithDebInfo build" FORCE)
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -DNDEBUG" CACHE STRING "C++ flags for RelWithDebInfo build" FORCE)
+    # For RelWithDebInfo builds: release build with moderate optimization and with debug symbols
+    # -O1 keeps more local variables addressable in memory than -O2, for stack relative measurement
+    set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O1 -g -DNDEBUG" CACHE STRING "C flags for RelWithDebInfo build" FORCE)
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O1 -g -DNDEBUG" CACHE STRING "C++ flags for RelWithDebInfo build" FORCE)
     # For Debug builds: no optimization, full debug symbols
     set(CMAKE_C_FLAGS_DEBUG "-O0 -g" CACHE STRING "C flags for Debug build" FORCE)
     set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g" CACHE STRING "C++ flags for Debug build" FORCE)

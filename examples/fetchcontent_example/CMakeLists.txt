@@ -92,30 +92,22 @@ endif()
 # ---------------------------------------------------------------------------
 # Optimized build with debug info (cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo)
 #
-# Measured local variables live in the application, not in the library, so these flags are
-# applied to the application targets only. The library is built with the CMake defaults of
-# the build type ("-O2 -g -DNDEBUG" for RelWithDebInfo).
+# -O1 is appended for the application targets only and overrides the -O2 of the build type:
+# it keeps more local variables addressable in memory, which matters for the event triggers
+# that measure locals directly on the stack (DaqTriggerEvent, DaqCreateAndTriggerEvent, DaqEventVar).
+# Debug symbols (-g) come from the build type itself and are needed for A2L generation from the
+# ELF file with xcpclient. The library has no measured locals and keeps the build type defaults.
 #
-# -O1                          Optimized, but keeps most local variables addressable (appended, overrides the -O2 of the build type)
-# -fno-omit-frame-pointer      Locals stay frame based, required for stack relative measurement
-# -fno-optimize-sibling-calls  No tail call optimization, keeps the stack frames of the event triggers
-#
-# Debug symbols (-g) come from the RelWithDebInfo build type itself and are needed for
-# A2L generation from the ELF file with xcpclient.
-#
-# The two -fno- flags are needed only for the event triggers which measure local variables
-# directly on the stack (DaqTriggerEvent, DaqCreateAndTriggerEvent, DaqEventVar). They are
-# not needed when the locals are captured instead, with DaqTriggerEventCapture or DaqCreateAndTriggerEventCapture
-# An application which uses only the capture macros for its local variables can be built with the default flags of the
-# build type.
+# No frame pointer or tail call flags are needed: the functions which trigger events use
+# __builtin_frame_address(), which forces a frame pointer in exactly these functions, and the
+# trigger macros end with XCP_NO_TAIL_CALL(). An application which captures its locals
+# (DaqTriggerEventCapture, DaqTriggerEventCaptureAt, DaqCreateAndTriggerEventCapture) does not
+# even need the -O1, the capture struct is always in memory.
 # ---------------------------------------------------------------------------
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    set(APP_RELWITHDEBINFO_OPTIONS $<$<CONFIG:RelWithDebInfo>:-O1 -fno-omit-frame-pointer -fno-optimize-sibling-calls>)
-elseif(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
-    set(APP_RELWITHDEBINFO_OPTIONS $<$<CONFIG:RelWithDebInfo>:/Oy->) # /Oy- disables frame pointer omission
+    target_compile_options(fetchcontent_example PRIVATE $<$<CONFIG:RelWithDebInfo>:-O1>)
+    target_compile_options(fetchcontent_example_cpp PRIVATE $<$<CONFIG:RelWithDebInfo>:-O1>)
 endif()
-target_compile_options(fetchcontent_example PRIVATE ${APP_RELWITHDEBINFO_OPTIONS})
-target_compile_options(fetchcontent_example_cpp PRIVATE ${APP_RELWITHDEBINFO_OPTIONS})
 
 message(STATUS "Building fetchcontent_example (C and C++)")
 message(STATUS "  xcplite source: ${xcplite_SOURCE_DIR}")

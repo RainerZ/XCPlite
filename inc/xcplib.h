@@ -530,6 +530,20 @@ static __forceinline const uint8_t *xcp_get_frame_addr(void) {
 #error "xcp_get_frame_addr is not defined for this compiler. Please implement it."
 #endif
 
+// Prevent the compiler from turning the preceding call into a tail call (sibling call optimization)
+// Used after every call which passes xcp_get_frame_addr(): if this is the last statement of a function, the compiler may
+// replace it with a jump and release the stack frame of the function first. The library would then copy the local variables
+// from a released frame, which the called function already reuses. Applications which call XcpEventExt_Var(), XcpEventExt() or
+// directly with xcp_get_frame_addr() must add XCP_NO_TAIL_CALL() after the call themselves, or make sure the
+// call is not the last statement of the function!!
+#if defined(__GNUC__) || defined(__clang__)
+#define XCP_NO_TAIL_CALL() __asm__ __volatile__("" ::: "memory")
+#elif defined(_MSC_VER)
+#define XCP_NO_TAIL_CALL() __nop() // intrin.h, an instruction after the call keeps it from becoming a tail call
+#else
+#define XCP_NO_TAIL_CALL() ((void)0)
+#endif
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Absolute addressing mode
 
@@ -560,12 +574,14 @@ extern const uint8_t *gXcpBaseAddr;
         static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                          \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
         XcpEventExt_Var(trg__AAS__##event_name, 1, xcp_get_frame_addr());                                                                                                          \
+        XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
 #define DaqTriggerEventAt(event_name, clock)                                                                                                                                       \
     {                                                                                                                                                                              \
         static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                          \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
         XcpEventExtAt_Var(trg__AAS__##event_name, clock, 1, xcp_get_frame_addr());                                                                                                 \
+        XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
 
 /// Trigger the XCP event by handle 'tXcpEventId event_id' for stack relative or absolute addressing AAS
@@ -574,12 +590,16 @@ extern const uint8_t *gXcpBaseAddr;
 #define DaqTriggerEvent_i(event_id)                                                                                                                                                \
     {                                                                                                                                                                              \
         static tXcpEventId trg__AAS = XCP_UNDEFINED_EVENT_ID;                                                                                                                      \
+        (void)trg__AAS;                                                                                                                                                            \
         XcpEventExt(event_id, xcp_get_frame_addr());                                                                                                                               \
+        XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
 #define DaqTriggerEventAt_i(event_id, clock)                                                                                                                                       \
     {                                                                                                                                                                              \
         static tXcpEventId trg__AAS = XCP_UNDEFINED_EVENT_ID;                                                                                                                      \
+        (void)trg__AAS;                                                                                                                                                            \
         XcpEventExtAt(event_id, xcp_get_frame_addr(), clock);                                                                                                                      \
+        XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
 
 /// Trigger the XCP event 'name' for absolute, stack and relative addressing mode AASD with a single given individual base address (from A2lSetRelativeAddrMode(base_addr))
@@ -590,6 +610,7 @@ extern const uint8_t *gXcpBaseAddr;
         static tXcpEventId trg__AASD__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                       \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASD__##event_name);                                                                                                      \
         XcpEventExt_Var(trg__AASD__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                           \
+        XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
 
 /// Trigger the XCP event 'name' for absolute, stack and relative addressing mode with given individual base address (from A2lSetRelativeAddrMode(base_addr))
@@ -604,6 +625,7 @@ extern const uint8_t *gXcpBaseAddr;
                 trg__AASD__##event_name = XcpFindEvent(event_name);                                                                                                                \
             }                                                                                                                                                                      \
             XcpEventExt_Var(trg__AASD__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                       \
+            XCP_NO_TAIL_CALL();                                                                                                                                                    \
         }                                                                                                                                                                          \
     }
 
@@ -614,7 +636,9 @@ extern const uint8_t *gXcpBaseAddr;
 #define DaqTriggerEventExt_i(event_id, base_addr)                                                                                                                                  \
     {                                                                                                                                                                              \
         static tXcpEventId trg__AASD = XCP_UNDEFINED_EVENT_ID;                                                                                                                     \
+        (void)trg__AASD;                                                                                                                                                           \
         XcpEventExt_Var(event_id, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                                          \
+        XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -630,6 +654,7 @@ extern const uint8_t *gXcpBaseAddr;
         static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                          \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
         XcpEventExt_Var(trg__AAS__##event_name, 1, xcp_get_frame_addr());                                                                                                          \
+        XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -702,6 +727,7 @@ extern const uint8_t *gXcpBaseAddr;
         static tXcpEventId trg__AASR__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                         \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASR__##event_name);                                                                                                      \
         XcpEventExt_Var(trg__AASR__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)&cap__##event_name);                                                                    \
+        XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
 
 /// Trigger the XCP event 'event_name' with a given timestamp and capture the given local variables for measurement, AASR
@@ -714,6 +740,7 @@ extern const uint8_t *gXcpBaseAddr;
         static tXcpEventId trg__AASR__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                         \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASR__##event_name);                                                                                                      \
         XcpEventExtAt_Var(trg__AASR__##event_name, clock, 2, xcp_get_frame_addr(), (const uint8_t *)&cap__##event_name);                                                           \
+        XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
 
 /// Create and trigger the XCP event 'event_name' and capture the given local variables for measurement, AASR
@@ -726,6 +753,7 @@ extern const uint8_t *gXcpBaseAddr;
         static tXcpEventId trg__AASR__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                         \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASR__##event_name);                                                                                                      \
         XcpEventExt_Var(trg__AASR__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)&cap__##event_name);                                                                    \
+        XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1186,6 +1214,7 @@ void clockGetPrintStatistic(void);
             }                                                                                                                                                                      \
         }                                                                                                                                                                          \
         XcpEventExt_Var(trg__AAS__##event_name, 1, xcp_get_frame_addr());                                                                                                          \
+        XCP_NO_TAIL_CALL();                                                                                                                                                        \
     } while (0)
 
 #endif // !__cplusplus
