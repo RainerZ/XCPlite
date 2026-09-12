@@ -153,8 +153,7 @@ either: there is no IP route to the ECU, it lives behind the tunnel. Send an ICM
 bytes to every captured frame, and the outer IPv4/UDP headers add 28 more, so on a 1500-byte
 path the largest inner frame is **1438 bytes**.
 
-This is why xcplite's `raw` configuration sets **`OPTION_MTU 1420`** rather than the 1500 a
-standard Ethernet link allows:
+This is why xcplite's `raw` configuration sets **`OPTION_MTU 1420`** rather than the 1500 a standard Ethernet link allows:
 
 | | |
 |---|---|
@@ -179,6 +178,13 @@ If you raise `OPTION_MTU` again, either lower the envelope's share with a jumbo-
 Either way an oversized frame is refused with `ETH_HAL_ERROR_SIZE` rather than fragmented.
 That is exactly what the HAL contract designed that error for: whether a frame fits is a
 runtime property only the backend knows.
+
+```bash
+# Test MTU 1501 — just above standard Ethernet MTU
+ping -D -c 3 -s 1473 192.168.0.206
+```
+
+
 
 ---
 

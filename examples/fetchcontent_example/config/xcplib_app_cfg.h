@@ -99,9 +99,9 @@
 
 // Ethernet MTU, no jumbo frames
 // Raise this, if your network path allows it. The default XCPlite configuration will error on fragmentation.
+// # Test MTU 1501 — just above standard Ethernet MTU: ping -D -c 3 -s 1473 192.168.0.206
 #undef OPTION_MTU
-// #define OPTION_MTU 1500
-#define OPTION_MTU 7000
+#define OPTION_MTU 1500
 
 //-------------------------------------------------------------------------------
 // Transmit queue
