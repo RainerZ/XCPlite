@@ -2,6 +2,19 @@
 
 All notable changes to XCPlite are documented in this file.
 
+
+
+## [V2.2.3] 
+
+- xcpclient related changes (xcpclient V4.0.1):
+    - The DWARF location expression parser no longer floods the log with warnings about variables which are dropped anyway by the filters, or which are markers the XCPlite macros generate in the code of the application (`evt__`, `trg__`, `cap__`, `xcp_meta__`, `evt_id_<event>`, ...).
+    - A local variable without any `DW_AT_location` in the debug information is now reported with a warning instead of silently missing from the A2L file.
+    - The messages of the location expression parser now name the compilation unit and the declaration line of the variable (`main_c:178: 'delay': ...`), the variable name alone does not identify which of several variables with that name is meant.
+    - A variable which the compiler spread over several locations (`DW_OP_piece`) is now reported as split into slices. A single piece covering only a part of the variable was silently registered with the address of that one slice before, it is now rejected like the multi piece case.
+    
+    
+
+
 ## [V2.2.2] 
 
 - New macros `DaqTriggerEventCapture` and `DaqCreateAndTriggerEventCapture` in `xcplib.h` to measure local variables which are not addressable via the frame pointer or which the user does not want to spill.

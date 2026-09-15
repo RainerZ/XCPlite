@@ -29,11 +29,9 @@ const C_INLINED_FUNCTION_CLANG_NOFP_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR
 
 // Load a fixture ELF file and register all its variables
 fn load_fixture(elf_file: &str) -> (ElfReader, Registry) {
-    let elf_reader = ElfReader::new(elf_file, 0, (0, usize::MAX)).unwrap_or_else(|e| panic!("failed to load {elf_file}: {e}"));
+    let elf_reader = ElfReader::new(elf_file, 0, ElfFilter::default()).unwrap_or_else(|e| panic!("failed to load {elf_file}: {e}"));
     let mut reg = Registry::new();
-    elf_reader
-        .register_variables(&mut reg, false, 0, (0, usize::MAX), "", "", None)
-        .expect("register_variables failed");
+    elf_reader.register_variables(&mut reg, false, 0, None).expect("register_variables failed");
     (elf_reader, reg)
 }
 
@@ -135,9 +133,10 @@ fn test_register_same_named_c_types_in_different_units() {
 // entirely: state_a is declared in compilation unit 0 (excluded by the min limit), state_b in compilation unit 1 (still in range)
 #[test]
 fn test_unit_idx_limit_min_does_not_stop_parsing() {
-    let elf_reader = ElfReader::new(C_LOCAL_TYPES_ELF, 0, (1, usize::MAX)).expect("failed to load fixtures/c_local_types.elf");
+    let filter = ElfFilter::new(1, usize::MAX, "", "").unwrap();
+    let elf_reader = ElfReader::new(C_LOCAL_TYPES_ELF, 0, filter).expect("failed to load fixtures/c_local_types.elf");
     let mut reg = Registry::new();
-    elf_reader.register_variables(&mut reg, false, 0, (1, usize::MAX), "", "", None).unwrap();
+    elf_reader.register_variables(&mut reg, false, 0, None).unwrap();
 
     assert!(
         reg.instance_list.get_instance("state_a", McObjectType::Measurement, None).is_none(),
@@ -192,11 +191,11 @@ fn test_register_inlined_function_variables() {
 // The checks of test_register_inlined_function_variables for one fixture ELF file (GCC or clang build of the same source),
 // bar_counter_offset is the DW_OP_fbreg offset of the variable counter in bar
 fn register_inlined_function_variables(elf_file: &str, bar_counter_offset: i64, test_float_measurable: bool) {
-    let elf_reader = ElfReader::new(elf_file, 0, (0, usize::MAX)).unwrap_or_else(|e| panic!("failed to load {elf_file}: {e}"));
+    let elf_reader = ElfReader::new(elf_file, 0, ElfFilter::default()).unwrap_or_else(|e| panic!("failed to load {elf_file}: {e}"));
     let mut reg = Registry::new();
     elf_reader.register_events(&mut reg, 0).unwrap();
     elf_reader.register_event_locations(&mut reg, 0).unwrap();
-    elf_reader.register_variables(&mut reg, false, 0, (0, usize::MAX), "", "", None).unwrap();
+    elf_reader.register_variables(&mut reg, false, 0, None).unwrap();
     let event_id = |name: &str| reg.event_list.find_event(name, 0).unwrap_or_else(|| panic!("event {name}")).get_id();
     let instance = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None);
 
@@ -234,11 +233,11 @@ fn register_inlined_function_variables(elf_file: &str, bar_counter_offset: i64, 
 // variables keep the function scope and the event
 #[test]
 fn test_register_stack_variables_without_frame_pointer() {
-    let elf_reader = ElfReader::new(C_INLINED_FUNCTION_CLANG_NOFP_ELF, 0, (0, usize::MAX)).expect("failed to load fixtures/c_inlined_function_clang_nofp.elf");
+    let elf_reader = ElfReader::new(C_INLINED_FUNCTION_CLANG_NOFP_ELF, 0, ElfFilter::default()).expect("failed to load fixtures/c_inlined_function_clang_nofp.elf");
     let mut reg = Registry::new();
     elf_reader.register_events(&mut reg, 0).unwrap();
     elf_reader.register_event_locations(&mut reg, 0).unwrap();
-    elf_reader.register_variables(&mut reg, false, 0, (0, usize::MAX), "", "", None).unwrap();
+    elf_reader.register_variables(&mut reg, false, 0, None).unwrap();
     let instance = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None);
 
     assert_eq!(elf_reader.debug_data.variables["trg__AAS__bar"][0].frame_base, FrameBase::Register(13));
@@ -253,11 +252,11 @@ fn test_register_stack_variables_without_frame_pointer() {
 // is captured is not registered a second time as a stack variable, and a capture in an inlined function works
 #[test]
 fn test_register_captured_variables() {
-    let elf_reader = ElfReader::new(C_CAPTURES_ELF, 0, (0, usize::MAX)).expect("failed to load fixtures/c_captures.elf");
+    let elf_reader = ElfReader::new(C_CAPTURES_ELF, 0, ElfFilter::default()).expect("failed to load fixtures/c_captures.elf");
     let mut reg = Registry::new();
     elf_reader.register_events(&mut reg, 0).unwrap();
     elf_reader.register_event_locations(&mut reg, 0).unwrap();
-    elf_reader.register_variables(&mut reg, false, 0, (0, usize::MAX), "", "", None).unwrap();
+    elf_reader.register_variables(&mut reg, false, 0, None).unwrap();
     elf_reader.register_captures(&mut reg, 0).unwrap();
 
     let event_id = |name: &str| reg.event_list.find_event(name, 0).unwrap_or_else(|| panic!("event {name}")).get_id();
@@ -294,11 +293,11 @@ fn test_register_captured_variables() {
 // a captured struct keeps the name of its own type in the A2L file and not the one of any helper type of the capture macro
 #[test]
 fn test_register_captured_variables_cpp() {
-    let elf_reader = ElfReader::new(CPP_CAPTURES_ELF, 0, (0, usize::MAX)).expect("failed to load fixtures/cpp_captures.elf");
+    let elf_reader = ElfReader::new(CPP_CAPTURES_ELF, 0, ElfFilter::default()).expect("failed to load fixtures/cpp_captures.elf");
     let mut reg = Registry::new();
     elf_reader.register_events(&mut reg, 0).unwrap();
     elf_reader.register_event_locations(&mut reg, 0).unwrap();
-    elf_reader.register_variables(&mut reg, false, 0, (0, usize::MAX), "", "", None).unwrap();
+    elf_reader.register_variables(&mut reg, false, 0, None).unwrap();
     elf_reader.register_captures(&mut reg, 0).unwrap();
 
     let task = reg.event_list.find_event("task", 0).expect("event task").get_id();
@@ -325,11 +324,11 @@ fn test_register_captured_variables_cpp() {
 // the two markers named static_counter are told apart by their size
 #[test]
 fn test_register_metadata_local_variable_markers() {
-    let elf_reader = ElfReader::new(C_META_MARKERS_ELF, 0, (0, usize::MAX)).expect("failed to load fixtures/c_meta_markers.elf");
+    let elf_reader = ElfReader::new(C_META_MARKERS_ELF, 0, ElfFilter::default()).expect("failed to load fixtures/c_meta_markers.elf");
     let mut reg = Registry::new();
     elf_reader.register_events(&mut reg, 0).unwrap();
     elf_reader.register_event_locations(&mut reg, 0).unwrap();
-    elf_reader.register_variables(&mut reg, false, 0, (0, usize::MAX), "", "", None).unwrap();
+    elf_reader.register_variables(&mut reg, false, 0, None).unwrap();
     elf_reader.register_metadata(&mut reg, 0).unwrap();
 
     let comment = |name: &str| {
@@ -414,15 +413,15 @@ fn test_get_target_signature() {
 // Global variables get the default event when one is specified, otherwise no event
 #[test]
 fn test_register_variables_default_event() {
-    let elf_reader = ElfReader::new(CPP_TYPES_ELF, 0, (0, usize::MAX)).expect("failed to load fixtures/cpp_types.elf");
+    let elf_reader = ElfReader::new(CPP_TYPES_ELF, 0, ElfFilter::default()).expect("failed to load fixtures/cpp_types.elf");
 
     let mut reg = Registry::new();
-    elf_reader.register_variables(&mut reg, false, 0, (0, usize::MAX), "", "", Some(3)).unwrap();
+    elf_reader.register_variables(&mut reg, false, 0, Some(3)).unwrap();
     let g_plain = reg.instance_list.get_instance("g_plain", McObjectType::Measurement, None).expect("instance g_plain");
     assert_eq!(g_plain.event_id(), Some(3));
 
     let mut reg = Registry::new();
-    elf_reader.register_variables(&mut reg, false, 0, (0, usize::MAX), "", "", None).unwrap();
+    elf_reader.register_variables(&mut reg, false, 0, None).unwrap();
     let g_plain = reg.instance_list.get_instance("g_plain", McObjectType::Measurement, None).expect("instance g_plain");
     assert_eq!(g_plain.event_id(), None);
 }
@@ -443,6 +442,7 @@ fn empty_debug_data() -> DebugData {
         epk_addr: 0,
         xcp_meta_data: None,
         is_little_endian: true,
+        filter: ElfFilter::default(),
     }
 }
 
@@ -492,7 +492,7 @@ fn elf_reader_with_conflicting_types() -> ElfReader {
 fn test_register_conflicting_typedef_names() {
     let elf = elf_reader_with_conflicting_types();
     let mut reg = Registry::new();
-    elf.register_variables(&mut reg, false, 0, (0, usize::MAX), "", "", None).unwrap();
+    elf.register_variables(&mut reg, false, 0, None).unwrap();
     assert_eq!(instance_typedef(&reg, "state_a"), "state");
     assert_eq!(instance_typedef(&reg, "state_b"), "state_1");
     assert_eq!(typedef_fields(&reg, "state"), vec![("a", 0)]);
