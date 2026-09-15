@@ -99,8 +99,8 @@ fi
 # Optionally force gnu or clang, default to clang which is the more demanding one
 echo "Clean build executable on Target ..."
 #ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
-#ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=gcc CXX=g++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
-ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=clang CXX=clang++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
+ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=gcc CXX=g++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
+#ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && CC=clang CXX=clang++ ./build.sh $BUILD_TYPE no_a2l examples clean" 1> /dev/null
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: Build on target"
     exit 1
@@ -129,7 +129,7 @@ echo "==========================================================================
 echo ""
 # Remove the A2L file of a previous run, so a failed generation can not leave a stale A2L file behind
 rm -f "$A2LFILE"
-XCPCLIENT_ARGS=(--log-level=1 --verbose=3 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE" --default-event=mainloop)
+XCPCLIENT_ARGS=(--log-level=3 --verbose=0 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE" --default-event=mainloop)
 echo "Command: $XCPCLIENT ${XCPCLIENT_ARGS[*]}"
 "$XCPCLIENT" "${XCPCLIENT_ARGS[@]}" >> "$LOGFILE"
 if [ $? -ne 0 ] || [ ! -f "$A2LFILE" ]; then

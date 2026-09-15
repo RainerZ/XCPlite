@@ -253,6 +253,9 @@ Messages worth knowing when a variable is missing or looks wrong in the A2L file
 | `Struct/class type 'x' in unit has a different definition or object type than the existing typedef 'x', registered as typedef 'x_1'` | Two different types with the same name and no scope to qualify them with, or one type used for measurement and for calibration. Both get their own typedef. |
 | `Local variable 'x' in function 'f' skipped, could not find event for dyn addressing mode` | The function contains no event trigger, so there is no stack frame anchor for its local variables. |
 | `Variable 'x' not registered, no address` (log level 4) | The variable has no DWARF location, typically a local variable held in a register. Make it `volatile`. |
+| `Local variable 'x' in function 'f' not registered, it has no location in the debug information, not implemented yet` | The compiler emitted no `DW_AT_location` for the variable and there is no symbol for it either, so there is nothing to derive an address from. Seen with clang `-O1` for the aggregate locals (struct, array) of a function whose scalar locals all got a location, `volatile` or not. Not handled yet. |
+| `'x': the variable is split into N slices (DW_OP_piece)`, `only a slice of the variable has a location` | The compiler spread the variable over several places (registers, constants, a stack slot). There is no single address for it, so it is not measurable. Declare it `volatile`. |
+| `'x': location is a register ...`, `'x': variable location is stack-pointer-relative ...` | The location expression of the variable can not be evaluated without a running program, the variable is not measurable. Usual for local variables in optimized code, make the variable `volatile` to keep it in memory. |
 | `Global variable 'x' not registered, address ... out of the 32 bit XCP address range` | The variable is outside the addressable range, see the addressing modes. |
 | `Metadata 'xcp_meta__...': no matching registry entry for '...'` | The annotated variable was not registered, or the name does not match. Check the scope prefix and the `__` path. |
 | `Metadata variable '...' address is 0` | The marker has no DWARF location and no resolveable symbol. |
@@ -263,6 +266,11 @@ Messages worth knowing when a variable is missing or looks wrong in the A2L file
 | `EPK mismatch: A2L file '...' has EPK '...', target reports EPK '...'` | The A2L file does not belong to the running build. `--yes` overrides the check. |
 | `'...' is a Mach-O (macOS) binary, macOS is not supported` | The application was built on macOS. Executables built on macOS contain no DWARF debug information, build on Linux or for an embedded ELF target. |
 | `... does not contain DWARF2+ debug info. The section .debug_info is missing.` | The application was built without `-g`, or the debug information was stripped. |
+
+The messages about a single variable are only warnings if the variable could become an A2L object at all. The variables of the
+compilation units which `--elf-unit-filter` excludes, and the marker variables which the XCPlite macros generate in the code
+(`evt__`, `trg__`, `cap__`, `xcp_meta__`, `evt_id_<event>`), are reported at log level 4 (`--log-level=4`) instead: they would
+otherwise bury the relevant warnings under hundreds of messages about the internals of the XCPlite library itself.
 
 xcpclient exits with status 1 when the A2L file could not be created or any other error occurred, scripts can rely on the exit
 status. The `create_a2l.sh` scripts of the examples check the exit status and the existence of the A2L file, and print the error
