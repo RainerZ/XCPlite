@@ -607,7 +607,7 @@ extern const uint8_t *gXcpBaseAddr;
 /// @param base_addr Base address pointer for relative addressing mode
 #define DaqTriggerEventExt(event_name, base_addr)                                                                                                                                  \
     {                                                                                                                                                                              \
-        static tXcpEventId trg__AASD__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                       \
+        static tXcpEventId trg__AASD__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                                                       \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASD__##event_name);                                                                                                      \
         XcpEventExt_Var(trg__AASD__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                           \
         XCP_NO_TAIL_CALL();                                                                                                                                                        \
@@ -1203,7 +1203,7 @@ void clockGetPrintStatistic(void);
 #define DaqEventVar(event_name, ...)                                                                                                                                               \
     do {                                                                                                                                                                           \
         static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, 0, 0);                                                  \
-        static tXcpEventId trg__AAS__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                        \
+        static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                                                        \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
         if (XcpIsActivated()) {                                                                                                                                                    \
             A2lOnce() {                                                                                                                                                            \
