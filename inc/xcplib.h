@@ -368,6 +368,9 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 // Link-time event id derived from the descriptor's position in the xcp_evts section
 // Only with clang on Linux, this is a link-time constant, usable as a static initializer
 #if defined(__ELF__) || defined(__APPLE__)
+
+// Get the event id for an event descriptor as expression, valid in any function with any compiler (used by DaqEventId)
+#define XCP_EVENT_SECTION_GET_ID(evt) ((tXcpEventId)(&(evt) - __start_xcp_evts))
 #if defined(__clang__) && defined(_LINUX)
 // Get the event id as compile-time constant for an event descriptor name (evt__<event_name>)
 #define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) ((tXcpEventId)(&(evt) - __start_xcp_evts))
@@ -380,17 +383,22 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 // Set the event id for an event descriptor at runtime
 #define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id) ((evt_id) = ((tXcpEventId)(&(evt_descr) - __start_xcp_evts)))
 #endif
+
 #else
+
 #ifdef OPTION_DAQ_EVENT_LIST
-// Use dynamic event creation, no compile-time or link-time event id available
+// Use dynamic event creation or lookup, no compile-time or link-time event id available
 #define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) XCP_UNDEFINED_EVENT_ID
 #define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id)                                                                                                                                \
     if ((evt_id) == XCP_UNDEFINED_EVENT_ID) {                                                                                                                                      \
         (evt_id) = XcpCreateEvent((evt_descr).name, 0, 0);                                                                                                                         \
     }
+// Get the event id for an event descriptor as expression: creates the event on the first call, returns the existing id afterwards
+#define XCP_EVENT_SECTION_GET_ID(evt) XcpCreateEvent((evt).name, (evt).cycle_time_ns, (evt).priority)
 #else
 #error "This platform does not support link-time event id generation, please enable OPTION_DAQ_EVENT_LIST"
 #endif
+
 #endif
 
 /// Create an event
@@ -418,6 +426,28 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
     static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, (cycle) * 1000U, (prio));                                   \
     XCP_MAYBE_UNUSED static tXcpEventId evt_id_##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                \
     XCP_EVENT_SECTION_SET_ID(evt__##event_name, evt_id_##event_name);
+
+/// Declare an event at file scope
+/// Like DaqCreateEvent, but a pure declaration without any statement, so it can be used at file scope with any compiler.
+/// The event may then be triggered by name (DaqTriggerEvent, DaqTriggerEventExt, ...) from any function of the compilation unit,
+/// for example from callbacks. The event id is available as expression with DaqEventId(event_name), there is no evt_id_<event_name>
+/// variable: its value can not be initialized at compile time with GCC or on macOS.
+/// @param name Name given as identifier
+#define DaqDeclareEvent(event_name) static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, 0, 0)
+
+/// Declare an event at file scope with given expected cycle time and priority
+/// @param name Name given as identifier
+/// @param cycle_time Cycle time in microseconds (0 = sporadic)
+/// @param priority Priority of the event (0 = normal, >=1 = realtime)
+#define DaqDeclareEventExt(event_name, cycle, prio)                                                                                                                                \
+    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, (cycle) * 1000U, (prio))
+
+/// Get the id of an event declared with DaqDeclareEvent or created with DaqCreateEvent
+/// An expression, valid in any function of the compilation unit which declares the event, for the _i variants of the trigger macros
+/// and the A2L address mode functions. On platforms with a linker section, this is the offset of the descriptor in the section
+/// (no lookup), otherwise the event is created on the first call and looked up by name afterwards.
+/// @param name Name given as identifier
+#define DaqEventId(event_name) XCP_EVENT_SECTION_GET_ID(evt__##event_name)
 
 #ifdef OPTION_DAQ_EVENT_LIST
 
@@ -607,7 +637,7 @@ extern const uint8_t *gXcpBaseAddr;
 /// @param base_addr Base address pointer for relative addressing mode
 #define DaqTriggerEventExt(event_name, base_addr)                                                                                                                                  \
     {                                                                                                                                                                              \
-        static tXcpEventId trg__AASD__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                                                       \
+        static tXcpEventId trg__AASD__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                         \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASD__##event_name);                                                                                                      \
         XcpEventExt_Var(trg__AASD__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                           \
         XCP_NO_TAIL_CALL();                                                                                                                                                        \
@@ -1203,7 +1233,7 @@ void clockGetPrintStatistic(void);
 #define DaqEventVar(event_name, ...)                                                                                                                                               \
     do {                                                                                                                                                                           \
         static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, 0, 0);                                                  \
-        static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                                                        \
+        static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                          \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
         if (XcpIsActivated()) {                                                                                                                                                    \
             A2lOnce() {                                                                                                                                                            \
