@@ -99,6 +99,49 @@ The `xcpclient` tool (`tools/xcpclient`) is an XCP client for testing, no CANape
 
 ```bash
 xcpclient --udp --upload-a2l --list-mea .                                                   # Upload the A2L file, list everything
+```bash
+
+```
+Measurement variables:
+ Measurement variables:
+ counter 2:0x0000FFE0 event 0 4 byte unsigned
+
+ foo_ctx.arg_a 1:0x0083A690 event 1 4 byte signed
+ foo_ctx.arg_iterations 1:0x0083A694 event 1 4 byte unsigned
+ foo_ctx.ret 1:0x0083A698 event 2 4 byte signed
+ foo_ctx.duration_ns 1:0x0083A6A0 event 2 4 byte unsigned
+ foo_ctx.call_count 1:0x0083A69C event 2 4 byte unsigned
+ foo_ctx.thread_id 1:0x0083A6A4 event 2 4 byte unsigned
+ foo_ctx.depth 1:0x0083A6A8 event 2 4 byte unsigned
+ foo_ctx.return_address 1:0x0083A6B0 event 2 8 byte unsigned
+ foo_ctx.function 1:0x0083A6B8 event 2 8 byte unsigned
+ foo_enter_cpu_context.pc 3:0x00400000 event 1 8 byte unsigned
+ foo_enter_cpu_context.sp 3:0x00400008 event 1 8 byte unsigned
+ foo_enter_cpu_context.nzcv 3:0x00400010 event 1 8 byte unsigned
+ foo_enter_cpu_context.x 3:0x00400018 event 1 8 byte unsigned
+ foo_enter_cpu_context.fp 3:0x00400100 event 1 8 byte unsigned
+ foo_enter_cpu_context.lr 3:0x00400108 event 1 8 byte unsigned
+ foo_leave_cpu_context.pc 3:0x00800000 event 2 8 byte unsigned
+ foo_leave_cpu_context.sp 3:0x00800008 event 2 8 byte unsigned
+ foo_leave_cpu_context.nzcv 3:0x00800010 event 2 8 byte unsigned
+ foo_leave_cpu_context.x 3:0x00800018 event 2 8 byte unsigned
+ foo_leave_cpu_context.fp 3:0x00800100 event 2 8 byte unsigned
+ foo_leave_cpu_context.lr 3:0x00800108 event 2 8 byte unsigned
+
+ alloc_count_app 1:0x00838E74 event 0 4 byte unsigned
+ alloc_count_xcp_init 1:0x00838E78 event 0 4 byte unsigned
+ alloc_count_xcp_threads 1:0x00838E7C event 0 4 byte unsigned
+ alloc_bytes_total 1:0x00838E80 event 0 8 byte unsigned
+ alloc_kind 2:0x00C0FFFF event 3 1 byte unsigned
+ alloc_size 2:0x00C0FFF0 event 3 8 byte unsigned
+ alloc_ptr 2:0x00C0FFE8 event 3 8 byte unsigned
+ alloc_return_address 2:0x00C0FFE0 event 3 8 byte unsigned
+ alloc_thread_id 2:0x00C0FFDC event 3 4 byte unsigned
+ alloc_depth 2:0x00C0FFD8 event 3 4 byte unsigned
+ alloc_origin 2:0x00C0FFD7 event 3 1 byte unsigned
+```
+
+```bash
 xcpclient --udp --a2l frida_demo.a2l --mea "foo_ctx.*" --time 3 --verbose 2                 # One sample per call of foo()
 xcpclient --udp --a2l frida_demo.a2l --mea "foo_leave_cpu_context.*" --time 2 --verbose 2   # Register context at the return of foo()
 xcpclient --udp --a2l frida_demo.a2l --mea "kind|size|origin|thread_id" --time 2 --csv alloc.csv   # Every allocation, all threads

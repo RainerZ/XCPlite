@@ -92,13 +92,12 @@ DaqDeclareEvent(alloc_leave);
 // No XCPlite instrumentation. XCP_NOINLINE is needed: Frida patches the code of the function, an inlined copy at the call
 // site would not be hooked. The function must also be larger than the few instructions the trampoline jump replaces.
 
-XCP_NOINLINE int32_t foo(int32_t a, uint32_t iterations) {
-    uint32_t x = (uint32_t)a;
+XCP_NOINLINE int32_t foo(uint32_t a, uint32_t iterations) {
+    uint32_t x = a;
     for (uint32_t i = 0; i < iterations; i++) {
-        x = x * 1103515245u + 12345u; // Linear congruential generator, just to burn some cycles
-        x ^= x >> 13;
+        x = x + 1;
     }
-    return (int32_t)x;
+    return x;
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -163,14 +162,11 @@ static void foo_on_leave(GumInvocationContext *ic, gpointer user_data) {
 // GumCpuContext is the register snapshot Frida takes in the trampoline. It lives in the trampoline's stack frame, so its
 // address is different for every invocation: the hooks pass it as base pointer to DaqTriggerEventExt(), and the A2L
 // describes the registers as offsets from that base pointer (relative addressing mode, address extension 3).
-// A dummy instance is used to compute the offsets, its address is never accessed.
-
-static GumCpuContext dummy_cpu_context;
 
 static void foo_hook_register_a2l(void) {
 
     // Typedef for the register context
-    A2lTypedefBegin(GumCpuContext, &dummy_cpu_context, "Frida Gum CPU register context");
+    A2lTypedefBegin(GumCpuContext, NULL, "Frida Gum CPU register context");
 #if defined(__aarch64__)
     A2lTypedefMeasurementComponent(pc, "Program counter");
     A2lTypedefMeasurementComponent(sp, "Stack pointer");
@@ -205,7 +201,7 @@ static void foo_hook_register_a2l(void) {
     A2lSetAbsoluteAddrMode(foo_enter);
     A2lCreateMeasurement(foo_ctx.arg_a, "foo() argument a");
     A2lCreateMeasurement(foo_ctx.arg_iterations, "foo() argument iterations");
-    GumCpuContext *foo_enter_cpu_context = &dummy_cpu_context; // Placeholder, offset 0 from the base pointer of the event
+    GumCpuContext *foo_enter_cpu_context = NULL; // Placeholder, offset 0 from the base pointer of the event
     A2lSetRelativeAddrMode(foo_enter, foo_enter_cpu_context);
     A2lCreateTypedefReference(foo_enter_cpu_context, GumCpuContext, "Register context at entry of foo()");
 
@@ -218,7 +214,7 @@ static void foo_hook_register_a2l(void) {
     A2lCreateMeasurement(foo_ctx.depth, "Nesting depth of hooked function calls");
     A2lCreateMeasurement(foo_ctx.return_address, "Return address, the call site of foo()");
     A2lCreateMeasurement(foo_ctx.function, "Address of foo()");
-    GumCpuContext *foo_leave_cpu_context = &dummy_cpu_context;
+    GumCpuContext *foo_leave_cpu_context = NULL; // Placeholder, offset 0 from the base pointer of the event
     A2lSetRelativeAddrMode(foo_leave, foo_leave_cpu_context);
     A2lCreateTypedefReference(foo_leave_cpu_context, GumCpuContext, "Register context at return of foo()");
 }
@@ -318,24 +314,25 @@ static GumThreadId alloc_main_thread_id;
 // this function (A2lSetStackAddrMode needs its stack frame), but it must not run inside the hook, because it allocates and
 // would re-enter the hook.
 
-XCP_NOINLINE static void alloc_leave(uint8_t kind, uint64_t size, uint64_t ptr, uint64_t return_address, uint32_t thread_id, uint32_t depth, uint8_t origin, bool prime) {
+XCP_NOINLINE static void alloc_leave(uint8_t alloc_kind, uint64_t alloc_size, uint64_t alloc_ptr, uint64_t alloc_return_address, uint32_t alloc_thread_id, uint32_t alloc_depth,
+                                     uint8_t alloc_origin, bool prime) {
 
     if (prime) {
         A2lSetStackAddrMode(alloc_leave);
         A2lCreateEnumConversion(alloc_kind, "3 0 \"malloc\" 1 \"calloc\" 2 \"aligned_alloc\"");
-        A2lCreatePhysMeasurement(kind, "Allocation function", "conv.alloc_kind", 0, 2);
-        A2lCreateMeasurement(size, "Requested size in bytes");
-        A2lCreateMeasurement(ptr, "Returned pointer");
-        A2lCreateMeasurement(return_address, "Return address, the caller of the allocation function");
-        A2lCreateMeasurement(thread_id, "Thread id of the caller");
-        A2lCreateMeasurement(depth, "Nesting depth of hooked function calls");
+        A2lCreatePhysMeasurement(alloc_kind, "Allocation function", "conv.alloc_kind", 0, 2);
+        A2lCreateMeasurement(alloc_size, "Requested size in bytes");
+        A2lCreateMeasurement(alloc_ptr, "Returned pointer");
+        A2lCreateMeasurement(alloc_return_address, "Return address, the caller of the allocation function");
+        A2lCreateMeasurement(alloc_thread_id, "Thread id of the caller");
+        A2lCreateMeasurement(alloc_depth, "Nesting depth of hooked function calls");
         A2lCreateEnumConversion(alloc_origin, "3 0 \"APP\" 1 \"XCP_INIT\" 2 \"XCP_THREAD\"");
-        A2lCreatePhysMeasurement(origin, "Origin of the call: application, XCP init or XCP thread", "conv.alloc_origin", 0, 2);
+        A2lCreatePhysMeasurement(alloc_origin, "Origin of the call: application, XCP init or XCP thread", "conv.alloc_origin", 0, 2);
     }
 
     // Statistics for the mainloop event and the console
     if (!prime) {
-        switch (origin) {
+        switch (alloc_origin) {
         case ALLOC_ORIGIN_APP:
             __atomic_fetch_add(&alloc_count_app, 1, __ATOMIC_RELAXED);
             break;
@@ -346,8 +343,8 @@ XCP_NOINLINE static void alloc_leave(uint8_t kind, uint64_t size, uint64_t ptr, 
             __atomic_fetch_add(&alloc_count_xcp_threads, 1, __ATOMIC_RELAXED);
             break;
         }
-        __atomic_fetch_add(&alloc_bytes_total, size, __ATOMIC_RELAXED);
-        alloc_caller_record((uintptr_t)return_address, (size_t)size);
+        __atomic_fetch_add(&alloc_bytes_total, alloc_size, __ATOMIC_RELAXED);
+        alloc_caller_record((uintptr_t)alloc_return_address, (size_t)alloc_size);
     }
 
     // XCP: Trigger the event, measures the local variables above
@@ -591,12 +588,12 @@ int main(int argc, char *argv[]) {
 
         // Call the hooked function
         if (p->foo_enabled) {
-            (void)foo((int32_t)counter, p->foo_iterations);
+            (void)foo(counter, p->foo_iterations);
         }
 
 #ifdef OPTION_HOOK_ALLOC
         // One application allocation per cycle, visible in the alloc_leave event and the statistics
-        void *mem = malloc(1);
+        void *mem = malloc(counter & 0xFF);
         free(mem);
 #endif
 
