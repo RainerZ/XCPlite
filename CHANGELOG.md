@@ -2,6 +2,12 @@
 
 All notable changes to XCPlite are documented in this file.
 
+## [Unreleased]
+
+- Fix: `DaqTriggerEventExt` and the C variant of `DaqEventVar` in `xcplib.h` initialized their event id marker with `XCP_UNDEFINED_EVENT_ID` instead of the link-time id `XCP_EVENT_SECTION_GET_LINKTIME_ID`. With clang on Linux, where the event id is a link-time constant and `XCP_EVENT_SECTION_SET_ID` is a no-op, these macros triggered `XCP_UNDEFINED_EVENT_ID` and no DAQ data was transmitted for the event (for example `event2`/`heap_struct1` in `struct_demo`). Other compilers and platforms were not affected.
+
+- New standalone `examples/frida_demo`: XCP measurement of functions which are not instrumented at source level, hooked with the Frida Gum Interceptor. The hook callbacks trigger the XCP events with arguments, return value, duration and the CPU register snapshot of the invocation (relative addressing with a per-invocation base pointer). The libc allocation functions are hooked as well, which shows that XCPlite allocates once at initialization and never afterwards. Consumes xcplite via `FetchContent` and the prebuilt Frida Gum devkit via CMake `FetchContent` URL download.
+
 ## [V2.2.2] 
 
 - New macros `DaqTriggerEventCapture` and `DaqCreateAndTriggerEventCapture` in `xcplib.h` to measure local variables which are not addressable via the frame pointer or which the user does not want to spill.
