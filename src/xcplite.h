@@ -136,6 +136,8 @@ typedef struct {
 static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
 static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor res padding must not be zero; check pointer size vs struct layout");
 
+#ifdef OPTION_SECTION_REGISTRATION
+
 // Linker-synthesized section boundary symbols, resolved at link time
 #if defined(__ELF__)
 // Declared weak: if no object file contributes to the xcp_evts section the symbols resolve
@@ -163,8 +165,6 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 #error "Unsupported platform for section based event pre-registration"
 #endif
 
-#endif // __XCPLIB_H__
-
 // Platform section attribute for tXcpEventDescriptor const static variables created by DaqCreateEvent().
 // Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
 // pre-register every event before the first trigger, without requiring the call site of the event creation to execute first.
@@ -173,8 +173,13 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 #elif defined(__APPLE__)
 #define XCP_EVENT_SECTION_ATTR __attribute__((section("__DATA,xcp_evts"), used))
 #else
-#define XCP_EVENT_SECTION_ATTR /* section-based registration not supported on this platform */
+#error "section-based registration not supported on this platform"
 #endif
+#else
+#define XCP_EVENT_SECTION_ATTR
+#endif // OPTION_SECTION_REGISTRATION
+
+#endif // __XCPLIB_H__
 
 // XCP event identifier type
 typedef uint16_t tXcpEventId;

@@ -164,7 +164,7 @@ xcpclient --udp --a2l frida_demo.a2l --mea "counter|alloc_count.*" --time 3
 
 ## Design notes
 
-**Events at file scope.** The Frida callbacks are separate functions, so the events must be visible to them: `main.c` declares them at file scope with `DaqDeclareEvent()`, a pure declaration without any statement (`DaqCreateEvent()` sets the event id at runtime and can only be used inside a function). `XcpInit()` finds the descriptors in the `xcp_evts` linker section, the trigger macros work by name, and `DaqEventId()` gives the id as expression where one is needed.
+**Events in callbacks.** The Frida callbacks are separate functions. With the default configuration of xcplite (dynamic event management, no `OPTION_SECTION_REGISTRATION`) the events are created at runtime by `DaqCreateEvent()` where their measurements are registered, and the trigger macros look up the event by name on their first execution. Nothing has to be visible at file scope.
 
 **Two listeners.** The `foo()` hook and the allocation hooks are independent: each has its own `GumInvocationListener`, callbacks, A2L registration and statistics, sharing only the process wide `GumInterceptor`. The allocation part is entirely under `#ifdef OPTION_HOOK_ALLOC`.
 

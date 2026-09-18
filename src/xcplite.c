@@ -970,6 +970,8 @@ tXcpEventId XcpCreateEvent(const char *name, uint32_t cycle_time_ns, uint8_t pri
     return id;
 }
 
+#ifdef OPTION_SECTION_REGISTRATION
+
 // Pre-register all tXcpEventDescriptor variables placed in the xcp_evts section by DaqCreateEvent().
 // Must be called after SS_ACTIVATED is set (XcpCreateEvent requires isActivated()).
 // If a persistence file was loaded before this call, events are matched by name and keep their saved id.
@@ -1003,6 +1005,8 @@ static uint16_t XcpRegisterSectionEvents(void) {
 #endif
     return count;
 }
+
+#endif // OPTION_SECTION_REGISTRATION
 
 #else // XCP_ENABLE_DAQ_EVENT_LIST
 
@@ -3265,14 +3269,16 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     assert(calseg_id_epk == 0);
 #endif
 
-    // Pre-register all segments whose tXcpCalSegDescriptor lives in the xcp_cals binary section.
-    // This optionally replaces the lazy creation at all CalSegCreate(), CalBlkCreate() macro call sites
-    // This is done after loading the persistence file, to ensure that all segments from the persistence file are already in the segment list, in particular segments from other
-    // applications in SHM mode
+// Pre-register all segments whose tXcpCalSegDescriptor lives in the xcp_cals binary section.
+// This optionally replaces the lazy creation at all CalSegCreate(), CalBlkCreate() macro call sites
+// This is done after loading the persistence file, to ensure that all segments from the persistence file are already in the segment list, in particular segments from other
+// applications in SHM mode
+#ifdef OPTION_SECTION_REGISTRATION
     XcpRegisterSectionCalSegs();
 #endif
+#endif
 
-#ifdef XCP_ENABLE_DAQ_EVENT_LIST
+#if defined(OPTION_SECTION_REGISTRATION) && defined(XCP_ENABLE_DAQ_EVENT_LIST)
     // Pre-register all events whose tXcpEventDescriptor lives in the xcp_evts binary section.
     // This optionally replaces the lazy creation at all DaqCreateEvent(), DaqCreateEventExt macro call sites
     // This is done after loading the persistence file, to ensure that all events from the persistence file are already in the event list, in particular events from other
