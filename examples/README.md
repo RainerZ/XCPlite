@@ -26,7 +26,7 @@ Note that examples targets may need different XCPlite library build configuratio
    cmake -B build        -S . -DXCPLITE_CONFIGURATION=default   # (or omit for default)
    cmake -B build-no_a2l -S . -DXCPLITE_CONFIGURATION=no_a2l    # for no_a2l_demo and no_a2l_demo_cpp
    cmake -B build-ptp    -S . -DXCPLITE_CONFIGURATION=ptp       # for ptp4l_demo
-   cmake -B build-shm    -S . -DXCPLITE_CONFIGURATION=shm       # for silkit_demo
+   cmake -B build-shm    -S . -DXCPLITE_CONFIGURATION=shm       # for hello_xcp, hello_xcp_cpp in SHM mode
    cmake -B build-rtos   -S . -DXCPLITE_CONFIGURATION=rtos      # for freertos_demo with the FreeRTOS POSIX simulator
    cmake -B build-raw    -S . -DXCPLITE_CONFIGURATION=raw       # for udp_raw_demo with the raw Ethernet transport
 ```
@@ -74,7 +74,7 @@ Uses the offline A2L generator tool (xcpclient).
 ### [silkit_demo](silkit_demo/README.md)
 
 Demonstrates the use of XCPlite in a SILKIT simulation with multiple participants.
-Builds against a pre-built libxcplite and silkit library
+Standalone project, SIL Kit and libxcplite (shm configuration) are fetched and built from source via CMake FetchContent
 
 
 ### [ptp4l_demo](ptp4l_demo/README.md)
