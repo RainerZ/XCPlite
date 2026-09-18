@@ -72,15 +72,9 @@ tXcpCalSegIndex params_calseg = XCP_UNDEFINED_CALSEG;
 //-----------------------------------------------------------------------------------------------------
 // XCP events
 //
-// The events are declared at file scope, so the trigger macros can be used in the Frida callbacks below.
-// XcpInit() finds the event descriptors in the xcp_evts linker section.
-
-DaqDeclareEvent(mainloop);
-DaqDeclareEvent(foo_enter);
-DaqDeclareEvent(foo_leave);
-#ifdef OPTION_HOOK_ALLOC
-DaqDeclareEvent(alloc_leave);
-#endif
+// The events are created at runtime with DaqCreateEvent() where their measurements are registered (default configuration
+// of xcplite, dynamic event management). The trigger macros in the Frida callbacks look up the event by name on their
+// first execution, so the events need not be visible at file scope.
 
 //=====================================================================================================
 // Use case 1: hook foo()
@@ -198,6 +192,7 @@ static void foo_hook_register_a2l(void) {
     A2lTypedefEnd();
 
     // Event foo_enter: arguments (absolute addressing) and register context (relative addressing to the base pointer of the event)
+    DaqCreateEvent(foo_enter);
     A2lSetAbsoluteAddrMode(foo_enter);
     A2lCreateMeasurement(foo_ctx.arg_a, "foo() argument a");
     A2lCreateMeasurement(foo_ctx.arg_iterations, "foo() argument iterations");
@@ -206,6 +201,7 @@ static void foo_hook_register_a2l(void) {
     A2lCreateTypedefReference(foo_enter_cpu_context, GumCpuContext, "Register context at entry of foo()");
 
     // Event foo_leave: results (absolute addressing) and register context (relative addressing)
+    DaqCreateEvent(foo_leave);
     A2lSetAbsoluteAddrMode(foo_leave);
     A2lCreateMeasurement(foo_ctx.ret, "foo() return value");
     A2lCreatePhysMeasurement(foo_ctx.duration_ns, "foo() execution time", "ns", 0, 1000000);
@@ -234,8 +230,7 @@ static bool foo_hook_attach(GumInterceptor *interceptor) {
     GumAttachReturn result = gum_interceptor_attach(interceptor, (gpointer)foo, foo_listener, NULL);
     gum_interceptor_end_transaction(interceptor); // The code patch is applied here
 
-    printf("Frida: hook foo() at %p: %s (%d), XCP events foo_enter=%u foo_leave=%u\n", (void *)foo, result == GUM_ATTACH_OK ? "ok" : "FAILED", (int)result, DaqEventId(foo_enter),
-           DaqEventId(foo_leave));
+    printf("Frida: hook foo() at %p: %s (%d)\n", (void *)foo, result == GUM_ATTACH_OK ? "ok" : "FAILED", (int)result);
     return result == GUM_ATTACH_OK;
 }
 
@@ -318,6 +313,7 @@ XCP_NOINLINE static void alloc_leave(uint8_t alloc_kind, uint64_t alloc_size, ui
                                      uint8_t alloc_origin, bool prime) {
 
     if (prime) {
+        DaqCreateEvent(alloc_leave);
         A2lSetStackAddrMode(alloc_leave);
         A2lCreateEnumConversion(alloc_kind, "3 0 \"malloc\" 1 \"calloc\" 2 \"aligned_alloc\"");
         A2lCreatePhysMeasurement(alloc_kind, "Allocation function", "conv.alloc_kind", 0, 2);
@@ -562,6 +558,7 @@ int main(int argc, char *argv[]) {
 
     // XCP: Event mainloop
     uint32_t counter = 0;
+    DaqCreateEvent(mainloop);
     A2lSetStackAddrMode(mainloop);
     A2lCreateMeasurement(counter, "Main loop counter");
 

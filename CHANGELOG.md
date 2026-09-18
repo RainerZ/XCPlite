@@ -4,9 +4,11 @@ All notable changes to XCPlite are documented in this file.
 
 ## [Unreleased]
 
-- Bugfix: `DaqTriggerEventExt` and the C variant of `DaqEventVar` in `xcplib.h` initialized their event id marker with `XCP_UNDEFINED_EVENT_ID` instead of the link-time id `XCP_EVENT_SECTION_GET_LINKTIME_ID`. With clang on Linux, where the event id is a link-time constant and `XCP_EVENT_SECTION_SET_ID` is a no-op, these macros triggered `XCP_UNDEFINED_EVENT_ID` and no DAQ data was transmitted for the event (for example `event2`/`heap_struct1` in `struct_demo`). Other compilers and platforms were not affected.
+- Bugfix: `DaqTriggerEventExt` and the C variant of `DaqEventVar` in `xcplib.h` initialized their event id marker with `XCP_UNDEFINED_EVENT_ID` instead of the link-time id `XCP_EVENT_SECTION_GET_LINKTIME_ID`. Affected only clang on Linux.
 
-- New macros `DaqDeclareEvent` / `DaqDeclareEventExt` in `xcplib.h`: declare an event at file scope. Pure declarations without a statement, usable with any compiler, unlike `DaqCreateEvent`, which sets the event id at runtime and is only valid inside a function (the compile-time event id exists with clang on Linux only; GCC and macOS can not initialize it statically). New expression macro `DaqEventId(event_name)` returns the id of a declared or created event.
+- New configuration option `OPTION_SECTION_REGISTRATION` to enable registration of events and calibration segments at link time in the sections `xcp_evts` and `xcp_cals`, as used by the offline A2L generator `xcpclient --elf`. Disabled in the default configuration. Enabled in the configurations `no_a2l` and `rtos` (mandatory without `OPTION_DAQ_EVENT_LIST`). The `default` configuration now creates events at runtime again in creation order, and the trigger macros look up the event by name on their first execution, so the event descriptor does not need to be visible at the trigger site. 
+
+- New macros `DaqDeclareEvent` / `DaqDeclareEventExt` in `xcplib.h` (section registration only): declare an event at file scope. Pure declarations without a statement, usable with any compiler.
 
 - New standalone example `frida_demo`: XCP measurement of functions which are not instrumented at source level, hooked with the Frida Gum Interceptor. 
 

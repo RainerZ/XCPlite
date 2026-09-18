@@ -12,7 +12,9 @@ See `examples/no_a2l_demo`, `examples/no_a2l_demo_cpp` and `examples/freertos_de
 
 ## Concept
 
-The instrumentation macros place information in the ELF file at compile and link time. The library and the generator use it:
+The instrumentation macros place information in the ELF file at compile and link time. The library and the generator use it. The
+sections `xcp_evts` and `xcp_cals` are only emitted with the configuration option `OPTION_SECTION_REGISTRATION` (set in the `no_a2l`
+and `rtos` configurations), without it the events get placeholder ids which are corrected from the target when connected:
 
 | Source in the ELF file | Written by | Used for |
 |---|---|---|

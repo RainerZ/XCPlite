@@ -136,6 +136,11 @@
 
 //-------------------------------------------------------------------------------
 // A2L / ELF — no filesystem on embedded; generate A2L externally via xcpclient or other tools
+
 #undef OPTION_ENABLE_A2L_GENERATOR
 #undef OPTION_ENABLE_A2L_UPLOAD
 #undef OPTION_ENABLE_ELF_UPLOAD
+
+// Use linker section based event and calibration segment registration
+// Linker sections xcp_evts and xcp_cals
+#define OPTION_SECTION_REGISTRATION
