@@ -162,13 +162,17 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
 // Platform section attribute for tXcpCalSegDescriptor static variables created by CalSegCreate() and CalBlkCreate().
 // Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
 // pre-register every calibration segment or block before the first use, without requiring the call site of the creation to execute first.
+#ifdef OPTION_SECTION_REGISTRATION
 #if defined(__ELF__)
 #define XCP_CAL_SECTION_ATTR __attribute__((section("xcp_cals"), used))
 #elif defined(__APPLE__)
 #define XCP_CAL_SECTION_ATTR __attribute__((section("__DATA,xcp_cals"), used))
 #else
-#define XCP_CAL_SECTION_ATTR /* section-based registration not supported on this platform */
+#error "section-based registration not supported on this platform"
 #endif
+#else
+#define XCP_CAL_SECTION_ATTR
+#endif // OPTION_SECTION_REGISTRATION
 
 #endif // __CAL_H__
 
@@ -320,12 +324,18 @@ typedef struct {
     uint8_t priority;
     uint8_t res[16 - sizeof(char *) - 4 - 1];
 } tXcpEventDescriptor;
+static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
+static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor res padding must not be zero; check pointer size vs struct layout");
 
 // Positional initializer (field order as above). Designated initializers would be a C++20 extension
 // and are reported by -pedantic when this header is compiled as C++17 (e.g. consumers via FetchContent).
 #define XCP_EVENT_DESCRIPTOR_INIT(name_str, cycle_ns, prio) {(name_str), (cycle_ns), (prio), {0}}
-static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
-static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor res padding must not be zero; check pointer size vs struct layout");
+
+#endif
+
+#ifdef OPTION_SECTION_REGISTRATION
+
+#ifndef __XCPLITE_H__ // Public API header guard
 
 // Linker-synthesized section boundary symbols, resolved at link time
 #if defined(__ELF__)
@@ -334,73 +344,65 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
 #elif defined(__APPLE__)
 extern const tXcpEventDescriptor __start_xcp_evts[] __asm("section$start$__DATA$xcp_evts");
 extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp_evts");
-#elif defined(_MSC_VER)
-#define __start_xcp_evts ((const tXcpEventDescriptor *)NULL)
-#define __stop_xcp_evts ((const tXcpEventDescriptor *)NULL)
 #else
 #error "Unsupported platform for section based event pre-registration"
 #endif
 
-#endif // __XCPLITE_H__
-
 // Platform section attribute for tXcpEventDescriptor const static variables created by DaqCreateEvent().
-// Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
-// pre-register every event before the first trigger, without requiring the call site of the event creation to execute first.
 #if defined(__ELF__)
 #define XCP_EVENT_SECTION_ATTR __attribute__((section("xcp_evts"), used))
 #elif defined(__APPLE__)
 #define XCP_EVENT_SECTION_ATTR __attribute__((section("__DATA,xcp_evts"), used))
-#else
-#define XCP_EVENT_SECTION_ATTR /* section-based registration not supported on this platform */
 #endif
 
-// Attribute for functions which trigger an event and measure their local variables: such a function must not be inlined.
-// An inlined function has a copy with its own stack frame at each call site, there is no stack frame relative address which is
-// valid for all copies. The offline A2L generator (xcpclient) does not register the local variables of an inlined function, see docs/OFFLINE_A2L.md
-#if defined(__GNUC__) || defined(__clang__)
-#define XCP_NOINLINE __attribute__((noinline))
-#elif defined(_MSC_VER)
-#define XCP_NOINLINE __declspec(noinline)
-#else
-#define XCP_NOINLINE
-#endif
+#endif // __XCPLITE_H__
 
-// Link-time event id derived from the descriptor's position in the xcp_evts section
 // Only with clang on Linux, this is a link-time constant, usable as a static initializer
-#if defined(__ELF__) || defined(__APPLE__)
 #if defined(__clang__) && defined(_LINUX)
 // Get the event id as compile-time constant for an event descriptor name (evt__<event_name>)
 #define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) ((tXcpEventId)(&(evt) - __start_xcp_evts))
 // Set the event id for an event descriptor at runtime not needed, the link-time id is already set
 #define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id) (void)(evt_id)
+#define XCP_EVENT_SECTION_LOOKUP_ID(evt_name, evt_id) (void)(evt_id)
 #else
 // With other compilers, the event id is not a compile-time constant, but a link-time constant, so it can be used as static initializer
 // Get the event id as compile-time constant for an event descriptor not possible
 #define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) XCP_UNDEFINED_EVENT_ID
 // Set the event id for an event descriptor at runtime
 #define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id) ((evt_id) = ((tXcpEventId)(&(evt_descr) - __start_xcp_evts)))
+#define XCP_EVENT_SECTION_LOOKUP_ID(evt_name, evt_id) ((evt_id) = ((tXcpEventId)(&(evt__##evt_name) - __start_xcp_evts)))
 #endif
-#else
+
+#else // OPTION_SECTION_REGISTRATION
+
 #ifdef OPTION_DAQ_EVENT_LIST
-// Use dynamic event creation, no compile-time or link-time event id available
+// Use dynamic event creation or lookup, no compile-time or link-time event id available
+#define XCP_EVENT_SECTION_ATTR
 #define XCP_EVENT_SECTION_GET_LINKTIME_ID(evt) XCP_UNDEFINED_EVENT_ID
 #define XCP_EVENT_SECTION_SET_ID(evt_descr, evt_id)                                                                                                                                \
     if ((evt_id) == XCP_UNDEFINED_EVENT_ID) {                                                                                                                                      \
-        (evt_id) = XcpCreateEvent((evt_descr).name, 0, 0);                                                                                                                         \
+        (evt_id) = XcpCreateEvent((evt_descr).name, (evt_descr).cycle_time_ns, (evt_descr).priority);                                                                              \
+    }
+#define XCP_EVENT_SECTION_LOOKUP_ID(evt_name, evt_id)                                                                                                                              \
+    if ((evt_id) == XCP_UNDEFINED_EVENT_ID) {                                                                                                                                      \
+        (evt_id) = XcpFindEvent(#evt_name);                                                                                                                                        \
     }
 #else
-#error "This platform does not support link-time event id generation, please enable OPTION_DAQ_EVENT_LIST"
-#endif
+#error "Without OPTION_DAQ_EVENT_LIST the events are registered at link time, this requires OPTION_SECTION_REGISTRATION and a platform with ELF or Mach-O sections"
 #endif
 
+#endif // !OPTION_SECTION_REGISTRATION
+
 /// Create an event
-/// Depending on option OPTION_DAQ_EVENT_LIST defined, events are created at runtime or otherwise at link time
-/// Dynamic event management (defined(OPTION_DAQ_EVENT_LIST)):
-///    On platforms with ELF linker, the macro emits a static const tXcpEventDescriptor in the xcp_evts section, which is scanned at runtime by XcpInit() to create the event and
-///    set the event id Otherwise the event is created at the call site with a once execution pattern
-/// Static event management (!defined(OPTION_DAQ_EVENT_LIST)):
-///    Requires a platform with ELF linker
-///    Event descriptor and event id is created at link time
+/// Must be used inside a function, the event is created or its id is set when the code is executed
+/// Depending on the options OPTION_SECTION_REGISTRATION and OPTION_DAQ_EVENT_LIST, events are registered at link time or created at runtime:
+/// Section registration (defined(OPTION_SECTION_REGISTRATION), configurations no_a2l and rtos, requires ELF or Mach-O sections):
+///    The macro emits a static const tXcpEventDescriptor in the xcp_evts section, the event id is the position of the descriptor in the section.
+///    With OPTION_DAQ_EVENT_LIST, XcpInit() scans the section and pre-registers every event before the first trigger, without it the section is the event list.
+///    The trigger macros use the position of the descriptor, so the descriptor must be visible at the trigger (same function, or DaqDeclareEvent at file scope).
+/// Dynamic event management (!defined(OPTION_SECTION_REGISTRATION), requires OPTION_DAQ_EVENT_LIST, default configuration):
+///    The event is created at the call site with a once execution pattern, the event id is the creation order.
+///    The trigger macros look up the event by name on their first execution, the descriptor need not be visible at the trigger.
 /// Event cycle time is set to sporadic and priority to normal
 /// Setting the cycle time would only have the benefit for the XCP client tool to estimate the expected data rate of a DAQ setup
 /// To create an XCP event with increased priority or specified expected cycle time, use DaqCreateEventExt
@@ -418,6 +420,26 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
     static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, (cycle) * 1000U, (prio));                                   \
     XCP_MAYBE_UNUSED static tXcpEventId evt_id_##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                \
     XCP_EVENT_SECTION_SET_ID(evt__##event_name, evt_id_##event_name);
+
+#ifdef OPTION_SECTION_REGISTRATION
+
+/// Declare an event at file scope (section registration only)
+/// Like DaqCreateEvent, but a pure declaration without any statement, so it can be used at file scope with any compiler.
+/// The event may then be triggered by name (DaqTriggerEvent, DaqTriggerEventExt, ...) from any function of the compilation unit,
+/// for example from callbacks. There is no evt_id_<event_name> variable: its value can not be initialized at compile time with
+/// GCC or on macOS. With dynamic event management (default configuration) this macro does not exist and is not needed: the trigger
+/// macros look up the event by name, DaqCreateEvent may be executed anywhere before the first trigger.
+/// @param name Name given as identifier
+#define DaqDeclareEvent(event_name) static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, 0, 0)
+
+/// Declare an event at file scope with given expected cycle time and priority
+/// @param name Name given as identifier
+/// @param cycle_time Cycle time in microseconds (0 = sporadic)
+/// @param priority Priority of the event (0 = normal, >=1 = realtime)
+#define DaqDeclareEventExt(event_name, cycle, prio)                                                                                                                                \
+    static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, (cycle) * 1000U, (prio))
+
+#endif // OPTION_SECTION_REGISTRATION
 
 #ifdef OPTION_DAQ_EVENT_LIST
 
@@ -565,21 +587,30 @@ extern const uint8_t *gXcpBaseAddr;
 // Note that XCP_EVENT_SECTION_SET_ID expands to nothing on platforms where the event id is a link-time constant
 // A function which triggers an event and measures its local variables (stack relative addressing) must not be inlined, mark it XCP_NOINLINE
 
-// @@@@ TODO: Not all permutations of name, string, index with At implemented
+// Attribute for functions which trigger an event and measure their local variables: such a function must not be inlined.
+// An inlined function has a copy with its own stack frame at each call site, there is no stack frame relative address which is
+// valid for all copies. The offline A2L generator (xcpclient) does not register the local variables of an inlined function, see docs/OFFLINE_A2L.md
+#if defined(__GNUC__) || defined(__clang__)
+#define XCP_NOINLINE __attribute__((noinline))
+#elif defined(_MSC_VER)
+#define XCP_NOINLINE __declspec(noinline)
+#else
+#define XCP_NOINLINE
+#endif
 
 /// Trigger the global XCP event 'name' for stack relative or absolute addressing AAS
 /// @param name Name given as identifier
 #define DaqTriggerEvent(event_name)                                                                                                                                                \
     {                                                                                                                                                                              \
         static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                          \
-        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
+        XCP_EVENT_SECTION_LOOKUP_ID(event_name, trg__AAS__##event_name);                                                                                                           \
         XcpEventExt_Var(trg__AAS__##event_name, 1, xcp_get_frame_addr());                                                                                                          \
         XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
 #define DaqTriggerEventAt(event_name, clock)                                                                                                                                       \
     {                                                                                                                                                                              \
         static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                          \
-        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
+        XCP_EVENT_SECTION_LOOKUP_ID(event_name, trg__AAS__##event_name);                                                                                                           \
         XcpEventExtAt_Var(trg__AAS__##event_name, clock, 1, xcp_get_frame_addr());                                                                                                 \
         XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
@@ -607,8 +638,8 @@ extern const uint8_t *gXcpBaseAddr;
 /// @param base_addr Base address pointer for relative addressing mode
 #define DaqTriggerEventExt(event_name, base_addr)                                                                                                                                  \
     {                                                                                                                                                                              \
-        static tXcpEventId trg__AASD__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                       \
-        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASD__##event_name);                                                                                                      \
+        static tXcpEventId trg__AASD__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                         \
+        XCP_EVENT_SECTION_LOOKUP_ID(event_name, trg__AASD__##event_name);                                                                                                          \
         XcpEventExt_Var(trg__AASD__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)(base_addr));                                                                           \
         XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
@@ -725,7 +756,7 @@ extern const uint8_t *gXcpBaseAddr;
     {                                                                                                                                                                              \
         XCP_CAPTURE(event_name, __VA_ARGS__)                                                                                                                                       \
         static tXcpEventId trg__AASR__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                         \
-        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASR__##event_name);                                                                                                      \
+        XCP_EVENT_SECTION_LOOKUP_ID(event_name, trg__AASR__##event_name);                                                                                                          \
         XcpEventExt_Var(trg__AASR__##event_name, 2, xcp_get_frame_addr(), (const uint8_t *)&cap__##event_name);                                                                    \
         XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
@@ -738,7 +769,7 @@ extern const uint8_t *gXcpBaseAddr;
     {                                                                                                                                                                              \
         XCP_CAPTURE(event_name, __VA_ARGS__)                                                                                                                                       \
         static tXcpEventId trg__AASR__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                         \
-        XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AASR__##event_name);                                                                                                      \
+        XCP_EVENT_SECTION_LOOKUP_ID(event_name, trg__AASR__##event_name);                                                                                                          \
         XcpEventExtAt_Var(trg__AASR__##event_name, clock, 2, xcp_get_frame_addr(), (const uint8_t *)&cap__##event_name);                                                           \
         XCP_NO_TAIL_CALL();                                                                                                                                                        \
     }
@@ -1231,7 +1262,7 @@ void clockGetPrintStatistic(void);
 #define DaqEventVar(event_name, ...)                                                                                                                                               \
     do {                                                                                                                                                                           \
         static const tXcpEventDescriptor evt__##event_name XCP_EVENT_SECTION_ATTR = XCP_EVENT_DESCRIPTOR_INIT(#event_name, 0, 0);                                                  \
-        static tXcpEventId trg__AAS__##event_name = XCP_UNDEFINED_EVENT_ID;                                                                                                        \
+        static tXcpEventId trg__AAS__##event_name = XCP_EVENT_SECTION_GET_LINKTIME_ID(evt__##event_name);                                                                          \
         XCP_EVENT_SECTION_SET_ID(evt__##event_name, trg__AAS__##event_name);                                                                                                       \
         if (XcpIsActivated()) {                                                                                                                                                    \
             A2lOnce() {                                                                                                                                                            \

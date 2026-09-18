@@ -67,6 +67,7 @@ Multiple examples demonstrating different features are available in the [example
 - [silkit_demo](examples/silkit_demo/README.md) - SIL-Kit multi-participant measurement and calibration (via shared memory (SHM mode))
 - [ptp4l_demo](examples/ptp4l_demo/README.md) - Using a PTP synchronized clock as XCP timestamp source
 - [bpf_demo](examples/bpf_demo/README.md) - eBPF based syscall tracing
+- [frida_demo](examples/frida_demo/README.md) - Measure functions without source instrumentation, hooked with the Frida Gum Interceptor (XCP events triggered from the hook callbacks)
 - [point_cloud_demo](examples/point_cloud_demo/README.md) - Measure and visualize dynamic length data structures in CANape (point cloud in 3D scene window)
 - [c_demo](examples/c_demo/README.md) - More detailed complex data objects, calibration objects, and calibration page switching
 - [cpp_demo](examples/cpp_demo/README.md) - More detailed C++ class instrumentation and RAII wrappers

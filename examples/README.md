@@ -122,6 +122,15 @@ Demonstrates building libxcplite from source on Github as part of your own proje
 - Typical workflow for CI builds, cross-compiling and projects which want the xcplite version pinned in code.  
 
 
+### [frida_demo](frida_demo/README.md)
+
+Demonstrates XCP measurement of functions which are not instrumented at source level, hooked with the [Frida Gum](https://frida.re) Interceptor:
+- Standalone project, xcplite via `FetchContent` and the prebuilt Frida Gum devkit downloaded by CMake.  
+- A function `foo()` without any XCPlite instrumentation is hooked, the hook callbacks trigger the XCP events with arguments, return value, duration and the CPU register snapshot.  
+- Relative addressing with the per-invocation register context as base pointer (`DaqTriggerEventExt`).  
+- The libc allocation functions are hooked as well: every allocation in the process becomes an XCP event, the callers show that XCPlite allocates once at initialization and never afterwards.  
+
+
 ### [c_demo](c_demo/README.md)
 
 Shows more complex data objects (structs, arrays) and calibration objects (axis, maps and curves).  
