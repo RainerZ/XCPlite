@@ -473,6 +473,13 @@ Macros to create events:
 /// May be called multiple times in different code locations, ignored if the the event name already exists
 /// @param name Name given as identifier
 DaqCreateEvent(event_name)
+
+/// Declare a global event at file scope (only with OPTION_SECTION_REGISTRATION, configurations no_a2l and rtos)
+/// Pure declaration without a statement, usable with any compiler; DaqCreateEvent sets the event id at runtime and is only valid inside a function
+/// With section registration the trigger macros need the event descriptor in scope, this declares it for all functions of the compilation unit, for example for callbacks
+/// With dynamic event management (default configuration) the trigger macros look up the event by name, DaqCreateEvent anywhere before the first trigger is sufficient
+/// @param name Name given as identifier
+DaqDeclareEvent(event_name)
 ```
 
 Macros to trigger events:

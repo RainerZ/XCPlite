@@ -162,15 +162,27 @@
 #endif
 
 //-------------------------------------------------------------------------------
-// A2L generation settings
+// Runtime A2L generation and upload
 
 #define OPTION_ENABLE_A2L_GENERATOR // Enable A2L generator
 #define OPTION_ENABLE_A2L_UPLOAD    // Enable A2L upload via XCP
-#define OPTION_ENABLE_ELF_UPLOAD    // Enable ELF upload via XCP
 
 // Enable socketGetLocalAddr for A2L file generation
 // Used for convenience to get an existing ip address in A2L, when bound to ANY 0.0.0.0
 // #define OPTION_ENABLE_GET_LOCAL_ADDR
+
+//-------------------------------------------------------------------------------
+// Buildtime A2L generation
+
+// Enable registration at compile and link time for both, the events (data acquisition, section xcp_evts) and the calibration
+// segments (calibration, section xcp_cals). The event id and the segment number are the positions of the descriptors in the
+// sections, the offline A2L generator (xcpclient --elf) reads the sections.
+// Requires a platform with ELF or Mach-O sections (not MSVC), mandatory if OPTION_DAQ_EVENT_LIST is off (configurations no_a2l and rtos)
+// Off: events and segments are created at runtime (DaqCreateEvent, CalSegCreate) in creation order, the trigger macros look up the event by name once
+
+// #define OPTION_SECTION_REGISTRATION
+
+// #define OPTION_ENABLE_ELF_UPLOAD    // Enable ELF upload via XCP
 
 //-------------------------------------------------------------------------------
 // Tests
@@ -200,4 +212,11 @@
 // examples/fetchcontent_example/config/xcplib_app_cfg.h for example override files.
 #ifdef XCPLIB_CFG_OVERRIDE
 #include XCPLIB_CFG_OVERRIDE
+#endif
+
+//-------------------------------------------------------------------------------
+// Configuration checks
+
+#if defined(OPTION_SECTION_REGISTRATION) && (defined(_MSC_VER) || defined(OPTION_SHM))
+#error "OPTION_SECTION_REGISTRATION (link time registration of events and calibration segments) is not supported"
 #endif

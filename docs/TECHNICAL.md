@@ -112,8 +112,10 @@ change of the tool.
 | `xcp_epk` | the EPK software version string | `XcpCreateEpk` |
 | `xcp_meta` | the metadata constants `xcp_meta__<kind>__<name>` | `XCP_UNIT`, `XCP_LIMITS`, `XCP_COMMENT`, `XCP_READ_WRITE` |
 
-On macOS the sections are named `__DATA,xcp_evts` etc. On platforms without section support (`XCP_EVENT_SECTION_ATTR` empty) the
-events and segments are registered at runtime only.
+The sections `xcp_evts` and `xcp_cals` exist only with the configuration option `OPTION_SECTION_REGISTRATION` (configurations `no_a2l`
+and `rtos`). Without it (`default` configuration) events and segments are created at runtime in creation order, the event descriptors
+are ordinary static constants and the trigger macros look up the event by name once. On macOS the sections are named `__DATA,xcp_evts`
+etc. Section registration requires ELF or Mach-O.
 
 ### Marker variables
 
