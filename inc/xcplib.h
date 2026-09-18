@@ -324,17 +324,16 @@ typedef struct {
     uint8_t priority;
     uint8_t res[16 - sizeof(char *) - 4 - 1];
 } tXcpEventDescriptor;
+static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
+static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor res padding must not be zero; check pointer size vs struct layout");
 
 // Positional initializer (field order as above). Designated initializers would be a C++20 extension
 // and are reported by -pedantic when this header is compiled as C++17 (e.g. consumers via FetchContent).
 #define XCP_EVENT_DESCRIPTOR_INIT(name_str, cycle_ns, prio) {(name_str), (cycle_ns), (prio), {0}}
-static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
-static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor res padding must not be zero; check pointer size vs struct layout");
 
 #endif
 
-// Link-time event id derived from the descriptor's position in the xcp_evts section
-#if defined(OPTION_SECTION_REGISTRATION) && (defined(__ELF__) || defined(__APPLE__))
+#ifdef OPTION_SECTION_REGISTRATION
 
 #ifndef __XCPLITE_H__ // Public API header guard
 
@@ -345,25 +344,18 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
 #elif defined(__APPLE__)
 extern const tXcpEventDescriptor __start_xcp_evts[] __asm("section$start$__DATA$xcp_evts");
 extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp_evts");
-#elif defined(_MSC_VER)
-#define __start_xcp_evts ((const tXcpEventDescriptor *)NULL)
-#define __stop_xcp_evts ((const tXcpEventDescriptor *)NULL)
 #else
 #error "Unsupported platform for section based event pre-registration"
 #endif
 
-#endif // __XCPLITE_H__
-
 // Platform section attribute for tXcpEventDescriptor const static variables created by DaqCreateEvent().
-// Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
-// pre-register every event before the first trigger, without requiring the call site of the event creation to execute first.
 #if defined(__ELF__)
 #define XCP_EVENT_SECTION_ATTR __attribute__((section("xcp_evts"), used))
 #elif defined(__APPLE__)
 #define XCP_EVENT_SECTION_ATTR __attribute__((section("__DATA,xcp_evts"), used))
-#else
-#define XCP_EVENT_SECTION_ATTR /* section-based registration not supported on this platform */
 #endif
+
+#endif // __XCPLITE_H__
 
 // Only with clang on Linux, this is a link-time constant, usable as a static initializer
 #if defined(__clang__) && defined(_LINUX)
@@ -381,7 +373,7 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 #define XCP_EVENT_SECTION_LOOKUP_ID(evt_name, evt_id) ((evt_id) = ((tXcpEventId)(&(evt__##evt_name) - __start_xcp_evts)))
 #endif
 
-#else
+#else // OPTION_SECTION_REGISTRATION
 
 #ifdef OPTION_DAQ_EVENT_LIST
 // Use dynamic event creation or lookup, no compile-time or link-time event id available
@@ -399,7 +391,7 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 #error "Without OPTION_DAQ_EVENT_LIST the events are registered at link time, this requires OPTION_SECTION_REGISTRATION and a platform with ELF or Mach-O sections"
 #endif
 
-#endif
+#endif // !OPTION_SECTION_REGISTRATION
 
 /// Create an event
 /// Must be used inside a function, the event is created or its id is set when the code is executed
