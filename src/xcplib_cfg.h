@@ -174,15 +174,21 @@
 //-------------------------------------------------------------------------------
 // Buildtime A2L generation
 
-// Enable registration at compile and link time for both, the events (data acquisition, section xcp_evts) and the calibration
-// segments (calibration, section xcp_cals). The event id and the segment number are the positions of the descriptors in the
-// sections, the offline A2L generator (xcpclient --elf) reads the sections.
-// Requires a platform with ELF or Mach-O sections (not MSVC), mandatory if OPTION_DAQ_EVENT_LIST is off (configurations no_a2l and rtos)
-// Off: events and segments are created at runtime (DaqCreateEvent, CalSegCreate) in creation order, the trigger macros look up the event by name once
+// Registration at compile and link time for events (data acquisition, section xcp_evts) and calibration segments (calibration, section xcp_cals).
+// On:
+// The event id and the segment number are the positions of the descriptors in the sections.
+// Stable for a build.
+// The offline A2L generator (xcpclient --elf) reads the sections.
+// Requires a platform with ELF or Mach-O sections (not MSVC), mandatory if OPTION_DAQ_EVENT_LIST is off (configurations no_a2l and rtos).
+// Event and calibration segment numbering independant of event creation order
+// Off:
+// Events and segments are created at runtime (DaqCreateEvent, CalSegCreate) in creation order.
+// The trigger macros look up the event by name once, so events may be created anywhere in the application.
+// Event and calibration segment numbering is dependant on event creation order (on each application start or once on initial creation order if persistence is enabled)
 
 // #define OPTION_SECTION_REGISTRATION
 
-// #define OPTION_ENABLE_ELF_UPLOAD    // Enable ELF upload via XCP
+// #define OPTION_ENABLE_ELF_UPLOAD // User defined command: xcpclient can upload ELF via XCP
 
 //-------------------------------------------------------------------------------
 // Tests
