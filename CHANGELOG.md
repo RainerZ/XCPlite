@@ -4,25 +4,25 @@ All notable changes to XCPlite are documented in this file.
 
 
 
-## [V2.2.3] 
 
-- xcpclient related changes (xcpclient V4.0.1):
-    - The DWARF location expression parser no longer floods the log with warnings about variables which are dropped anyway by the filters, or which are markers the XCPlite macros generate in the code of the application (`evt__`, `trg__`, `cap__`, `xcp_meta__`, `evt_id_<event>`, ...).
-    - A local variable without any `DW_AT_location` in the debug information is now reported with a warning instead of silently missing from the A2L file.
-    - The messages of the location expression parser now name the compilation unit and the declaration line of the variable (`main_c:178: 'delay': ...`), the variable name alone does not identify which of several variables with that name is meant.
-    - A variable which the compiler spread over several locations (`DW_OP_piece`) is now reported as split into slices. A single piece covering only a part of the variable was silently registered with the address of that one slice before, it is now rejected like the multi piece case.
-    
-    
-
-## [Unreleased]
+## [Unreleased V2.3.0] Breaking change because section registration is now disabled in the default configuration
 
 - Bugfix: `DaqTriggerEventExt` and the C variant of `DaqEventVar` in `xcplib.h` initialized their event id marker with `XCP_UNDEFINED_EVENT_ID` instead of the link-time id `XCP_EVENT_SECTION_GET_LINKTIME_ID`. Affected only clang on Linux.
 
-- New configuration option `OPTION_SECTION_REGISTRATION` to enable registration of events and calibration segments at link time in the sections `xcp_evts` and `xcp_cals`, as used by the offline A2L generator `xcpclient --elf`. Disabled in the default configuration. Enabled in the configurations `no_a2l` and `rtos` (mandatory without `OPTION_DAQ_EVENT_LIST`). The `default` configuration now creates events at runtime again in creation order, and the trigger macros look up the event by name on their first execution, so the event descriptor does not need to be visible at the trigger site. 
+- New configuration option `OPTION_SECTION_REGISTRATION` to enable registration of events and calibration segments at link time in the sections `xcp_evts` and `xcp_cals`, as used by the offline A2L generator `xcpclient --elf`. Now disabled in the default configuration! Enabled in the configurations `no_a2l` and `rtos` (mandatory without `OPTION_DAQ_EVENT_LIST`). The `default` configuration now creates events at runtime again in creation order, and the trigger macros look up the event by name on their first execution, so the event descriptor does not need to be visible at the trigger site. Broken `point_cloud_demo` and `silkit_demo` are fixed by this change.
 
 - New macros `DaqDeclareEvent` / `DaqDeclareEventExt` in `xcplib.h` (section registration only): declare an event at file scope. Pure declarations without a statement, usable with any compiler.
 
-- New standalone example `frida_demo`: XCP measurement of functions which are not instrumented at source level, hooked with the Frida Gum Interceptor. 
+- New example `frida_demo`: XCP measurement of functions which are not instrumented at source level, hooked with the Frida Gum Interceptor. 
+
+- `silkit_demo` fetch content support added.
+
+- xcpclient related changes (xcpclient V4.0.1):
+    - Improved logging and warning message noise from the DWARF location expression parser.
+    - A local variable without any `DW_AT_location` is now reported with a warning instead of silently missing from the A2L file.
+    - The messages of the location expression parser now name the compilation unit and the declaration line of the variable 
+    - A variable which the compiler spread over several locations (`DW_OP_piece`) is now reported as split into slices and ignored.
+
 
 ## [V2.2.2] 
 

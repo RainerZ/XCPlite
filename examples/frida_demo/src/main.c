@@ -34,12 +34,16 @@
 #include <a2l.h>    // for A2l generation
 #include <xcplib.h> // for application programming interface
 
+#ifndef __XCPLIB_APP_CFG_H__
+#error "configuration override header config/xcplib_app_cfg.h is not included"
+#endif
+
 //-----------------------------------------------------------------------------------------------------
 // Options
 
 // Use case 2: hook the libc allocation functions
 // Comment out to reduce the example to the interception of foo()
-#define OPTION_HOOK_ALLOC
+// #define OPTION_HOOK_ALLOC
 
 //-----------------------------------------------------------------------------------------------------
 // XCP params
@@ -69,16 +73,25 @@ const params_t params = {.delay_us = 10000, .foo_iterations = 1000, .foo_enabled
 // Calibration segment handle
 tXcpCalSegIndex params_calseg = XCP_UNDEFINED_CALSEG;
 
-//-----------------------------------------------------------------------------------------------------
-// XCP events
-//
-// The events are created at runtime with DaqCreateEvent() where their measurements are registered (default configuration
-// of xcplite, dynamic event management). The trigger macros in the Frida callbacks look up the event by name on their
-// first execution, so the events need not be visible at file scope.
-
 //=====================================================================================================
 // Use case 1: hook foo()
 //=====================================================================================================
+
+//-----------------------------------------------------------------------------------------------------
+// XCP events for foo
+
+#ifdef OPTION_SECTION_REGISTRATION
+
+DaqDeclareEvent(foo_enter);
+DaqDeclareEvent(foo_leave);
+
+#else
+
+// The events are created at runtime with DaqCreateEvent() where their measurements are registered
+// (default configuration of xcplite, dynamic event management).
+// The trigger macros in the Frida callbacks look up the event by name on their first execution, so the events need not be visible at file scope.
+
+#endif
 
 //-----------------------------------------------------------------------------------------------------
 // The function to be hooked
@@ -130,6 +143,10 @@ static void foo_on_enter(GumInvocationContext *ic, gpointer user_data) {
     foo_ctx.arg_iterations = (uint32_t)GPOINTER_TO_SIZE(gum_invocation_context_get_nth_argument(ic, 1));
 
     // XCP: Trigger the event with the register context of this invocation as base pointer for relative addressing
+    // @@@@ TODO: xcpclient does not handle dynamic addressing mode, copy it for now to a local static, which gets the correct event id
+    static GumCpuContext foo_enter_cpu_context;
+    memcpy(&foo_enter_cpu_context, ic->cpu_context, sizeof(GumCpuContext));
+
     DaqTriggerEventExt(foo_enter, ic->cpu_context);
 }
 
@@ -156,6 +173,8 @@ static void foo_on_leave(GumInvocationContext *ic, gpointer user_data) {
 // GumCpuContext is the register snapshot Frida takes in the trampoline. It lives in the trampoline's stack frame, so its
 // address is different for every invocation: the hooks pass it as base pointer to DaqTriggerEventExt(), and the A2L
 // describes the registers as offsets from that base pointer (relative addressing mode, address extension 3).
+
+#ifndef OPTION_SECTION_REGISTRATION
 
 static void foo_hook_register_a2l(void) {
 
@@ -214,6 +233,8 @@ static void foo_hook_register_a2l(void) {
     A2lSetRelativeAddrMode(foo_leave, foo_leave_cpu_context);
     A2lCreateTypedefReference(foo_leave_cpu_context, GumCpuContext, "Register context at return of foo()");
 }
+
+#endif
 
 //-----------------------------------------------------------------------------------------------------
 // Attach the foo() hook
@@ -308,6 +329,11 @@ static GumThreadId alloc_main_thread_id;
 // The A2L registration is done by a priming call from main() with prime=true, after A2lInit(): the registration must run in
 // this function (A2lSetStackAddrMode needs its stack frame), but it must not run inside the hook, because it allocates and
 // would re-enter the hook.
+
+#ifdef OPTION_SECTION_REGISTRATION
+DaqDeclareEvent(alloc_enter);
+DaqDeclareEvent(alloc_leave);
+#endif
 
 XCP_NOINLINE static void alloc_leave(uint8_t alloc_kind, uint64_t alloc_size, uint64_t alloc_ptr, uint64_t alloc_return_address, uint32_t alloc_thread_id, uint32_t alloc_depth,
                                      uint8_t alloc_origin, bool prime) {
@@ -543,30 +569,38 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // XCP: Enable runtime A2L generation
+// XCP: Enable runtime A2L generation
+#ifndef OPTION_SECTION_REGISTRATION
     if (!A2lInit(addr, OPTION_SERVER_PORT, OPTION_USE_TCP, OPTION_A2L_MODE)) {
         return 1;
     }
+#endif
 
     // XCP: Calibration segment and parameters
     params_calseg = XcpCreateCalSeg("params", &params, sizeof(params));
     assert(params_calseg != XCP_UNDEFINED_CALSEG);
+#ifndef OPTION_SECTION_REGISTRATION
     A2lSetSegmentAddrMode(params_calseg, params);
     A2lCreateParameter(params.delay_us, "Main loop period", "us", 0, 1000000);
     A2lCreateParameter(params.foo_iterations, "Work done by foo(), changes its execution time", "", 0, 10000000);
     A2lCreateParameter(params.foo_enabled, "Call foo() from the main loop", "", 0, 1);
+#endif
 
     // XCP: Event mainloop
     uint32_t counter = 0;
     DaqCreateEvent(mainloop);
+#ifndef OPTION_SECTION_REGISTRATION
     A2lSetStackAddrMode(mainloop);
     A2lCreateMeasurement(counter, "Main loop counter");
+#endif
 
     // Frida: hook foo() and register its measurements
     if (!foo_hook_attach(interceptor)) {
         return 1;
     }
+#ifndef OPTION_SECTION_REGISTRATION
     foo_hook_register_a2l();
+#endif
 
 #ifdef OPTION_HOOK_ALLOC
     // XCP: Register the measurements of the allocation hook, end of the init phase
@@ -625,7 +659,9 @@ int main(int argc, char *argv[]) {
 
     // XCP: Shutdown
     XcpDisconnect();
+#ifndef OPTION_SECTION_REGISTRATION
     A2lFinalize();
+#endif
     XcpEthServerShutdown();
 
     gum_deinit_embedded();

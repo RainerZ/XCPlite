@@ -862,20 +862,7 @@ extern const uint8_t *gXcpBaseAddr;
 
 /// Macro to force a local variable or function parameter to be stored on the stack
 /// Example usage: XCP_MEAS struct my_struct s = {...}; XCP_FORCE_TO_STACK(s);
-///
-/// XCP_MEAS (volatile) alone is not enough for a variable of aggregate type (struct, union, array):
-/// clang initializes such a local with a memcpy from a constant and marks that memcpy volatile, but InstCombine folds away
-/// an alloca whose only write is a memcpy from a constant without honoring the volatile flag (seen with clang 14 at -O1,
-/// fixed in clang 20). The variable then does not exist in the executable at all, it has no location in the debug
-/// information and xcpclient can not create an A2L entry for it. A scalar is not affected, its initialization is a plain
-/// volatile store which no optimization pass removes.
-/// This macro makes the variable visible to an empty inline assembly statement, which no pass can look through, so the
-/// variable has to stay in memory. It emits no code.
-///
-/// Note on where the variable ends up: the compiler describes a stack slot either relative to the frame pointer
-/// (DW_OP_fbreg, which xcpclient supports) or relative to the stack pointer (DW_OP_breg<sp>, which it does not support yet).
-/// On AArch64 the slots near the frame pointer get the frame pointer form, so declare the variables which have to be
-/// measurable before the other locals of the function
+/// XCP_MEAS (volatile) alone is not enough for a variable of aggregate type (struct, union, array).
 #if defined(__GNUC__) || defined(__clang__)
 #define XCP_FORCE_TO_STACK(var) __asm__ volatile("" ::"m"(var) : "memory")
 #elif defined(_MSC_VER)

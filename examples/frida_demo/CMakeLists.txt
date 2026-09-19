@@ -13,6 +13,19 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
+# ---------------------------------------------------------------------------
+# Application specific configuration override for XCPlite
+#
+# XCPLITE_CFG_OVERRIDE names a header which xcplite includes at the end of its
+# src/xcplib_cfg.h. It may #undef/#define any OPTION_* default, in the same way
+# as the shipped src/xcplib_<name>_cfg.h configuration files do. xcplite adds
+# XCPLIB_CFG_OVERRIDE="xcplib_app_cfg.h" and the header's directory as PUBLIC
+# usage requirements of the library target, so library and application are
+# compiled with the same options. Only valid with XCPLITE_CONFIGURATION "default".
+# ---------------------------------------------------------------------------
+set(XCPLITE_CFG_OVERRIDE "${CMAKE_CURRENT_SOURCE_DIR}/config/xcplib_app_cfg.h")
+
+
 include(FetchContent)
 
 # ---------------------------------------------------------------------------
