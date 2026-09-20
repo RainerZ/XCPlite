@@ -359,6 +359,7 @@ fn test_register_metadata_file_scope_marker_fallback() {
             namespaces: Vec::new(),
             inlined: false,
             frame_base: FrameBase::Cfa,
+            param: None,
         }]
     };
     let mut debug_data = empty_debug_data();
@@ -405,6 +406,7 @@ fn test_get_target_signature() {
             namespaces: Vec::new(),
             inlined: false,
             frame_base: FrameBase::Unknown,
+            param: None,
         }],
     );
     assert_eq!(ElfReader::from_debug_data(debug_data).get_target_signature(), Some("ACSDD"));
@@ -475,6 +477,7 @@ fn elf_reader_with_conflicting_types() -> ElfReader {
         namespaces: Vec::new(),
         inlined: false,
         frame_base: FrameBase::Cfa,
+        param: None,
     };
     let mut debug_data = empty_debug_data();
     debug_data.unit_names = vec![Some("a.c".to_string()), Some("b.c".to_string())];
@@ -528,6 +531,7 @@ fn test_register_metadata_namespaced_instance() {
             namespaces: vec!["motor_control".to_string()],
             inlined: false,
             frame_base: FrameBase::Cfa,
+            param: None,
         }]
     };
     let mut debug_data = empty_debug_data();
@@ -577,6 +581,7 @@ fn test_register_metadata_same_marker_name_in_namespaces() {
         namespaces: vec![namespace.to_string()],
         inlined: false,
         frame_base: FrameBase::Cfa,
+        param: None,
     };
     let mut debug_data = empty_debug_data();
     debug_data.xcp_meta_data = Some((meta_base, meta));
@@ -617,6 +622,7 @@ fn test_register_metadata_marker_scope() {
             namespaces: namespaces.iter().map(|s| s.to_string()).collect(),
             inlined: false,
             frame_base: FrameBase::Cfa,
+            param: None,
         }]
     };
     let mut debug_data = empty_debug_data();
@@ -773,6 +779,7 @@ fn elf_reader_with_markers(markers: &[(&str, u64, &str)], event_section: Option<
             namespaces: Vec::new(),
             inlined: false,
             frame_base: FrameBase::Cfa,
+            param: None,
         });
     }
     if let Some(range) = event_section {

@@ -60,6 +60,42 @@ pub(crate) struct VarInfo {
     pub(crate) function: Option<String>, // function name if variable is local to a function (stack variable or static local)
     pub(crate) namespaces: Vec<String>,  // namespaces the variable is defined in, outermost first
     pub(crate) inlined: bool,            // the variable belongs to a function which the compiler inlined, see load_variables
+    pub(crate) param: Option<ParamInfo>, // the variable is a parameter of its function (DW_TAG_formal_parameter), None for variables
+}
+
+// ParamInfo holds what is specific to a function parameter.
+//
+// Unlike a local variable, a parameter usually does not have one location for the whole function: it arrives in a register
+// or on the stack of the caller as the calling convention demands, and the function may then spill it to its own stack frame
+// (always without optimization: DW_OP_fbreg, valid after the prologue), keep it in the register, move it or drop it. The
+// address of the VarInfo is evaluated like the one of a local variable: (2, 0x80000000+off) if the parameter has a single
+// frame base relative location, not measurable (0x80..) otherwise. The locations keep the unevaluated picture
+#[derive(Debug)]
+pub(crate) struct ParamInfo {
+    pub(crate) index: usize,                  // position in the parameter list of the function, 0 = first parameter (C++: this)
+    pub(crate) function_low_pc: Option<u64>,  // start address of the function, None for a function without contiguous code
+    pub(crate) locations: Vec<ParamLocation>, // DW_AT_location: one entry, or one per PC range of a location list, empty if there is none
+}
+
+// One location expression of a parameter
+#[derive(Debug)]
+pub(crate) struct ParamLocation {
+    pub(crate) pc_range: Option<(u64, u64)>, // PC range [begin, end) of a location list entry, None: valid in the whole function
+    pub(crate) expression: String,           // the DWARF operations as text: "DW_OP_fbreg -20", "DW_OP_reg0 (X0)"
+    pub(crate) register: Option<u16>,        // DWARF register number if the parameter lives in a register here (a single DW_OP_reg<n>)
+    pub(crate) frame_offset: Option<i64>,    // offset from the frame base if the parameter is in the stack frame here (a single DW_OP_fbreg)
+}
+
+impl ParamInfo {
+    // The location which is valid at the first instruction of the function, where a function hook (Frida interceptor) takes
+    // its register snapshot. None if the location list has no entry for the start address or the start address is unknown
+    pub(crate) fn location_at_entry(&self) -> Option<&ParamLocation> {
+        self.locations.iter().find(|l| match (l.pc_range, self.function_low_pc) {
+            (None, _) => true,
+            (Some((begin, end)), Some(low_pc)) => begin <= low_pc && low_pc < end,
+            (Some(_), None) => false,
+        })
+    }
 }
 
 // TypeInfo holds information about a variable's type

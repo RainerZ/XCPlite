@@ -885,6 +885,8 @@ impl ElfReader {
         // register_captures, the stack variable of the same name is not registered a second time
         let captured = self.capture_member_names();
 
+        self.log_parameters(reg);
+
         // Iterate over variables
         for (var_name, var_infos) in &self.debug_data.variables {
             // Skip the internal and marker variables, they never become A2L objects
@@ -1038,6 +1040,11 @@ impl ElfReader {
                             debug!("Local variable '{}' in function {:?} skipped, frame base {:?}", var_name, var_function, var_info.frame_base);
                             continue;
                         }
+                        // A parameter of a function without event trigger is nothing to warn about
+                        if var_info.param.is_some() && reg.event_list.find_event_by_location(var_info.unit_idx, var_function_name).is_none() {
+                            debug!("Parameter '{}' of function '{}' skipped, no event trigger in this function", var_name, var_function_name);
+                            continue;
+                        }
                         if let Some(event) = reg.event_list.find_event_by_location(var_info.unit_idx, var_function_name) {
                             // Set the event id for this function
                             // Prefix the variable with the function name
@@ -1048,7 +1055,8 @@ impl ElfReader {
                                 a2l_name = var_name.to_string();
                             }
                             info!(
-                                "Local variable '{}' in function '{:?}', event id = {:?}, offset = {}",
+                                "{} '{}' in function '{:?}', event id = {:?}, offset = {}",
+                                if var_info.param.is_some() { "Parameter" } else { "Local variable" },
                                 var_name,
                                 var_function,
                                 xcp_event_id,
@@ -1221,6 +1229,73 @@ impl ElfReader {
             }
         } // var_infos
         Ok(())
+    }
+
+    // Log the parameters of the functions of the selected compilation units with their DWARF locations, one block per function.
+    // A parameter in the stack frame of its function (DW_OP_fbreg) is registered by register_variables like a local variable,
+    // if the function has an event trigger. The locations in registers are not used yet, they are what a function hook sees
+    // in its register snapshot, see ParamInfo::location_at_entry
+    fn log_parameters(&self, reg: &Registry) {
+        let mut params: Vec<(usize, &str, usize, &str, &VarInfo)> = Vec::new();
+        for (var_name, var_infos) in &self.debug_data.variables {
+            for var_info in var_infos {
+                // The copies of an inlined function are left out: there is no function entry to hook and no stack frame of their own
+                if let (Some(param), Some(function)) = (&var_info.param, var_info.function.as_deref())
+                    && self.debug_data.unit_is_selected(var_info.unit_idx)
+                    && !var_info.inlined
+                {
+                    params.push((var_info.unit_idx, function, param.index, var_name.as_str(), var_info));
+                }
+            }
+        }
+        if params.is_empty() {
+            return;
+        }
+        // Static functions of the same name in one unit are told apart by their start address
+        params.sort_by_key(|(unit_idx, function, index, _, v)| (*unit_idx, *function, v.param.as_ref().and_then(|p| p.function_low_pc), *index));
+
+        info!("Function parameters:");
+        let mut current: Option<(usize, &str, Option<u64>)> = None;
+        for (unit_idx, function, index, name, var_info) in params {
+            let param = var_info.param.as_ref().unwrap();
+            if current != Some((unit_idx, function, param.function_low_pc)) {
+                current = Some((unit_idx, function, param.function_low_pc));
+                let unit_name = self.debug_data.make_simple_unit_name(unit_idx).unwrap_or_else(|| unit_idx.to_string());
+                let entry = param.function_low_pc.map_or_else(|| "entry unknown".to_string(), |pc| format!("entry {pc:#x}"));
+                let event = reg
+                    .event_list
+                    .find_event_by_location(unit_idx, function)
+                    .map_or_else(|| "no event trigger".to_string(), |e| format!("event '{}' id {}", e.get_name(), e.id));
+                info!("  {}:{}() {}, frame base {:?}, {}", unit_name, function, entry, var_info.frame_base, event);
+            }
+            let type_name = self.debug_data.types.get(&var_info.typeref).map_or_else(
+                || "<unknown type>".to_string(),
+                |t| match (&t.name, &t.datatype) {
+                    (Some(name), DbgDataType::Pointer(..)) => format!("pointer({name})"),
+                    (Some(name), _) => name.clone(),
+                    (None, _) => t.to_string(),
+                },
+            );
+            let at_entry = param.location_at_entry();
+            if let [location] = param.locations.as_slice()
+                && location.pc_range.is_none()
+            {
+                info!("    #{} {} {}: {}", index, type_name, name, location.expression);
+            } else {
+                info!("    #{} {} {}: location list", index, type_name, name);
+                for location in &param.locations {
+                    let (begin, end) = location.pc_range.unwrap_or((0, 0));
+                    let is_entry = at_entry.is_some_and(|l| std::ptr::eq(l, location));
+                    info!(
+                        "         {:#x}..{:#x}: {}{}",
+                        begin,
+                        end,
+                        location.expression,
+                        if is_entry { "  <- at function entry" } else { "" }
+                    );
+                }
+            }
+        }
     }
 
     // Names of the captured variables: (compilation unit, function, variable name) of every member of every capture struct

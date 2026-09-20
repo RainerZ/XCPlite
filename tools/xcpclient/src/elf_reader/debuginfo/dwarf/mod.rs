@@ -67,14 +67,14 @@ use object::{Endianness, Object};
 use gimli::{Abbreviations, DebuggingInformationEntry, Dwarf, UnitHeader};
 use gimli::{EndianSlice, RunTimeEndian};
 
-use crate::elf_reader::debuginfo::{DbgDataType, DebugData, FrameBase, TypeInfo, VarInfo, make_simple_unit_name_from};
+use crate::elf_reader::debuginfo::{DbgDataType, DebugData, FrameBase, ParamInfo, ParamLocation, TypeInfo, VarInfo, make_simple_unit_name_from};
 use crate::elf_reader::{ElfFilter, is_generated_variable};
 
 mod attributes;
 pub(super) use attributes::get_low_pc_attribute;
 use attributes::{
-    get_abstract_origin_attribute, get_linkage_name_attribute, get_location_attribute, get_name_attribute, get_producer_attribute, get_specification_attribute,
-    get_typeref_attribute,
+    get_abstract_origin_attribute, get_linkage_name_attribute, get_location_attribute, get_name_attribute, get_param_locations, get_producer_attribute,
+    get_specification_attribute, get_typeref_attribute,
 };
 
 mod typereader;
@@ -655,6 +655,8 @@ impl DebugDataReader<'_> {
                         offset,
                         inlined: false,
                         frame_base: FrameBase::Unknown,
+                        low_pc: None,
+                        param_count: 0,
                     },
                     gimli::constants::DW_TAG_subprogram | gimli::constants::DW_TAG_inlined_subroutine => {
                         // A function which the compiler inlined is described by an abstract instance (DW_AT_inline, GCC keeps the static
@@ -671,6 +673,8 @@ impl DebugDataReader<'_> {
                             offset,
                             inlined,
                             frame_base: get_frame_base(self.architecture, entry, unit.encoding()),
+                            low_pc: get_low_pc_attribute(entry, "", |index| self.dwarf.unit(*unit).and_then(|unit| self.dwarf.address(&unit, index))),
+                            param_count: 0,
                         }
                     }
                     _ => Scope {
@@ -680,6 +684,8 @@ impl DebugDataReader<'_> {
                         offset,
                         inlined: false,
                         frame_base: FrameBase::Unknown,
+                        low_pc: None,
+                        param_count: 0,
                     },
                 };
                 context.push(scope);
@@ -694,6 +700,39 @@ impl DebugDataReader<'_> {
                     && (tag != gimli::constants::DW_TAG_variable || parent.tag != gimli::constants::DW_TAG_subprogram)
                 {
                     self.scope_parent.insert(offset, parent.offset);
+                }
+
+                // A parameter of a function. DW_TAG_formal_parameter is also used in function types (DW_TAG_subroutine_type) and
+                // in function declarations, only the parameters of a function with code are of interest: they have a location.
+                // The position in the parameter list is counted over all parameters of the function, it is what the calling
+                // convention assigns the argument registers by
+                if tag == gimli::constants::DW_TAG_formal_parameter
+                    && context.len() >= 2
+                    && let parent = &mut context[depth as usize - 2]
+                    && (parent.tag == gimli::constants::DW_TAG_subprogram || parent.tag == gimli::constants::DW_TAG_inlined_subroutine)
+                {
+                    let index = parent.param_count;
+                    parent.param_count += 1;
+                    let function_low_pc = parent.low_pc;
+                    let (function, _, namespaces, inlined, frame_base) = get_varinfo_from_context(&context);
+                    if function.is_some()
+                        && let Some((name, typeref, address, locations)) = self.get_parameter(entry, unit, abbreviations)
+                    {
+                        variables.entry(name).or_default().push(VarInfo {
+                            address,
+                            typeref,
+                            unit_idx,
+                            function,
+                            namespaces,
+                            inlined,
+                            frame_base,
+                            param: Some(ParamInfo {
+                                index,
+                                function_low_pc,
+                                locations,
+                            }),
+                        });
+                    }
                 }
 
                 if entry.tag() == gimli::constants::DW_TAG_variable {
@@ -726,6 +765,7 @@ impl DebugDataReader<'_> {
                                     namespaces,
                                     inlined,
                                     frame_base,
+                                    param: None,
                                 });
                             }
                         }
@@ -887,6 +927,41 @@ impl DebugDataReader<'_> {
         })
     }
 
+    // Read one DW_TAG_formal_parameter entry of a function: returns (name, type reference, (address extension, address), locations),
+    // None for a parameter without name or type (unnamed parameter, C++ artificial parameters are kept: this) and for a parameter
+    // without location (a declaration, the abstract instance of an inlined function, optimized away).
+    // Name and type of the parameter of an inlined or out of line copy are found in the abstract instance (DW_AT_abstract_origin).
+    // The address is evaluated only if the parameter lives at one frame base relative location in the whole function, it is
+    // then addressed like a local variable, see VarInfo. Anything else is a register (0x80) or too complex (0x82), which is the
+    // normal case for a parameter and not reported as a location problem, the locations tell what the compiler did
+    fn get_parameter<'a>(
+        &self,
+        entry: &DebuggingInformationEntry<SliceType<'a>, usize>,
+        unit: &UnitHeader<SliceType<'a>>,
+        abbrev: &gimli::Abbreviations,
+    ) -> Option<ParameterEntry> {
+        let origin = get_abstract_origin_attribute(entry, unit, abbrev);
+        let name = get_name_attribute(entry, &self.dwarf, unit)
+            .ok()
+            .or_else(|| origin.as_ref().and_then(|o| get_name_attribute(o, &self.dwarf, unit).ok()))?;
+        let typeref = get_typeref_attribute(entry, unit)
+            .ok()
+            .or_else(|| origin.as_ref().and_then(|o| get_typeref_attribute(o, unit).ok()))?;
+        let current_unit = self.units.list.len() - 1;
+        let locations = get_param_locations(self, entry, unit.encoding(), current_unit);
+        if locations.is_empty() {
+            return None;
+        }
+        let address = if locations.iter().all(|l| l.frame_offset.is_some()) {
+            get_location_attribute(self, entry, unit.encoding(), current_unit, &name).unwrap_or((0x82, 0))
+        } else if locations.iter().all(|l| l.register.is_some()) {
+            (0x80, 0)
+        } else {
+            (0x82, 0)
+        };
+        Some((name, typeref, address, locations))
+    }
+
     // Read one DW_TAG_variable entry: returns (name, type reference, (address extension, address)), see VarInfo for the address encoding.
     // The three cases are the ways DWARF splits the description of a variable over several entries:
     //  - DW_AT_specification: the entry is the definition of a variable which was declared elsewhere (a C++ namespace or static
@@ -977,6 +1052,9 @@ impl DebugDataReader<'_> {
     }
 }
 
+// Result of get_parameter: (name, type reference, (address extension, address), locations)
+type ParameterEntry = (String, usize, (u8, u64), Vec<ParamLocation>);
+
 // Tags of debug info entries which are a named scope for the types and variables nested inside of them
 fn is_scope_tag(tag: gimli::DwTag) -> bool {
     matches!(
@@ -1021,6 +1099,8 @@ fn itanium_local_static_name(function_linkage: &str, name: &str) -> Option<Strin
 
 // An ancestor of the current entry in the depth-first traversal of load_variables
 struct Scope {
+    low_pc: Option<u64>, // functions only: start address (DW_AT_low_pc), None for declarations, abstract instances and split functions
+    param_count: usize,  // functions only: number of parameters (DW_TAG_formal_parameter children) seen so far
     tag: gimli::DwTag,
     name: Option<String>,         // namespaces and functions only
     linkage_name: Option<String>, // mangled name of a C++ function, used to resolve the symbols of its static variables
@@ -1221,6 +1301,30 @@ mod test {
             Some("_ZZL8fastTaskPvE33xcp_meta__comment__static_counter")
         );
         assert_eq!(itanium_local_static_name("main", "counter"), None);
+    }
+
+    // Function parameters (DW_TAG_formal_parameter): task(uint32_t n) of fixtures/c_captures.c, optimized code for arm. The
+    // parameter arrives in r0, the location list describes where it is kept afterwards
+    #[test]
+    fn test_load_parameters() {
+        let filename = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_captures.elf");
+        let debugdata = DebugData::load_dwarf(OsStr::new(filename), 0, ElfFilter::default()).unwrap();
+        let n = debugdata
+            .variables
+            .get("n")
+            .and_then(|v| v.iter().find(|v| v.function.as_deref() == Some("task") && v.param.is_some()))
+            .expect("parameter n of task");
+        let param = n.param.as_ref().unwrap();
+        assert_eq!(param.index, 0);
+        assert!(param.function_low_pc.is_some());
+        assert!(param.locations.len() > 1, "location list expected");
+        let at_entry = param.location_at_entry().expect("location at function entry");
+        assert_eq!(at_entry.register, Some(0));
+        assert_eq!(at_entry.expression, "DW_OP_reg0 (R0)");
+        // Not at one place in the whole function: not measurable as a stack variable
+        assert!(n.address.0 >= 0x80);
+        // The local variables are not parameters
+        assert!(debugdata.variables.get("stack_var").unwrap().iter().all(|v| v.param.is_none()));
     }
 
     // Qualified names of struct types whose name is used in different scopes: namespaces, nested namespaces, enclosing classes

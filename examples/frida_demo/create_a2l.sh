@@ -96,9 +96,9 @@ fi
 # Build on target
 # Always a clean build: if the target has no NTP its clock may skew
 # local XCPlite library build
-echo "Clean (local XCPlite library) build on Target ..."
+echo "Clean $BUILD_TYPE (local XCPlite library) build on Target ..."
 ssh "$TARGET_USER@$TARGET_HOST" \
-    "cd $TARGET_PATH/examples/frida_demo && ./build.sh local clean" \
+    "cd $TARGET_PATH/examples/frida_demo && ./build.sh $BUILD_TYPE local clean" \
     >> "$LOGFILE" 2>&1
 if [ $? -ne 0 ]; then
     echo "❌ FAILED: Build on target"
@@ -118,7 +118,7 @@ fi
 
 #======================================================================================================================
 # Create A2L file
-# Create the  A2L from ELF file with xcpclient tool
+# Create the A2L from ELF file with xcpclient tool
 #======================================================================================================================
 
 echo ""
@@ -128,7 +128,9 @@ echo "==========================================================================
 echo ""
 # Remove the A2L file of a previous run, so a failed generation can not leave a stale A2L file behind
 rm -f "$A2LFILE"
-XCPCLIENT_ARGS=(--log-level=3 --verbose=2 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE" --default-event=mainloop)
+# The unit filter '^main_c$' is a regular expression on the file name of the compilation unit with '.' replaced by '_',
+# anchored to select main.c only 
+XCPCLIENT_ARGS=(--log-level=3 --verbose=0 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter '^main_c$' --create-a2l --a2l "$A2LFILE" --default-event=mainloop)
 echo "Command: $XCPCLIENT ${XCPCLIENT_ARGS[*]}"
 "$XCPCLIENT" "${XCPCLIENT_ARGS[@]}" >> "$LOGFILE"
 if [ $? -ne 0 ] || [ ! -f "$A2LFILE" ]; then

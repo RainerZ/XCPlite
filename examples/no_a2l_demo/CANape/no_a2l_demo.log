@@ -1,15 +1,15 @@
 
 [INFO ] xcp_client - version 4.0.1
 [INFO ] Default event mainloop for variables without a fixed event
-[INFO ] Using A2L file name from command line argument: /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l
-[INFO ] A2L path: /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l
-[INFO ] Generate A2L file /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l with ELF/DWARF information only,  offline mode 
-[INFO ] Reading ELF file: /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.elf
-[INFO ] Parsing ELF object file /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.elf
+[INFO ] Using A2L file name from command line argument: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l
+[INFO ] A2L path: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l
+[INFO ] Generate A2L file /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l with ELF/DWARF information only,  offline mode 
+[INFO ] Reading ELF file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.elf
+[INFO ] Parsing ELF object file /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.elf
 [INFO ] Loading DWARF sections
 [WARN ] main_c:329: 'p_counter_control': location is a register Register(0)
-[WARN ] main_c:342: 'p_params': location is a register Register(24)
-[WARN ] main_c:359: 'delay': location is a register Register(24)
+[WARN ] main_c:342: 'p_params': location is a register Register(23)
+[WARN ] main_c:359: 'delay': location is a register Register(23)
 [WARN ] main_c:240: 'test_struct2': the variable is split into 7 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value: Generic(18446744073709551614) } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Bytes { value: EndianSlice(Little, [0x9a, 0x99, 0x99, 0x3e]) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(2) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(3) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Address { address: 0 } }]
 [WARN ] main_c:178: 'delay': location is a register Register(24)
 [INFO ] Compiler: GNU C11 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c11 -fasynchronous-unwind-tables
@@ -36,12 +36,12 @@
 [INFO ] ===============================================================
 [INFO ] Calibration segment 'epk' not yet defined in registry
 [INFO ] Created segment 0: 'epk':  addr = 0x000302C0, size = 7, mem_addr = 0x000302C0
-[INFO ] Calibration segment 'counter_control' default page variable found in debug data: Address = 0xbbb8, Size = 0x4
+[INFO ] Calibration segment 'counter_control' default page variable found in debug data: Address = 0xcbc0, Size = 0x4
 [INFO ] Calibration segment 'counter_control' not yet defined in registry
-[INFO ] Created segment 1: 'counter_control':  addr = 0x0000BBB8, size = 4, mem_addr = 0x0000BBB8
-[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xbb70, Size = 0x48
+[INFO ] Created segment 1: 'counter_control':  addr = 0x0000CBC0, size = 4, mem_addr = 0x0000CBC0
+[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xcb78, Size = 0x48
 [INFO ] Calibration segment 'params' not yet defined in registry
-[INFO ] Created segment 2: 'params':  addr = 0x0000BB70, size = 72, mem_addr = 0x0000BB70
+[INFO ] Created segment 2: 'params':  addr = 0x0000CB78, size = 72, mem_addr = 0x0000CB78
 [INFO ] ===============================================================
 [INFO ] Registering event locations:
 [INFO ] ===============================================================
@@ -120,9 +120,9 @@
 [INFO ] Metadata comment xcp_meta__comment__bar__static_counter applied to instance 'bar.static_counter'
 [INFO ] Metadata read_write xcp_meta__read_write__bar__static_counter applied to instance 'bar.static_counter'
 [INFO ] ===============================================================
-[INFO ] Write A2L file "/Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l"
-[INFO ] A2L writer: transport layer: UDP 192.168.0.206:5555
-[INFO ] Check A2L file "/Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l"
+[INFO ] Write A2L file "/Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l"
+[INFO ] A2L writer: transport layer: UDP 192.168.8.135:5555
+[INFO ] Check A2L file "/Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l"
 [INFO ] A2L file check ok
-[INFO ] Created A2L with file: /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l ELF/DWARF information only,  offline mode
+[INFO ] Created A2L with file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo/CANape/no_a2l_demo.a2l ELF/DWARF information only,  offline mode
 [INFO ] Default event 'mainloop' resolved to event id 3

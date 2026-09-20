@@ -84,6 +84,7 @@ tXcpCalSegIndex params_calseg = XCP_UNDEFINED_CALSEG;
 
 DaqDeclareEvent(foo_enter);
 DaqDeclareEvent(foo_leave);
+DaqDeclareEvent(foo);
 
 #else
 
@@ -99,12 +100,13 @@ DaqDeclareEvent(foo_leave);
 // No XCPlite instrumentation. XCP_NOINLINE is needed: Frida patches the code of the function, an inlined copy at the call
 // site would not be hooked. The function must also be larger than the few instructions the trampoline jump replaces.
 
-XCP_NOINLINE int32_t foo(uint32_t a, uint32_t iterations) {
-    uint32_t x = a;
+XCP_NOINLINE int32_t foo(uint32_t value, uint32_t iterations) {
+    uint32_t result = value;
     for (uint32_t i = 0; i < iterations; i++) {
-        x = x + 1;
+        result = result + 1;
     }
-    return x;
+    DaqTriggerEvent(foo);
+    return result;
 }
 
 //-----------------------------------------------------------------------------------------------------

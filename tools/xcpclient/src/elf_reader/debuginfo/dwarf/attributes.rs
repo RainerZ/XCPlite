@@ -20,6 +20,7 @@
 //                 location changes during the function (optimized code)
 
 use super::{DebugDataReader, UnitList};
+use crate::elf_reader::debuginfo::ParamLocation;
 use gimli::{DebugAddrBase, DebuggingInformationEntry, EndianSlice, RunTimeEndian, UnitHeader};
 
 type SliceType<'a> = EndianSlice<'a, RunTimeEndian>;
@@ -216,6 +217,121 @@ pub(crate) fn get_location_attribute(
             None
         }
     }
+}
+
+// get the locations of a function parameter from its DW_AT_location attribute, without evaluating them: one ParamLocation
+// for a single expression, one per PC range for a location list, none if the parameter has no location (optimized away,
+// or the entry belongs to a declaration or to the abstract instance of an inlined function).
+// A parameter in a register is the normal case and not a problem to report, see get_parameter
+pub(crate) fn get_param_locations(
+    debug_data_reader: &DebugDataReader,
+    entry: &DebuggingInformationEntry<SliceType, usize>,
+    encoding: gimli::Encoding,
+    current_unit: usize,
+) -> Vec<ParamLocation> {
+    let architecture = debug_data_reader.architecture;
+    let list_offset = match get_attr_value(entry, gimli::constants::DW_AT_location) {
+        Some(gimli::AttributeValue::Exprloc(expression)) => return vec![describe_expression(architecture, expression, encoding, None)],
+        Some(gimli::AttributeValue::LocationListsRef(offset)) => Some(offset),
+        Some(gimli::AttributeValue::DebugLocListsIndex(index)) => {
+            let (unit_header, _) = &debug_data_reader.units[current_unit];
+            debug_data_reader
+                .dwarf
+                .unit(*unit_header)
+                .and_then(|unit| debug_data_reader.dwarf.locations_offset(&unit, index))
+                .ok()
+        }
+        _ => None,
+    };
+    let mut locations = Vec::new();
+    if let Some(offset) = list_offset {
+        let (unit_header, _) = &debug_data_reader.units[current_unit];
+        if let Ok(unit) = debug_data_reader.dwarf.unit(*unit_header)
+            && let Ok(mut iter) = debug_data_reader.dwarf.locations(&unit, offset)
+        {
+            // The ranges are absolute addresses, gimli applies the base address of the unit
+            while let Ok(Some(entry)) = iter.next() {
+                locations.push(describe_expression(architecture, entry.data, encoding, Some((entry.range.begin, entry.range.end))));
+            }
+        }
+    }
+    locations
+}
+
+// Describe a location expression without evaluating it: the operations as text, and the register or frame offset if the
+// expression is just that (DW_OP_reg<n> / DW_OP_fbreg <offset>)
+fn describe_expression(architecture: object::Architecture, expression: gimli::Expression<SliceType>, encoding: gimli::Encoding, pc_range: Option<(u64, u64)>) -> ParamLocation {
+    let mut text: Vec<String> = Vec::new();
+    let mut register = None;
+    let mut frame_offset = None;
+    let mut count = 0;
+    let mut operations = expression.operations(encoding);
+    loop {
+        match operations.next() {
+            Ok(Some(operation)) => {
+                count += 1;
+                match &operation {
+                    gimli::Operation::Register { register: r } => register = Some(r.0),
+                    gimli::Operation::FrameOffset { offset } => frame_offset = Some(*offset),
+                    _ => {}
+                }
+                text.push(describe_operation(architecture, &operation, encoding));
+            }
+            Ok(None) => break,
+            Err(e) => {
+                text.push(format!("<invalid: {e}>"));
+                count = 0;
+                break;
+            }
+        }
+    }
+    // Only an expression which consists of the single operation is a plain register or frame location
+    if count != 1 {
+        register = None;
+        frame_offset = None;
+    }
+    ParamLocation {
+        pc_range,
+        expression: if text.is_empty() { "<empty>".to_string() } else { text.join(", ") },
+        register,
+        frame_offset,
+    }
+}
+
+// One operation of a location expression as text, in the notation of dwarfdump with the register name added
+fn describe_operation(architecture: object::Architecture, operation: &gimli::Operation<SliceType>, encoding: gimli::Encoding) -> String {
+    match operation {
+        gimli::Operation::Register { register } => format!("DW_OP_reg{} ({})", register.0, dwarf_register_name(architecture, *register)),
+        gimli::Operation::RegisterOffset { register, offset, .. } => {
+            format!("DW_OP_breg{} ({}) {:+}", register.0, dwarf_register_name(architecture, *register), offset)
+        }
+        gimli::Operation::FrameOffset { offset } => format!("DW_OP_fbreg {offset}"),
+        gimli::Operation::Address { address } => format!("DW_OP_addr {address:#x}"),
+        gimli::Operation::CallFrameCFA => "DW_OP_call_frame_cfa".to_string(),
+        gimli::Operation::StackValue => "DW_OP_stack_value".to_string(),
+        gimli::Operation::Piece { size_in_bits, .. } => format!("DW_OP_piece {}", size_in_bits / 8),
+        // The value the parameter had on entry of the function, which the function did not keep: not readable at runtime
+        gimli::Operation::EntryValue { expression } => {
+            format!(
+                "DW_OP_entry_value({})",
+                describe_expression(architecture, gimli::Expression(*expression), encoding, None).expression
+            )
+        }
+        other => format!("{other:?}"),
+    }
+}
+
+// Name of a DWARF register number
+pub(crate) fn dwarf_register_name(architecture: object::Architecture, register: gimli::Register) -> String {
+    let name = match architecture {
+        object::Architecture::Aarch64 => gimli::AArch64::register_name(register),
+        object::Architecture::Arm => gimli::Arm::register_name(register),
+        object::Architecture::X86_64 => gimli::X86_64::register_name(register),
+        object::Architecture::I386 => gimli::X86::register_name(register),
+        object::Architecture::Riscv32 | object::Architecture::Riscv64 => gimli::RiscV::register_name(register),
+        _ => None,
+    };
+    name.map_or_else(|| format!("r{}", register.0), str::to_string)
 }
 
 // get the address offset of a struct member from a DW_AT_data_member_location attribute
