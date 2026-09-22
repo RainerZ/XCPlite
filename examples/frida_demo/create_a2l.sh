@@ -30,12 +30,11 @@ A2LFILE="$REPO_ROOT/examples/frida_demo/CANape/frida_demo.a2l"
 ELFFILE="$REPO_ROOT/examples/frida_demo/CANape/frida_demo.elf"
 
 # Build type for target executable: Release, RelWithDebInfo or Debug
-# RelWithDebInfo is default to demonstrate operation with with -O1 and NDEBUG
 # Optimization level >= -O1 keeps variables in registers whenever possible, so these local variables cannot be measured
 # Debug mode is the least efficient but keeps all variables and stack frames intact
-BUILD_TYPE="RelWithDebInfo"
+#BUILD_TYPE="RelWithDebInfo"
 # -O0
-#BUILD_TYPE="Debug"
+BUILD_TYPE="Debug"
 # -O2 no debug symbols
 #BUILD_TYPE="Release"
 
@@ -54,6 +53,7 @@ TARGET_BINARY="frida_demo"
 
 # Path to xcpclient tool executable (assuming cargo installed it to ~/.cargo/bin)
 XCPCLIENT="xcpclient"
+XCPCLIENT_CFGFILE="$REPO_ROOT/examples/frida_demo/create_a2l.toml"
 
 
 #======================================================================================================================
@@ -130,7 +130,7 @@ echo ""
 rm -f "$A2LFILE"
 # The unit filter '^main_c$' is a regular expression on the file name of the compilation unit with '.' replaced by '_',
 # anchored to select main.c only 
-XCPCLIENT_ARGS=(--log-level=3 --verbose=0 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter '^main_c$' --create-a2l --a2l "$A2LFILE" --default-event=mainloop)
+XCPCLIENT_ARGS=(--config "$XCPCLIENT_CFGFILE" --dest-addr="$TARGET_HOST" --udp --elf "$ELFFILE" --a2l "$A2LFILE")
 echo "Command: $XCPCLIENT ${XCPCLIENT_ARGS[*]}"
 "$XCPCLIENT" "${XCPCLIENT_ARGS[@]}" >> "$LOGFILE"
 if [ $? -ne 0 ] || [ ! -f "$A2LFILE" ]; then

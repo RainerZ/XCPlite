@@ -885,7 +885,9 @@ impl ElfReader {
         // register_captures, the stack variable of the same name is not registered a second time
         let captured = self.capture_member_names();
 
-        self.log_parameters(reg);
+        if verbose > 0 {
+            self.log_parameters(reg);
+        }
 
         // Iterate over variables
         for (var_name, var_infos) in &self.debug_data.variables {
