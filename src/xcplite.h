@@ -136,6 +136,8 @@ typedef struct {
 static_assert(sizeof(tXcpEventDescriptor) == 16, "Size of tXcpEventDescriptor must be 16 bytes for correct section parsing in xcpclient tool");
 static_assert(sizeof(((tXcpEventDescriptor *)0)->res) > 0, "tXcpEventDescriptor res padding must not be zero; check pointer size vs struct layout");
 
+#ifdef OPTION_SECTION_REGISTRATION
+
 // Linker-synthesized section boundary symbols, resolved at link time
 #if defined(__ELF__)
 // Declared weak: if no object file contributes to the xcp_evts section the symbols resolve
@@ -149,21 +151,9 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __attribute__((weak));
 // development-only target and a build with zero events is a non-functional configuration.
 extern const tXcpEventDescriptor __start_xcp_evts[] __asm("section$start$__DATA$xcp_evts");
 extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp_evts");
-#elif defined(_MSC_VER)
-// MSVC/COFF has no reliable linker-synthesized section boundary symbols (unlike ELF/Mach-O: in practice
-// link.exe does not pack '$'-subsection contributions from different object files contiguously/predictably).
-// Event pre-registration via section scanning is therefore not used on MSVC; DaqCreateEvent() and the
-// DaqTriggerEvent family instead resolve/create events directly via XcpCreateEvent() at each call site
-// (idempotent by name), see the XCP_EVENT_SECTION_SET_ID '_MSC_VER' branch below. Setting these to NULL
-// makes XcpRegisterSectionEvents() at XcpInit() gracefully find nothing, exactly like an ELF/Mach-O build
-// with zero section-registered events.
-#define __start_xcp_evts ((const tXcpEventDescriptor *)NULL)
-#define __stop_xcp_evts ((const tXcpEventDescriptor *)NULL)
 #else
 #error "Unsupported platform for section based event pre-registration"
 #endif
-
-#endif // __XCPLIB_H__
 
 // Platform section attribute for tXcpEventDescriptor const static variables created by DaqCreateEvent().
 // Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
@@ -172,9 +162,15 @@ extern const tXcpEventDescriptor __stop_xcp_evts[] __asm("section$end$__DATA$xcp
 #define XCP_EVENT_SECTION_ATTR __attribute__((section("xcp_evts"), used))
 #elif defined(__APPLE__)
 #define XCP_EVENT_SECTION_ATTR __attribute__((section("__DATA,xcp_evts"), used))
-#else
-#define XCP_EVENT_SECTION_ATTR /* section-based registration not supported on this platform */
 #endif
+
+#else // OPTION_SECTION_REGISTRATION
+
+#define XCP_EVENT_SECTION_ATTR
+
+#endif // !OPTION_SECTION_REGISTRATION
+
+#endif // __XCPLIB_H__
 
 // XCP event identifier type
 typedef uint16_t tXcpEventId;

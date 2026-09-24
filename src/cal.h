@@ -248,8 +248,9 @@ void XcpInitCalSegList(void);
 void XcpDeinitCalSegList(void);
 
 // Register all calibration segments from the xcp_cals section, returns the number of registered segments
+#ifdef OPTION_SECTION_REGISTRATION
 uint16_t XcpRegisterSectionCalSegs(void);
-
+#endif
 // Get the number of calibration segments
 uint16_t XcpGetCalSegCount(void);
 

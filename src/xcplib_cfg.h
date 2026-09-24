@@ -15,12 +15,12 @@
   The values for XCP_xxx and XCPTL_xxx define constants (in xcp_cfg.h and xcptl_cfg.h) may depend on options
 */
 
-// XCPlite version, currently V2.2.x
+// XCPlite version, currently V2.3.x
 // Keep in sync with project(xcplite VERSION ...) in CMakeLists.txt, which is what
 // find_package(xcplite) reports to a consuming project.
 #define OPTION_VERSION_MAJOR 2
-#define OPTION_VERSION_MINOR 2
-#define OPTION_VERSION_PATCH 2
+#define OPTION_VERSION_MINOR 3
+#define OPTION_VERSION_PATCH 1
 
 // CANape version compatibility
 // Disable workarounds for CANape versions < 24SP2
@@ -162,15 +162,33 @@
 #endif
 
 //-------------------------------------------------------------------------------
-// A2L generation settings
+// Runtime A2L generation and upload
 
 #define OPTION_ENABLE_A2L_GENERATOR // Enable A2L generator
 #define OPTION_ENABLE_A2L_UPLOAD    // Enable A2L upload via XCP
-#define OPTION_ENABLE_ELF_UPLOAD    // Enable ELF upload via XCP
 
 // Enable socketGetLocalAddr for A2L file generation
 // Used for convenience to get an existing ip address in A2L, when bound to ANY 0.0.0.0
 // #define OPTION_ENABLE_GET_LOCAL_ADDR
+
+//-------------------------------------------------------------------------------
+// Buildtime A2L generation
+
+// Registration at compile and link time for events (data acquisition, section xcp_evts) and calibration segments (calibration, section xcp_cals).
+// On:
+// The event id and the segment number are the positions of the descriptors in the sections.
+// Stable for a build.
+// The offline A2L generator (xcpclient --elf) reads the sections.
+// Requires a platform with ELF or Mach-O sections (not MSVC), mandatory if OPTION_DAQ_EVENT_LIST is off (configurations no_a2l and rtos).
+// Event and calibration segment numbering independant of event creation order
+// Off:
+// Events and segments are created at runtime (DaqCreateEvent, CalSegCreate) in creation order.
+// The trigger macros look up the event by name once, so events may be created anywhere in the application.
+// Event and calibration segment numbering is dependant on event creation order (on each application start or once on initial creation order if persistence is enabled)
+
+// #define OPTION_SECTION_REGISTRATION // Default is Off
+
+// #define OPTION_ENABLE_ELF_UPLOAD // User defined command: xcpclient can upload ELF via XCP
 
 //-------------------------------------------------------------------------------
 // Tests
@@ -200,4 +218,11 @@
 // examples/fetchcontent_example/config/xcplib_app_cfg.h for example override files.
 #ifdef XCPLIB_CFG_OVERRIDE
 #include XCPLIB_CFG_OVERRIDE
+#endif
+
+//-------------------------------------------------------------------------------
+// Configuration checks
+
+#if defined(OPTION_SECTION_REGISTRATION) && (defined(_MSC_VER) || defined(OPTION_SHM))
+#error "OPTION_SECTION_REGISTRATION (link time registration of events and calibration segments) is not supported"
 #endif

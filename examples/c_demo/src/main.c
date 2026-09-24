@@ -25,7 +25,10 @@
 // See README.md
 
 // #define OPTION_CANAPE_24                // Enable CANape 24 shared axis support for typedefs
+
+#ifndef OPTION_SECTION_REGISTRATION
 #define XCP_ENABLE_APP_ADDRESSING // Demonstrate application specific memory access
+#endif
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters

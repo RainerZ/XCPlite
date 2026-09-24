@@ -1,5 +1,6 @@
 
 build*
+!build.sh
 clang_tidy
 TODO.md
 

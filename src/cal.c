@@ -119,6 +119,7 @@ static void *XcpCalMemAlloc_(size_t size) {
 // Pre-register all tXcpCalSegDescriptor variables placed in the xcp_cals section
 // Must be called after SS_ACTIVATED is set
 // If a persistence file was loaded before this call, segments are matched by name and keep their saved id
+#ifdef OPTION_SECTION_REGISTRATION
 uint16_t XcpRegisterSectionCalSegs(void) {
 
     uint16_t count = 0;
@@ -140,6 +141,12 @@ uint16_t XcpRegisterSectionCalSegs(void) {
                 assert(index != XCP_UNDEFINED_CALSEG);
                 count++;
             }
+#ifdef XCP_ENABLE_TEST_CHECKS
+            else {
+                tXcpCalSeg *c = CalSegPtr(index);
+                assert((c->h.mode & PAG_PROPERTY_PRELOAD) != 0 || strcmp(c->h.name, XCP_EPK_CALSEG_NAME) == 0); // Unexpected duplicate
+            }
+#endif
             *(e->indexp) = index; // initialize the segment index pointer
         }
     } else {
@@ -151,7 +158,7 @@ uint16_t XcpRegisterSectionCalSegs(void) {
     if (begin != NULL) {
         const tXcpCalSegDescriptor *end = begin + (sz / sizeof(tXcpCalSegDescriptor));
         for (const tXcpCalSegDescriptor *e = begin; e < end; e++) {
-            DBG_PRINTF6("Found calibration segment descriptor in section: name=%s, addr=%p, size=%u, type=%x, indexp=%p\n", e->name, e->addr, e->size, e->type, e->indexp);
+            DBG_PRINTF6("Found calibration segment descriptor in section: name=%s, addr=%p, size=%u, type=%x, indexp=%p\n", e->name, e->addr, e->size, e->type, (void *)e->indexp);
             tXcpCalSegIndex index = XcpFindCalSeg(e->name);
             if (index == XCP_UNDEFINED_CALSEG) {
                 assert(e->type == XCP_CALSEG_TYPE_SEGMENT || e->type == XCP_CALSEG_TYPE_BLOCK);
@@ -159,6 +166,12 @@ uint16_t XcpRegisterSectionCalSegs(void) {
                 assert(index != XCP_UNDEFINED_CALSEG);
                 count++;
             }
+#ifdef XCP_ENABLE_TEST_CHECKS
+            else {
+                tXcpCalSeg *c = CalSegPtr(index);
+                assert((c->h.mode & PAG_PROPERTY_PRELOAD) != 0 || strcmp(c->h.name, XCP_EPK_CALSEG_NAME) == 0); // Unexpected duplicate
+            }
+#endif
             *(e->indexp) = index;
         }
     } else {
@@ -178,6 +191,7 @@ uint16_t XcpRegisterSectionCalSegs(void) {
 #endif
     return count;
 }
+#endif
 
 /**************************************************************************/
 
