@@ -188,6 +188,16 @@
 
 // #define OPTION_SECTION_REGISTRATION // Default is Off
 
+// With section registration off, the macros for event and calibration segment creation still work, but events and segments are created at runtime at the call site, not at compile
+// and link time and in XcpInit This may lead to unstable event and calibration segment numbering across application runs, when OPTION_PERSISTENCE is not enabled. The C macros
+// still create static marker variables to help offline A2L generators
+// DaqCreateEvent and its variants:
+//   static const tXcpEventDescriptor evt__##event_name = <event_descriptor>; // at the call site of DaqCreateEvent
+// DaqTriggerEvent and its variants:
+//   static tXcpEventId trg__AAS__##event_name = <event_id>; // at the call site of DaqTriggerEvent
+// C and C++ CalSegCreate, CalSegDecl, C++ CalSegDeclRef:
+//   static const tXcpCalSegDescriptor cal__##calseg_name = <calseg_descriptor>;
+
 // #define OPTION_ENABLE_ELF_UPLOAD // User defined command: xcpclient can upload ELF via XCP
 
 //-------------------------------------------------------------------------------

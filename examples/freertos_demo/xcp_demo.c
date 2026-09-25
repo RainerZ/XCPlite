@@ -35,6 +35,10 @@
 #define XCP_QUEUE_SIZE 0 // The queue size is derived from OPTION_QUEUE_32_SEGMENT_COUNT for the 32-bit FreeRTOS build; this parameter is ignored
 #define XCP_LOG_LEVEL 4  // 3 - Info, 4 - Print XCP commands, 5 - Debug
 
+#ifndef OPTION_SECTION_REGISTRATION
+#error "This example requires OPTION_SECTION_REGISTRATION"
+#endif
+
 // Start XCPlite
 bool startXcpServer() {
 
@@ -134,10 +138,8 @@ struct parameters {
     uint32_t slow_task_period_ms; // Period of measurement task 2 in milliseconds
     uint16_t counter_max;         // Counter wrap-around value for the global_counter incremented in fastTask
     float amplitude;              // Amplitude for the sine signal generator in slowTask
-    float period;                 // Period of the sine signal generator in slowTask    
+    float period;                 // Period of the sine signal generator in slowTask
 };
-
-
 
 // Default calibration parameters (default/reference page)
 // &parameters is the A2l file address of the calibration parameter segment 'parameters'
@@ -147,7 +149,7 @@ const struct parameters parameters = {
     .slow_task_period_ms = 10, // 10 ms = 100 Hz
     .counter_max = 1000,
     .amplitude = 1.0f,
-    .period = 1.0f,    
+    .period = 1.0f,
 };
 
 XCP_COMMENT(parameters__counter_max, "Maximum value for the global counter");
@@ -163,7 +165,7 @@ XCP_UNIT(parameters__amplitude, "Volt");
 XCP_LIMITS(parameters__amplitude, 0.0f, 10.0f);
 XCP_COMMENT(parameters__period, "Period of the sine signal generator");
 XCP_UNIT(parameters__period, "s");
-XCP_LIMITS(parameters__period, 0.001f, 10.0f);  
+XCP_LIMITS(parameters__period, 0.001f, 10.0f);
 
 // Declare a calibration segment that wraps 'parameters' for thread-safe and consistent access.
 // This creates:
@@ -177,16 +179,15 @@ CalSegDeclRef(parameters, parameters_calseg);
 CalSegDecl(parameters);
 #endif
 
-
 // Optional helper to clamp calibration parameters during runtime (for safety reasons) to the value range given by XCP_LIMIT
-#define clamp_parameter(x, p, default, name)                                                                                                                                            \
+#define clamp_parameter(x, p, default, name)                                                                                                                                       \
     do {                                                                                                                                                                           \
-        if (((p)->name) < (xcp_meta__min__##default##__##name))                                                                                                                                                           \
-            (x) = xcp_meta__min__##default##__##name;                                                                                                                                                           \
-        else if (((p)->name) > (xcp_meta__max__##default##__##name))                                                                                                                                                      \
-            (x) = xcp_meta__max__##default##__##name;                                                                                                                                                           \
+        if (((p)->name) < (xcp_meta__min__##default##__##name))                                                                                                                    \
+            (x) = xcp_meta__min__##default##__##name;                                                                                                                              \
+        else if (((p)->name) > (xcp_meta__max__##default##__##name))                                                                                                               \
+            (x) = xcp_meta__max__##default##__##name;                                                                                                                              \
         else                                                                                                                                                                       \
-            (x) = (p)->name;                                                                                                                                                             \
+            (x) = (p)->name;                                                                                                                                                       \
     } while (0)
 
 //----------------------------------------------------------------------------------------------------
@@ -211,10 +212,9 @@ XCP_NOINLINE void foo(void) {
     counter = static_counter;
 
     XCP_MEAS int8_t test_int8 = static_counter - 1;
-    XCP_MEAS int16_t test_int16 = static_counter -2;
-    XCP_MEAS int32_t test_int32 = static_counter -3;
-    XCP_MEAS uint64_t test_int64 = static_counter -4;
-
+    XCP_MEAS int16_t test_int16 = static_counter - 2;
+    XCP_MEAS int32_t test_int32 = static_counter - 3;
+    XCP_MEAS uint64_t test_int64 = static_counter - 4;
 
     // Local variables measured via capture
     float test_float = 0.001f * static_counter;
@@ -231,10 +231,9 @@ XCP_NOINLINE void foo(void) {
     } test_struct = {1, -2, 0.003f * static_counter, {1, 2, 3}};
     uint8_t test_array[3] = {1, 2, static_counter & 0xff};
 
-
     // Create and trigger the DAQ event 'foo' with captured local variables
     // Capturing local variables comes with the overhead of additionally space used for the copy on stack
-    // But copying is usually cheaper than generally spilling registers to stack with XCP_MEAS 
+    // But copying is usually cheaper than generally spilling registers to stack with XCP_MEAS
     DaqCreateAndTriggerEventCapture(foo, counter, test_float, test_double, test_uint8, test_uint16, test_uint32, test_uint64, test_struct, test_array);
 }
 
@@ -275,7 +274,7 @@ static void fastTask(void *parameter) {
 #ifdef __cplusplus
             auto params = parameters_calseg.lock();
 #else
-            struct parameters *params = (struct parameters *)CalSegLock(parameters);
+            struct parameters *params = CalSegLock(parameters);
 #endif
 
             // Save the task period parameter, don't delay during the lock to give XCP a chance to modify the parameters.
@@ -341,7 +340,7 @@ static void slowTask(void *parameter) {
 #ifdef __cplusplus
             auto params = parameters_calseg.lock();
 #else
-            struct parameters *params = (struct parameters *)CalSegLock(parameters);
+            struct parameters *params = CalSegLock(parameters);
 #endif
 
             clamp_parameter(slow_task_period_ms, params, parameters, slow_task_period_ms);
@@ -352,13 +351,12 @@ static void slowTask(void *parameter) {
                 counter = 0;
             }
 
-            #define PI2 6.28318530717958647692f
+#define PI2 6.28318530717958647692f
             channel1 = params->amplitude * sinf(phase);
             phase += PI2 / (params->period * 1000.0 / slow_task_period_ms);
             if (phase >= PI2) {
                 phase -= PI2;
             }
-           
 
 #ifndef __cplusplus
             CalSegUnlock(parameters);
@@ -368,9 +366,7 @@ static void slowTask(void *parameter) {
         // Call the demo function foo
         foo();
 
-
         DaqCreateAndTriggerEvent(slowTask);
-
 
         // printf("slowTask: counter = %u, period = %u ms, channel1 = %f\n", counter, slow_task_period_ms, channel1);
 #ifdef OPTION_DISPLAY

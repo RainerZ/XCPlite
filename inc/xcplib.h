@@ -210,9 +210,9 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
 /// the other one then finds it already registered by name and just reuses its index (see XcpRegisterSectionCalSegs()
 /// in src/cal.c). This makes the macro usable anywhere, including inside a function body or loop, without relying
 /// on XcpInit() having run yet.
-/// Note for readers of xcplib.hpp: the C++ macro of the same name, CalSegCreate(value), is unrelated - it is an
-/// expression (not a statement) that always creates the segment immediately via xcp::CalSeg<T>'s constructor and
-/// does not register a section descriptor at all.
+/// Note for readers of xcplib.hpp: the C++ macro of the same name, CalSegCreate(value), is an expression (not a
+/// statement) that creates the segment immediately via xcp::CalSeg<T>'s constructor and, like this C macro, also
+/// emits the xcp_cals section descriptor and linker map marker for optional pre-registration by XcpInit().
 /// Name given as identifier, type name and segment name must be identical
 /// @param name given as identifier, &name is expected to be the const static lifetime pointer to the default page, sizeof(name) is used as size of the calibration segment
 // calseg__##name and calblk__##name are the linker map file markers for calibration segments and blocks

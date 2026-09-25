@@ -45,6 +45,10 @@
 // New option in V1.1: Enable variadic all in one macros for simple arithmetic types, see examples below
 #define OPTION_USE_VARIADIC_MACROS
 
+#ifdef OPTION_SECTION_REGISTRATION
+#error "OPTION_SECTION_REGISTRATION is not supported in this example"
+#endif
+
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
 
@@ -222,7 +226,7 @@ int main(int argc, char *argv[]) {
         // XCP: Lock the calibration parameter segment for consistent and safe access
         // Calibration segment locking is wait-free, locks may be recursive
         // Returns a pointer to the active page (working or reference) of the calibration segment
-        const params_t *p = (params_t *)XcpLockCalSeg(calseg_id_params);
+        const params_t *p = (params_t *)XcpLockCalSeg(params_calseg);
         delay_us = p->delay_us; // Get the delay_us calibration value
 
         // Local variables
@@ -240,7 +244,7 @@ int main(int argc, char *argv[]) {
         heat_energy += heat_power / 3600e6;                                      // Integrate heat energy in kWh in a global measurement variable, kWh = W/1000  * us/ 3600e6
 
         // XCP: Unlock the calibration segment
-        XcpUnlockCalSeg(calseg_id_params);
+        XcpUnlockCalSeg(params_calseg);
 
 #ifndef OPTION_USE_VARIADIC_MACROS
         // XCP: Trigger the measurement event "mainloop"

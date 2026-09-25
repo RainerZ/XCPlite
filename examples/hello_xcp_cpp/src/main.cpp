@@ -32,6 +32,10 @@ constexpr uint8_t OPTION_XCP_MODE = (XCP_MODE_PERSISTENCE | XCP_MODE_LOCAL); // 
 // A2L generation mode:
 constexpr uint8_t OPTION_A2L_MODE = (A2L_MODE_WRITE_ONCE | A2L_MODE_FINALIZE_ON_CONNECT | A2L_MODE_AUTO_GROUPS);
 
+#ifdef OPTION_SECTION_REGISTRATION
+#error "OPTION_SECTION_REGISTRATION is not supported in this example"
+#endif
+
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
 
@@ -64,6 +68,10 @@ const ParametersT kParameters = {.delay_us = 1000,
 
 // Create a global calibration parameter segment for struct 'ParametersT' to provide safe and consistent access to the calibration parameters
 // Initialized in main(), after XCP initialization
+
+// Note: this deferred global + emplace() pattern constructs the segment at runtime and emits no xcp_cals linker marker.
+// That is fine here (runtime A2L generation, default config). For offline A2L (no_a2l/rtos, OPTION_SECTION_REGISTRATION),
+// use the section-registered CalSegDeclRef/CalSegDecl (CalSegRef<T>) instead, as in examples/no_a2l_demo_cpp.
 
 // Option 1:
 // This calibration segment has a working page (RAM) and a reference page (FLASH), it creates a MEMORY_SEGMENT in the A2L file

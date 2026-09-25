@@ -143,8 +143,12 @@ uint16_t XcpRegisterSectionCalSegs(void) {
             }
 #ifdef XCP_ENABLE_TEST_CHECKS
             else {
-                tXcpCalSeg *c = CalSegPtr(index);
+                const tXcpCalSeg *c = CalSegPtr(index);
+#ifdef XCP_ENABLE_CAL_PERSISTENCE
                 assert((c->h.mode & PAG_PROPERTY_PRELOAD) != 0 || strcmp(c->h.name, XCP_EPK_CALSEG_NAME) == 0); // Unexpected duplicate
+#else
+                assert(strcmp(c->h.name, XCP_EPK_CALSEG_NAME) == 0); // Unexpected duplicate
+#endif
             }
 #endif
             *(e->indexp) = index; // initialize the segment index pointer
@@ -168,8 +172,12 @@ uint16_t XcpRegisterSectionCalSegs(void) {
             }
 #ifdef XCP_ENABLE_TEST_CHECKS
             else {
-                tXcpCalSeg *c = CalSegPtr(index);
+                const tXcpCalSeg *c = CalSegPtr(index);
+#ifdef XCP_ENABLE_CAL_PERSISTENCE
                 assert((c->h.mode & PAG_PROPERTY_PRELOAD) != 0 || strcmp(c->h.name, XCP_EPK_CALSEG_NAME) == 0); // Unexpected duplicate
+#else
+                assert(strcmp(c->h.name, XCP_EPK_CALSEG_NAME) == 0); // Unexpected duplicate
+#endif
             }
 #endif
             *(e->indexp) = index;

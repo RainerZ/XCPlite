@@ -32,6 +32,10 @@ static void sig_handler(int sig) { global_running = false; }
 #define OPTION_QUEUE_SIZE (1024 * 8)      // Size of the measurement queue in bytes, must be a multiple of 8
 #define OPTION_LOG_LEVEL 3                // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
+#ifndef OPTION_SECTION_REGISTRATION
+#error "This example requires OPTION_SECTION_REGISTRATION"
+#endif
+
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
 

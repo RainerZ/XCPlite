@@ -258,16 +258,36 @@ template <typename T> class CalBlk {
 #endif
 };
 
-/// Convenience macro to create a calibration segment with automatic name stringification
+/// Convenience expression macro to create a calibration segment with automatic name stringification
 /// Usage: auto calseg = CalSegCreate(initial_value);
-/// Unlike the C macro of the same name (xcplib.h), this is an expression, not a statement: it always creates the
-/// segment immediately, by calling XcpCreateCalSeg in xcp::CalSeg<T>'s constructor, and does not register an
-/// xcp_cals section descriptor at all - so it cannot be pre-registered by XcpInit()'s section scan and must itself
-/// run before the segment is first used. For the lazy, section-based equivalent (matching the C CalSegDecl), see
-/// CalSegDecl/CalSegDeclRef below.
-#define CalSegCreate(value) xcp::CalSeg<decltype(value)>(#value, &value)
+/// Like the C macro of the same name (xcplib.h), this is an expression that creates the segment immediately, by
+/// calling XcpCreateCalSeg in xcp::CalSeg<T>'s constructor. In addition it emits the same xcp_cals section
+/// descriptor and the linker map marker symbol 'calseg__<value>' as the C CalSegCreate, so when
+/// OPTION_SECTION_REGISTRATION is enabled the segment can also be pre-registered by XcpInit()'s section scan
+/// (whichever of the two runs first creates it; the other reuses it by name). Requires 'value' to have static
+/// storage duration, since the section descriptor stores &value as the default page pointer. Wrapped in an
+/// immediately-invoked lambda so it stays a single expression: guaranteed copy elision (C++17) returns the
+/// xcp::CalSeg<T> prvalue as the initializer.
+#define CalSegCreate(value)                                                                                                                                                        \
+    ([]() -> xcp::CalSeg<decltype(value)> {                                                                                                                                        \
+        static tXcpCalSegIndex calseg_id_##value = XCP_UNDEFINED_CALSEG;                                                                                                           \
+        static const tXcpCalSegDescriptor calseg__##value __asm__("calseg__" #value)                                                                                               \
+            XCP_CAL_SECTION_ATTR = {#value, (const void *)&value, &calseg_id_##value, sizeof(value), XCP_CALSEG_TYPE_SEGMENT};                                                     \
+        (void)&calseg__##value;                                                                                                                                                    \
+        return xcp::CalSeg<decltype(value)>(#value, &value);                                                                                                                       \
+    }())
+/// Convenience expression macro to create a calibration block with automatic name stringification
+/// Emits the xcp_cals section descriptor / linker map marker like CalSegCreate above; see there for details.
+#define CalBlkCreate(value)                                                                                                                                                        \
+    ([]() -> xcp::CalBlk<decltype(value)> {                                                                                                                                        \
+        static tXcpCalSegIndex calblk_id_##value = XCP_UNDEFINED_CALSEG;                                                                                                           \
+        static const tXcpCalSegDescriptor calblk__##value __asm__("calblk__" #value)                                                                                               \
+            XCP_CAL_SECTION_ATTR = {#value, (const void *)&value, &calblk_id_##value, sizeof(value), XCP_CALSEG_TYPE_BLOCK};                                                       \
+        (void)&calblk__##value;                                                                                                                                                    \
+        return xcp::CalBlk<decltype(value)>(#value, &value);                                                                                                                       \
+    }())
 
-/// Declare a section-registered global calibration segment and create a typed C++ handle.
+/// Section-registered declaration macro to create a global calibration segment and a typed C++ handle.
 /// Usage: CalSegDeclRef(parameters, parameters_calseg); auto parameters = parameters_calseg.lock();
 /// Like the C macro CalSegDecl (xcplib.h), this only registers an xcp_cals section descriptor: the segment is not
 /// created until XcpInit() pre-registers it via its section scan, so 'handle' is only valid for locking after
@@ -279,13 +299,9 @@ template <typename T> class CalBlk {
         XCP_CAL_SECTION_ATTR = {#value, (const void *)&value, &calseg_id_##value, sizeof(value), XCP_CALSEG_TYPE_SEGMENT};                                                         \
     static const xcp::CalSegRef<decltype(value)> handle(&calseg_id_##value, &value)
 
-/// Declare a section-registered global calibration segment and create a typed C++ handle named <value>_calseg.
+/// Section-registered declaration macro to create a global calibration segment and a typed C++ handle named <value>_calseg.
 /// See CalSegDeclRef above for the section-based registration semantics this builds on.
 #define CalSegDecl(value) CalSegDeclRef(value, value##_calseg)
-
-/// Convenience macro to create a calibration value with automatic name stringification
-/// Usage: auto calval = CalVal(initial_value);
-#define CalBlkCreate(value) xcp::CalBlk<decltype(value)>(#value, &value)
 
 } // namespace xcp
 
