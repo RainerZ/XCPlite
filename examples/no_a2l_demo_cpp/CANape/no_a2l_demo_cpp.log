@@ -1,11 +1,33 @@
 
-[INFO ] xcp_client - version 4.0.0
+[INFO ] xcp_client - version 4.0.1
 [INFO ] Default event mainloop for variables without a fixed event
-[INFO ] Using A2L file name from command line argument: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l
-[INFO ] A2L path: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l
-[INFO ] Generate A2L file /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l with ELF/DWARF information only,  offline mode 
-[INFO ] Reading ELF file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.elf
-[INFO ] Loading debug information from ELF file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.elf
+[INFO ] Using A2L file name from command line argument: /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l
+[INFO ] A2L path: /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l
+[INFO ] Generate A2L file /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l with ELF/DWARF information only,  offline mode 
+[INFO ] Reading ELF file: /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.elf
+[INFO ] Parsing ELF object file /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.elf
+[INFO ] Loading DWARF sections
+[WARN ] main_cpp:276: 'counter': location is a register Register(10)
+[WARN ] main_cpp:280: 'test_float': location is a register Register(64)
+[WARN ] main_cpp:286: 'test_struct': the variable is split into 6 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value: Generic(18446744073709551614) } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Register { register: Register(64) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(2) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(3) } }]
+[WARN ] main_cpp:285: 'test_uint64': location is a constant value Generic(4)
+[WARN ] main_cpp:284: 'test_uint32': location is a constant value Generic(3)
+[WARN ] main_cpp:283: 'test_uint16': location is a constant value Generic(2)
+[WARN ] main_cpp:282: 'test_uint8': location is a constant value Generic(1)
+[WARN ] main_cpp:281: 'test_double': location is a register Register(65)
+[WARN ] main_cpp: 'cal': only a slice of the variable has a location (DW_OP_piece), not measurable: Piece { size_in_bits: Some(16), bit_offset: None, location: Register { register: Register(19) } }
+[WARN ] main_cpp: 'counter': variable location is stack-pointer-relative (DW_OP_breg31 <offset>), not frame-base-relative; not measurable yet, eval_result=RequiresRegister { register: Register(31), base_type: UnitOffset(0) }
+[WARN ] main_cpp:319: 'counter_ctl': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Register { register: Register(8) } }]
+[WARN ] main_cpp:342: 'delay': location is a register Register(20)
+[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Register { register: Register(27) } }]
+[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Register { register: Register(27) } }]
+[WARN ] main_cpp:379: 'counter': variable location is stack-pointer-relative (DW_OP_breg31 <offset>), not frame-base-relative; not measurable yet, eval_result=RequiresRegister { register: Register(31), base_type: UnitOffset(0) }
+[WARN ] main_cpp:421: 'delay': location is a register Register(22)
+[WARN ] main_cpp: 'cal': only a slice of the variable has a location (DW_OP_piece), not measurable: Piece { size_in_bits: Some(16), bit_offset: None, location: Register { register: Register(21) } }
+[WARN ] main_cpp: 'cal': only a slice of the variable has a location (DW_OP_piece), not measurable: Piece { size_in_bits: Some(16), bit_offset: None, location: Register { register: Register(21) } }
+[WARN ] main_cpp: 'cal': only a slice of the variable has a location (DW_OP_piece), not measurable: Piece { size_in_bits: Some(16), bit_offset: None, location: Register { register: Register(21) } }
+[WARN ] main_cpp: 'cal': only a slice of the variable has a location (DW_OP_piece), not measurable: Piece { size_in_bits: Some(16), bit_offset: None, location: Register { register: Register(21) } }
+[WARN ] main_cpp:403: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Register { register: Register(22) } }]
 [INFO ] Compiler: Debian clang version 14.0.6
 [INFO ] ===============================================================
 [INFO ] Target signature found: ACSDD
@@ -28,18 +50,15 @@
 [INFO ] ===============================================================
 [INFO ] Calibration segment 'epk' not yet defined in registry
 [INFO ] Created segment 0: 'epk':  addr = 0x00030390, size = 7, mem_addr = 0x00030390
-Calibration segment 'params' type information found, type=params, size = 64
-[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xc808, Size = 0x40
+[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xcce8, Size = 0x40
 [INFO ] Calibration segment 'params' not yet defined in registry
-[INFO ] Created segment 1: 'params':  addr = 0x0000C808, size = 64, mem_addr = 0x0000C808
-Calibration segment 'counter_ctl_params' type information found, type=CounterCtlParams, size = 8
-[INFO ] Calibration segment 'counter_ctl_params' default page variable found in debug data: Address = 0xc848, Size = 0x8
+[INFO ] Created segment 1: 'params':  addr = 0x0000CCE8, size = 64, mem_addr = 0x0000CCE8
+[INFO ] Calibration segment 'counter_ctl_params' default page variable found in debug data: Address = 0xcd28, Size = 0x8
 [INFO ] Calibration segment 'counter_ctl_params' not yet defined in registry
-[INFO ] Created segment 2: 'counter_ctl_params':  addr = 0x0000C848, size = 8, mem_addr = 0x0000C848
-Calibration segment 'task_counter_ctl_params' type information found, type=TaskCounterCtlParams, size = 12
-[INFO ] Calibration segment 'task_counter_ctl_params' default page variable found in debug data: Address = 0xc854, Size = 0xc
+[INFO ] Created segment 2: 'counter_ctl_params':  addr = 0x0000CD28, size = 8, mem_addr = 0x0000CD28
+[INFO ] Calibration segment 'task_counter_ctl_params' default page variable found in debug data: Address = 0xcd34, Size = 0xc
 [INFO ] Calibration segment 'task_counter_ctl_params' not yet defined in registry
-[INFO ] Created segment 3: 'task_counter_ctl_params':  addr = 0x0000C854, size = 12, mem_addr = 0x0000C854
+[INFO ] Created segment 3: 'task_counter_ctl_params':  addr = 0x0000CD34, size = 12, mem_addr = 0x0000CD34
 [INFO ] ===============================================================
 [INFO ] Registering event locations:
 [INFO ] ===============================================================
@@ -76,13 +95,17 @@ Calibration segment 'task_counter_ctl_params' type information found, type=TaskC
 [INFO ] Static variable 'static_counter' local to function 'Some("foo")', event id = 0
 [INFO ] Static variable 'static_counter' local to function 'Some("task")', event id = 1
 [INFO ] Static variable 'static_counter' local to function 'Some("main")', event id = 2
-[INFO ] Local variable 'test_int8' in function 'Some("foo")', event id = Some(0), offset = 28
-[INFO ] Local variable 'test_int16' in function 'Some("foo")', event id = Some(0), offset = 24
-[INFO ] Local variable 'test_int32' in function 'Some("foo")', event id = Some(0), offset = -4
-[INFO ] Local variable 'test_int64' in function 'Some("foo")', event id = Some(0), offset = -16
+[INFO ] Local variable 'counter' in function 'Some("task")', event id = Some(1), offset = -4
+[WARN ] Local variable 'counter' in function 'bar' not registered, it has no location in the debug information, not implemented yet
+[INFO ] Local variable 'test_int8' in function 'Some("foo")', event id = Some(0), offset = -4
+[INFO ] Local variable 'test_int16' in function 'Some("foo")', event id = Some(0), offset = -8
+[INFO ] Local variable 'test_int32' in function 'Some("foo")', event id = Some(0), offset = -12
+[INFO ] Local variable 'test_int64' in function 'Some("foo")', event id = Some(0), offset = -24
+[WARN ] Local variable 'cal' in function 'step' not registered, it has no location in the debug information, not implemented yet
+[WARN ] Local variable 'cal' in function 'step' not registered, it has no location in the debug information, not implemented yet
 [INFO ] Static variable 'task_counter_ctl_params' local to function 'Some("task")', event id = 1
 [INFO ] Static variable 'calseg_id_task_counter_ctl_params' local to function 'Some("task")', event id = 1
-[INFO ] Static variable 'counter_ctl_task_calseg_handle' local to function 'Some("task")', event id = 1
+[WARN ] Local variable 'counter_ctl_task_calseg_handle' in function 'task' not registered, it has no location in the debug information, not implemented yet
 [INFO ] Local variable 'xcp_epk_keep' in function 'Some("main")', event id = Some(2), offset = -4
 [INFO ] Global variable 'params', event id = Some(2)
 [INFO ] Global variable 'calseg_id_params', event id = Some(2)
@@ -108,12 +131,24 @@ Calibration segment 'task_counter_ctl_params' type information found, type=TaskC
 [INFO ] ===============================================================
 [INFO ] Registering metadata from xcp_meta section:
 [INFO ] ===============================================================
-[WARN ] Metadata 'xcp_meta__comment__task__counter': no matching registry entry for 'task.task.counter' or 'task.counter'
+[INFO ] Metadata xcp_meta__min__params__delay_us applied to typedef field 'params.delay_us'
+[INFO ] Metadata xcp_meta__max__params__delay_us applied to typedef field 'params.delay_us'
+[INFO ] Metadata xcp_meta__unit__params__delay_us applied to typedef field 'params.delay_us'
+[INFO ] Metadata comment xcp_meta__comment__global_counter applied to instance 'global_counter'
+[INFO ] Metadata comment xcp_meta__comment__input applied to instance 'motor_control.input'
+[INFO ] Metadata comment xcp_meta__comment__input applied to instance 'valve_control.input'
+[INFO ] Metadata comment xcp_meta__comment__bar__static_counter applied to instance 'bar.static_counter'
+[INFO ] Metadata read_write xcp_meta__read_write__bar__static_counter applied to instance 'bar.static_counter'
+[INFO ] Metadata comment xcp_meta__comment__foo__static_counter applied to instance 'foo.static_counter'
+[INFO ] Metadata comment xcp_meta__comment__foo__counter applied to instance 'foo.counter'
+[INFO ] Metadata comment xcp_meta__comment__task__static_counter applied to instance 'task.static_counter'
+[INFO ] Metadata comment xcp_meta__comment__task__counter applied to instance 'task.counter'
 [WARN ] Metadata 'xcp_meta__comment__main__counter': no matching registry entry for 'main.main.counter' or 'main.counter'
+[INFO ] Metadata comment xcp_meta__comment__main__static_counter applied to instance 'main.static_counter'
 [INFO ] ===============================================================
-[INFO ] Write A2L file "/Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l"
-[INFO ] A2L writer: transport layer: UDP 192.168.0.206:5555
-[INFO ] Check A2L file "/Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l"
+[INFO ] Write A2L file "/Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l"
+[INFO ] A2L writer: transport layer: UDP 192.168.8.135:5555
+[INFO ] Check A2L file "/Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l"
 [INFO ] A2L file check ok
-[INFO ] Created A2L with file: /Users/rainer/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l ELF/DWARF information only,  offline mode
+[INFO ] Created A2L with file: /Users/Rainer.Zaiser/git/XCPlite-RainerZ/examples/no_a2l_demo_cpp/CANape/no_a2l_demo_cpp.a2l ELF/DWARF information only,  offline mode
 [INFO ] Default event 'mainloop' resolved to event id 2

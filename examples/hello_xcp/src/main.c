@@ -27,6 +27,7 @@
 #define OPTION_XCP_MODE (XCP_MODE_PERSISTENCE | XCP_MODE_SHM_AUTO) // XCP multi application mode, leader becomes XCP server
 #else
 #define OPTION_XCP_MODE (XCP_MODE_PERSISTENCE | XCP_MODE_LOCAL) // XCP single application server mode
+// #define OPTION_XCP_MODE (XCP_MODE_DEACTIVATE) // XCP disabled
 #endif
 
 // A2L generation mode:
@@ -67,7 +68,11 @@ const params_t params = {.delay_us = 1000, .counter_max = 1024, .flow_rate = 0.3
 // A calibration segment has a working page ("RAM") and a reference page ("FLASH"), it is described by a MEMORY_SEGMENT in the A2L file.
 // Using the calibration segment to access parameters assures safe (thread safe against XCP modifications), wait-free and consistent access.
 // It supports offline calibration, RAM/FLASH page switching, reinitialization (copy FLASH to RAM page) and persistence (save to BIN file).
-tXcpCalSegIndex params_calseg = XCP_UNDEFINED_CALSEG;
+// tXcpCalSegIndex calseg_id_params = XCP_UNDEFINED_CALSEG;
+CalSegDecl(params);
+
+// The example code shows 2 variants: Using the CalXxx macros or using the explicit CalSegXxx functions.
+// The macros provide the option to deactivate XCP by XcpInit(XCP_MODE_DEACTIVATE), without any other code changes.
 
 //-----------------------------------------------------------------------------------------------------
 // Demo global measurement values
@@ -117,12 +122,14 @@ float calc_power(uint8_t t1, uint8_t t2) {
 
     // XCP: Lock access to calibration parameters
     // Note: calc_power() is called from main()'s mainloop while it already holds a lock on this same segment
-    const params_t *p = (params_t *)XcpLockCalSeg(params_calseg);
+    // const params_t *p = (params_t *)XcpLockCalSeg(calseg_id_params);
+    const params_t *p = CalSegLock(params);
 
     heat_power = diff_temp * p->flow_rate * 1000.0 * 1.16; // in kWh, 1.16Wh per K per liter - calculate heat power using the flow rate calibration parameter
 
     // XCP: Unlock the calibration segment
-    XcpUnlockCalSeg(params_calseg);
+    // XcpUnlockCalSeg(calseg_id_params);
+    CalSegUnlock(params);
 
 #ifndef OPTION_USE_VARIADIC_MACROS
     // XCP: Trigger the measurement event "calc_power"
@@ -175,9 +182,10 @@ int main(int argc, char *argv[]) {
     }
 
     // XCP: Create a calibration segment named 'params' for the calibration parameter struct instance 'params' as reference page
-    params_calseg = XcpCreateCalSeg("params", &params, sizeof(params));
-    assert(params_calseg != XCP_UNDEFINED_CALSEG);
-    A2lSetSegmentAddrMode(params_calseg, params);
+    // calseg_id_params = XcpCreateCalSeg("params", &params, sizeof(params));
+    // A2lSetSegmentAddrMode(calseg_id_params, params);
+    CalSegCreate(params);
+    A2lSetSegmentAddrMode(CalSegIndex(params), params);
 
     // XCP: Option1: Register the individual calibration parameters in the calibration segment
     // A2lSetSegmentAddrMode(seg_index, seg_instance) must come after XcpCreateCalSeg (it needs the returned segment index) and before
@@ -226,14 +234,15 @@ int main(int argc, char *argv[]) {
         // XCP: Lock the calibration parameter segment for consistent and safe access
         // Calibration segment locking is wait-free, locks may be recursive
         // Returns a pointer to the active page (working or reference) of the calibration segment
-        const params_t *p = (params_t *)XcpLockCalSeg(params_calseg);
+        // const params_t *p = (params_t *)XcpLockCalSeg(calseg_id_params);
+        const params_t *p = CalSegLock(params);
         delay_us = p->delay_us; // Get the delay_us calibration value
 
         // Local variables
         counter++;
         if (counter > p->counter_max) { // Get the counter_max calibration value and reset counter
-            // printf("counter_max = %u\n", p->counter_max);
             counter = 0;
+            printf("Reset counter to 0 at %u\n", p->counter_max);
         }
 
         // Global variables
@@ -244,7 +253,8 @@ int main(int argc, char *argv[]) {
         heat_energy += heat_power / 3600e6;                                      // Integrate heat energy in kWh in a global measurement variable, kWh = W/1000  * us/ 3600e6
 
         // XCP: Unlock the calibration segment
-        XcpUnlockCalSeg(params_calseg);
+        // XcpUnlockCalSeg(calseg_id_params);
+        CalSegUnlock(params);
 
 #ifndef OPTION_USE_VARIADIC_MACROS
         // XCP: Trigger the measurement event "mainloop"

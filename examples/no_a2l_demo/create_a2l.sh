@@ -39,16 +39,14 @@ BUILD_TYPE="RelWithDebInfo"
 #BUILD_TYPE="Release"
 
 # Run a simple test calibration and measurement
-TEST=false
+TEST=true
 # CSV measurement file path on local machine
 CSVFILE="$REPO_ROOT/examples/no_a2l_demo/CANape/no_a2l_demo.csv"
 
 
 # Target connection details
-#TARGET_USER="parallels"
-#TARGET_HOST="10.211.55.4"
 TARGET_USER="rainer"
-TARGET_HOST="192.168.0.206"
+TARGET_HOST="192.168.8.135"
 TARGET_PATH="~/XCPlite-Test"
 TARGET_BUILD_DIR="build-no_a2l"
 TARGET_BINARY="no_a2l_demo"
@@ -153,24 +151,30 @@ echo ""
 if [ "$TEST" = true ]; then
 
 ssh "$TARGET_USER@$TARGET_HOST" "cd $TARGET_PATH && ./$TARGET_BUILD_DIR/$TARGET_BINARY" &
-sleep 1
 
+sleep 1
 echo "========================================================================================================"
 echo "Test connect"
 echo "========================================================================================================"
 read -p "Press any key to continue..." -n1 -s
 $XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE" --list-mea . --list-cal . 
-sleep 1
 
+sleep 1
+echo "========================================================================================================"
+echo "Test calibration"
+echo "========================================================================================================"
+read -p "Press any key to continue..." -n1 -s
+$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --cal counter_control.counter_max 2000
+
+sleep 1
 echo "========================================================================================================"
 echo "Test measurement"
 echo "========================================================================================================"
 read -p "Press any key to continue..." -n1 -s
 # Log measurement to stdout
-$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea . --time 3 --verbose=2
+$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea counter --time 3 --verbose=2
 # Log measurement to CSV file
 #$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea . --time 3 --csv "$CSVFILE"
-read -p "Press any key to continue..." -n1 -s
 sleep 1
 
 ssh "$TARGET_USER@$TARGET_HOST" "pkill -f no_a2l_demo" 

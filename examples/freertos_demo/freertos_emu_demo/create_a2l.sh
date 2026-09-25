@@ -34,7 +34,7 @@ fi
 REMOTE=true
 
 # Run a short calibration and measurement test
-TEST=false
+TEST=true
 CSVFILE="$REPO_ROOT/examples/freertos_demo/freertos_emu_demo/CANape/freertos_demo.csv"
 
 
@@ -64,7 +64,7 @@ BUILD_TYPE="RelWithDebInfo"
 #TARGET_USER="parallels"
 #TARGET_HOST="10.211.55.4"
 TARGET_USER="rainer"
-TARGET_HOST="192.168.0.206"
+TARGET_HOST="192.168.8.135"
 TARGET_PATH="~/XCPlite-rtos"
 TARGET_BUILD_DIR="build-rtos"
 TARGET_BINARY="freertos_emu_demo"
