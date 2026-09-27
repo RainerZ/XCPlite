@@ -112,9 +112,10 @@ float calc_power(uint8_t t1, uint8_t t2) {
 
     // XCP: Lock access to calibration parameters
     // Note: calc_power() is called from main()'s mainloop while it already holds a lock on this same segment (see below) -
-    // this nested lock is safe because XcpLockCalSeg/XcpUnlockCalSeg maintain an atomic lock count per segment rather than
-    // a traditional mutex, so recursive (nested, same thread) and concurrent (other threads) locks are both wait-free and
-    // always see a consistent page. See docs/CAL_RCU.md for the underlying RCU scheme.
+    // this nested lock is safe because XcpLockCalSeg/XcpUnlockCalSeg are not a traditional mutex, recursive (nested, same thread)
+    // and concurrent (other threads) locks never block and each lock returns a pointer to a consistent page.
+    // @@@@ TODO: With #define XCP_ENABLE_CALSEG_RCU_REFCOUNT each lock must be released with the pointer it returned.
+    // See docs/CAL_RCU.md for the underlying RCU scheme and the user contract.
     const params_t *p = (params_t *)XcpLockCalSeg(params_calseg);
 
     heat_power = diff_temp * p->flow_rate * 1000.0 * 1.16; // in kWh, 1.16Wh per K per liter - calculate heat power using the flow rate calibration parameter

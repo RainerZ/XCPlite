@@ -74,7 +74,7 @@ ctest --test-dir build -L unit               # only the fast unit tests
 
 See [test/README.md](test/README.md) for the full taxonomy, conventions for new tests, and how to drive the interactive ones.
 
-`test/test.sh [clean] [example_name]` runs the example integration tests against `build/` (not the unit test binaries above): builds each example, exercises it, and diffs generated `.a2l` files against `test/fixtures/`. Omit `example_name` to run all examples; `clean` first deletes generated `.a2l`/`.bin`/`.hex` files from the workspace root.
+`test/test_examples.sh [clean] [example_name]` runs the example integration tests against `build/` (not the unit test binaries above): builds each example, exercises it, and diffs generated `.a2l` files against `test/fixtures/`. Omit `example_name` to run all examples; `clean` first deletes generated `.a2l`/`.bin`/`.hex` files from the workspace root.
 
 ### Windows / QNX
 
@@ -120,7 +120,7 @@ The 64-bit lock-free queue needs `atomic_uint_least64_t`; some ARM/Clang combina
 
 ### Calibration segments (RCU, see `docs/CAL_RCU.md`)
 
-Calibration parameters live in **calibration segments**: a struct wrapped so the single XCP writer thread and multiple lock-free/wait-free reader threads (`XcpLockCalSeg`/`XcpUnlockCalSeg`, or `CalSeg<T>::lock()` in C++) stay consistent without blocking. Implementation uses a 3-page RCU scheme (`ecu_page`/`xcp_page`/`free_page`) — precondition is exactly one writer thread. Read `docs/CAL_RCU.md` before touching `src/cal.c`; the compromises/invariants documented there (e.g. visibility delay is "second lock after write", starvation is possible under heavy read contention) are load-bearing, not incidental.
+Calibration parameters live in **calibration segments**: a struct wrapped so the single XCP writer thread and multiple lock-free/wait-free reader threads (`XcpLockCalSeg`/`XcpUnlockCalSeg`, or `CalSeg<T>::lock()` in C++) stay consistent without blocking. Two RCU algorithms are implemented in `src/cal.c` behind a small set of `CalSegRcu*` primitives, selected with `XCP_ENABLE_CALSEG_RCU_REFCOUNT` in `src/xcp_cfg.h`: per page reference counting (default, publishing independent of reader progress, `XCP_CALSEG_RCU_PAGES` pages) and the older lock count / page hand-over scheme (`ecu_page`/`xcp_page`/`free_page`). Precondition for both is exactly one writer thread; `XcpUnlockCalSeg` takes the page pointer returned by the matching lock. Read `docs/CAL_RCU.md` before touching `src/cal.c`; the user contract, compromises and memory ordering documented there are load-bearing, not incidental.
 
 ### Addressing modes (see `docs/TECHNICAL.md`)
 

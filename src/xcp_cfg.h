@@ -403,6 +403,21 @@ XCPlite multi application absolute addressing: XCP_ADDRESS_MODE_XCPLITE__CXSDD (
 // Timeout for acquiring a free calibration segment page
 #define XCP_CALSEG_AQUIRE_FREE_PAGE_TIMEOUT 500 // 500 ms timeout
 
+// RCU algorithm for calibration segment updates, see docs/CAL_RCU.md
+// Defined: per page reference counting. Publishing is independent of reader progress, changes are visible with the next lock,
+//   the lock is lock-free (retries when a publish lands concurrently), XCP_CALSEG_RCU_PAGES pages per segment
+// Undefined: lock count and page hand-over. Publishing depends on the lock count returning to zero, changes are visible with the
+//   first or second first level lock, the lock is wait-free, 3 pages per segment
+// The reader API is identical, except XcpUnlockCalSeg() needs the page pointer returned by XcpLockCalSeg()
+// #define XCP_ENABLE_CALSEG_RCU_REFCOUNT
+
+// Number of RCU pages per calibration segment for XCP_ENABLE_CALSEG_RCU_REFCOUNT (writer page, published page and reclamation candidates)
+// 3 is the structural minimum and needs the same memory as the lock count algorithm
+// Each additional page tolerates one more reader which never unlocks and improves the publish rate under a bursting writer, 6 is the maximum
+#ifndef XCP_CALSEG_RCU_PAGES
+#define XCP_CALSEG_RCU_PAGES 3
+#endif
+
 #endif // XCP_ENABLE_CALSEG_LIST
 
 //-------------------------------------------------------------------------------
