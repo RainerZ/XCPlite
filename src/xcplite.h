@@ -635,13 +635,10 @@ void ApplXcpRegisterGetClockInfoGrandmasterCallback(bool (*cb_get_clock_info_gra
 /****************************************************************************/
 
 // Some metrics collected by the XCP protocol layer for debugging and performance analysis
-#ifdef TEST_ENABLE_DBG_METRICS
+#ifdef TEST_ENABLE_TL_METRICS
 #ifdef __cplusplus
 extern "C" {
 #endif
-extern uint32_t gXcpWritePendingCount;
-extern uint32_t gXcpCalSegPublishAllCount;
-extern uint32_t gXcpDaqEventCount;
 extern uint32_t gXcpTxPacketCount;
 extern uint32_t gXcpTxMessageCount;
 extern uint32_t gXcpTxIoVectorCount;
@@ -649,4 +646,15 @@ extern uint32_t gXcpRxPacketCount;
 #ifdef __cplusplus
 }
 #endif
-#endif // TEST_ENABLE_DBG_METRICS
+#endif // TEST_ENABLE_TL_METRICS
+
+#ifdef TEST_ENABLE_CAL_METRICS
+#ifdef __cplusplus
+extern "C" {
+#endif
+extern uint32_t gXcpWritePendingCount;
+extern uint32_t gXcpCalSegPublishAllCount;
+#ifdef __cplusplus
+}
+#endif
+#endif // TEST_ENABLE_CAL_METRICS

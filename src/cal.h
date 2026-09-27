@@ -83,9 +83,9 @@ typedef uint16_t tXcpCalSegIndex;
 #define XCP_CALPAGE_ALIGNMENT 8   // Page alignment in bytes
 #define XCP_CALSEG_HEADER_SIZE 64 // Must be & XCP_CALPAGE_ALIGNMENT
 
-#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#ifdef OPTION_CAL_RCU_REFCOUNT
 #ifndef XCP_CALSEG_RCU_PAGES
-#error "XCP_CALSEG_RCU_PAGES must be defined with XCP_ENABLE_CALSEG_RCU_REFCOUNT"
+#error "XCP_CALSEG_RCU_PAGES must be defined with OPTION_CAL_RCU_REFCOUNT"
 #endif
 #if XCP_CALSEG_RCU_PAGES < 3
 #error "XCP_CALSEG_RCU_PAGES must be at least 3 (writer page, published page, one reclamation candidate)"
@@ -103,7 +103,7 @@ typedef struct {
 #else
     uint8_t *res1; // Default, there is no pointer to the default page
 #endif
-#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#ifdef OPTION_CAL_RCU_REFCOUNT
     // RCU state for per page reference counting, see docs/CAL_RCU.md
     atomic_uint_least32_t published_page; // index of the published (ECU) page in [1..XCP_CALSEG_RCU_PAGES-1], written by the writer thread only
     uint32_t xcp_page;                    // offset into c->b[] of the writer page (RCU page 0, fixed), or XCP_CALSEG_NO_PAGE
@@ -188,7 +188,7 @@ static_assert(sizeof(tXcpCalSegHeader) == XCP_CALSEG_HEADER_SIZE, "Error: size o
 #endif
 
 // RCU pages
-#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#ifdef OPTION_CAL_RCU_REFCOUNT
 #define CALSEG_RCU_PAGE_COUNT XCP_CALSEG_RCU_PAGES // Writer page (0), published page and reclamation candidates
 #else
 #define CALSEG_RCU_PAGE_COUNT 3 // XCP page, ECU page and free swap page
@@ -203,7 +203,7 @@ static_assert(sizeof(tXcpCalSegHeader) == XCP_CALSEG_HEADER_SIZE, "Error: size o
 #define CalSegXcpPage(c) (&(c)->b[(c)->h.xcp_page])
 
 // Published (ECU) page, for use by the writer thread (which never writes into it) or by a reader holding a lock
-#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#ifdef OPTION_CAL_RCU_REFCOUNT
 #define CalSegEcuPage(c) CalSegRcuPage(c, atomic_load_explicit(&(c)->h.published_page, memory_order_acquire))
 #else
 #define XCP_PAGE_OFFSET(aligned_page_size) CALSEG_RCU_PAGE_OFFSET(aligned_page_size, 0)  // Initial offset of the XCP working page
@@ -260,7 +260,7 @@ const uint8_t *XcpLockCalSeg(tXcpCalSegIndex calseg);
 
 // Unlock a calibration segment
 // Thread safe, page is the pointer returned by the matching XcpLockCalSeg
-#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#ifdef OPTION_CAL_RCU_REFCOUNT
 void XcpUnlockCalSeg(tXcpCalSegIndex calseg, const void *page);
 #else
 void XcpUnlockCalSeg(tXcpCalSegIndex calseg);

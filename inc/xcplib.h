@@ -124,7 +124,7 @@ const uint8_t *XcpLockCalSeg(tXcpCalSegIndex index);
 /// @param index Calibration segment index.
 /// @param page The pointer returned by the matching XcpLockCalSeg call.
 /// Every lock is released exactly once with the page it returned, locks may be nested, see the user contract in docs/CAL_RCU.md
-#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#ifdef OPTION_CAL_RCU_REFCOUNT
 void XcpUnlockCalSeg(tXcpCalSegIndex calseg_index, const void *page);
 #else
 void XcpUnlockCalSeg(tXcpCalSegIndex calseg_index);
@@ -241,7 +241,7 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
 /// Passive mode: nothing to unlock when the segment does not exist, see CalSegLock
 /// @param name given as identifier
 /// @param ptr the pointer returned by the matching CalSegLock(name)
-#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#ifdef OPTION_CAL_RCU_REFCOUNT
 #define CalSegUnlock(name, ptr) ((calseg_id_##name != XCP_UNDEFINED_CALSEG) ? XcpUnlockCalSeg(calseg_id_##name, (const void *)(ptr)) : (void)0)
 #define CalBlkUnlock(name, ptr) ((calblk_id_##name != XCP_UNDEFINED_CALSEG) ? XcpUnlockCalSeg(calblk_id_##name, (const void *)(ptr)) : (void)0)
 #else

@@ -92,6 +92,20 @@
 // Must be large enough for all XcpCreateCalSeg() calls combined
 #define OPTION_CAL_MEM_SIZE (1024 * 5) // 5 KB default
 
+// RCU algorithm for calibration segment updates, see docs/CAL_RCU.md
+// Defined: Publishing does not depend on reader progress
+//  - Changes are visible with the next lock
+//  - The lock is lock-free (but not wait-free, retries when a publish happens concurrently)
+//  - Slightly more complex cache synchronisation
+//  - Not recommended for micro controller (FreeRTOS) use cases due to potential performance issues
+//  - Recommended for slow reader, configuration parameter use-cases, not typical calibration use-cases
+// Undefined (default): Publishing depends on the lock count returning to zero
+//  - Changes are visible with the first or second first level lock
+//  - The lock is wait-free
+// The reader API is identical, except XcpUnlockCalSeg() needs the page pointer returned by XcpLockCalSeg()
+// The C++ API is not affected, the C examples have not been adapted for the API change, the tests are adapted
+// #define OPTION_CAL_RCU_REFCOUNT
+
 // Single page mode
 // #define OPTION_CAL_SEGMENTS_SINGLE_PAGE
 
@@ -180,7 +194,8 @@
 // #define TEST_CLOCK_GET_STATISTIC // Count number of calls to clockGet and clockGetLast, print results with clockPrintStatistic()
 // #define TEST_ACQUIRE_SPIN_COUNT // Get max spin count of the queue acquire operations
 // #define TEST_ACQUIRE_LOCK_TIMING // Create a queue acquire time histogram, prints results on queue deinit, significant performance impact, for testing only !!!!!!!!!!
-// #define TEST_ENABLE_DBG_METRICS  // Enable debug metrics for XCP events and transport layer packets
+// #define TEST_ENABLE_TL_METRICS  // Enable debug metrics for XCP transport layer packets
+// #define TEST_ENABLE_CAL_METRICS // Enable debug metrics for XCP calibration
 // #define TEST_ENABLE_BUFFERCOUNT_HISTOGRAM // Enable histogram of the used buffer counts in the transport layer vectored io
 // #define TEST_MUTABLE_ACCESS_OWNERSHIP // Enable tracking of mutable access thread ownership to detect overseen potential memory safety problems
 // #define TEST_ENABLE_DBG_CHECKS // Enable timing checks in the XCP server

@@ -329,20 +329,6 @@ static uint8_t XcpAsyncCommand(bool async, const uint32_t *cmdBuf, uint8_t cmdLe
     }
 
 /****************************************************************************/
-// Metrics
-/****************************************************************************/
-
-#ifdef TEST_ENABLE_DBG_METRICS
-uint32_t gXcpWritePendingCount = 0;
-uint32_t gXcpCalSegPublishAllCount = 0;
-uint32_t gXcpDaqEventCount = 0;
-uint32_t gXcpTxPacketCount = 0;
-uint32_t gXcpTxMessageCount = 0;
-uint32_t gXcpTxIoVectorCount = 0;
-uint32_t gXcpRxPacketCount = 0;
-#endif
-
-/****************************************************************************/
 // Logging
 /****************************************************************************/
 
@@ -1676,10 +1662,6 @@ static void XcpTriggerDaqList_(tQueueHandle queue_handle, uint16_t daq, const ui
 // Trigger DAQ event
 // DAQ lists must be valid and DAQ must be running
 static void XcpTriggerDaqEvent_(tQueueHandle queue_handle, tXcpEventId event_id, int count, const uint8_t **bases, uint64_t clock) {
-
-#ifdef TEST_ENABLE_DBG_METRICS
-    atomic_fetch_add_explicit(&gXcpDaqEventCount, 1, memory_order_relaxed);
-#endif
 
     // Take event timestamp if not already done
     if (clock == 0) {

@@ -114,7 +114,7 @@ float calc_power(uint8_t t1, uint8_t t2) {
     // Note: calc_power() is called from main()'s mainloop while it already holds a lock on this same segment (see below) -
     // this nested lock is safe because XcpLockCalSeg/XcpUnlockCalSeg are not a traditional mutex, recursive (nested, same thread)
     // and concurrent (other threads) locks never block and each lock returns a pointer to a consistent page.
-    // @@@@ TODO: With #define XCP_ENABLE_CALSEG_RCU_REFCOUNT each lock must be released with the pointer it returned.
+    // @@@@ TODO: With #define OPTION_CAL_RCU_REFCOUNT each lock must be released with the pointer it returned.
     // See docs/CAL_RCU.md for the underlying RCU scheme and the user contract.
     const params_t *p = (params_t *)XcpLockCalSeg(params_calseg);
 
