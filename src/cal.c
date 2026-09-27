@@ -37,6 +37,14 @@
 #include "xcp.h"      // XCP protocol definitions
 #include "xcplite.h"  // XCP protocol layer interface functions
 
+/****************************************************************************/
+// Metrics
+
+#ifdef TEST_ENABLE_CAL_METRICS
+uint32_t gXcpWritePendingCount = 0;
+uint32_t gXcpCalSegPublishAllCount = 0;
+#endif
+
 /**************************************************************************/
 // State
 
@@ -96,11 +104,11 @@ extern tXcpLocalData gXcpLocalData;
 static bool XcpInitCalSeg_(tXcpCalSeg *calseg, const char *name, const void *default_page, FILE *default_page_file, uint16_t page_size, bool memory_segment);
 static tXcpCalSegIndex XcpCreateCalSeg_(const char *name, bool lookup, const void *default_page, FILE *default_page_file, uint16_t page_size, bool memory_segment);
 
-// RCU primitives, two implementations selected with XCP_ENABLE_CALSEG_RCU_REFCOUNT, see below
+// RCU primitives, two implementations selected with OPTION_CAL_RCU_REFCOUNT, see below
 static void CalSegRcuReset(tXcpCalSeg *c);
 static void CalSegRcuInit(tXcpCalSeg *c, uint32_t aligned_page_size);
 static const uint8_t *CalSegRcuLock(tXcpCalSeg *c);
-#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#ifdef OPTION_CAL_RCU_REFCOUNT
 static void CalSegRcuUnlock(tXcpCalSeg *c, const uint8_t *page);
 #else
 static void CalSegRcuUnlock(tXcpCalSeg *c);
@@ -654,7 +662,7 @@ static bool XcpInitCalSeg_(tXcpCalSeg *calseg, const char *name, const void *def
 /**************************************************************************/
 // RCU primitives
 //
-// Two implementations, selected with XCP_ENABLE_CALSEG_RCU_REFCOUNT (see docs/CAL_RCU.md, chapters 4 and 5)
+// Two implementations, selected with OPTION_CAL_RCU_REFCOUNT (see docs/CAL_RCU.md, chapters 4 and 5)
 // Everything else in this file is independent of the RCU algorithm and uses only these functions:
 //   CalSegRcuReset      - reset the RCU state, passive mode, no pages
 //   CalSegRcuInit       - initialize the RCU pages from the default page, once, before the segment is visible to other threads
@@ -663,7 +671,7 @@ static bool XcpInitCalSeg_(tXcpCalSeg *calseg, const char *name, const void *def
 //   CalSegRcuTryPublish - writer: publish the writer page, false when no page is available yet, the changes stay in the writer page
 //   CalSegRcuIsUnlocked - no reader holds a lock, contract check in debug builds
 
-#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#ifdef OPTION_CAL_RCU_REFCOUNT
 
 //----------------------------------------------------------------------------------------------------------
 // Per page reference counting
@@ -880,7 +888,7 @@ static bool CalSegRcuTryPublish(tXcpCalSeg *c) {
 static bool CalSegRcuIsUnlocked(const tXcpCalSeg *c) { return atomic_load_explicit(&c->h.lock_count, memory_order_relaxed) == 0; }
 #endif
 
-#endif // XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#endif // OPTION_CAL_RCU_REFCOUNT
 
 //----------------------------------------------------------------------------------------------------------
 
@@ -911,7 +919,7 @@ const uint8_t *XcpLockCalSeg(tXcpCalSegIndex calseg_index) {
 // Unlock a calibration segment
 // page is the pointer returned by the matching XcpLockCalSeg
 // Thread safe
-#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#ifdef OPTION_CAL_RCU_REFCOUNT
 void XcpUnlockCalSeg(tXcpCalSegIndex calseg_index, const void *page) {
 #else
 void XcpUnlockCalSeg(tXcpCalSegIndex calseg_index) {
@@ -933,7 +941,7 @@ void XcpUnlockCalSeg(tXcpCalSegIndex calseg_index) {
 #endif
 
     tXcpCalSeg *c = CalSegPtrMut(calseg_index);
-#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+#ifdef OPTION_CAL_RCU_REFCOUNT
     CalSegRcuUnlock(c, (const uint8_t *)page);
 #else
     CalSegRcuUnlock(c);
@@ -984,7 +992,7 @@ static uint8_t XcpCalSegPublish(tXcpCalSeg *c, bool wait) {
     }
     if (!published) {
         c->h.write_pending = true; // Keep the changes pending in the xcp page, to retry publishing them later
-#ifdef TEST_ENABLE_DBG_METRICS
+#ifdef TEST_ENABLE_CAL_METRICS
         gXcpWritePendingCount++;
 #endif
         if (wait) {
@@ -1017,7 +1025,7 @@ uint8_t XcpCalSegPublishAll(bool wait) {
             if (c->h.write_pending) {
                 uint8_t res1 = XcpCalSegPublish(c, wait);
                 if (res1 == CRC_CMD_OK) {
-#ifdef TEST_ENABLE_DBG_METRICS
+#ifdef TEST_ENABLE_CAL_METRICS
                     gXcpCalSegPublishAllCount++;
 #endif
                 } else {
