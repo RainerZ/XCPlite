@@ -79,7 +79,11 @@ template <typename T> class CalSeg {
         /// Destructor - unlocks the calibration segment
         ~CalSegGuard() {
             if (index_ != XCP_UNDEFINED_CALSEG) {
+#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+                XcpUnlockCalSeg(index_, params_ptr_);
+#else
                 XcpUnlockCalSeg(index_);
+#endif
             }
         }
 
@@ -152,7 +156,11 @@ template <typename T> class CalSegRef {
         /// Destructor - unlocks the calibration segment, unless index is XCP_UNDEFINED_CALSEG
         ~CalSegGuard() {
             if (index_ != XCP_UNDEFINED_CALSEG) {
+#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+                XcpUnlockCalSeg(index_, params_ptr_);
+#else
                 XcpUnlockCalSeg(index_);
+#endif
             }
         }
 
@@ -225,7 +233,11 @@ template <typename T> class CalBlk {
         /// Destructor - unlocks the calibration segment
         ~CalSegGuard() {
             if (calseg_index_ != XCP_UNDEFINED_CALSEG) {
+#ifdef XCP_ENABLE_CALSEG_RCU_REFCOUNT
+                XcpUnlockCalSeg(calseg_index_, params_ptr_);
+#else
                 XcpUnlockCalSeg(calseg_index_);
+#endif
             }
         }
 
