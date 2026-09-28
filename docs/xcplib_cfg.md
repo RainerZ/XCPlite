@@ -157,8 +157,8 @@ This section describes the XCP protocol layer configuration parameters in xcp_cf
 | `XCP_CAL_MEM_SIZE` | Static memory allocation for calibration segment memory (default: 16 KB) |
 | `XCP_ENABLE_CALSEG_LAZY_WRITE` | Enables lazy write mode for calibration segments with background RCU updates |
 | `XCP_CALSEG_AQUIRE_FREE_PAGE_TIMEOUT` | Timeout for acquiring free calibration segment pages in milliseconds (default: 500) |
-| `XCP_ENABLE_CALSEG_RCU_REFCOUNT` | Selects the RCU algorithm for calibration segments: defined - per page reference counting (publishing independent of reader progress, lock-free lock), undefined - lock count and page hand-over (wait-free lock, publishing depends on the readers). See `docs/CAL_RCU.md` (default: defined) |
-| `XCP_CALSEG_RCU_PAGES` | Number of RCU pages per calibration segment with `XCP_ENABLE_CALSEG_RCU_REFCOUNT`, 3 to 6. 3 is the minimum and needs the same memory as the lock count algorithm, each further page tolerates one more reader which never unlocks and improves the publish rate under a bursting writer (default: 3) |
+undefined - lock count and page hand-over (wait-free lock, publishing depends on the readers). See `docs/CAL_RCU.md` (default: defined) |
+| `XCP_CALSEG_RCU_PAGES` | Number of RCU pages per calibration segment with `OPTION_CALSEG_RCU_REFCOUNT`, 3 to 6. 3 is the minimum and needs the same memory as the lock count algorithm, each further page tolerates one more reader which never unlocks and improves the publish rate under a bursting writer (default: 3) |
 
 ### Clock and Timestamp Configuration
 
