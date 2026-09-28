@@ -2,15 +2,18 @@
 
 All notable changes to XCPlite are documented in this file.
 
-## [unreleased V2.3.1]
+## [V2.3.2]
 
 - Bugfix: `DaqTriggerEventExt` and the C variant of `DaqEventVar` in `xcplib.h` initialized their event id marker with `XCP_UNDEFINED_EVENT_ID` instead of the link-time id `XCP_EVENT_SECTION_GET_LINKTIME_ID`. Affected only clang on Linux.
 
-- New configuration option `OPTION_SECTION_REGISTRATION` to enable registration of events and calibration segments at link time in the sections `xcp_evts` and `xcp_cals`, as used by the offline A2L generator `xcpclient --elf`. Disabled in the default configuration. Enabled in the configurations `no_a2l` and `rtos` (mandatory without `OPTION_DAQ_EVENT_LIST`). The `default` configuration now creates events at runtime again in creation order, and the trigger macros look up the event by name on their first execution, so the event descriptor does not need to be visible at the trigger site. 
+- Bugfix: point_cloud_demo, duplicate event in section registration mode
 
 - New macros `DaqDeclareEvent` / `DaqDeclareEventExt` in `xcplib.h` (section registration only): declare an event at file scope. Pure declarations without a statement, usable with any compiler.
 
-- Bugfix: point_cloud_demo, duplicate event in section registration mode
+- New configuration option `OPTION_SECTION_REGISTRATION` to enable registration of events and calibration segments at link time in the sections `xcp_evts` and `xcp_cals`, as used by the offline A2L generator `xcpclient --elf`. Disabled in the default configuration. Enabled in the configurations `no_a2l` and `rtos` (mandatory without `OPTION_DAQ_EVENT_LIST`). The `default` configuration now creates events at runtime again in creation order, and the trigger macros look up the event by name on their first execution, so the event descriptor does not need to be visible at the trigger site. 
+
+- New configuration option `OPTION_CAL_RCU_REFCOUNT` provides an alternative calibration RCU algorithm. Disabled in the default configuration. Needs a breaking change in the C API, C++ API stays compatible. Makes some compromises to get calibration changes visibility in the the first look after a publish. Recommended only for slow reader configuration use-cases. Not recommended and not tested on micro-controller platforms.
+
 
 
 ## [V2.2.3]
