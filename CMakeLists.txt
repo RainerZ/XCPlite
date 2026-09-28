@@ -156,7 +156,11 @@ option(XCPLITE_BUILD_BPF_DEMO   "Build bpf_demo (default configuration, Linux on
 option(XCPLITE_INSTALL          "Generate install rules for xcplite (default: ON when top-level, OFF when consumed via add_subdirectory/FetchContent)" ${_xcplite_is_top_level})
 
 # Find required packages
-find_package(Threads REQUIRED)
+# The rtos configuration is single-threaded from pthreads' perspective (FreeRTOS primitives only);
+# bare-metal sysroots have no pthread.h, so skip the Threads dependency there.
+if(NOT XCPLITE_CONFIGURATION STREQUAL "rtos")
+    find_package(Threads REQUIRED)
+endif()
 
 # Enable compile commands for VS Code IntelliSense (standalone builds only; not propagated to consumers)
 if(_xcplite_is_top_level)
@@ -296,20 +300,27 @@ else()
     target_compile_definitions(xcplite PUBLIC $<$<PLATFORM_ID:Linux>:_GNU_SOURCE>)
 endif()
 
-# Link threads library to xcplite (needed for pthread usage in platform.h)
-target_link_libraries(xcplite PUBLIC Threads::Threads)
+# Link threads library to xcplite (needed for pthread usage in platform.h; not for rtos, see above)
+if(NOT XCPLITE_CONFIGURATION STREQUAL "rtos")
+    target_link_libraries(xcplite PUBLIC Threads::Threads)
+endif()
 
 # Link math library on Unix/Linux/macOS (needed for math functions)
 if(UNIX)
     target_link_libraries(xcplite PUBLIC m)
 endif()
 
-# Check for atomic library support (needed on some ARM platforms with clang)
-include(CheckLibraryExists)
-check_library_exists(atomic __atomic_store_4 "" HAVE_LIBATOMIC)
-if(HAVE_LIBATOMIC)
-    message(STATUS "Linking with atomic library for C11 atomics support")
-    target_link_libraries(xcplite PUBLIC atomic)
+# Check for atomic library support (needed on some ARM platforms with clang).
+# The rtos configuration uses queue32m.c with FreeRTOS critical sections, not 64-bit lock-free
+# atomics, so it needs no libatomic. Skipping the probe also avoids a cross-compile pitfall where
+# check_library_exists finds the host's libatomic and links a library absent from the target sysroot.
+if(NOT XCPLITE_CONFIGURATION STREQUAL "rtos")
+    include(CheckLibraryExists)
+    check_library_exists(atomic __atomic_store_4 "" HAVE_LIBATOMIC)
+    if(HAVE_LIBATOMIC)
+        message(STATUS "Linking with atomic library for C11 atomics support")
+        target_link_libraries(xcplite PUBLIC atomic)
+    endif()
 endif()
 
 

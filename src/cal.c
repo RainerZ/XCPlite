@@ -573,7 +573,7 @@ static bool XcpInitCalSeg_(tXcpCalSeg *calseg, const char *name, const void *def
     // Align page size to 8 bytes for better performance
     uint16_t aligned_page_size = (page_size + XCP_CALPAGE_ALIGNMENT - 1) & ~(XCP_CALPAGE_ALIGNMENT - 1);
 
-    size_t name_len = strnlen(name, XCP_MAX_CALSEG_NAME);
+    size_t name_len = STRNLEN(name, XCP_MAX_CALSEG_NAME);
     memcpy(c->h.name, name, name_len);
     c->h.name[name_len] = '\0';
     c->h.size = page_size;

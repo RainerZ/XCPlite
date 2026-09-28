@@ -12,7 +12,8 @@
 
 #include <stdlib.h> // for malloc, free
 #include <string.h> // for memset, memcpy, strerror, strncpy
-#if !defined(_WIN)
+// FreeRTOS uses lwip_close() instead of POSIX close(); bare-metal toolchains may lack unistd.h
+#if !defined(_WIN) && !defined(_FREE_RTOS)
 #include <unistd.h> // for close
 #endif
 
