@@ -199,6 +199,8 @@ int16_t socketRecvFrom(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSiz
 }
 
 // Send a UDP datagram to addr:port
+// Blocking call
+// buffer,bufferSize: must remain valid and unmodified until socketSendTo returns, and the transport must fully consume it before returning
 // Returns: bytes sent, 0 on closed socket, -1 on error
 int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t bufferSize, const uint8_t *addr, uint16_t port, uint64_t *time) {
 #if defined(OPTION_FREERTOS_LWIP)
@@ -1325,12 +1327,13 @@ int16_t socketRecv(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t buffer_size, 
 #endif // OPTION_ENABLE_TCP
 
 // Send datagram on UDP socket
-// Returns number of bytes sent or -1 on error
+// Blocking call
+// buffer,bufferSize: must remain valid and unmodified until socketSendTo returns, and the transport must fully consume it before returning
+// Returns total number of bytes sent, 0 on socket closed or -1 on error
 // Requests and may returns optional send time if (time != NULL)
 // Support hardware timestamps if enabled on the socket and with OPTION_SOCKET_HW_TIMESTAMPS defined, otherwise system time is used
 // If *time = 0 on return, no timestamp is available yet, but can be obtained with socketGetSendTime()
 // On non-Linux platforms, *time is set to system time at send
-// Returns total number of bytes sent, 0 on socket closed or -1 on error
 int16_t socketSendTo(SOCKET_HANDLE socket, const uint8_t *buffer, uint16_t size, const uint8_t *addr, uint16_t port, uint64_t *time) {
 
     assert(socket != INVALID_SOCKET_HANDLE);

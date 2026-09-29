@@ -285,6 +285,8 @@ int16_t socketRecv(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSize, b
 int16_t socketRecvFrom(SOCKET_HANDLE socket, uint8_t *buffer, uint16_t bufferSize, uint8_t *srcAddr, uint16_t *srcPort, uint64_t *time);
 
 // Send a UDP datagram to addr:port
+// Blocking call
+// buffer,bufferSize: must remain valid and unmodified until socketSendTo returns, and the transport must fully consume it before returning
 // time: optional send timestamp (NULL to skip)
 //       on Linux with HW timestamps: *time is set to 0; call socketGetSendTime() afterwards to retrieve it
 //       on other platforms: *time is set to the system clock at send time
