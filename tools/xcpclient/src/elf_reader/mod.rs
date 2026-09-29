@@ -69,7 +69,6 @@ Useful tools to look at an ELF file while debugging this code (the GNU or LLVM v
 #![allow(clippy::collapsible_else_if)]
 
 use indexmap::IndexMap;
-use regex::Regex;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -125,6 +124,10 @@ Possible future improvements:
 mod debuginfo;
 use debuginfo::{DbgDataType, DebugData, FrameBase, TypeInfo, VarInfo};
 
+// The compilation unit and variable name selection from the command line (--elf-unit-limit, --elf-unit-filter, --elf-var-filter)
+mod filter;
+pub use filter::ElfFilter;
+
 // The name of the variable a capture struct member was copied from: the macro appends one underscore to it, so exactly one
 // trailing underscore is removed here, and a variable which ends with an underscore itself keeps it
 fn capture_member_variable_name(member_name: &str) -> &str {
@@ -148,6 +151,16 @@ pub fn is_internal_variable(name: &str) -> bool {
     name.starts_with("__") || name.starts_with("gXcp") || name.starts_with("gA2l") || is_a2l_variable(name)
 }
 
+// Variables which the XCPlite instrumentation macros generate in the code of the application, not variables the user wrote.
+// A problem with the location of such a variable is never the user's business, so it is not reported.
+// evt_id_<event> (DaqCreateEvent, see inc/xcplib.h) is deliberately not in is_internal_variable: it is a normal static
+// variable and it is registered as a measurement when it has an address, the freertos demo A2L files contain it.
+// The capture struct cap__<event> is in here as well: register_captures only needs its type and its function, the target
+// passes the address of the struct at runtime, so its own location is irrelevant
+pub fn is_generated_variable(name: &str) -> bool {
+    is_internal_variable(name) || name.starts_with("evt_id_")
+}
+
 // XCP address extension of the captured variables: the first dynamic base address (XCP_ADDR_EXT_DYN + 1 in src/xcp_cfg.h),
 // which the capture trigger macros pass as the address of the capture struct
 const XCP_ADDR_EXT_CAPTURE: u8 = 3;
@@ -165,9 +178,10 @@ pub(crate) struct ElfReader {
 impl ElfReader {
     // Load debug information from the ELF file
     // The error message describes why the file can not be used (not found, not an ELF file, no DWARF debug information, ...)
-    pub fn new(file_name: &str, verbose: usize, unit_idx_limit: (usize, usize)) -> Result<ElfReader, String> {
-        info!("Loading debug information from ELF file: {}", file_name);
-        let debug_data = DebugData::load_dwarf(OsStr::new(file_name), verbose, unit_idx_limit)?;
+    // filter is the compilation unit and variable name selection from the command line, it is moved into the DebugData and
+    // everything which has to know it reads it from there, see ElfFilter
+    pub fn new(file_name: &str, verbose: usize, filter: ElfFilter) -> Result<ElfReader, String> {
+        let debug_data = DebugData::load_dwarf(OsStr::new(file_name), verbose, filter)?;
         Ok(ElfReader::from_debug_data(debug_data))
     }
 
@@ -496,14 +510,14 @@ impl ElfReader {
                 // Determine segment length
                 seg_length = {
                     if let Some(type_info) = self.debug_data.types.get(&seg_var_info.typeref) {
-                        println!(
+                        log::debug!(
                             "Calibration segment '{}' type information found, type={}, size = {}",
                             seg_name,
                             type_info.name.as_ref().map_or("<unnamed>", |s| s.as_str()),
                             type_info.get_size()
                         );
                         if verbose >= 2 {
-                            println!("  type = {}", type_info);
+                            log::debug!("  type = {}", type_info);
                         }
                         type_info.get_size().try_into().expect("segment size exceeds 64K")
                     } else {
@@ -843,16 +857,7 @@ impl ElfReader {
     //     and add the instance to the registry
     //
     // default_event: event assigned to global variables and to static variables in functions without an event trigger, None for no event
-    pub fn register_variables(
-        &self,
-        reg: &mut Registry,
-        seg_relative: bool,
-        verbose: usize,
-        unit_idx_limit: (usize, usize),
-        name_filter: &str,
-        unit_filter: &str,
-        default_event: Option<u16>,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn register_variables(&self, reg: &mut Registry, seg_relative: bool, verbose: usize, default_event: Option<u16>) -> Result<(), Box<dyn Error>> {
         // Load debug information from the ELF file
         info!("===============================================================");
         info!("Registering variables:");
@@ -872,35 +877,9 @@ impl ElfReader {
             }
         }
 
-        // Compile name filter regex if specified
-        let name_regex: Option<Regex> = if name_filter.is_empty() {
-            None
-        } else {
-            match Regex::new(name_filter) {
-                Ok(re) => {
-                    info!("Variable name filter: '{}'", name_filter);
-                    Some(re)
-                }
-                Err(e) => {
-                    return Err(format!("Invalid --elf-var-filter regex '{}': {}", name_filter, e).into());
-                }
-            }
-        };
-
-        // Compile compilation unit filter regex if specified
-        let unit_regex: Option<Regex> = if unit_filter.is_empty() {
-            None
-        } else {
-            match Regex::new(unit_filter) {
-                Ok(re) => {
-                    info!("Compilation unit filter: '{}'", unit_filter);
-                    Some(re)
-                }
-                Err(e) => {
-                    return Err(format!("Invalid --elf-unit-filter regex '{}': {}", unit_filter, e).into());
-                }
-            }
-        };
+        // The compilation unit and variable name selection from the command line, see ElfFilter
+        let filter = &self.debug_data.filter;
+        filter.log();
 
         // Local variables which their function captures at an event trigger are registered from the capture struct in
         // register_captures, the stack variable of the same name is not registered a second time
@@ -913,11 +892,9 @@ impl ElfReader {
                 continue;
             }
 
-            // Apply name filter
-            if let Some(ref re) = name_regex {
-                if !re.is_match(var_name) {
-                    continue;
-                }
+            // Apply the variable name filter (--elf-var-filter)
+            if !filter.var_is_selected(var_name) {
+                continue;
             }
 
             if var_infos.is_empty() {
@@ -927,13 +904,16 @@ impl ElfReader {
             let mut a2l_name = var_name.to_string();
             let mut xcp_event_id: Option<u16>;
             // Count the definitions of this name within the compilation unit limit (--elf-unit-limit), including definitions without
-            // an address. More than one definition means the A2L name has to be qualified to be unique
-            let count = var_infos.iter().filter(|v| v.unit_idx >= unit_idx_limit.0 && v.unit_idx <= unit_idx_limit.1).count();
+            // an address. More than one definition means the A2L name has to be qualified to be unique.
+            // Note this counts over the unit limit only, not over the --elf-unit-filter: a name which the filter reduces to a single
+            // definition is still qualified. Qualifying too much is harmless, changing it would rename objects in existing A2L files
+            // @@@@ TODO: Consider if we need to further qualify the A2L name based on the count and defined_count
+            let count = var_infos.iter().filter(|v| filter.unit_in_range(v.unit_idx)).count();
             // Count the distinct global or static variables with this name by their address
             // (declarations of the same variable in several compilation units resolve to the same address, local variables have no address)
             let mut addresses: Vec<u64> = var_infos
                 .iter()
-                .filter(|v| v.unit_idx >= unit_idx_limit.0 && v.unit_idx <= unit_idx_limit.1 && v.address.0 == 0 && v.address.1 != 0)
+                .filter(|v| filter.unit_in_range(v.unit_idx) && v.address.0 == 0 && v.address.1 != 0)
                 .map(|v| v.address.1)
                 .collect();
             addresses.sort_unstable();
@@ -942,17 +922,10 @@ impl ElfReader {
 
             // Process all variables with this name in different scopes and namespaces
             for var_info in var_infos {
-                // @@@@ TODO: Create only variables from specified compilation unit
-                if var_info.unit_idx < unit_idx_limit.0 || var_info.unit_idx > unit_idx_limit.1 {
+                // Apply the compilation unit limit and filter (--elf-unit-limit, --elf-unit-filter). This is the same decision
+                // the DWARF reader used to pick the log level for problems with this variable, see ElfFilter::unit_is_selected
+                if !self.debug_data.unit_is_selected(var_info.unit_idx) {
                     continue;
-                }
-
-                // Apply compilation unit filter
-                if let Some(ref re) = unit_regex {
-                    let cu_name = self.debug_data.make_simple_unit_name(var_info.unit_idx).unwrap_or_else(|| format!("{}", var_info.unit_idx));
-                    if !re.is_match(&cu_name) {
-                        continue;
-                    }
                 }
 
                 let var_function = var_info.function.as_ref().map(|f| f.as_str());
@@ -963,7 +936,38 @@ impl ElfReader {
                 let mem_addr: u64 = if mem_addr_ext == 0 {
                     // Encode absolute addressing mode
                     if var_info.address.1 == 0 {
-                        debug!("Variable '{}' not registered, no address", var_name);
+                        // The debug information has no DW_AT_location for this variable and there is no symbol for it either,
+                        // so the location expression parser never saw it and reported nothing.
+                        //
+                        // One known cause, seen with clang 14 -O1 on the aggregate locals (struct, array) of no_a2l_demo's foo():
+                        // the variable is not in the executable at all, not even as a stack slot, so there is nothing to describe.
+                        // Clang initializes a local of aggregate type with a memcpy from a constant, and marks that memcpy volatile
+                        // for a volatile variable (llvm.memcpy(..., i1 true)), while a scalar becomes a plain 'store volatile'.
+                        // InstCombine then folds away an alloca whose only write is a memcpy from a constant without honoring the
+                        // volatile flag, so the aggregate disappears and the scalars of the same function survive. Declaring the
+                        // variable volatile does not help, which is why this warning gives no advice. What does help:
+                        //   - a newer compiler, clang 20 keeps the volatile memcpy and the alloca at -O1
+                        //   - letting the address of the variable escape (DaqTriggerEventExt, the capture macros), the variable
+                        //     then has one contiguous location again
+                        //   - assigning the fields one by one instead of using an aggregate initializer, every field becomes a
+                        //     'store volatile' and survives - but SROA splits the variable into one alloca per field, so the
+                        //     location becomes DW_OP_piece slices instead (see evaluate_exprloc in dwarf/attributes.rs)
+                        //   - building without optimization
+                        // @@@@ TODO: Other causes are not investigated, and nothing is done about this one yet
+                        //
+                        // A global without an address is usually just a declaration of a variable defined in another ELF file,
+                        // and a captured local is measurable through the capture struct, see register_captures
+                        if let Some(function) = var_function
+                            && !is_generated_variable(var_name)
+                            && !captured.contains(&(var_info.unit_idx, function, var_name.as_str()))
+                        {
+                            warn!(
+                                "Local variable '{}' in function '{}' not registered, it has no location in the debug information, not implemented yet",
+                                var_name, function
+                            );
+                        } else {
+                            debug!("Variable '{}' not registered, no address", var_name);
+                        }
                         continue; // skip this variable
                     } else if var_info.address.1 >= 0xFFFFFFFF {
                         warn!(
@@ -1557,7 +1561,7 @@ fn apply_field_metadata(
 
     match reg.set_instance_field_support_data(instance_name, field_path, support_data) {
         Ok(()) => {
-            info!("  Metadata {} applied to typedef field '{}.{}'", var_name, instance_name, field_path);
+            info!("Metadata {} applied to typedef field '{}.{}'", var_name, instance_name, field_path);
             true
         }
         Err(RegistryError::NotFound(_)) => false, // no such instance or field — not an error, Path B will try

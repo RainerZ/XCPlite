@@ -67,7 +67,8 @@ use object::{Endianness, Object};
 use gimli::{Abbreviations, DebuggingInformationEntry, Dwarf, UnitHeader};
 use gimli::{EndianSlice, RunTimeEndian};
 
-use crate::elf_reader::debuginfo::{DbgDataType, DebugData, FrameBase, TypeInfo, VarInfo};
+use crate::elf_reader::debuginfo::{DbgDataType, DebugData, FrameBase, TypeInfo, VarInfo, make_simple_unit_name_from};
+use crate::elf_reader::{ElfFilter, is_generated_variable};
 
 mod attributes;
 pub(super) use attributes::get_low_pc_attribute;
@@ -105,13 +106,14 @@ struct DebugDataReader<'elffile> {
     xcp_meta_data: Option<(u64, Vec<u8>)>,                  // (section_base_addr, raw_bytes)
     is_little_endian: bool,
     scope_parent: HashMap<usize, usize>, // .debug_info offset of a named type or scope -> offset of its enclosing scope (namespace, struct, class, union or function)
+    filter: ElfFilter,                   // the compilation unit and variable name selection from the command line, moved into the DebugData in collect_debug_data
 }
 
 // Create DebugData
 // Load and validate ELF/DWARF input, then collect and return parsed DebugData.
 // This function constructs a temporary DebugDataReader that owns parser state
 // (units, transient names, symbol table cache) and finalizes it into DebugData.
-pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: (usize, usize)) -> Result<DebugData, String> {
+pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, filter: ElfFilter) -> Result<DebugData, String> {
     log::debug!("load_elf_dwarf: {}", filename.to_string_lossy());
 
     // open the file and mmap its content
@@ -203,9 +205,10 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, unit_idx_limit: (
         xcp_meta_data,
         is_little_endian,
         scope_parent: HashMap::new(),
+        filter,
     };
     log::debug!("Reading debug info entries");
-    Ok(dbg_reader.collect_debug_data(unit_idx_limit))
+    Ok(dbg_reader.collect_debug_data())
 }
 
 // open a file and mmap its content
@@ -241,16 +244,16 @@ fn load_elf_file<'data>(filename: &str, filedata: &'data [u8], verbose: usize) -
         ));
     }
 
+    log::info!("Parsing ELF object file {}", filename);
     match object::File::parse(filedata) {
         Ok(object_file) => {
             if verbose >= 1 {
                 println!("\n====================================================================================================");
-                println!("Parsed ELF object file: {}", filename);
-                println!("File format: {:?}", object_file.format());
+                println!("Format: {:?}", object_file.format());
                 println!("Architecture: {:?}", object_file.architecture());
                 println!("Endianness: {:?}", object_file.endianness());
                 println!("");
-                println!("\nSections:");
+                println!("Sections:");
                 for section in object_file.sections() {
                     let kind = section.kind();
                     println!(
@@ -351,7 +354,7 @@ fn get_global_symbol_names(elffile: &object::read::File) -> HashSet<String> {
 
 // load the DWARF debug info from the .debug_<xyz> sections
 fn load_dwarf_sections<'data>(elffile: &object::read::File<'data>) -> Result<gimli::Dwarf<SliceType<'data>>, String> {
-    log::debug!("load_dwarf_sections");
+    log::info!("Loading DWARF sections");
     // Dwarf::load takes two closures / functions and uses them to load all the required debug sections
     let loader = |section: gimli::SectionId| get_file_section_reader(elffile, section.name());
     gimli::Dwarf::load(loader)
@@ -388,6 +391,36 @@ fn get_endian(elffile: &object::read::File) -> RunTimeEndian {
 }
 
 impl DebugDataReader<'_> {
+    // Can a variable of this compilation unit become an A2L object? The same question ElfReader::register_variables asks
+    // before it skips a variable, answered by the same predicate (ElfFilter::unit_is_selected). The DWARF reader already
+    // reports problems with the variables it reads, but a variable of a unit which the filter drops never becomes an A2L
+    // object, so its problems (a location in a register, an unsupported location expression) are logged at debug level
+    // instead of warn. Unit names are pushed in load_variables before the entries of the unit are read, so the name of the
+    // current unit is known here
+    fn unit_is_selected(&self, unit_idx: usize) -> bool {
+        self.filter.unit_is_selected(unit_idx, self.unit_names.get(unit_idx).and_then(Option::as_deref))
+    }
+
+    // Is a problem with the location of this variable worth a warning? Only if the variable could become an A2L object:
+    // it has to survive the compilation unit filter and it must not be one of the variables which the XCPlite macros
+    // generate in the code of the application (the event and trigger markers, evt_id_<event>, the compiler and standard
+    // library internals). The user did not write those and can do nothing about their location, see log_location_problem
+    fn location_problem_is_reported(&self, unit_idx: usize, name: &str) -> bool {
+        self.unit_is_selected(unit_idx) && !is_generated_variable(name)
+    }
+
+    // Where a variable is declared, for the log messages of the location expression parser: the compilation unit and the
+    // declaration line (main_c:210). The name alone is not enough to find the variable, the same name is used by the locals
+    // of several functions of a file and by the variables of several compilation units. decl_line 0 means the line is unknown
+    fn declared_at(&self, unit_idx: usize, decl_line: u64) -> String {
+        let unit = self
+            .unit_names
+            .get(unit_idx)
+            .and_then(Option::as_deref)
+            .map_or_else(|| unit_idx.to_string(), make_simple_unit_name_from);
+        if decl_line == 0 { unit } else { format!("{unit}:{decl_line}") }
+    }
+
     // Get the address of a symbol by its exact name
     // local_only: only symbols with local binding (static variables) are considered
     fn symbol_address(&self, symbol_name: &str, local_only: bool) -> Option<u64> {
@@ -519,8 +552,8 @@ impl DebugDataReader<'_> {
     // Traverse DWARF entries and finalize collected parser state into DebugData.
     // The order matters: the variables are loaded first, then only the types referenced by variables (loading all types of a
     // large ELF file would take far longer), then the scope qualified names of the types whose plain name is ambiguous
-    fn collect_debug_data(mut self, unit_idx_limit: (usize, usize)) -> DebugData {
-        let mut variables = self.load_variables(unit_idx_limit);
+    fn collect_debug_data(mut self) -> DebugData {
+        let mut variables = self.load_variables();
         let (types, typenames) = self.load_types(&variables);
         self.resolve_local_static_addresses(&mut variables, &types);
         let qualified_type_names = self.load_qualified_type_names(&types, &typenames);
@@ -543,14 +576,15 @@ impl DebugDataReader<'_> {
             epk_addr: self.epk_addr,
             xcp_meta_data: self.xcp_meta_data,
             is_little_endian: self.is_little_endian,
+            filter: self.filter,
         }
     }
 
-    // Load all variables from the dwarf data: every DW_TAG_variable entry of every compilation unit whose index is inside
-    // the inclusive range unit_idx_limit = (min, max), with its enclosing function and namespaces. The traversal is depth
+    // Load all variables from the dwarf data: every DW_TAG_variable entry of every compilation unit inside the
+    // --elf-unit-limit range (ElfFilter::unit_in_range), with its enclosing function and namespaces. The traversal is depth
     // first (next_dfs), the `context` stack mirrors the path from the unit root to the current entry (entry.depth() is the
     // nesting level), so the scopes a variable is nested in are the entries currently on the stack
-    fn load_variables(&mut self, unit_idx_limit: (usize, usize)) -> IndexMap<String, Vec<VarInfo>> {
+    fn load_variables(&mut self) -> IndexMap<String, Vec<VarInfo>> {
         let mut variables = IndexMap::<String, Vec<VarInfo>>::new();
 
         let mut iter = self.dwarf.debug_info.units();
@@ -566,7 +600,7 @@ impl DebugDataReader<'_> {
             self.units.add(unit, abbreviations);
             let unit_idx = self.units.list.len() - 1;
             // Unit indices increase monotonically, so once the upper limit is exceeded, no further unit can be in range: stop entirely
-            if unit_idx > unit_idx_limit.1 {
+            if unit_idx > self.filter.unit_max() {
                 break;
             }
             let (unit, abbreviations) = &self.units[unit_idx];
@@ -597,7 +631,7 @@ impl DebugDataReader<'_> {
 
             // Units below the lower limit are still registered above to keep unit indices aligned, but their variables are
             // not collected
-            if unit_idx < unit_idx_limit.0 {
+            if !self.filter.unit_in_range(unit_idx) {
                 continue;
             }
 
@@ -1194,7 +1228,7 @@ mod test {
     #[test]
     fn test_load_qualified_type_names() {
         let filename = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_namespaces.elf");
-        let debugdata = DebugData::load_dwarf(OsStr::new(filename), 0, (0, usize::MAX)).unwrap();
+        let debugdata = DebugData::load_dwarf(OsStr::new(filename), 0, ElfFilter::default()).unwrap();
         let type_name_of = |varinfo: &VarInfo| -> String {
             let type_info = debugdata.types.get(&varinfo.typeref).expect("type of variable");
             debugdata.get_type_name(type_info).expect("type name").to_string()
@@ -1238,7 +1272,7 @@ mod test {
     #[test]
     fn test_load_data() {
         for filename in ELF_FILE_NAMES {
-            let debugdata = DebugData::load_dwarf(OsStr::new(filename), 1, (0, usize::MAX)).unwrap();
+            let debugdata = DebugData::load_dwarf(OsStr::new(filename), 1, ElfFilter::default()).unwrap();
             // 14 globals in cpp_types.cpp, compilers may add a few more (e.g. static members)
             assert!(debugdata.variables.len() >= 14, "only {} variables found", debugdata.variables.len());
             assert!(debugdata.variables.get("g_sink").is_some());
