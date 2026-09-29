@@ -274,7 +274,7 @@ static void fastTask(void *parameter) {
 #ifdef __cplusplus
             auto params = parameters_calseg.lock();
 #else
-            struct parameters *params = CalSegLock(parameters);
+            const struct parameters *params = CalSegLock(parameters);
 #endif
 
             // Save the task period parameter, don't delay during the lock to give XCP a chance to modify the parameters.
@@ -340,7 +340,7 @@ static void slowTask(void *parameter) {
 #ifdef __cplusplus
             auto params = parameters_calseg.lock();
 #else
-            struct parameters *params = CalSegLock(parameters);
+            const struct parameters *params = CalSegLock(parameters);
 #endif
 
             clamp_parameter(slow_task_period_ms, params, parameters, slow_task_period_ms);
