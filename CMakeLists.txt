@@ -310,7 +310,17 @@ if(UNIX)
     target_link_libraries(xcplite PUBLIC m)
 endif()
 
-# Check for atomic library support (needed on some ARM platforms with clang).
+# Check for atomic library support.
+# The lock-free 64-bit transmit queues (queue64v.c / queue64f.c) use atomic_uint_fast64_t. On
+# targets where the compiler cannot lower 64-bit atomics to inline lock-free instructions (e.g.
+# some ARM/clang combinations), it emits calls to libatomic runtime helpers (__atomic_*), so the
+# library must be linked. Where 64-bit atomics are inlined (typical x86-64/AArch64), libatomic does
+# not exist / is not needed and the probe simply comes back false.
+# This probe only makes libatomic available for linking; it does NOT decide lock-freedom and cannot
+# tell an out-of-line-but-lock-free helper from libatomic's lock-table emulation. The actual lock-free
+# guarantee is enforced in the source: queue64v.c / queue64f.c carry a compile-time
+# static_assert(ATOMIC_LLONG_LOCK_FREE == 2), so a target whose 64-bit atomics would fall back to a
+# hidden lock table fails to build and must opt into the mutex queue32.c via OPTION_ATOMIC_EMULATION.
 # The rtos configuration uses queue32m.c with FreeRTOS critical sections, not 64-bit lock-free
 # atomics, so it needs no libatomic. Skipping the probe also avoids a cross-compile pitfall where
 # check_library_exists finds the host's libatomic and links a library absent from the target sysroot.
