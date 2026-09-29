@@ -109,11 +109,12 @@ change of the tool.
 |---|---|---|
 | `xcp_evts` | one `tXcpEventDescriptor` (16 bytes: name, cycle time, priority) per event in link order, the position is the event id | `DaqCreateEvent`, `DaqCreateEventExt`, `DaqCreateAndTriggerEvent` |
 | `xcp_cals` | one `tXcpCalSegDescriptor` (32 bytes: name, default page address, index variable, size, type) per calibration segment or block | `CalSegDecl`, `CalSegDeclRef`, `CalSegCreate` and the calibration block macros |
-| `xcp_epk` | the EPK software version string | `XcpCreateEpk` |
+| `xcp_epk` | the EPK software version string, without `OPTION_SECTION_REGISTRATION` the constant `xcp_epk__` instead (see below) | `XcpCreateEpk` |
 | `xcp_meta` | the metadata constants `xcp_meta__<kind>__<name>` | `XCP_UNIT`, `XCP_LIMITS`, `XCP_COMMENT`, `XCP_READ_WRITE` |
 
 The sections `xcp_evts` and `xcp_cals` exist only with the configuration option `OPTION_SECTION_REGISTRATION` (configurations `no_a2l`
-and `rtos`). Without it (`default` configuration) events and segments are created at runtime in creation order, the event descriptors
+and `rtos`). Without it the event ids and segment numbers are the runtime creation order and an offline A2L tool can not know them, see
+[OFFLINE_A2L.md — Without section registration](OFFLINE_A2L.md#without-section-registration). Without it (`default` configuration) events and segments are created at runtime in creation order, the event descriptors
 are ordinary static constants and the trigger macros look up the event by name once. On macOS the sections are named `__DATA,xcp_evts`
 etc. Section registration requires ELF or Mach-O.
 
@@ -134,6 +135,11 @@ static THREAD_LOCAL tXcpEventId evt__dynname;   // DaqCreateEventInstance(name),
 
 // Event trigger anchor, from DaqTriggerEvent(name), DaqTriggerEventExt(name, base), DaqEventVar(name, ...), DaqTriggerEventCapture(name, ...), see below
 static tXcpEventId trg__<modes>__name;          // in the function which triggers the event
+
+// EPK version string, from XcpCreateEpk(epk). In section xcp_epk with OPTION_SECTION_REGISTRATION, otherwise an ordinary
+// constant, found by its name in the DWARF. XcpCreateEpk stores its address in the volatile pointer xcp_epk__keep, this
+// reference keeps the array in the build when the compiler optimizes and the linker removes unreferenced sections
+static const char xcp_epk__[];
 
 // Metadata, from XCP_COMMENT(name, text), XCP_UNIT(name, unit), XCP_LIMITS(name, min, max), XCP_READ_WRITE(name)
 static const char xcp_meta__comment__name[];    // in section xcp_meta, also xcp_meta__unit__, xcp_meta__min__, xcp_meta__max__, xcp_meta__read_write__

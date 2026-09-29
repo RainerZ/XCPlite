@@ -35,7 +35,7 @@ The code is layered top down:
 An ELF file carries two kinds of information which are used here:
 
   1. Sections and the symbol table (.symtab). This is the linker's view: flat lists of named byte ranges (sections) and
-     named addresses (symbols). Used for the XCPlite marker sections (xcp_evts, xcp_epk, xcp_meta), for the address of a
+     named addresses (symbols). Used for the XCPlite marker sections (xcp_evts, xcp_cals, xcp_epk, xcp_meta), for the address of a
      variable when the DWARF information has none, and for the mangled names of C++ symbols.
   2. DWARF debug information (.debug_info and the other .debug_* sections). This is the compiler's view: a tree of
      "debugging information entries" (DIEs) per compilation unit (one .c/.cpp file), describing every function, scope,
@@ -45,11 +45,12 @@ An ELF file carries two kinds of information which are used here:
 
 Marker variables, emitted by the macros in inc/xcplib.h and found by their name in the DWARF variable list:
 
-  calseg__<name>, calblk__<name>   calibration segment or block descriptor, CalSegCreate/CalBlkCreate  (register_segments)
-  evt__<name>                      event descriptor in the xcp_evts section, DaqCreateEvent            (register_events)
-  trg__<modes>__<name>             event trigger point in a function, DaqTriggerEvent                  (register_event_locations)
+  calseg__<name>, calblk__<name>   calibration segment or block descriptor, CalSegCreate/CalBlkCreate   (register_segments)
+  evt__<name>                      event descriptor in the xcp_evts section, DaqCreateEvent             (register_events)
+  trg__<modes>__<name>             event trigger point in a function, DaqTriggerEvent                   (register_event_locations)
   xcp_meta__<kind>__<name>         XCP_COMMENT, XCP_UNIT, XCP_LIMITS, XCP_READ_WRITE, xcp_meta section  (register_metadata)
-  XCPLITE__<signature>             addressing mode signature of the target build                       (get_target_signature)
+  xcp_epk__                        From XcpDeclEpk(string)
+  XCPLITE__<signature>             addressing mode signature of the target build                        (get_target_signature)
 
 The order of the register_* calls matters: events before event locations (a trigger refers to its event), segments and
 events before variables (a variable gets its event and its segment), variables before metadata (metadata is attached to
@@ -142,6 +143,7 @@ pub fn is_a2l_variable(name: &str) -> bool {
         || name.starts_with("trg__")
         || name.starts_with("cap__")
         || name.starts_with("xcp_meta__")
+        || name.starts_with("xcp_epk__")
         || name.starts_with("XCPLITE__")
 }
 
@@ -381,12 +383,12 @@ impl ElfReader {
     pub fn register_epk_addr_info(&self, reg: &mut Registry, verbose: usize) {
         info!("===============================================================");
         if self.debug_data.epk_addr > 0 {
-            info!("EPK segment memory section found at address = 0x{:08X}", self.debug_data.epk_addr);
+            info!("EPK found at address = 0x{:08X}", self.debug_data.epk_addr);
             let epk = self.debug_data.epk_string.clone().unwrap_or_else(|| "<unknown>".to_string());
             info!("EPK string: '{}'", epk);
             reg.application.set_version(epk, self.debug_data.epk_addr.try_into().unwrap());
         } else {
-            warn!("EPK segment memory section not found in ELF file");
+            warn!("No EPK in ELF file, the A2L file gets no EPK and ADDR_EPK");
         }
     }
 
@@ -423,13 +425,47 @@ impl ElfReader {
                 seg_definitions.push((seg_name.to_string(), var_infos, seg_descr_addr, seg_number));
             }
         }
-        seg_definitions.sort_by_key(|x| x.2);
+        // The EPK segment is always number 0 (created first in XcpInit), the others are sorted by descriptor address, which is
+        // their position in the xcp_cals section. Without the section all addresses are 0 and the order of the debug information
+        // (compilation unit and declaration order) is kept, the EPK segment must still come first
+        seg_definitions.sort_by_key(|x| (x.0 != "epk", x.2));
         // Calculate the segment numbers for calseg, calblk doues not have a number
         let mut seg_number: u8 = 0;
         for i in 0..seg_definitions.len() {
             if let Some(0) = seg_definitions[i].3 {
                 seg_definitions[i].3 = Some(seg_number);
                 seg_number += 1;
+            }
+        }
+
+        // Without section registration (no xcp_cals section and no linker boundary symbols), the target creates the segments at
+        // runtime, in the order in which the CalSegCreate calls are executed. Report what can not be derived from the ELF file
+        let has_cal_section = self.debug_data.sections.contains_key("xcp_cals") || self.debug_data.symbol_addresses.contains_key("__start_xcp_cals");
+        if !has_cal_section {
+            // A descriptor at file scope comes from CalSegDecl, CalBlkDecl or CalSegDeclRef (CalSegCreate contains a statement or a
+            // lambda, so its descriptor is always in a function). These segments are only created by the xcp_cals section scan in XcpInit
+            let is_file_scope_decl = |seg_name: &str, var_infos: &Vec<VarInfo>| seg_name != "epk" && var_infos.iter().all(|v| v.function.is_none());
+            for (seg_name, var_infos, _, _) in &seg_definitions {
+                if is_file_scope_decl(seg_name, var_infos) {
+                    warn!(
+                        "Calibration segment '{}' is declared at file scope with CalSegDecl, CalBlkDecl or CalSegDeclRef, but the ELF file has no \
+                         xcp_cals section: without OPTION_SECTION_REGISTRATION the target never creates this segment, calibration of it has no \
+                         effect. Use CalSegCreate/CalBlkCreate, or build with OPTION_SECTION_REGISTRATION",
+                        seg_name
+                    );
+                }
+            }
+            // The EPK segment and one more are always numbered correctly, with more the creation order at runtime is unknown here,
+            // unless the segments are already in the registry from the XCP server (connected mode)
+            let user_segments: Vec<&str> = seg_definitions.iter().filter(|x| x.3.is_some() && x.0 != "epk" && !is_file_scope_decl(&x.0, x.1)).map(|x| x.0.as_str()).collect();
+            if user_segments.len() >= 2 && user_segments.iter().any(|name| reg.cal_seg_list.find_cal_seg(name).is_none()) {
+                warn!(
+                    "No xcp_cals section: the calibration segment numbers ({}) are assumed in the order of the debug information. The target \
+                     numbers them in the order in which CalSegCreate is executed at runtime. If this order differs, the A2L file has wrong segment \
+                     numbers. Create the segments in this order at startup, connect xcpclient to the target to get the numbers from it, or build \
+                     with OPTION_SECTION_REGISTRATION",
+                    user_segments.join(", ")
+                );
             }
         }
 
@@ -465,7 +501,7 @@ impl ElfReader {
                     seg_length = epk_str.len().try_into().expect("EPK string length exceeds 64K");
                     seg_addr = self.debug_data.epk_addr;
                 } else {
-                    error!("No EPK segment memory section in ELF file, segment '{}' skipped", seg_name);
+                    error!("No EPK in ELF file (section xcp_epk or variable xcp_epk__), segment '{}' skipped", seg_name);
                     continue; // skip this variable
                 }
             }

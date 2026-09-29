@@ -24,11 +24,8 @@
 // Enable level 4 to observe how asynchronous read/write access to a variable on the stack works, and how the consistent parameter update and measurement works
 // See README.md
 
-// #define OPTION_CANAPE_24                // Enable CANape 24 shared axis support for typedefs
-
-#ifndef OPTION_SECTION_REGISTRATION
-#define XCP_ENABLE_APP_ADDRESSING // Demonstrate application specific memory access
-#endif
+// #define OPTION_CANAPE_24 // Enable CANape 24 shared axis support for typedefs
+// #define XCP_ENABLE_APP_ADDRESSING // Demonstrate application specific memory access
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters

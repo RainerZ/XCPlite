@@ -146,8 +146,8 @@ pub(crate) struct DebugData {
     pub(crate) producers: Vec<Option<String>>,               // the DW_AT_producer of each unit by unit index: compiler, version and command line options
     pub(crate) sections: HashMap<String, (u64, u64)>,        // ELF section name -> (start address, end address), only sections with an address
     pub(crate) symbol_addresses: HashMap<String, u64>,       // ELF symbol name -> address, the symbol table (.symtab), C++ names are mangled
-    pub(crate) epk_string: Option<String>,                   // EPK string read from xcp_epk ELF section
-    pub(crate) epk_addr: u64,                                // Address of the xcp_epk ELF section (0 if not found)
+    pub(crate) epk_string: Option<String>,                   // EPK string read from xcp_epk ELF section or xcp_epk__ variable
+    pub(crate) epk_addr: u64,                                // Address of the xcp_epk ELF section or xcp_epk__ variable (0 if not found)
     pub(crate) xcp_meta_data: Option<(u64, Vec<u8>)>,        // (section_base_addr, raw_bytes) of xcp_meta section
     pub(crate) is_little_endian: bool,                       // ELF endianness
     pub(crate) filter: ElfFilter, // the compilation unit and variable name selection from the command line (--elf-unit-limit, --elf-unit-filter, --elf-var-filter)

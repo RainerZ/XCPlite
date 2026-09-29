@@ -95,6 +95,20 @@ xcpclient --offline --udp --dest-addr 192.168.0.207 --elf build/Debug/STM32H753E
 xcpclient --offline --udp --dest-addr 127.0.0.1 --elf build-rtos/Debug/freertos_emu_demo --a2l examples/freertos_demo/freertos_emu_demo/CANape/freertos_demo.a2l --default-event=mainloop --elf-unit-filter xcp_demo
 ```
 
+The `--offline` commands above need section registration (`OPTION_SECTION_REGISTRATION`), which puts the event ids and calibration
+segment numbers into the ELF file. If the `rtos` configuration is built without it (`#undef OPTION_SECTION_REGISTRATION` in `src/xcplib_rtos_cfg.h`), the target numbers
+events and segments in the order of creation at runtime. The offline A2L file then has placeholder event ids, and most XCP tools use
+them as they are. Generate the A2L file with the running target instead, omit `--offline`, or correct the offline A2L file once with the
+running target:
+
+```bash
+xcpclient --udp --dest-addr <esp32-ip-address> --elf <elf-file> --a2l <a2l-file> --create-a2l --default-event=fastTask --elf-unit-filter xcp_demo
+xcpclient --udp --dest-addr <esp32-ip-address> --a2l <a2l-file> --fix-a2l
+```
+
+The creation order must be the same in every run: `xcp_demo.c` creates the calibration segment in `startXcpServer()` after `XcpInit()`,
+before the tasks start. See [docs/OFFLINE_A2L.md — Without section registration](../../docs/OFFLINE_A2L.md#without-section-registration).
+
 See below how to obtain the xcpclient tool.  
 
 
@@ -163,6 +177,15 @@ emits a `tXcpEventDescriptor` (name, cycle time, priority) into `xcp_evts`. xcpc
 
 **`xcp_cals` section** — every `CalSegDecl(name)` at file scope emits a `tXcpCalSegDescriptor`
 (name, default page address, size) into `xcp_cals`. xcpclient iterates this to discover all calibration segments.
+
+The linker has to keep both sections and provide the boundary symbols `__start_xcp_evts`/`__stop_xcp_evts` and
+`__start_xcp_cals`/`__stop_xcp_cals`, a custom linker script needs `KEEP` and the symbol definitions (see `freertos_esp32_demo/extra_linker_script.py`).
+Each event must be created in one place only. What else to consider and how to check that the registration works is described in
+[docs/OFFLINE_A2L.md — With section registration: requirements and checks](../../docs/OFFLINE_A2L.md#with-section-registration-requirements-and-checks).
+
+Both sections exist only with `OPTION_SECTION_REGISTRATION`. Without it, xcpclient finds the events and segments by the names of their
+descriptor variables in the DWARF, but not their numbers, and `CalSegDecl`/`CalSegDeclRef` are a compile time error: `xcp_demo.c`
+then creates the segment with `CalSegCreate` after `XcpInit()`, see the `#ifdef OPTION_SECTION_REGISTRATION` there.
 
 **DWARF trigger point anchors** — every event trigger macro emits a named static variable (e.g. `trg__AAS__name`, `trg__AASD__name`) whose name encodes the active addressing modes.
 xcpclient finds this variable in the DWARF and walks all variables in the same lexical scope — those become the local measurements in the A2L.

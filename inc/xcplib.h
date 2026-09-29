@@ -183,6 +183,16 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
 
 #endif // __CAL_H__
 
+// CalSegDecl, CalBlkDecl and the C++ CalSegDeclRef only emit a descriptor in the xcp_cals section, the segment is created by the
+// section scan in XcpInit(). Without section registration there is no scan and the segment would never be created, calibration
+// would silently have no effect. This is rejected at compile time, use CalSegCreate or CalBlkCreate after XcpInit() instead
+#ifdef OPTION_SECTION_REGISTRATION
+#define XCP_CALSEG_DECL_CHECK
+#else
+#define XCP_CALSEG_DECL_CHECK                                                                                                                                                      \
+    static_assert(0, "CalSegDecl, CalBlkDecl and CalSegDeclRef require OPTION_SECTION_REGISTRATION, without it the segment is never created: use CalSegCreate after XcpInit()");
+#endif
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Macros to create and access calibration segments or blocks
 #ifndef __cplusplus
@@ -194,14 +204,17 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
 /// must be used at file/global scope, so the static descriptor exists at link time regardless of whether its call
 /// site ever executes. For the equivalent macro that also creates the segment immediately (usable inside a function
 /// or loop, without depending on XcpInit()'s section scan), see CalSegCreate below.
+/// Requires OPTION_SECTION_REGISTRATION, without it the segment would never be created, this is a compile time error.
 /// Name given as identifier, type name and segment name must be identical
 /// @param name given as identifier, &name is expected to be the const static lifetime pointer to the default page, sizeof(name) is used as size of the calibration segment
 // calseg__##name and calblk__##name are the linker map file markers for calibration segments and blocks
 #define CalSegDecl(calseg_name)                                                                                                                                                    \
+    XCP_CALSEG_DECL_CHECK                                                                                                                                                          \
     static tXcpCalSegIndex calseg_id_##calseg_name = XCP_UNDEFINED_CALSEG;                                                                                                         \
     static const tXcpCalSegDescriptor calseg__##calseg_name XCP_CAL_SECTION_ATTR = {                                                                                               \
         .name = #calseg_name, .addr = (const void *)&(calseg_name), .indexp = &calseg_id_##calseg_name, .size = sizeof(calseg_name), .type = XCP_CALSEG_TYPE_SEGMENT};
 #define CalBlkDecl(calblk_name)                                                                                                                                                    \
+    XCP_CALSEG_DECL_CHECK                                                                                                                                                          \
     static tXcpCalSegIndex calblk_id_##calblk_name = XCP_UNDEFINED_CALSEG;                                                                                                         \
     static const tXcpCalSegDescriptor calblk__##calblk_name XCP_CAL_SECTION_ATTR = {                                                                                               \
         .name = #calblk_name, .addr = (const void *)&(calblk_name), .indexp = &calblk_id_##calblk_name, .size = sizeof(calblk_name), .type = XCP_CALSEG_TYPE_BLOCK};
@@ -837,6 +850,8 @@ extern const uint8_t *gXcpBaseAddr;
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Build time A2L file generation macros for metadata annotations
 
+#ifdef OPTION_SECTION_REGISTRATION
+
 #if defined(__ELF__)
 #define XCP_METADATA_SECTION_ATTR __attribute__((section("xcp_meta"), used))
 #elif defined(__APPLE__)
@@ -848,24 +863,14 @@ extern const uint8_t *gXcpBaseAddr;
 #endif
 #endif
 
-// Avoid mangled names for C++ meta data symbols, use __asm__ to set the symbol name in the object file
-// #define XCP_STRINGIFY_INNER(x) #x
-// #define XCP_STRINGIFY(x) XCP_STRINGIFY_INNER(x)
-// #if defined(__cplusplus) && (defined(__clang__) || defined(__GNUC__))
-// #define XCP_COMMENT(name, comment) static const char XCP_METADATA_SECTION_ATTR xcp_meta__comment__##name[] __asm__("xcp_meta__comment__" XCP_STRINGIFY(name)) = comment;
-// #define XCP_READ_WRITE(name) static const bool XCP_METADATA_SECTION_ATTR xcp_meta__read_write__##name[] __asm__("xcp_meta__read_write__" XCP_STRINGIFY(name)) = true;
-// #define XCP_UNIT(name, unit) static const char XCP_METADATA_SECTION_ATTR xcp_meta__unit__##name[] __asm__("xcp_meta__unit__" XCP_STRINGIFY(name)) = unit;
-// #define XCP_LIMITS(name, min, max)
-//     static const double XCP_METADATA_SECTION_ATTR xcp_meta__min__##name __asm__("xcp_meta__min__" XCP_STRINGIFY(name)) = min;
-//     static const double XCP_METADATA_SECTION_ATTR xcp_meta__max__##name __asm__("xcp_meta__max__" XCP_STRINGIFY(name)) = max
-// #else
 #define XCP_COMMENT(name, comment) static const char XCP_METADATA_SECTION_ATTR xcp_meta__comment__##name[] = comment;
 #define XCP_READ_WRITE(name) static const bool XCP_METADATA_SECTION_ATTR xcp_meta__read_write__##name = true;
 #define XCP_UNIT(name, unit) static const char XCP_METADATA_SECTION_ATTR xcp_meta__unit__##name[] = unit;
 #define XCP_LIMITS(name, min, max)                                                                                                                                                 \
     static const double XCP_METADATA_SECTION_ATTR xcp_meta__min__##name = min;                                                                                                     \
     static const double XCP_METADATA_SECTION_ATTR xcp_meta__max__##name = max;
-// #endif
+
+#endif
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Measurement of local variables and function parameters without A2L runtime generation enabled
@@ -953,7 +958,10 @@ extern const uint8_t *gXcpBaseAddr;
 /// @param level (0 = no logging, 1 = error, 2 = warning, 3 = info, 4 = debug, 5 = trace)
 void XcpSetLogLevel(uint8_t level);
 
+// Build time A2L generation
 // Create the memory section for epk software version string, used for compatibility check of A2L and BIN file
+#ifdef OPTION_SECTION_REGISTRATION
+
 #if defined(__ELF__)
 #define XCP_EPK_SECTION_ATTR __attribute__((section("xcp_epk"), used))
 #elif defined(__APPLE__)
@@ -961,12 +969,18 @@ void XcpSetLogLevel(uint8_t level);
 #else
 #define XCP_EPK_SECTION_ATTR /* section-based registration not supported on this platform */
 #endif
+
+// Without the xcp_epk section, xcpclient finds the EPK string by the variable name xcp_epk__ in the DWARF debug information.
+// The address of xcp_epk__ is stored in a volatile pointer: this is a real reference to the array, which keeps it alive in
+// optimized builds and keeps its section alive when the linker removes unreferenced sections (--gc-sections)
 #define XcpCreateEpk(epk)                                                                                                                                                          \
     do {                                                                                                                                                                           \
-        static char gXcpEpkString[] XCP_EPK_SECTION_ATTR = epk;                                                                                                                    \
-        volatile char xcp_epk_keep = gXcpEpkString[0];                                                                                                                             \
-        (void)xcp_epk_keep;                                                                                                                                                        \
+        static const char xcp_epk__[] XCP_EPK_SECTION_ATTR = epk;                                                                                                                  \
+        const char *volatile xcp_epk__keep = xcp_epk__;                                                                                                                            \
+        (void)xcp_epk__keep;                                                                                                                                                       \
     } while (0)
+
+#endif
 
 /// XcpInit mode flags
 #define XCP_MODE_DEACTIVATE 0     ///< Initialize XCP singleton without activating the protocol layer (passive/off)

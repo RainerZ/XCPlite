@@ -305,7 +305,10 @@ template <typename T> class CalBlk {
 /// created until XcpInit() pre-registers it via its section scan, so 'handle' is only valid for locking after
 /// XcpInit() has run. On top of that, this also defines 'handle' as a typed, non-owning xcp::CalSegRef<T> over the
 /// section-registered index - there is no C++ equivalent of the C CalSegCreate's immediate, self-sufficient creation.
+/// Requires OPTION_SECTION_REGISTRATION, without it the segment would never be created, this is a compile time error.
+/// Without section registration, create the segment with CalSegCreate after XcpInit() and use a CalSegRef over its index.
 #define CalSegDeclRef(value, handle)                                                                                                                                               \
+    XCP_CALSEG_DECL_CHECK                                                                                                                                                          \
     static tXcpCalSegIndex calseg_id_##value = XCP_UNDEFINED_CALSEG;                                                                                                               \
     static const tXcpCalSegDescriptor calseg__##value __asm__("calseg__" #value)                                                                                                   \
         XCP_CAL_SECTION_ATTR = {#value, (const void *)&value, &calseg_id_##value, sizeof(value), XCP_CALSEG_TYPE_SEGMENT};                                                         \
@@ -330,6 +333,8 @@ template <typename T> class CalBlk {
 #define XCPLIB_ALWAYS_INLINE inline
 #error "XCPLIB_ALWAYS_INLINE may not guarantee inlining on this compiler - stack frame addresses may be incorrect"
 #endif
+
+#ifndef OPTION_SECTION_REGISTRATION
 
 namespace xcp {
 
@@ -529,3 +534,5 @@ template <typename... Measurements> XCPLIB_ALWAYS_INLINE void DaqEventVarTemplat
 #endif
 
 } // namespace xcp
+
+#endif // OPTION_SECTION_REGISTRATION

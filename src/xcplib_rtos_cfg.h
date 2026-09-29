@@ -114,7 +114,7 @@
 // Data acquisition
 
 // No dynamic event list management, use section registered events
-#undef OPTION_DAQ_EVENT_LIST
+// #define OPTION_DAQ_EVENT_LIST
 
 // Adjust OPTION_DAQ_MEM_SIZE and OPTION_DAQ_EVENT_COUNT to your application
 // In maximum fragmentation, each measurement value needs 6 bytes DAQ list memory
@@ -144,3 +144,9 @@
 // Use linker section based event and calibration segment registration
 // Linker sections xcp_evts and xcp_cals
 #define OPTION_SECTION_REGISTRATION
+
+// @@@@ Test: rtos configuration without section registration (not recommended)
+/*
+#undef OPTION_SECTION_REGISTRATION
+#define OPTION_DAQ_EVENT_LIST
+*/

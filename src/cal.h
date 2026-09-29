@@ -297,13 +297,18 @@ static_assert(sizeof(((tXcpCalSegDescriptor *)0)->res) > 0, "tXcpCalSegDescripto
 // Platform section attribute for tXcpCalSegDescriptor static variables created by CalSegCreate() and CalBlkCreate().
 // Placing all descriptors in a named ELF/Mach-O section lets XcpInit() iterate them and
 // pre-register every calibration segment or block before the first use, without requiring the call site of the creation to execute first.
+#ifdef OPTION_SECTION_REGISTRATION
 #if defined(__ELF__)
 #define XCP_CAL_SECTION_ATTR __attribute__((section("xcp_cals"), used))
 #elif defined(__APPLE__)
 #define XCP_CAL_SECTION_ATTR __attribute__((section("__DATA,xcp_cals"), used))
 #else
-#define XCP_CAL_SECTION_ATTR /* section-based registration not supported on this platform */
+#define XCP_CAL_SECTION_ATTR
+#error "section-based registration not supported on this platform"
 #endif
+#else
+#define XCP_CAL_SECTION_ATTR
+#endif // OPTION_SECTION_REGISTRATION
 
 #endif // __XCPLIB_H__
 

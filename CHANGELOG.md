@@ -4,24 +4,38 @@ All notable changes to XCPlite are documented in this file.
 
 ## [V2.3.2]
 
-- Bugfix: `DaqTriggerEventExt` and the C variant of `DaqEventVar` in `xcplib.h` initialized their event id marker with `XCP_UNDEFINED_EVENT_ID` instead of the link-time id `XCP_EVENT_SECTION_GET_LINKTIME_ID`. Affected only clang on Linux.
-
-- Bugfix: point_cloud_demo, duplicate event in section registration mode
+- Bugfixes: 
+    - `DaqTriggerEventExt` and the C variant of `DaqEventVar` in `xcplib.h` initialized their event id marker with `XCP_UNDEFINED_EVENT_ID` instead of the link-time id `XCP_EVENT_SECTION_GET_LINKTIME_ID`. Affected only clang on Linux.
+    - Example point_cloud_demo, duplicate event in section registration mode,
 
 - New macros `DaqDeclareEvent` / `DaqDeclareEventExt` in `xcplib.h` (section registration only): declare an event at file scope. Pure declarations without a statement, usable with any compiler.
 
-- New configuration option `OPTION_SECTION_REGISTRATION` to enable registration of events and calibration segments at link time in the sections `xcp_evts` and `xcp_cals`, as used by the offline A2L generator `xcpclient --elf`. Disabled in the default configuration. Enabled in the configurations `no_a2l` and `rtos` (mandatory without `OPTION_DAQ_EVENT_LIST`). The `default` configuration now creates events at runtime again in creation order, and the trigger macros look up the event by name on their first execution, so the event descriptor does not need to be visible at the trigger site. 
-
 - New configuration option `OPTION_CAL_RCU_REFCOUNT` provides an alternative calibration RCU algorithm. Disabled in the default configuration. Needs a breaking change in the C API, C++ API stays compatible. Makes some compromises to get calibration changes visibility in the the first look after a publish. Recommended only for slow reader configuration use-cases. Not recommended and not tested on micro-controller platforms.
 
+- New configuration option `OPTION_SECTION_REGISTRATION` to enable registration of events and calibration segments at link time in the sections `xcp_evts` and `xcp_cals`, as used by the offline A2L generator `xcpclient --elf`. Disabled in the default configuration. Enabled in the configurations `no_a2l` and `rtos` (mandatory without `OPTION_DAQ_EVENT_LIST`). The `default` configuration now creates events at runtime again in creation order, and the trigger macros look up the event by name on their first execution, so the event descriptor does not need to be visible at the trigger site. 
 
-- xcpclient related changes (xcpclient V4.0.1):
+- `CalSegDecl`, `CalBlkDecl` and the C++ `CalSegDeclRef`/`CalSegDecl` are now a compile time error without `OPTION_SECTION_REGISTRATION`. They only emit a section descriptor, the segment is created by the section scan in `XcpInit()`, so without section registration the segment was never created and calibration silently had no effect. Use `CalSegCreate` after `XcpInit()`.
+
+- Section registration with `OPTION_DAQ_EVENT_LIST`: `XcpInit()` reports an event which is created at more than one place (`DaqCreateEvent`, `DaqCreateAndTriggerEvent`, ...) as an error. The event is created only once, but the trigger macros use the position of their descriptor in the section as event id, so the triggers of all following events silently used wrong event ids.
+
+- freertos_demo: `xcp_demo.c` supports builds with and without `OPTION_SECTION_REGISTRATION`. Without it, the events and the calibration segment `parameters` are created in a fixed order in `startXcpServer()` after `XcpInit()`, before the tasks start, so the event ids and segment numbers are the same after each restart. The event creation macros in the tasks find the events by name.
+
+- `XcpCreateEpk`: the EPK string variable is renamed from `gXcpEpkString` to `xcp_epk__`. Its address is stored in a volatile pointer, so the string is no longer removed by the compiler in optimized builds, or by the linker with `--gc-sections`, when there is no `xcp_epk` section (no `OPTION_SECTION_REGISTRATION`).
+
+- xcpclient changes (xcpclient V4.0.1):
     - The DWARF location expression parser no longer floods the log with warnings about variables which are dropped anyway by the filters, or which are markers the XCPlite macros generate in the code of the application (`evt__`, `trg__`, `cap__`, `xcp_meta__`, `evt_id_<event>`, ...).
     - A local variable without any `DW_AT_location` in the debug information is now reported with a warning instead of silently missing from the A2L file.
     - The messages of the location expression parser now name the compilation unit and the declaration line of the variable (`main_c:178: 'delay': ...`), the variable name alone does not identify which of several variables with that name is meant.
     - A variable which the compiler spread over several locations (`DW_OP_piece`) is now reported as split into slices. A single piece covering only a part of the variable was silently registered with the address of that one slice before, it is now rejected like the multi piece case.
-    
-   
+    - `--fix-a2l` now rewrites the A2L file with the event ids and calibration segment numbers of the target, the original is kept as `<file>.a2l.bak`. The event ids in the addresses of dynamic addressing (stack variables) and the segment numbers in calibration segment relative addresses are corrected as well, it panicked on those before. Only A2L files created by xcpclient are accepted. 
+    - Bugfix: without the `xcp_cals` section, the `epk` calibration segment was not always numbered 0 in the A2L file, the segments were numbered in the order of the debug information, where the application usually comes before the library.
+    - Without the `xcp_cals` section (no `OPTION_SECTION_REGISTRATION`), a calibration segment declared with `CalSegDecl`, `CalBlkDecl` or `CalSegDeclRef` is reported, the target never creates it. More than one calibration segment is reported as well, their numbers are assumed in declaration order, the target numbers them in creation order.
+    - Without the `xcp_epk` section (no `OPTION_SECTION_REGISTRATION`), the EPK string is read from the variable `xcp_epk__` of `XcpCreateEpk`, using its DWARF location and the initialized data of the ELF file. A missing `XcpCreateEpk` call, or an EPK string which the compiler or linker removed, is reported with a warning and a hint what to do.
+
+- Documentation
+    - What section registration requires from the build (linker script, `KEEP`, boundary symbols, each event created in one place, one A2L file per build) and how to check that it works, see docs/OFFLINE_A2L.md.
+    - Without section registration a pure offline A2L file is not possible, the event ids and segment numbers are the runtime creation order. The A2L file has to be generated or corrected (`--fix-a2l`) once with the running target, see docs/OFFLINE_A2L.md.
+
 
 
 ## [V2.2.3]

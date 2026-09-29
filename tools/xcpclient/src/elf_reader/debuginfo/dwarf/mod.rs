@@ -97,8 +97,8 @@ struct DebugDataReader<'elffile> {
     endian: Endianness,                                     // byte order of the target, needed for bitfield offsets
     sections: HashMap<String, (u64, u64)>,                  // ELF section name -> (start, end)
     architecture: object::Architecture,                     // target architecture, for the frame pointer register (FrameBase)
-    epk_string: Option<String>,                             // content of the xcp_epk section, the EPK version string of the application
-    epk_addr: u64,                                          // address of the xcp_epk section, 0 if there is none
+    epk_string: Option<String>,                             // content of the xcp_epk section or variable, the EPK version string of the application
+    epk_addr: u64,                                          // address of the xcp_epk section or variable, 0 if there is none
     symbol_addresses: HashMap<String, u64>,                 // ELF symbol table: name -> address, for variables without a DWARF location
     local_static_symbols: HashMap<String, Vec<(u64, u64)>>, // the symbols of the static variables in functions: variable name -> [(address, size)], see resolve_local_static_addresses
     global_symbol_names: HashSet<String>,                   // names of the symbols with global (or weak) binding
@@ -161,7 +161,7 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, filter: ElfFilter
     // get the elf sections for DebugDataReader
     let sections = get_elf_sections(&elffile);
 
-    // read the EPK string and address from the xcp_epk ELF section
+    // read the EPK string and address from the xcp_epk ELF section, if there is none it is read from the xcp_epk__ variable after the DWARF is loaded
     let epk_section = elffile.section_by_name("xcp_epk");
     let epk_addr: u64 = epk_section.as_ref().map_or(0, |s| s.address());
     let epk_string: Option<String> = epk_section
@@ -169,7 +169,7 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, filter: ElfFilter
         .and_then(|data| std::ffi::CStr::from_bytes_until_nul(data).ok())
         .map(|cs| cs.to_string_lossy().into_owned());
     if let Some(ref epk) = epk_string {
-        log::debug!("EPK string read from xcp_epk section: '{}' at address 0x{:08X}", epk, epk_addr);
+        log::info!("EPK string read from xcp_epk section: '{}' at address 0x{:08X}", epk, epk_addr);
     }
 
     // read the xcp_meta section raw bytes for metadata (XCP_UNIT / XCP_LIMITS annotations)
@@ -208,7 +208,18 @@ pub(crate) fn load_elf_dwarf(filename: &OsStr, verbose: usize, filter: ElfFilter
         filter,
     };
     log::debug!("Reading debug info entries");
-    Ok(dbg_reader.collect_debug_data())
+    let mut debug_data = dbg_reader.collect_debug_data();
+
+    // No xcp_epk section (built without OPTION_SECTION_REGISTRATION), read the initialized data of the xcp_epk__ variable
+    if debug_data.epk_string.is_none()
+        && let Some((addr, epk)) = get_epk_from_variable(&elffile, &debug_data)
+    {
+        log::info!("EPK string read from variable xcp_epk__: '{}' at address 0x{:08X}", epk, addr);
+        debug_data.epk_addr = addr;
+        debug_data.epk_string = Some(epk);
+    }
+
+    Ok(debug_data)
 }
 
 // open a file and mmap its content
@@ -291,6 +302,88 @@ fn get_elf_sections(elffile: &object::read::File) -> HashMap<String, (u64, u64)>
     }
 
     map
+}
+
+// Find the EPK string variable xcp_epk__ of XcpCreateEpk in the DWARF variables and read its null terminated content from the
+// initialized data of the ELF section at its address. Fallback when there is no xcp_epk section.
+// The DWARF location is used, not the symbol table: the symbol may be missing although the string is there (seen with the
+// ESP32 xtensa toolchain, where an older XcpCreateEpk did not reference the array, the linker removed it, and GCC described
+// its location as the address of an identical string literal).
+// Every way this fails is reported as a warning with a hint what to do, an A2L file without EPK is never created silently.
+// Returns (address, EPK string)
+fn get_epk_from_variable(elffile: &object::read::File, debug_data: &DebugData) -> Option<(u64, String)> {
+    const HINT_LINKER: &str = "Make sure the application is built with the current inc/xcplib.h, its XcpCreateEpk references the array. \
+         If the problem persists, the linker removes the unreferenced section: add KEEP(*(.rodata.*xcp_epk__*)) to the linker script, \
+         or build without -fdata-sections / --gc-sections";
+
+    let Some(var_infos) = debug_data.variables.get("xcp_epk__") else {
+        log::warn!(
+            "No EPK string found, neither the section xcp_epk nor the variable xcp_epk__ exist. The A2L file gets no EPK and the \
+             tool can not check whether the A2L file matches the target software. Call XcpCreateEpk(<epk>) in the application, with \
+             the same EPK string as given to XcpInit"
+        );
+        return None;
+    };
+
+    let mut result: Option<(u64, String)> = None;
+    for addr in var_infos.iter().filter(|v| v.address.0 == 0 && v.address.1 != 0).map(|v| v.address.1) {
+        // Read from the address to the end of its section, the string ends at the first null byte
+        let data = elffile
+            .sections()
+            .filter(|s| s.address() <= addr && addr < s.address() + s.size())
+            .find_map(|s| s.data_range(addr, s.address() + s.size() - addr).ok().flatten());
+        let Some(data) = data else {
+            log::warn!(
+                "The variable xcp_epk__ (XcpCreateEpk) has the address 0x{:08X}, which has no initialized data in the ELF file, \
+                 it was probably removed by the linker. {}",
+                addr,
+                HINT_LINKER
+            );
+            continue;
+        };
+        let Ok(cs) = std::ffi::CStr::from_bytes_until_nul(data) else {
+            log::warn!("The variable xcp_epk__ (XcpCreateEpk) at 0x{:08X} is not null terminated", addr);
+            continue;
+        };
+        let epk = cs.to_string_lossy().into_owned();
+        match &result {
+            None => result = Some((addr, epk)),
+            Some((first_addr, first_epk)) if *first_addr != addr => {
+                log::warn!(
+                    "XcpCreateEpk is called more than once, using EPK '{}' at 0x{:08X}, ignoring '{}' at 0x{:08X}",
+                    first_epk,
+                    first_addr,
+                    epk,
+                    addr
+                );
+            }
+            Some(_) => {}
+        }
+    }
+
+    match &result {
+        None if var_infos.iter().all(|v| v.address.1 == 0 || v.address.0 != 0) => {
+            // The compiler or the linker removed the array, the DWARF has the variable without a location
+            log::warn!(
+                "No EPK string found: the variable xcp_epk__ (XcpCreateEpk) exists in the debug information, but it has no address, \
+                 the compiler or the linker removed it. The A2L file gets no EPK. {}",
+                HINT_LINKER
+            );
+        }
+        None => log::warn!("No EPK string found in the variable xcp_epk__ (XcpCreateEpk), the A2L file gets no EPK. {}", HINT_LINKER),
+        Some((addr, _)) => {
+            // Not an error: the string at the address is correct, but the address is not the one of the variable itself
+            if !elffile.symbols().any(|sym| sym.address() == *addr && sym.name().is_ok_and(|name| name.contains("xcp_epk__"))) {
+                log::info!(
+                    "The EPK address 0x{:08X} is from the debug information only, there is no xcp_epk__ symbol at this address. \
+                     The string there is the EPK, it may be a string literal with the same content. {}",
+                    addr,
+                    HINT_LINKER
+                );
+            }
+        }
+    }
+    result
 }
 
 // The ELF symbol table (.symtab): symbol name -> address, for all symbols with a name and an address. Functions, global

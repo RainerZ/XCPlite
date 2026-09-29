@@ -13,14 +13,15 @@ See `examples/no_a2l_demo`, `examples/no_a2l_demo_cpp` and `examples/freertos_de
 ## Concept
 
 The instrumentation macros place information in the ELF file at compile and link time. The library and the generator use it. The
-sections `xcp_evts` and `xcp_cals` are only emitted with the configuration option `OPTION_SECTION_REGISTRATION` (set in the `no_a2l`
-and `rtos` configurations), without it the events get placeholder ids which are corrected from the target when connected:
+sections `xcp_evts` and `xcp_cals` are only emitted with the configuration option `OPTION_SECTION_REGISTRATION` (defined in the `no_a2l`
+and `rtos` configurations). Without it, a pure offline A2L file is not possible, see
+[Without section registration](#without-section-registration):
 
 | Source in the ELF file | Written by | Used for |
 |---|---|---|
 | `xcp_evts` section | `DaqCreateEvent`, `DaqCreateEventExt`, `DaqCreateAndTriggerEvent` | All events with name, cycle time and priority. The position of the descriptor in the section is the event id, on the target and in the A2L file |
 | `xcp_cals` section | `CalSegDecl`, `CalSegDeclRef`, `CalSegCreate` | All calibration segments with the address and the size of their default page. The order of the descriptors is the segment number |
-| `xcp_epk` section | `XcpCreateEpk` | The EPK software version string and its address |
+| `xcp_epk` section, or the `xcp_epk__` variable without `OPTION_SECTION_REGISTRATION` | `XcpCreateEpk` | The EPK software version string and its address |
 | `xcp_meta` section | `XCP_UNIT`, `XCP_LIMITS`, `XCP_COMMENT`, `XCP_READ_WRITE` | Metadata of measurement and calibration objects |
 | DWARF scope of the `trg__<modes>__<event>` anchor variables | `DaqTriggerEvent`, `DaqCreateAndTriggerEvent`, `DaqTriggerEventExt`, `DaqEventVar` | The function in which an event is triggered, its stack frame and the addressing modes available at the trigger point |
 | `XCPLITE__<signature>` variable | libxcplite | The addressing scheme of the target (`CASDD`, `ACSDD`, `AXSDD`, `CXSDD`), see [addressing modes](TECHNICAL.md#addressing-modes) |
@@ -32,7 +33,98 @@ described in [TECHNICAL.md — Instrumentation Markers for Offline A2L Tools](TE
 
 The same link time information is used by the library itself: `XcpInit` registers the events and calibration segments from the
 sections in a deterministic order, so the event ids and segment numbers in the A2L file stay valid independent of the code execution
-order, without a persistence file.
+order, without a persistence file. What this requires from the build is described in
+[With section registration: requirements and checks](#with-section-registration-requirements-and-checks).
+
+### With section registration: requirements and checks
+
+Section registration relies on the compiler and the linker. The instrumentation macros put constant descriptors into the sections
+`xcp_evts` (events, 16 bytes each) and `xcp_cals` (calibration segments, 32 bytes each). `XcpInit()` and xcpclient walk through the
+sections as arrays, between the linker symbols `__start_xcp_evts`/`__stop_xcp_evts` and `__start_xcp_cals`/`__stop_xcp_cals` (on macOS
+`section$start$__DATA$xcp_evts` etc., provided by the Mach-O linker). The event id is the position of the descriptor in `xcp_evts`.
+What has to be considered:
+
+- **The linker must keep the sections and provide the boundary symbols.** GNU ld creates the `__start_`/`__stop_` symbols for a
+  section with a C identifier name which the linker script does not place (orphan section), and keeps the section with `--gc-sections`
+  because the library references these symbols. lld creates the symbols as well, but whether the references keep the section depends
+  on the option `-z start-stop-gc`, whose default differs between lld versions. The `used` attribute of the descriptors only prevents
+  the compiler from removing them, not the linker. A custom linker script, typical for microcontrollers, which places the sections
+  explicitly, must `KEEP` them, define the boundary symbols around them and place them in memory the program can read:
+
+  ```
+  __start_xcp_evts = ABSOLUTE(.);
+  KEEP(*(xcp_evts))
+  __stop_xcp_evts = ABSOLUTE(.);
+  __start_xcp_cals = ABSOLUTE(.);
+  KEEP(*(xcp_cals))
+  __stop_xcp_cals = ABSOLUTE(.);
+  ```
+
+  This is the safe way with any linker and any option.
+  The `xcp_meta` section (metadata) is never referenced by the program, it needs `KEEP` with `--gc-sections`, otherwise the metadata is
+  silently missing in the A2L file (xcpclient warning `No xcp_meta section found`). `examples/freertos_demo/freertos_esp32_demo/extra_linker_script.py`
+  shows all of this for ESP-IDF, including an ESP32 specific pitfall: the flash data must stay one contiguous DROM segment, otherwise
+  the bootloader maps only a part of it and the firmware crashes at startup.
+- **No gaps between the descriptors.** Nothing else may be placed between the boundary symbols, and no alignment padding. The section size
+  must be a multiple of the descriptor size, 16 bytes for `xcp_evts`, 32 bytes for `xcp_cals`.
+- **Create each event in one place.** Every call site of `DaqCreateEvent`, `DaqCreateEventExt`, `DaqCreateAndTriggerEvent` or
+  `DaqCreateAndTriggerEventCapture` emits its own descriptor. With `OPTION_DAQ_EVENT_LIST` (the `rtos` configuration) an event name
+  which is created at two places shifts the ids of all events after it in the section: `XcpInit()` creates the event only once, the
+  trigger macros use the position of their descriptor. The triggers of the following events then silently use a wrong or undefined
+  event id, and the A2L file has the positions as well. Without `OPTION_DAQ_EVENT_LIST` (the `no_a2l` configuration) there are two
+  events with the same name. xcpclient warns with `Event 'x' is defined N times`, and with `OPTION_DAQ_EVENT_LIST` `XcpInit()` reports
+  `Event 'x' is created at more than one place`. To trigger an event in several functions, declare it
+  once with `DaqDeclareEvent` at file scope and use `DaqTriggerEvent` in the functions.
+- **Declare each calibration segment once**, the generator expects exactly one `calseg__<name>` descriptor per segment.
+- **The numbers belong to one build.** The order of the descriptors, and with it the event ids and segment numbers, depends on the code
+  and the link order. A new build may change them, the A2L file has to be generated again for each build. The EPK check detects an A2L
+  file of another build only if the EPK changes with the build (for example with a build number or a hash in the EPK string).
+- **Platforms:** ELF (Linux, QNX, embedded) and Mach-O (macOS, runtime only, the A2L generator reads ELF files). Not supported with MSVC
+  (Windows) and in SHM mode.
+
+How to make sure it works:
+
+1. Check the ELF file: `readelf -S <elf-file> | grep xcp_` lists the sections with their sizes (multiples of 16 and 32). If the linker
+   script merged them into another output section, check the boundary symbols: `nm <elf-file> | grep -E "__(start|stop)_xcp_"`.
+2. Check the log of the target at `XcpInit()` (log level 3): `Preregistered N events from event descriptor section` and
+   `Preregistered N new calibration segments or blocks from descriptor section`. `No xcp_evts section found` or
+   `No xcp_cals section found for pre-registration` mean that the registration did not work, calibration segments declared with
+   `CalSegDecl` are then never created and calibration silently has no effect. The error `Event 'x' is created at more than one place`
+   means that event ids are wrong, see above.
+3. Check the xcpclient log of the A2L generation: `Found XCP event descriptor memory section at address ...`, no warnings
+   `New event '...' found, created with undefined event id` and `Event 'x' is defined N times`.
+4. Final check with the running target: load the A2L file with xcpclient, `xcpclient --udp --dest-addr <ip> --a2l <a2l-file>`. It compares
+   the events and calibration segments of the A2L file with the target, there must be no warnings `Event id of 'x' differs` or
+   `Calibration segment index of 'x' differs`. Measure a variable of each event, for example with `--mea`.
+
+### Without section registration
+
+Without `OPTION_SECTION_REGISTRATION` the target creates the events and calibration segments at runtime, the event ids and the segment
+numbers are the order of creation. This order is not in the ELF file, so the A2L file can not be generated offline alone:
+
+- The generator still finds all events and calibration segments by their marker variables in the debug information, but not their numbers.
+  The events get placeholder ids (0xFFFF, 0xFFFE, ...), the calibration segments are numbered in declaration order, the `epk` segment is
+  always 0. Both are reported as warnings.
+- **Connect to the target once.** Either generate the A2L file with the running target, without `--offline`, the event ids and segment
+  numbers are then read from the target (GET_EVENT_INFO, GET_SEGMENT_INFO):
+  `xcpclient --udp --dest-addr 192.168.0.206 --elf <elf-file> --create-a2l --a2l <a2l-file>`
+  or generate it offline and correct it later with the running target, the file is rewritten and the original kept as `<a2l-file>.bak`:
+  `xcpclient --udp --dest-addr 192.168.0.206 --a2l <a2l-file> --fix-a2l`
+  `--fix-a2l` corrects the event and segment definitions and the addresses which contain an event id (stack and other dynamic addressing)
+  or a segment number (calibration segment relative addressing). It accepts only A2L files created by xcpclient.
+- The A2L file stays valid only as long as the creation order on the target is the same in every run. Keeping it deterministic is the
+  responsibility of the application. Events created by `DaqCreateEvent` in concurrently running tasks get their ids in the order in
+  which the tasks happen to execute the macro. Create all events and calibration segments in one place after `XcpInit()`, before any
+  task is started: the events with `XcpCreateEvent(name, cycle_time_ns, priority)` in a fixed order, the segments with `CalSegCreate`.
+  The event creation macros in the tasks then find the existing events by name (`XcpCreateEvent` returns the id of an existing event),
+  the name must be identical. `createEventsAndCalSegs()` in `examples/freertos_demo/xcp_demo.c` shows this. A different build, or a code
+  change in the creation order, may change the numbers, correct or generate the A2L file again with the target in that case.
+- **Most XCP tools use the event ids and segment numbers of the A2L file as they are**, they do not detect or correct a difference to the
+  target, the measurement or calibration then silently uses the wrong event or segment. xcpclient itself checks the numbers of a loaded
+  A2L file against the target (warnings `Event id of 'x' differs` and `Calibration segment index of 'x' differs`), a DAQ measurement
+  with wrong event ids is rejected by the target (`SetDaqListMode: Parameter out of range`).
+- `CalSegDecl`, `CalBlkDecl` and `CalSegDeclRef` only work with section registration, without it they are a compile time error (the
+  segment would never be created). Use `CalSegCreate` after `XcpInit()`. `examples/freertos_demo/xcp_demo.c` shows both variants.
 
 ## Workflow
 
@@ -90,7 +182,9 @@ the library is not parsed (`--elf-unit-limit`) or the library was built without 
   (`XcpCreateEvent`, `XcpCreateCalSeg`). Only the macros emit the sections and the anchor variables.
 - Mark local measurement variables `volatile` (or use the `XCP_MEA` attribute). Otherwise an optimizing compiler might keep them in registers, the DWARF entry has no location and the variable is skipped.
 - Declare calibration segments with `CalSegDecl` or `CalSegDeclRef` and give the default page static lifetime. File scope is
-  recommended. The segment name and the name of the default page variable are identical by convention, the generator relies on it.
+  recommended. Without section registration, create them with `CalSegCreate` after `XcpInit()` instead, see
+  [Without section registration](#without-section-registration). The segment name and the name of the default page variable are
+  identical by convention, the generator relies on it.
 - Metadata macros name the object with `__` as path separator: `XCP_UNIT(params__delay_us, "us")` annotates the field `delay_us` of the
   instance `params`. A macro placed in the same namespace as the variable, or in the same function as a local variable, does not need a
   scope prefix: `XCP_COMMENT(input, ...)` in namespace `motor_control` annotates `motor_control.input`, `XCP_COMMENT(counter, ...)` in
@@ -263,8 +357,15 @@ Messages worth knowing when a variable is missing or looks wrong in the A2L file
 | `Metadata variable '...' address is 0` | The marker has no DWARF location and no resolveable symbol. |
 | `Event '...' is triggered with a capture in N functions, only the one in function ... is used` | The same event is triggered with `DaqTriggerEventCapture` in several functions, whose capture structs have different layouts. Use one event per capture. |
 | `No target signature found in ELF file` | The `XCPLITE__<signature>` variable of the XCPlite library is missing, absolute addressing of calibration segments is assumed. A build with segment relative addressing (`CASDD`, `CXSDD`) then gets wrong calibration addresses. |
-| `New event '...' found, created with undefined event id ...` | No `xcp_evts` section and no linker symbols. Connect to the target to get the ids. |
+| `New event '...' found, created with undefined event id ...` | No `xcp_evts` section and no linker symbols, the application is built without section registration. Generate the A2L file with the running target, see [Without section registration](#without-section-registration). |
+| `Calibration segment 'x' is declared at file scope with CalSegDecl, CalBlkDecl or CalSegDeclRef, but the ELF file has no xcp_cals section` | These macros only emit a descriptor, the segment is created by the `xcp_cals` section scan in `XcpInit`. Without `OPTION_SECTION_REGISTRATION` the target never creates it and calibration has no effect. Use `CalSegCreate`/`CalBlkCreate`. The current `xcplib.h` rejects this at compile time, the message is for applications built with an older one. |
+| `No xcp_cals section: the calibration segment numbers (...) are assumed in the order of the debug information` | Without section registration the target numbers the segments in the order in which `CalSegCreate` is executed. The generator can not know this order, it uses the declaration order (the `epk` segment is always 0). Generate the A2L file with the running target, see [Without section registration](#without-section-registration). |
+| `A2L file ... differs from target, use automatic correction (--fix-a2l)` | The event ids or segment numbers of the loaded A2L file do not match the target. `--fix-a2l` rewrites the A2L file with the numbers of the target. |
+| `--fix-a2l: A2L file '...' was not created by xcpclient` | `--fix-a2l` only corrects A2L files created by xcpclient, a file of another A2L creator could lose information when it is written again. |
 | `Calibration segment reference page variable 'x' has N usable definitions, expected 1` | The name of the default page variable is ambiguous, restrict the compilation units with `--elf-unit-filter`. |
+| `No EPK string found, neither the section xcp_epk nor the variable xcp_epk__ exist` | The application does not call `XcpCreateEpk(epk)`. The A2L file gets no `EPK`/`ADDR_EPK`, so neither the tool nor CANape can check whether the A2L file matches the target software. Call `XcpCreateEpk` with the same string as `XcpInit`. |
+| `No EPK string found: the variable xcp_epk__ (XcpCreateEpk) exists in the debug information, but it has no address` | The compiler or the linker (`--gc-sections`) removed the EPK string. The application was built with an older `xcplib.h`, whose `XcpCreateEpk` did not reference the array. If it happens with the current one, add `KEEP(*(.rodata.*xcp_epk__*))` to the linker script. |
+| `The EPK address ... is from the debug information only, there is no xcp_epk__ symbol at this address` (info) | The EPK string is correct, but the array itself was removed and the compiler described its location with an identical string literal. Same cause and fix as above. |
 | `EPK mismatch: A2L file '...' has EPK '...', target reports EPK '...'` | The A2L file does not belong to the running build. `--yes` overrides the check. |
 | `'...' is a Mach-O (macOS) binary, macOS is not supported` | The application was built on macOS. Executables built on macOS contain no DWARF debug information, build on Linux or for an embedded ELF target. |
 | `... does not contain DWARF2+ debug info. The section .debug_info is missing.` | The application was built without `-g`, or the debug information was stripped. |

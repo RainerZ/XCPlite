@@ -1,5 +1,56 @@
 // XCP FreeRTOS demo application
 
+// This example supports runtime or link time event and calibration segment registration (OPTION_SECTION_REGISTRATION)
+// Link time registration is strongly recommended for embedded targets,
+// but it may be platform specific, to assure the memory sections with the static event and segment descriptors are kept by the linker.
+
+// With section registration (the default of the rtos configuration):
+// The macros put constant event and segment descriptors into the linker sections xcp_evts and xcp_cals. XcpInit() creates the events
+// and segments from them, the event id is the position of the descriptor in the section, known at link time, so the A2L file can be
+// generated offline from the ELF file.
+// What has to be considered:
+// - The linker must keep the sections and provide the symbols __start_xcp_evts/__stop_xcp_evts and __start_xcp_cals/__stop_xcp_cals.
+//   GNU ld does this automatically (with lld it depends on -z start-stop-gc), a custom linker script must KEEP the sections and define
+//   the symbols around them. The 'used' attribute of the descriptors does not prevent the linker from removing them.
+//   The xcp_meta section (XCP_UNIT, XCP_LIMITS, ...) is not referenced by the program and needs KEEP as well.
+//   freertos_esp32_demo/extra_linker_script.py shows this for ESP-IDF (and the ESP32 specific DROM segment pitfall).
+// - Nothing else between the boundary symbols: the section sizes must be multiples of 16 bytes (xcp_evts) and 32 bytes (xcp_cals).
+// - Create each event in one place. An event name created at two places shifts the ids of all following events, their triggers then
+//   silently use wrong event ids. To trigger an event in several functions, use DaqDeclareEvent at file scope and DaqTriggerEvent.
+// - The event ids and segment numbers belong to one build, generate the A2L file again for each build. The EPK check detects a wrong
+//   A2L file only if the EPK changes with each build.
+// How to check it works:
+// - readelf -S <elf-file> | grep xcp_   (or nm <elf-file> | grep __start_xcp_, if the linker script merged the sections)
+// - Target log at XcpInit (log level 3): "Preregistered N events ..." and "Preregistered N new calibration segments ...",
+//   not "No xcp_evts section found", "No xcp_cals section found for pre-registration" or "Event 'x' is created at more than one place"
+// - xcpclient log of the A2L generation: no "undefined event id" and no "Event 'x' is defined N times" warnings
+// - Load the A2L file with xcpclient connected to the target: no "Event id of 'x' differs" or "Calibration segment index ... differs"
+// Details: docs/OFFLINE_A2L.md, "With section registration: requirements and checks"
+
+// Without section registration, the event ids and calibration segment numbers are the order of creation at runtime.
+// They are not known at link time, the A2L file generated offline from the ELF file has to be corrected once from the target with
+// `xcpclient --fix-a2l` in online mode, or generated with `xcpclient --elf ... --create-a2l` in online mode.
+// This works, when the creation order is deterministic, so the numbers stay the same after each restart.
+// In this demo, events and segments are created in createEventsAndCalSegs(), called by startXcpServer() after XcpInit() and before the
+// tasks are started.
+
+// Calibration segments:
+// Without section registration, the macros CalSegDecl and CalSegDeclRef are not available (compile time error).
+// The segments are created with CalSegCreate. The segment numbers are the creation order (0 is the EPK segment created in XcpInit).
+
+// Measurement events:
+// DaqCreateEvent, DaqCreateAndTriggerEvent and DaqCreateAndTriggerEventCapture create the event on their first execution, in the task.
+// The tasks run concurrently, so the creation order and the event ids could change after each restart.
+// The events are therefore created at startup with XcpCreateEvent in a fixed order, the macros in the tasks find them by name.
+// The event names must be identical, a misspelled name creates an additional event.
+
+// Actual event ids can be obtained via the XCP protocol (GET_DAQ_EVENT_INFO), but this is not supported by all XCP tools.
+// There is no way to query the calibration segment names over standard XCP.
+// XCPlite has a small proprietary XCP extension which makes this possible (GET_SEGMENT_INFO mode 0 info 2).
+// This is the way, how xcpclient is able to fix both, event and segment number to name associations.
+// xcpclient reads the events and segments from the target on each connect and compares them with the A2L file, with a mismatch the
+// DAQ measurement fails. It corrects them with --fix-a2l, or takes them from the target when it runs with --elf instead of an A2L file.
+
 #include "assert.h"
 #include <inttypes.h>
 #include <math.h>
@@ -36,7 +87,7 @@
 #define XCP_LOG_LEVEL 4  // 3 - Info, 4 - Print XCP commands, 5 - Debug
 
 #ifndef OPTION_SECTION_REGISTRATION
-#error "This example requires OPTION_SECTION_REGISTRATION"
+static void createEventsAndCalSegs(void); // Create the events and calibration segments at runtime, see below
 #endif
 
 // Start XCPlite
@@ -51,6 +102,12 @@ bool startXcpServer() {
         printf("XcpInit failed\n");
         return false;
     }
+
+#ifndef OPTION_SECTION_REGISTRATION
+    // Without section registration, the events and calibration segments are created at runtime in a fixed order, after XcpInit() and
+    // before the tasks are started
+    createEventsAndCalSegs();
+#endif
 
     // Register the high resolution 64-bit clock function implemented by Clock64_Get() in clock64.c as XCP DAQ clock
 #if !defined(FREE_RTOS_POSIX_SIM)
@@ -169,15 +226,54 @@ XCP_LIMITS(parameters__period, 0.001f, 10.0f);
 
 // Declare a calibration segment that wraps 'parameters' for thread-safe and consistent access.
 // This creates:
-//  - a linker-section 'xcp_cals' descriptor used by XcpInit() for registration
-//  - an internal calibration segment index initialized by XcpInit()
+//  - the calibration segment index calseg_id_parameters, used by CalSegLock(parameters) in C
 //  - the typed C++ handle 'parameters_calseg' used by the tasks below
 // The offline A2L generator currently assumes that the struct type name and default-parameter variable name are identical.
+#ifdef OPTION_SECTION_REGISTRATION
+
+// With section registration, XcpInit() creates the segment from the descriptor in the xcp_cals section.
+// The segment number is the position of the descriptor in the section, known at link time, so the A2L file can be generated
+// offline from the ELF file
 #ifdef __cplusplus
 CalSegDeclRef(parameters, parameters_calseg);
 #else
 CalSegDecl(parameters);
 #endif
+
+#else // !OPTION_SECTION_REGISTRATION
+
+#ifndef __cplusplus
+// The C macro CalSegCreate defines the index variable calseg_id_parameters in the scope of the function, it is returned here and
+// stored in the index variable at file scope below, which CalSegLock(parameters) in the tasks uses
+static tXcpCalSegIndex createParametersCalSeg(void) {
+    CalSegCreate(parameters);
+    return calseg_id_parameters;
+}
+#endif
+static tXcpCalSegIndex calseg_id_parameters = XCP_UNDEFINED_CALSEG;
+#ifdef __cplusplus
+// The typed C++ handle over the index
+static const xcp::CalSegRef<decltype(parameters)> parameters_calseg(&calseg_id_parameters, &parameters);
+#endif
+
+static void createEventsAndCalSegs(void) {
+
+    // Events, the event ids are the creation order: fastTask 0, slowTask 1, foo 2
+    // DaqCreateEvent(fastTask), DaqCreateAndTriggerEvent(slowTask) and DaqCreateAndTriggerEventCapture(foo, ...) in the tasks find them by name.
+    // XcpCreateEvent is used here, not DaqCreateEvent, which would emit a second event descriptor marker for the offline A2L generator
+    XcpCreateEvent("fastTask", 0, 0);
+    XcpCreateEvent("slowTask", 0, 0);
+    XcpCreateEvent("foo", 0, 0);
+
+    // Calibration segments, the segment numbers are the creation order: epk 0 (created in XcpInit), parameters 1
+#ifdef __cplusplus
+    calseg_id_parameters = CalSegCreate(parameters).getIndex();
+#else
+    calseg_id_parameters = createParametersCalSeg();
+#endif
+}
+
+#endif // !OPTION_SECTION_REGISTRATION
 
 // Optional helper to clamp calibration parameters during runtime (for safety reasons) to the value range given by XCP_LIMIT
 #define clamp_parameter(x, p, default, name)                                                                                                                                       \
@@ -229,7 +325,7 @@ XCP_NOINLINE void foo(void) {
         float f;
         uint8_t d[3];
     } test_struct = {1, -2, 0.003f * static_counter, {1, 2, 3}};
-    uint8_t test_array[3] = {1, 2, static_counter & 0xff};
+    uint8_t test_array[3] = {1, 2, (uint8_t)(static_counter & 0xff)};
 
     // Create and trigger the DAQ event 'foo' with captured local variables
     // Capturing local variables comes with the overhead of additionally space used for the copy on stack

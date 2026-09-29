@@ -34,7 +34,7 @@ fi
 
 # Remove the A2L file of a previous run, so a failed generation can not leave a stale A2L file behind
 rm -f "$A2LFILE"
-XCPCLIENT_ARGS=(--offline --udp --dest-addr "$TARGET_HOST" --elf "$ELFFILE" --a2l "$A2LFILE" --elf-unit-limit=100 --elf-unit-filter xcp_demo --default-event=fastTask --log-level=3 --verbose=1) 
+XCPCLIENT_ARGS=(--offline --udp --dest-addr "$TARGET_HOST" --elf "$ELFFILE" --a2l "$A2LFILE" --elf-unit-filter xcp_demo --default-event=fastTask --log-level=3 --verbose=0) 
 echo "Command: $XCPCLIENT ${XCPCLIENT_ARGS[*]}"
 "$XCPCLIENT" "${XCPCLIENT_ARGS[@]}" >$LOGFILE
 if [ $? -ne 0 ] || [ ! -f "$A2LFILE" ]; then

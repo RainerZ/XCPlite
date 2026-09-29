@@ -971,6 +971,18 @@ static uint16_t XcpRegisterSectionEvents(void) {
     const tXcpEventDescriptor *end = __stop_xcp_evts;
     if (begin != NULL && end != NULL && begin < end) {
         for (const tXcpEventDescriptor *e = begin; e < end; e++) {
+
+            // Detect an event which is created at more than one place (a descriptor with the same name earlier in the section)
+            // The event is created only once, but the trigger macros use the position of their descriptor in the section as event id,
+            // so the triggers of all following events would use wrong event ids
+            // A match by name with an event loaded from a persistence file is not a duplicate, so the section itself is searched here
+            for (const tXcpEventDescriptor *d = begin; d < e; d++) {
+                if (strcmp(d->name, e->name) == 0) {
+                    DBG_PRINTF_ERROR("Event '%s' is created at more than one place !!!\n", e->name);
+                    break;
+                }
+            }
+
             tXcpEventId id = XcpFindEvent(e->name);
             if (id == XCP_UNDEFINED_EVENT_ID) {
                 id = XcpCreateEvent(e->name, e->cycle_time_ns, e->priority);
@@ -3242,6 +3254,7 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
     static tXcpCalSegIndex calseg_id_epk = XCP_UNDEFINED_CALSEG;
     static const tXcpCalSegDescriptor calseg__epk XCP_CAL_SECTION_ATTR = {
         .name = XCP_EPK_CALSEG_NAME, .addr = &calseg_id_epk, .indexp = (tXcpCalSegIndex *)&calseg_id_epk, .size = XCP_EPK_MAX_LENGTH + 1, .type = XCP_CALSEG_TYPE_SEGMENT};
+    (void)calseg__epk; // Without section registration, the descriptor is only the calseg__epk marker for offline A2L tools
     DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s'\n", XCP_EPK_CALSEG_NAME);
     // @@@@ TODO: Are we sure, that this works in absolute addressing mode, since the reference page is not copied anymore: what is writen to the A2L file
     // Note that this, this might not be the final EPK yet
