@@ -128,7 +128,11 @@ XCPlite encodes *where* a measured/calibrated variable lives (global, stack, hea
 
 ### Offline A2L generation (`xcpclient`, no-A2L builds)
 
-Needs option `#define OPTION_SECTION_REGISTRATION`.
+Pure offline generation needs `#define OPTION_SECTION_REGISTRATION`: only then are event ids and calibration segment numbers known at link time. Without it (experimental, see the commented-out test block at the end of `src/xcplib_rtos_cfg.h`), they are the runtime creation order, so the A2L file must be generated online (`xcpclient --elf ...` connected to the running target, `create_a2l.sh online` in `freertos_esp32_demo`) or corrected with `--fix-a2l`. In that mode `CalSegDecl`/`CalSegDeclRef` are compile errors (use `CalSegCreate` after `XcpInit`), the `XCP_UNIT`/`XCP_LIMITS`/`XCP_COMMENT` metadata macros are unavailable, and `XcpCreateEpk` still works (xcpclient finds `xcp_epk__` by name in the DWARF). `examples/freertos_demo/xcp_demo.c` shows both variants.
+
+EPK: the target keeps its own copy of the string given to `XcpInit` (`local.epk`, truncated to `XCP_EPK_MAX_LENGTH` = 31 characters, space/tab/colon replaced by `_`). That copy is the default page of the `epk` calibration segment (index 0) and is what `GET_ID` and EPK uploads return; `xcp_epk__` from `XcpCreateEpk` is only read by xcpclient for the string. `ADDR_EPK` in generated A2L files is therefore `XCP_ADDR_EPK` (`0xFFFFFF00` in ACSDD, `0x80000000` in CASDD), never the address of `xcp_epk__`, and in absolute addressing mode the target's `epk` segment address differs from `xcp_epk__` by design.
+
+xcpclient builds its registry unflattened (the A2L file keeps typedefs/structs) and flattens it after writing the A2L, because the measurement/calibration code (`--mea`, `--cal`, `--list-cal`) handles basic-type instances only; struct members are addressed as `parameters.counter_max`, `foo.test_struct.a`.
 
 `no_a2l` and `rtos` are the two configurations that do not use on-target runtime A2L generation. Build-time A2L generation instead relies on information embedded in ELF file sections and DWARF markers to locate events and calibration parameter segments in the code: the Rust `xcpclient` tool (`tools/xcpclient/`) parses the built ELF's DWARF debug info and two marker sections:
 - `xcp_evts` section — `tXcpEventDescriptor` constants emitted by `DaqCreateEvent`/`DaqCreateAndTriggerEvent` the `default` configuration creates events at runtime and the trigger macros look them up by name)
@@ -136,7 +140,7 @@ Needs option `#define OPTION_SECTION_REGISTRATION`.
 
 Not supported on Windows.
 
-The generator reads ELF files only. Executables built on macOS are Mach-O and carry no DWARF (the linker leaves it in the `.o` files / `.dSYM`), so `xcpclient` rejects them with an explicit "macOS is not supported" error and exit status 1 — A2L files for `no_a2l`/`rtos` builds must be generated from a Linux build, which is what the examples' `create_a2l.sh` scripts do via a remote build on a Linux target.
+The generator reads ELF files only. Executables built on macOS are Mach-O and carry no DWARF (the linker leaves it in the `.o` files / `.dSYM`), so `xcpclient` rejects them with an explicit "macOS is not supported" error and exit status 1 — A2L files for native `no_a2l`/`rtos` builds (`no_a2l_demo*`, `freertos_emu_demo`) must be generated from a Linux build, which is what those examples' `create_a2l.sh` scripts do via a remote build on a Linux target. Cross-compiled embedded firmware is ELF regardless of the host, so `freertos_esp32_demo/create_a2l.sh` runs locally on macOS against the PlatformIO `firmware.elf`.
 
 ### Shared-memory (SHM) multi-application mode (`docs/SHM.md`)
 

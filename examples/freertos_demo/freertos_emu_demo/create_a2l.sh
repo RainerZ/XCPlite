@@ -161,7 +161,7 @@ echo "Creating A2L file from XCPlite ELF file ..."
 echo "========================================================================================================"
 echo ""
 # --log-level is program flow verbosity
-# --verbose is information detail level
+# --verbose is ELF information detail level
 # Remove the A2L file of a previous run, so a failed generation can not leave a stale A2L file behind
 rm -f "$A2LFILE"
 XCPCLIENT_ARGS=(--log-level=3 --verbose=5 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter xcp_demo --default-event=0 --create-a2l --a2l "$A2LFILE")

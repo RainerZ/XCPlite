@@ -307,11 +307,6 @@ XCP_NOINLINE void foo(void) {
     bar();
 
     DaqCreateAndTriggerEventCapture(foo, test_struct2, test_array2, counter, test_int8, test_int16, test_int32, test_int64);
-    // DaqCreateAndTriggerEventCapture must have at least one argument to capture
-
-    // Check the xcpclient log (--log-level=2 --verbose=0 --elf-unit-filter main ...)
-    /*
-     */
 }
 
 //-----------------------------------------------------------------------------------------------------

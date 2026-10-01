@@ -349,7 +349,7 @@ fn test_register_metadata_local_variable_markers() {
 #[test]
 fn test_register_metadata_file_scope_marker_fallback() {
     let meta_base: u64 = 0xF000;
-    let meta: Vec<u8> = b"Delay Counter in foo ".to_vec(); // offsets 0 and 6
+    let meta: Vec<u8> = b"Delay\0Counter in foo\0".to_vec(); // offsets 0 and 6
     let marker = |addr: u64, function: Option<&str>| {
         vec![VarInfo {
             address: (0, addr),

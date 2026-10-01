@@ -125,9 +125,11 @@ echo "==========================================================================
 echo "Creating A2L file from XCPlite ELF file ..."
 echo "========================================================================================================"
 echo ""
+# --log-level is program flow verbosity
+# --verbose is ELF information detail level
 # Remove the A2L file of a previous run, so a failed generation can not leave a stale A2L file behind
 rm -f "$A2LFILE"
-XCPCLIENT_ARGS=(--log-level=1 --verbose=3 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE" --default-event=mainloop)
+XCPCLIENT_ARGS=(--log-level=3 --verbose=1 --dest-addr="$TARGET_HOST" --udp --offline --elf "$ELFFILE" --elf-unit-filter main --create-a2l --a2l "$A2LFILE" --default-event=mainloop)
 echo "Command: $XCPCLIENT ${XCPCLIENT_ARGS[*]}"
 "$XCPCLIENT" "${XCPCLIENT_ARGS[@]}" >> "$LOGFILE"
 if [ $? -ne 0 ] || [ ! -f "$A2LFILE" ]; then
@@ -172,7 +174,7 @@ echo "Test measurement"
 echo "========================================================================================================"
 read -p "Press any key to continue..." -n1 -s
 # Log measurement to stdout
-$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea counter --time 3 --verbose=2
+$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea counter --time 3
 # Log measurement to CSV file
 #$XCPCLIENT --log-level=3 --dest-addr=$TARGET_HOST:5555 --udp --a2l "$A2LFILE"  --mea . --time 3 --csv "$CSVFILE"
 sleep 1

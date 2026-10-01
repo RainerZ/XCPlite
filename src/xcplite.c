@@ -1651,11 +1651,11 @@ static void XcpTriggerDaqList_(tQueueHandle queue_handle, uint16_t daq, const ui
 #endif
             while (e <= el) {
                 uint8_t n = *size_ptr++;
-#ifdef XCP_ENABLE_TEST_CHECKS
+#if defined(XCP_ENABLE_TEST_CHECKS) && !defined(NDEBUG)
                 assert(n != 0);
 #endif
 #ifdef XCP_ENABLE_DAQ_ADDREXT
-#ifdef XCP_ENABLE_TEST_CHECKS
+#if defined(XCP_ENABLE_TEST_CHECKS) && !defined(NDEBUG)
                 assert(*addr_ext_ptr < count && (bases[*addr_ext_ptr] != NULL || XcpAddrIsAbs(*addr_ext_ptr)));
 #else
                 (void)count;
@@ -3281,10 +3281,12 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
 #endif
 
 #ifdef OPTION_SHM_MODE // XcpInit print inital SHM state
+#ifdef OPTION_ENABLE_DBG_PRINTS
     if (DBG_LEVEL >= 3) {
         DBG_PRINT3(ANSI_COLOR_BLUE "XCP shared memory initialized by leader\n" ANSI_COLOR_RESET);
         XcpShmDebugPrint();
     }
+#endif
 #endif
 
     return true;

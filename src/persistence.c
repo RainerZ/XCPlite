@@ -309,9 +309,11 @@ bool XcpBinWrite(const char *epk) {
 
     DBG_PRINTF3(ANSI_COLOR_GREEN "Persistence data written to BIN file '%s'\n" ANSI_COLOR_RESET, XcpBinGetFilename());
 #ifdef OPTION_SHM_MODE // debug print application list
+#ifdef OPTION_ENABLE_DBG_PRINTS
     if (DBG_LEVEL >= 4) {
         XcpShmDebugPrint();
     }
+#endif
 #endif
 
     return true;

@@ -140,7 +140,7 @@ static tXcpEventId trg__<modes>__name;          // in the function which trigger
 // constant, found by its name in the DWARF. XcpCreateEpk stores its address in the volatile pointer xcp_epk__keep, this
 // reference keeps the array in the build when the compiler optimizes and the linker removes unreferenced sections
 // Only the string is used for the A2L file, not its address: the target keeps its own copy of the EPK given to XcpInit (epk segment,
-// EPK upload), ADDR_EPK is the address XCP_ADDR_EPK which the target maps to this copy
+// EPK upload), ADDR_EPK is the address XCP_ADDR_EPK which the target XCP driver maps to this copy
 static const char xcp_epk__[];
 
 // Metadata, from XCP_COMMENT(name, text), XCP_UNIT(name, unit), XCP_LIMITS(name, min, max), XCP_READ_WRITE(name)

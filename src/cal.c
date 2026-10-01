@@ -164,7 +164,7 @@ uint16_t XcpRegisterSectionCalSegs(void) {
                 assert(index != XCP_UNDEFINED_CALSEG);
                 count++;
             }
-#ifdef XCP_ENABLE_TEST_CHECKS
+#if defined(XCP_ENABLE_TEST_CHECKS) && !defined(NDEBUG)
             else {
                 const tXcpCalSeg *c = CalSegPtr(index);
 #ifdef XCP_ENABLE_CAL_PERSISTENCE
@@ -193,7 +193,7 @@ uint16_t XcpRegisterSectionCalSegs(void) {
                 assert(index != XCP_UNDEFINED_CALSEG);
                 count++;
             }
-#ifdef XCP_ENABLE_TEST_CHECKS
+#if defined(XCP_ENABLE_TEST_CHECKS) && !defined(NDEBUG)
             else {
                 const tXcpCalSeg *c = CalSegPtr(index);
 #ifdef XCP_ENABLE_CAL_PERSISTENCE
@@ -550,7 +550,7 @@ static tXcpCalSegIndex XcpCreateCalSeg_(const char *name, bool lookup, const voi
     }
 #endif //   XCP_ENABLE_CAL_PERSISTENCE
 
-#ifdef XCP_ENABLE_TEST_CHECKS
+#if defined(XCP_ENABLE_TEST_CHECKS) && defined(OPTION_ENABLE_DBG_PRINTS)
     // For an already existing segment, the default page should be the same as the existing one, because we assume it has static lifetime
     if (default_page != NULL && memcmp(default_page, CalSegDefaultPage(calseg), page_size) != 0) {
         DBG_PRINTF_WARNING("Calibration segment '%s' already exists with a different default page\n", calseg->h.name);
