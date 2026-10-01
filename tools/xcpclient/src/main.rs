@@ -855,14 +855,15 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                     if segment_relative { "segment relative" } else { "absolute" }
                 );
 
-                // Get the EPK string and address from debug_data and set it in the registry application version information, if available
-                elf_reader.register_epk_addr_info(&mut reg, verbose);
-
                 // Register events from event creation markers (evt__name) in the code
                 elf_reader.register_events(&mut reg, verbose)?;
 
                 // Register segments from segment creation markers (calseg__name) found in the code
                 elf_reader.register_segments(&mut reg, segment_relative, verbose)?;
+
+                // Get the EPK string from debug_data and set it in the registry application version information, if available
+                // After the segments, ADDR_EPK depends on the addressing mode and the epk segment
+                elf_reader.register_epk_addr_info(&mut reg, segment_relative, verbose);
 
                 // Find event triggers in the code by their trigger markers (trg__mode__name) and register their location (compilation unit, function, CFA offset)
                 elf_reader.register_event_locations(&mut reg, verbose)?;
@@ -913,6 +914,10 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                 .unwrap();
                 info!("Created A2L with file: {} {}", a2l_path.display(), mode);
             }
+
+            // The A2L file keeps the typedef structure, but xcp_client supports only basic type instances (see load_a2l_file_into_registry):
+            // flatten the registry like loading an A2L file does, so --list-cal, --cal and --mea work the same as with --a2l
+            reg.flatten_typedefs();
         }
         //----------------------------------------------------------------
         // Load A2L from local file

@@ -1,6 +1,6 @@
 // XCP FreeRTOS demo application
 
-// This example supports runtime or link time event and calibration segment registration (OPTION_SECTION_REGISTRATION)
+// This example code supports runtime or link time event and calibration segment registration (OPTION_SECTION_REGISTRATION)
 // Link time registration is strongly recommended for embedded targets,
 // but it may be platform specific, to assure the memory sections with the static event and segment descriptors are kept by the linker.
 
@@ -86,14 +86,25 @@
 #define XCP_QUEUE_SIZE 0 // The queue size is derived from OPTION_QUEUE_32_SEGMENT_COUNT for the 32-bit FreeRTOS build; this parameter is ignored
 #define XCP_LOG_LEVEL 4  // 3 - Info, 4 - Print XCP commands, 5 - Debug
 
+// @@@@ TODO: Experimental A2L generation without the need for the XCP linker sections
 #ifndef OPTION_SECTION_REGISTRATION
+
 static void createEventsAndCalSegs(void); // Create the events and calibration segments at runtime, see below
+
+// Linker section based metadata annotations are currently not supported without OPTION_SECTION_REGISTRATION
+#define XCP_COMMENT(name, string)
+#define XCP_UNIT(name, string)
+#define XCP_LIMITS(name, min, max)
+#define XCP_READ_WRITE(name)
+
 #endif
 
 // Start XCPlite
 bool startXcpServer() {
 
     XcpSetLogLevel(XCP_LOG_LEVEL);
+
+    // Create the EPK string with linker file markers, so the xcpclient A2L generator can find it
     XcpCreateEpk(XCP_PROJECT_VERSION);
 
     // Initialize XCP protocol layer
@@ -224,12 +235,13 @@ XCP_COMMENT(parameters__period, "Period of the sine signal generator");
 XCP_UNIT(parameters__period, "s");
 XCP_LIMITS(parameters__period, 0.001f, 10.0f);
 
+#ifdef OPTION_SECTION_REGISTRATION
+
 // Declare a calibration segment that wraps 'parameters' for thread-safe and consistent access.
 // This creates:
 //  - the calibration segment index calseg_id_parameters, used by CalSegLock(parameters) in C
 //  - the typed C++ handle 'parameters_calseg' used by the tasks below
 // The offline A2L generator currently assumes that the struct type name and default-parameter variable name are identical.
-#ifdef OPTION_SECTION_REGISTRATION
 
 // With section registration, XcpInit() creates the segment from the descriptor in the xcp_cals section.
 // The segment number is the position of the descriptor in the section, known at link time, so the A2L file can be generated
@@ -239,6 +251,17 @@ CalSegDeclRef(parameters, parameters_calseg);
 #else
 CalSegDecl(parameters);
 #endif
+
+// Optional helper to clamp calibration parameters during runtime (for safety reasons) to the value range given by XCP_LIMIT
+#define clamp_parameter(x, p, default, name)                                                                                                                                       \
+    do {                                                                                                                                                                           \
+        if (((p)->name) < (xcp_meta__min__##default##__##name))                                                                                                                    \
+            (x) = xcp_meta__min__##default##__##name;                                                                                                                              \
+        else if (((p)->name) > (xcp_meta__max__##default##__##name))                                                                                                               \
+            (x) = xcp_meta__max__##default##__##name;                                                                                                                              \
+        else                                                                                                                                                                       \
+            (x) = (p)->name;                                                                                                                                                       \
+    } while (0)
 
 #else // !OPTION_SECTION_REGISTRATION
 
@@ -273,18 +296,10 @@ static void createEventsAndCalSegs(void) {
 #endif
 }
 
-#endif // !OPTION_SECTION_REGISTRATION
+// No XCP_LIMITS metadata available without section registration, no clamping
+#define clamp_parameter(x, p, default, name) ((x) = (p)->name)
 
-// Optional helper to clamp calibration parameters during runtime (for safety reasons) to the value range given by XCP_LIMIT
-#define clamp_parameter(x, p, default, name)                                                                                                                                       \
-    do {                                                                                                                                                                           \
-        if (((p)->name) < (xcp_meta__min__##default##__##name))                                                                                                                    \
-            (x) = xcp_meta__min__##default##__##name;                                                                                                                              \
-        else if (((p)->name) > (xcp_meta__max__##default##__##name))                                                                                                               \
-            (x) = xcp_meta__max__##default##__##name;                                                                                                                              \
-        else                                                                                                                                                                       \
-            (x) = (p)->name;                                                                                                                                                       \
-    } while (0)
+#endif // !OPTION_SECTION_REGISTRATION
 
 //----------------------------------------------------------------------------------------------------
 // Functions

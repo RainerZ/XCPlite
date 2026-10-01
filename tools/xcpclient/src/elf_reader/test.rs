@@ -828,3 +828,29 @@ fn test_register_events_marker_outside_section() {
     assert_eq!(reg.event_list.find_event("out", 0).unwrap().get_id(), 0xFFFE);
     assert_eq!(reg.event_list.find_event("zero", 0).unwrap().get_id(), 0xFFFD);
 }
+
+// The EPK in the A2L file is the EPK as XcpInit stores it on the target: truncated to XCP_EPK_MAX_LENGTH, space, tab and colon replaced
+#[test]
+fn normalize_epk_like_target() {
+    assert_eq!(normalize_epk("V201"), "V201");
+    assert_eq!(normalize_epk("V 1.0:build\t7"), "V_1.0_build_7");
+    let long = "0123456789012345678901234567890123456789";
+    assert_eq!(normalize_epk(long), &long[..XCP_EPK_MAX_LENGTH]);
+}
+
+// ADDR_EPK is the address the target maps to its own EPK copy (XCP_ADDR_EPK), not the address of the xcp_epk__ string
+#[test]
+fn epk_addr_is_target_epk_address() {
+    assert_eq!(epk_addr(false, true), 0xFFFFFF00); // ACSDD
+    assert_eq!(epk_addr(false, false), 0xFFFFFF00);
+    assert_eq!(epk_addr(true, true), 0x80000000); // CASDD, epk segment 0 offset 0
+    assert_eq!(epk_addr(true, false), 0xFFFFFF00); // CASDD without epk segment
+
+    let mut debug_data = empty_debug_data();
+    debug_data.epk_string = Some("V 201".to_string());
+    debug_data.epk_addr = 0x3C0C8E8C;
+    let elf_reader = ElfReader::from_debug_data(debug_data);
+    let mut reg = Registry::new();
+    elf_reader.register_epk_addr_info(&mut reg, false, 0);
+    assert_eq!(reg.application.get_version(), "V_201");
+}

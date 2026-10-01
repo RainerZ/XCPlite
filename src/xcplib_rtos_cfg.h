@@ -145,8 +145,8 @@
 // Linker sections xcp_evts and xcp_cals
 #define OPTION_SECTION_REGISTRATION
 
-// @@@@ Test: rtos configuration without section registration (not recommended)
-/*
-#undef OPTION_SECTION_REGISTRATION
-#define OPTION_DAQ_EVENT_LIST
-*/
+// @@@@ Test:
+// rtos configuration without section registration (not recommended),
+// needs XCP tool support for event and segment detection or xcpclient in online A2L generation mode
+// #undef OPTION_SECTION_REGISTRATION
+// #define OPTION_DAQ_EVENT_LIST

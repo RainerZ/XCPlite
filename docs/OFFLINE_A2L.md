@@ -1,27 +1,23 @@
 # Offline A2L Generation with xcpclient
 
 XCPlite can generate the A2L file on the target at runtime ([on-target A2L generation](TECHNICAL.md#on-target-a2l-file-generation)),
-or the A2L file is generated offline from the ELF file of the application by the ELF/DWARF to A2L generator built into the
-`xcpclient` tool (`tools/xcpclient/`). Offline generation is used by the `no_a2l` (Linux,MacOS) and `rtos` (FreeRTOS) build configurations: the library is built without A2L generator and without file system dependency, which reduces code size on microcontroller and RTOS targets.
+or the A2L file is generated offline from the ELF file of the application by the ELF/DWARF to A2L generator built into the `xcpclient` tool (`tools/xcpclient/`). Offline generation is used by the `no_a2l` (Linux,MacOS) and `rtos` (FreeRTOS) build configurations. In this case, the library is built without A2L generator and without file system dependency.
 
-The generator is specific to XCPlite. It knows the markers the XCPlite instrumentation macros leave in the ELF file and the relative
-addressing modes of XCPlite, so it creates a complete A2L file for measurement variables on the stack, calibration parameters in
-segments and complex types, which a general purpose A2L creator can not reconstruct from the debug information alone.
+The generator is specific to XCPlite. It knows the markers the XCPlite instrumentation macros leave in the ELF file, the relative addressing modes of XCPlite and other implementation details, so it cis able to creates a complete A2L file for measurement variables, calibration parameters in segments and complex types, which a general purpose A2L creator can not reconstruct from the debug information alone.
 
 See `examples/no_a2l_demo`, `examples/no_a2l_demo_cpp` and `examples/freertos_demo` for complete examples with build scripts.
 
 ## Concept
 
-The instrumentation macros place information in the ELF file at compile and link time. The library and the generator use it. The
-sections `xcp_evts` and `xcp_cals` are only emitted with the configuration option `OPTION_SECTION_REGISTRATION` (defined in the `no_a2l`
-and `rtos` configurations). Without it, a pure offline A2L file is not possible, see
+The instrumentation macros place information in the ELF file at compile and link time. The library and the generator use it.  
+The sections (`xcp_evts`,`xcp_cals`,...) are only emitted with the configuration option `OPTION_SECTION_REGISTRATION` (defined in the `no_a2l` and `rtos` configurations). Without it, a pure offline A2L file is not possible, see
 [Without section registration](#without-section-registration):
 
 | Source in the ELF file | Written by | Used for |
 |---|---|---|
 | `xcp_evts` section | `DaqCreateEvent`, `DaqCreateEventExt`, `DaqCreateAndTriggerEvent` | All events with name, cycle time and priority. The position of the descriptor in the section is the event id, on the target and in the A2L file |
 | `xcp_cals` section | `CalSegDecl`, `CalSegDeclRef`, `CalSegCreate` | All calibration segments with the address and the size of their default page. The order of the descriptors is the segment number |
-| `xcp_epk` section, or the `xcp_epk__` variable without `OPTION_SECTION_REGISTRATION` | `XcpCreateEpk` | The EPK software version string and its address |
+| `xcp_epk` section, or the `xcp_epk__` variable without `OPTION_SECTION_REGISTRATION` | `XcpCreateEpk` | The EPK software version string. `ADDR_EPK` is not the address of this string: the target keeps its own copy of the EPK given to `XcpInit`, which the `epk` segment and the EPK upload use, the A2L file gets the address the target maps to it (`XCP_ADDR_EPK`: `0xFFFFFF00` with absolute addressing of calibration segments, `0x80000000` with segment relative addressing) |
 | `xcp_meta` section | `XCP_UNIT`, `XCP_LIMITS`, `XCP_COMMENT`, `XCP_READ_WRITE` | Metadata of measurement and calibration objects |
 | DWARF scope of the `trg__<modes>__<event>` anchor variables | `DaqTriggerEvent`, `DaqCreateAndTriggerEvent`, `DaqTriggerEventExt`, `DaqEventVar` | The function in which an event is triggered, its stack frame and the addressing modes available at the trigger point |
 | `XCPLITE__<signature>` variable | libxcplite | The addressing scheme of the target (`CASDD`, `ACSDD`, `AXSDD`, `CXSDD`), see [addressing modes](TECHNICAL.md#addressing-modes) |
@@ -31,9 +27,7 @@ and `rtos` configurations). Without it, a pure offline A2L file is not possible,
 The macro expansions and the naming conventions of the markers are the contract between the library and the generator, they are
 described in [TECHNICAL.md — Instrumentation Markers for Offline A2L Tools](TECHNICAL.md#instrumentation-markers-for-offline-a2l-tools).
 
-The same link time information is used by the library itself: `XcpInit` registers the events and calibration segments from the
-sections in a deterministic order, so the event ids and segment numbers in the A2L file stay valid independent of the code execution
-order, without a persistence file. What this requires from the build is described in
+The same link time information is used by the library itself: `XcpInit` registers the events and calibration segments from the sections in a deterministic order, so the event ids and segment numbers in the A2L file stay valid independent of the code execution order, without a persistence file. What this requires from the build is described in
 [With section registration: requirements and checks](#with-section-registration-requirements-and-checks).
 
 ### With section registration: requirements and checks
@@ -62,17 +56,12 @@ What has to be considered:
 
   This is the safe way with any linker and any option.
   The `xcp_meta` section (metadata) is never referenced by the program, it needs `KEEP` with `--gc-sections`, otherwise the metadata is
-  silently missing in the A2L file (xcpclient warning `No xcp_meta section found`). `examples/freertos_demo/freertos_esp32_demo/extra_linker_script.py`
-  shows all of this for ESP-IDF, including an ESP32 specific pitfall: the flash data must stay one contiguous DROM segment, otherwise
-  the bootloader maps only a part of it and the firmware crashes at startup.
+  silently missing in the A2L file (xcpclient warning `No xcp_meta section found`). `examples/freertos_demo/freertos_esp32_demo/extra_linker_script.py` shows all of this for ESP-IDF, including an ESP32 specific pitfall: the flash data must stay one contiguous DROM segment, otherwise the bootloader maps only a part of it and the firmware crashes at startup.
 - **No gaps between the descriptors.** Nothing else may be placed between the boundary symbols, and no alignment padding. The section size
   must be a multiple of the descriptor size, 16 bytes for `xcp_evts`, 32 bytes for `xcp_cals`.
 - **Create each event in one place.** Every call site of `DaqCreateEvent`, `DaqCreateEventExt`, `DaqCreateAndTriggerEvent` or
   `DaqCreateAndTriggerEventCapture` emits its own descriptor. With `OPTION_DAQ_EVENT_LIST` (the `rtos` configuration) an event name
-  which is created at two places shifts the ids of all events after it in the section: `XcpInit()` creates the event only once, the
-  trigger macros use the position of their descriptor. The triggers of the following events then silently use a wrong or undefined
-  event id, and the A2L file has the positions as well. Without `OPTION_DAQ_EVENT_LIST` (the `no_a2l` configuration) there are two
-  events with the same name. xcpclient warns with `Event 'x' is defined N times`, and with `OPTION_DAQ_EVENT_LIST` `XcpInit()` reports
+  which is created at two places shifts the ids of all events after it in the section: `XcpInit()` creates the event only once and prints an error message, the trigger macros use the position of their descriptor. The triggers of the following events then silently use a wrong or undefined event id, and the A2L file has the positions as well. Without `OPTION_DAQ_EVENT_LIST` (the `no_a2l` configuration) there are two events with the same name. xcpclient warns with `Event 'x' is defined N times`, and with `OPTION_DAQ_EVENT_LIST` `XcpInit()` reports
   `Event 'x' is created at more than one place`. To trigger an event in several functions, declare it
   once with `DaqDeclareEvent` at file scope and use `DaqTriggerEvent` in the functions.
 - **Declare each calibration segment once**, the generator expects exactly one `calseg__<name>` descriptor per segment.
@@ -366,6 +355,7 @@ Messages worth knowing when a variable is missing or looks wrong in the A2L file
 | `No EPK string found, neither the section xcp_epk nor the variable xcp_epk__ exist` | The application does not call `XcpCreateEpk(epk)`. The A2L file gets no `EPK`/`ADDR_EPK`, so neither the tool nor CANape can check whether the A2L file matches the target software. Call `XcpCreateEpk` with the same string as `XcpInit`. |
 | `No EPK string found: the variable xcp_epk__ (XcpCreateEpk) exists in the debug information, but it has no address` | The compiler or the linker (`--gc-sections`) removed the EPK string. The application was built with an older `xcplib.h`, whose `XcpCreateEpk` did not reference the array. If it happens with the current one, add `KEEP(*(.rodata.*xcp_epk__*))` to the linker script. |
 | `The EPK address ... is from the debug information only, there is no xcp_epk__ symbol at this address` (info) | The EPK string is correct, but the array itself was removed and the compiler described its location with an identical string literal. Same cause and fix as above. |
+| `The target changes the EPK '...' to '...'` | `XcpInit` truncates the EPK to 31 characters and replaces space, tab and colon with an underscore. The A2L file gets the changed EPK, which the target reports. Use an EPK string without these characters, so `XcpCreateEpk` and the target agree. |
 | `EPK mismatch: A2L file '...' has EPK '...', target reports EPK '...'` | The A2L file does not belong to the running build. `--yes` overrides the check. |
 | `'...' is a Mach-O (macOS) binary, macOS is not supported` | The application was built on macOS. Executables built on macOS contain no DWARF debug information, build on Linux or for an embedded ELF target. |
 | `... does not contain DWARF2+ debug info. The section .debug_info is missing.` | The application was built without `-g`, or the debug information was stripped. |

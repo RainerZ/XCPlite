@@ -3256,10 +3256,9 @@ bool XcpInit(const char *name, const char *epk, uint8_t mode) {
         .name = XCP_EPK_CALSEG_NAME, .addr = &calseg_id_epk, .indexp = (tXcpCalSegIndex *)&calseg_id_epk, .size = XCP_EPK_MAX_LENGTH + 1, .type = XCP_CALSEG_TYPE_SEGMENT};
     (void)calseg__epk; // Without section registration, the descriptor is only the calseg__epk marker for offline A2L tools
     DBG_PRINTF3("XcpInit: Create EPK calibration segment '%s'\n", XCP_EPK_CALSEG_NAME);
-    // @@@@ TODO: Are we sure, that this works in absolute addressing mode, since the reference page is not copied anymore: what is writen to the A2L file
-    // Note that this, this might not be the final EPK yet
-    // In SHM mode, it is too early to initialize the EPK segment, since the EPK is a hash of the applications EPKs
-    // XcpGetEcuEpk() will return the EPK a static lifetime empty string in this case, with XCP_EPK_MAX_LENGTH + 1 zero initialized bytes
+    // In SHM mode, the EPK is a hash of the applications EPKs
+    // Note that this might not be the final EPK yet
+    // XcpGetEcuEpk() will return the EPK as a static lifetime empty string, in this case with XCP_EPK_MAX_LENGTH + 1 zero initialized bytes
     calseg_id_epk = XcpCreateCalSeg(XCP_EPK_CALSEG_NAME, XcpGetEcuEpk(), XCP_EPK_MAX_LENGTH + 1);
     assert(calseg_id_epk == 0);
 #endif

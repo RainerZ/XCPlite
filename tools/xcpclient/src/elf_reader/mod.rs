@@ -135,6 +135,25 @@ fn capture_member_variable_name(member_name: &str) -> &str {
     member_name.strip_suffix('_').unwrap_or(member_name)
 }
 
+// EPK of the target, see XCP_EPK_MAX_LENGTH and XCP_ADDR_EPK in src/xcp_cfg.h
+// The target keeps its own copy of the EPK string given to XcpInit, the epk calibration segment and the EPK upload use this copy, not
+// the xcp_epk__ string of XcpCreateEpk. Its address is not known from the ELF file, ADDR_EPK is the address the target maps to it
+const XCP_EPK_MAX_LENGTH: usize = 31;
+const XCP_ADDR_EPK_ABS: u32 = 0xFFFFFF00; // Absolute addressing (ACSDD) or no epk segment, XcpSetMta maps it to the EPK
+const XCP_ADDR_EPK_SEG: u32 = 0x80000000; // Segment relative addressing (CASDD) with epk segment, segment 0 offset 0
+
+// The EPK as the target sees it: XcpSetEpk truncates the string given to XcpInit to XCP_EPK_MAX_LENGTH bytes and replaces space, tab
+// and colon with an underscore
+fn normalize_epk(epk: &str) -> String {
+    let bytes = &epk.as_bytes()[..epk.len().min(XCP_EPK_MAX_LENGTH)];
+    String::from_utf8_lossy(bytes).replace([' ', '\t', ':'], "_")
+}
+
+// ADDR_EPK, the address the target maps to its EPK
+fn epk_addr(segment_relative: bool, has_epk_segment: bool) -> u32 {
+    if segment_relative && has_epk_segment { XCP_ADDR_EPK_SEG } else { XCP_ADDR_EPK_ABS }
+}
+
 // Variable which transport information for the A2L creator
 pub fn is_a2l_variable(name: &str) -> bool {
     name.starts_with("calseg__")
@@ -379,14 +398,26 @@ impl ElfReader {
         }
     }
 
-    // Get the EPK string and address from debug_data and set it in the registry application version information, if available
-    pub fn register_epk_addr_info(&self, reg: &mut Registry, verbose: usize) {
+    // Get the EPK string from debug_data and set it in the registry application version information, if available
+    // ADDR_EPK is the address the target maps to its EPK (XCP_ADDR_EPK), not the address of the xcp_epk__ string, see XCP_ADDR_EPK_ABS
+    // Must be called after register_segments, the address depends on the epk segment
+    pub fn register_epk_addr_info(&self, reg: &mut Registry, segment_relative: bool, verbose: usize) {
         info!("===============================================================");
-        if self.debug_data.epk_addr > 0 {
-            info!("EPK found at address = 0x{:08X}", self.debug_data.epk_addr);
-            let epk = self.debug_data.epk_string.clone().unwrap_or_else(|| "<unknown>".to_string());
-            info!("EPK string: '{}'", epk);
-            reg.application.set_version(epk, self.debug_data.epk_addr.try_into().unwrap());
+        if let Some(epk_string) = self.debug_data.epk_string.as_ref() {
+            info!("EPK string '{}' found at address 0x{:08X}", epk_string, self.debug_data.epk_addr);
+            let epk = normalize_epk(epk_string);
+            if epk != *epk_string {
+                warn!(
+                    "The target changes the EPK '{}' to '{}': XcpInit truncates it to {} characters and replaces space, tab and colon with an underscore. \
+                     The A2L file gets '{}', use an EPK string without these characters",
+                    epk_string, epk, XCP_EPK_MAX_LENGTH, epk
+                );
+            }
+            let epk_addr = epk_addr(segment_relative, reg.cal_seg_list.find_cal_seg("epk").is_some());
+            if verbose >= 1 {
+                println!("  EPK '{}', ADDR_EPK = 0x{:08X}", epk, epk_addr);
+            }
+            reg.application.set_version(epk, epk_addr);
         } else {
             warn!("No EPK in ELF file, the A2L file gets no EPK and ADDR_EPK");
         }
@@ -495,10 +526,12 @@ impl ElfReader {
             let seg_length: u16;
             let seg_addr: u64;
 
-            // Special case for EPK segment, which does not have a reference page variable, but the segment address and length may be stored in the debug data from the EPK section
+            // Special case for EPK segment, which does not have a reference page variable
+            // The target creates it in XcpInit with its own copy of the EPK string (XCP_EPK_MAX_LENGTH + 1 bytes), whose address is not known
+            // from the ELF file. In absolute addressing mode, the address of the xcp_epk__ string is used instead, it has the same content
             if seg_name == "epk" {
-                if let Some(epk_str) = self.debug_data.epk_string.as_ref() {
-                    seg_length = epk_str.len().try_into().expect("EPK string length exceeds 64K");
+                if self.debug_data.epk_string.is_some() {
+                    seg_length = (XCP_EPK_MAX_LENGTH + 1) as u16;
                     seg_addr = self.debug_data.epk_addr;
                 } else {
                     error!("No EPK in ELF file (section xcp_epk or variable xcp_epk__), segment '{}' skipped", seg_name);
@@ -596,7 +629,17 @@ impl ElfReader {
                 // Segment absolute addressing mode
                 else {
                     // Check if address and length match
-                    if reg_seg.addr as u64 != seg_addr {
+                    // The target reports the address of its own copy of the EPK string for the epk segment, it is not the xcp_epk__ string
+                    if seg_name == "epk" {
+                        if reg_seg.size != seg_length as u32 {
+                            warn!(
+                                "Calibration segment 'epk' length does not match the target, reg = {} vs. {}, check XCP_EPK_MAX_LENGTH",
+                                reg_seg.size, seg_length
+                            );
+                        } else {
+                            info!("Calibration segment 'epk' of the target {}:0x{:08X} used", reg_seg.addr_ext, reg_seg.addr);
+                        }
+                    } else if reg_seg.addr as u64 != seg_addr {
                         warn!(
                             "Calibration segment '{}' address does not match existing registry entry, reg = {:08X} vs. {:08X}",
                             seg_name, reg_seg.addr, seg_addr
@@ -607,6 +650,8 @@ impl ElfReader {
                             seg_name, reg_seg.size, seg_length
                         );
                     } else {
+                        // Set the memory address for the lookup of the calibration variables in this segment, as for a new segment below
+                        reg_seg.set_mem_addr(seg_addr);
                         info!("Calibration segment '{}' matches existing registry entry", seg_name);
                     }
                 } // absolute addressing mode

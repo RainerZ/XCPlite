@@ -959,15 +959,14 @@ extern const uint8_t *gXcpBaseAddr;
 void XcpSetLogLevel(uint8_t level);
 
 // Build time A2L generation
-// Create the memory section for epk software version string, used for compatibility check of A2L and BIN file
-#ifdef OPTION_SECTION_REGISTRATION
-
-#if defined(__ELF__)
+// Create the epk software version string, used for compatibility check of A2L and BIN file
+// With OPTION_SECTION_REGISTRATION, it is placed in the memory section xcp_epk
+#if defined(OPTION_SECTION_REGISTRATION) && defined(__ELF__)
 #define XCP_EPK_SECTION_ATTR __attribute__((section("xcp_epk"), used))
-#elif defined(__APPLE__)
+#elif defined(OPTION_SECTION_REGISTRATION) && defined(__APPLE__)
 #define XCP_EPK_SECTION_ATTR __attribute__((section("__DATA,xcp_epk"), used))
 #else
-#define XCP_EPK_SECTION_ATTR /* section-based registration not supported on this platform */
+#define XCP_EPK_SECTION_ATTR /* no section registration, or not supported on this platform */
 #endif
 
 // Without the xcp_epk section, xcpclient finds the EPK string by the variable name xcp_epk__ in the DWARF debug information.
@@ -979,8 +978,6 @@ void XcpSetLogLevel(uint8_t level);
         const char *volatile xcp_epk__keep = xcp_epk__;                                                                                                                            \
         (void)xcp_epk__keep;                                                                                                                                                       \
     } while (0)
-
-#endif
 
 /// XcpInit mode flags
 #define XCP_MODE_DEACTIVATE 0     ///< Initialize XCP singleton without activating the protocol layer (passive/off)

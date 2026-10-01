@@ -23,7 +23,7 @@ Sections:
   Name: .dram0.data          Addr: 0x3fc96f00 Size: 22780 bytes Kind: Data 
   Name: .noinit              Addr: 0x3fc9c7fc Size: 0 bytes Kind: UninitializedData 
   Name: .dram0.bss           Addr: 0x3fc9c800 Size: 66544 bytes Kind: UninitializedData 
-  Name: .flash.text          Addr: 0x42000020 Size: 717280 bytes Kind: Text 
+  Name: .flash.text          Addr: 0x42000020 Size: 717284 bytes Kind: Text 
   Name: .flash_rodata_dummy  Addr: 0x3c000020 Size: 720896 bytes Kind: UninitializedData 
   Name: .flash.appdesc       Addr: 0x3c0b0020 Size: 256 bytes Kind: ReadOnlyData 
   Name: .flash.rodata        Addr: 0x3c0b0120 Size: 207424 bytes Kind: Data 
@@ -56,21 +56,21 @@ Sections:
 
 [INFO ] Loading DWARF sections
 [INFO ] EPK string read from xcp_epk section: 'V201' at address 0x3C0E2B60
-[WARN ] xcp_demo_cpp:419: 'phase': location evaluation result not handled Piece { size_in_bits: None, bit_offset: None, location: Bytes { value: EndianSlice(Little, [0x00, 0x00, 0x00, 0x00]) } }
-[WARN ] xcp_demo_cpp:420: 'slow_task_period_ms': location is a register Register(6)
-[WARN ] xcp_demo_cpp:421: 'fast_task_period_ms': location is a register Register(9)
-[WARN ] xcp_demo_cpp:476: 'delayed': location is a register Register(10)
-[WARN ] xcp_demo_cpp:437: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(32), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Value { value: Generic(1007456452) } }]
-[WARN ] xcp_demo_cpp:360: 'period_ms': location is a register Register(5)
-[WARN ] xcp_demo_cpp:405: 'delayed': location is a register Register(10)
-[WARN ] xcp_demo_cpp:371: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(32), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Value { value: Generic(1007456452) } }]
-[WARN ] xcp_demo_cpp:316: 'test_float': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(19), base_type: UnitOffset(37) }
-[WARN ] xcp_demo_cpp:317: 'test_double': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(7), base_type: UnitOffset(0) }
-[WARN ] xcp_demo_cpp:319: 'test_uint16': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(5), base_type: UnitOffset(0) }
-[WARN ] xcp_demo_cpp:320: 'test_uint32': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(7), base_type: UnitOffset(0) }
-[WARN ] xcp_demo_cpp:321: 'test_uint64': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(7), base_type: UnitOffset(0) }
-[WARN ] xcp_demo_cpp:327: 'test_struct': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(19), base_type: UnitOffset(37) }
-[WARN ] xcp_demo_cpp:328: 'test_array': the variable is split into 3 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(2) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Register { register: Register(3) } }]
+[WARN ] xcp_demo_cpp:434: 'phase': location evaluation result not handled Piece { size_in_bits: None, bit_offset: None, location: Bytes { value: EndianSlice(Little, [0x00, 0x00, 0x00, 0x00]) } }
+[WARN ] xcp_demo_cpp:435: 'slow_task_period_ms': location is a register Register(6)
+[WARN ] xcp_demo_cpp:436: 'fast_task_period_ms': location is a register Register(9)
+[WARN ] xcp_demo_cpp:491: 'delayed': location is a register Register(10)
+[WARN ] xcp_demo_cpp:452: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(32), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Value { value: Generic(1007456452) } }]
+[WARN ] xcp_demo_cpp:375: 'period_ms': location is a register Register(5)
+[WARN ] xcp_demo_cpp:420: 'delayed': location is a register Register(10)
+[WARN ] xcp_demo_cpp:386: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(32), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Value { value: Generic(1007456452) } }]
+[WARN ] xcp_demo_cpp:331: 'test_float': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(19), base_type: UnitOffset(37) }
+[WARN ] xcp_demo_cpp:332: 'test_double': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(7), base_type: UnitOffset(0) }
+[WARN ] xcp_demo_cpp:334: 'test_uint16': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(5), base_type: UnitOffset(0) }
+[WARN ] xcp_demo_cpp:335: 'test_uint32': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(7), base_type: UnitOffset(0) }
+[WARN ] xcp_demo_cpp:336: 'test_uint64': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(7), base_type: UnitOffset(0) }
+[WARN ] xcp_demo_cpp:342: 'test_struct': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(19), base_type: UnitOffset(37) }
+[WARN ] xcp_demo_cpp:343: 'test_array': the variable is split into 3 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(2) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Register { register: Register(3) } }]
 [WARN ] Failed to read type: unexpected DWARF tag DW_TAG_ptr_to_member_type in type definition
 [WARN ] Failed to read type: unexpected DWARF tag DW_TAG_ptr_to_member_type in type definition
 [WARN ] Failed to read type: unexpected DWARF tag DW_TAG_ptr_to_member_type in type definition
@@ -831,8 +831,8 @@ Compilation units in debug_data.unit_names:
 
 ====================================================================================================
 DWARF sections by address:
-  '.flash_rodata_dummy': 0x3c000020, 1006632992 bytes (1007353888)
-  '.ext_ram.dummy': 0x3c000020, 0 bytes (1007616000)
+  '.ext_ram.dummy': 0x3c000020, 1006632992 bytes (1007616000)
+  '.flash_rodata_dummy': 0x3c000020, 0 bytes (1007353888)
   '.flash.appdesc': 0x3c0b0020, 720896 bytes (1007354144)
   '.flash.rodata': 0x3c0b0120, 256 bytes (1007561568)
   'xcp_epk': 0x3c0e2b60, 207424 bytes (1007561576)
@@ -844,7 +844,7 @@ DWARF sections by address:
   '.iram0.vectors': 0x40374000, 7174144 bytes (1077363716)
   '.iram0.text': 0x40374404, 1028 bytes (1077440067)
   '.iram0.text_end': 0x40386e43, 76351 bytes (1077440256)
-  '.flash.text': 0x42000020, 29856221 bytes (1108013568)
+  '.flash.text': 0x42000020, 29856221 bytes (1108013572)
   '.rtc.force_slow': 0x50000200, 234881504 bytes (1342177824)
   '.rtc_reserved': 0x600fffd8, 269483480 bytes (1611661312)
 
@@ -892,9 +892,6 @@ xcp_epk__keep':  xcp_demo_cpp:'startXcpServer' : addr=2:0x7FFFFFD8
 [INFO ] Target signature found: ACSDD
 [INFO ] Using absolute addressing for calibration segments
 [INFO ] ===============================================================
-[INFO ] EPK found at address = 0x3C0E2B60
-[INFO ] EPK string: 'V201'
-[INFO ] ===============================================================
 [INFO ] Registering event information:
 [INFO ] ===============================================================
 [INFO ] Found XCP event descriptors using linker symbols at address = 0x3C0B0160, size = 48 bytes
@@ -911,10 +908,13 @@ Found 2 segment definition marker variables:
 0: 'epk' - number=Some(0), addr=00000000'
 1: 'parameters' - number=Some(1), addr=3C0B0140'
 [INFO ] Calibration segment 'epk' not yet defined in registry
-[INFO ] Created segment 0: 'epk':  addr = 0x3C0E2B60, size = 4, mem_addr = 0x3C0E2B60
+[INFO ] Created segment 0: 'epk':  addr = 0x3C0E2B60, size = 32, mem_addr = 0x3C0E2B60
 [INFO ] Calibration segment 'parameters' default page variable found in debug data: Address = 0x3c0c90c4, Size = 0x14
 [INFO ] Calibration segment 'parameters' not yet defined in registry
 [INFO ] Created segment 1: 'parameters':  addr = 0x3C0C90C4, size = 20, mem_addr = 0x3C0C90C4
+[INFO ] ===============================================================
+[INFO ] EPK string 'V201' found at address 0x3C0E2B60
+  EPK 'V201', ADDR_EPK = 0xFFFFFF00
 [INFO ] ===============================================================
 [INFO ] Registering event locations:
 [INFO ] ===============================================================
@@ -1020,4 +1020,5 @@ Found 2 segment definition marker variables:
 [INFO ] Check A2L file "CANape/freertos_demo.a2l"
 [INFO ] A2L file check ok
 [INFO ] Created A2L with file: CANape/freertos_demo.a2l ELF/DWARF information only,  offline mode
+[INFO ] Flattening typedef structure in registry into mangled instance names !
 [INFO ] Default event 'fastTask' resolved to event id 1
