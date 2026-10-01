@@ -135,7 +135,7 @@ struct Args {
     log_level: u8,
 
     // -v --verbose
-    /// Content information detail verbosity level
+    /// ELF parsing log verbosity level
     #[arg(long, default_value_t = 0)]
     verbose: usize,
 
@@ -369,12 +369,12 @@ struct DaqDecoder {
     event_count: usize,
     byte_count: usize,
     daq_timestamp: [u64; MAX_EVENT],
-    verbose: u8,
+    log_measurements: bool,
     csv_writer: Option<std::io::BufWriter<std::fs::File>>,
 }
 
 impl DaqDecoder {
-    pub fn new(verbose: u8, csv_filename: &str) -> DaqDecoder {
+    pub fn new(log_measurements: bool, csv_filename: &str) -> DaqDecoder {
         let csv_writer = if csv_filename.is_empty() {
             None
         } else {
@@ -396,7 +396,7 @@ impl DaqDecoder {
             event_count: 0,
             byte_count: 0,
             daq_timestamp: [0; MAX_EVENT],
-            verbose,
+            log_measurements,
             csv_writer,
         }
     }
@@ -484,12 +484,12 @@ impl XcpDaqDecoder for DaqDecoder {
         let t_ns = t * self.timestamp_resolution;
         let delta_us = ((t - t_last) * self.timestamp_resolution) / 1000;
 
-        if self.verbose >= 2 {
+        if self.csv_writer.is_none() {
             println!("EVENT: daq={}, odt={}, lost={}, t={}ns (+{}us)", daq, odt, lost, t_ns, delta_us);
         }
 
         // Decode all odt entries — for terminal (log_level >= 2) and/or CSV output
-        if self.verbose >= 1 || self.csv_writer.is_some() {
+        {
             let daq_list = &self.daq_odt_entries.as_ref().unwrap()[daq as usize];
 
             for odt_entry in daq_list.iter() {
@@ -532,8 +532,7 @@ impl XcpDaqDecoder for DaqDecoder {
 
                 if let Some(ref mut writer) = self.csv_writer {
                     let _ = writeln!(writer, "{},{},{},{}", t_ns, daq, odt_entry.name, value_str);
-                }
-                if self.verbose >= 1 {
+                } else {
                     println!(" {} = {}", odt_entry.name, value_str);
                 }
             }
@@ -641,7 +640,7 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
             // Connect to the XCP server
             // Print protocol information
             info!("XCP Connect using {}", protocol);
-            let daq_decoder = Arc::new(Mutex::new(DaqDecoder::new(verbose as u8, &csv_filename)));
+            let daq_decoder = Arc::new(Mutex::new(DaqDecoder::new(true, &csv_filename)));
             match xcp_client.connect(connect_mode, Arc::clone(&daq_decoder), ServTextDecoder::new()).await {
                 Ok(_) => {
                     info!("Connected to XCP server at {}", dest_addr);
@@ -1068,7 +1067,8 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                         std::net::IpAddr::V4(addr) if protocol == "TCP" || protocol == "UDP" => Some((protocol, addr, dest_addr.port())),
                         _ => None,
                     };
-                    a2l_fix::rewrite_a2l_file(&a2l_path, &event_mapping, &seg_mapping, tl_params).map_err(|e| format!("Could not rewrite A2L file '{}': {}", a2l_path.display(), e))?;
+                    a2l_fix::rewrite_a2l_file(&a2l_path, &event_mapping, &seg_mapping, tl_params)
+                        .map_err(|e| format!("Could not rewrite A2L file '{}': {}", a2l_path.display(), e))?;
                 }
             } else if !event_mapping.is_empty() || !seg_mapping.is_empty() {
                 warn!("A2L file {} differs from target, use automatic correction (--fix-a2l)", a2l_path.display());

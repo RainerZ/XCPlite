@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 1
 cd "$SCRIPT_DIR" || exit 1
 
 # IP address of the ESP32, written to the A2L file
-TARGET_HOST="192.168.0.146"
+TARGET_HOST="192.168.8.127"
 
 # ELF file built by PlatformIO
 ELFFILE=".pio/build/lilygo-t-display-s3/firmware.elf"
@@ -34,7 +34,8 @@ fi
 
 # Remove the A2L file of a previous run, so a failed generation can not leave a stale A2L file behind
 rm -f "$A2LFILE"
-XCPCLIENT_ARGS=(--offline --udp --dest-addr "$TARGET_HOST" --elf "$ELFFILE" --a2l "$A2LFILE" --elf-unit-filter xcp_demo --default-event=fastTask --log-level=3 --verbose=0) 
+# --verbose=1 logs the ELF/DWARF sections and the compilation units to stdout
+XCPCLIENT_ARGS=(--offline --udp --dest-addr "$TARGET_HOST" --elf "$ELFFILE" --a2l "$A2LFILE" --elf-unit-filter xcp_demo --default-event=fastTask --log-level=3 --verbose=1) 
 echo "Command: $XCPCLIENT ${XCPCLIENT_ARGS[*]}"
 "$XCPCLIENT" "${XCPCLIENT_ARGS[@]}" >$LOGFILE
 if [ $? -ne 0 ] || [ ! -f "$A2LFILE" ]; then

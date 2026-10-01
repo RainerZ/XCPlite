@@ -80,7 +80,7 @@
 
 // XCPlite parameters
 #define XCP_PROJECT_NAME "freertos_demo"
-#define XCP_PROJECT_VERSION "V200"
+#define XCP_PROJECT_VERSION "V201"
 #define XCP_USE_TCP false
 #define XCP_SERVER_PORT 5555
 #define XCP_QUEUE_SIZE 0 // The queue size is derived from OPTION_QUEUE_32_SEGMENT_COUNT for the 32-bit FreeRTOS build; this parameter is ignored

@@ -10,6 +10,7 @@ generated_sections = build_dir / "sections.ld"
 # Generate a project-local shadow of sections.ld which collects XCPlite's
 # runtime descriptors inside .flash.rodata and keeps named build metadata
 # adjacent in the same mapped flash region.
+
 source_sections = next(
     (
         Path(path) / "sections.ld"
@@ -46,6 +47,7 @@ xcp_sections = """
 # rodata unmapped, and the firmware crashes and resets on every boot with:
 #   E boot: Image contains multiple DROM segments. Only the last one will be mapped.
 # Verify with: esptool --chip esp32s3 image-info firmware.bin | grep DROM
+
 named_sections_marker = "  _flash_rodata_align = ALIGNOF(.flash.rodata);\n"
 named_sections = """  
 
