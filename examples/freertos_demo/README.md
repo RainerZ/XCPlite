@@ -248,12 +248,22 @@ With `configSUPPORT_STATIC_ALLOCATION=1`, XCPlite also uses static storage for i
 
 Each segment holds one UDP payload plus 8 bytes of metadata. With the default MTU of 1500, each segment occupies 1,480 bytes, so 16 segments require 23,680 bytes of static RAM. Adjust `OPTION_QUEUE_32_SEGMENT_COUNT` for DAQ burst capacity and RAM usage.
 
-The queue state and buffer use the default `.dtcm` and `.noncacheable` sections on embedded targets. These sections may be overridden in `xcplib_rtos_cfg.h` to match the application linker script:
+The queue state and buffer are placed in ordinary RAM by default. They may be placed into dedicated sections of the application linker script, for example the queue state into zero wait state DTCM on STM32H7. The section must exist in the linker script, GNU ld places an unknown section somewhere without a diagnostic:
 
 ```c
-#define OPTION_QUEUE_32_ATTRIBUTE __attribute__((section(".queue")))
+#define OPTION_QUEUE_32_ATTRIBUTE __attribute__((section(".dtcm")))
 #define OPTION_QUEUE_32_BUFFER_ATTRIBUTE __attribute__((section(".queue_buffer")))
 ```
+
+### lwIP API and Ethernet DMA
+
+By default the XCP server uses the lwIP netconn API. Every transmitted datagram is copied into a `PBUF_RAM` pbuf owned by lwIP, so the XCP buffers are free again when the send returns, whatever the lwIP build options and the Ethernet driver do. This matters for drivers which transmit with asynchronous DMA directly from the pbuf and release it on transmit completion, and which do cache maintenance only for pbufs they consider their own: TI CPSW lwipif skips it for `PBUF_REF` payloads, the STM32H7 `ethernetif.c` relies on the lwIP heap being placed in non-cacheable RAM.
+
+`OPTION_FREERTOS_LWIP_SOCKET_API` selects the lwIP socket API instead. With `LWIP_NETIF_TX_SINGLE_PBUF=0`, `lwip_sendto` references the XCP transmit buffer as a `PBUF_REF` pbuf instead of copying it. This saves one copy per datagram, but is only correct when the Ethernet driver has finished reading the buffer, or has copied it, before `lwip_sendto` returns, and keeps it coherent with its DMA (CPU cache). Drivers which start an asynchronous DMA transfer and release the pbuf on transmit completion, like TI CPSW lwipif and the STM32H7 `ethernetif.c`, do not meet this. With `LWIP_NETIF_TX_SINGLE_PBUF=1` (e.g. ESP-IDF) lwIP copies in both cases.
+
+Both need the receive timeout, `LWIP_SO_RCVTIMEO=1`.
+
+lwIP does not block a UDP send when it is out of memory (pbufs, heap or driver transmit buffers, for example on a congested Wi-Fi link), it fails immediately. The XCP server emulates a blocking send instead and retries every millisecond until lwIP accepts the datagram. As on platforms with a blocking `sendto`, the transmit queue then fills up and DAQ events are dropped and counted at queue entry; increase `OPTION_QUEUE_32_SEGMENT_COUNT` to handle longer bursts. A stall of more than one second is reported periodically, and when it ends. While blocked, command responses wait as well, and a stall which never ends, for example a permanently missing link, blocks a graceful server shutdown. The retry interval is at least one FreeRTOS tick, with a slow tick rate (e.g. 100 Hz) it limits the throughput under sustained overload.
 
 The memory size of static `tXcpData` depends on the configuration in `xcplib_cfg.h` and `xcplib_rtos_cfg.h`:
 - OPTION_CAL_SEGMENT_COUNT: Max number of calibration segments or blocks

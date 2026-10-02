@@ -52,7 +52,17 @@
 #define OPTION_FREERTOS_PRIORITY (tskIDLE_PRIORITY + 2U)
 
 // FreeRTOS IP stack configuration
-#define OPTION_FREERTOS_LWIP // Use the lwIP socket API for FreeRTOS
+#define OPTION_FREERTOS_LWIP // Use lwIP for FreeRTOS
+
+// lwIP API used by the XCP server, default is the netconn API
+// netconn API: each transmitted datagram is copied into a pbuf owned by lwIP. Works with any lwIP build options
+//   and any Ethernet driver, including drivers which transmit with asynchronous DMA directly from the pbuf
+//   and skip cache maintenance for referenced (PBUF_REF) payloads, e.g. TI CPSW lwipif.
+// socket API: lwip_sendto references the XCP transmit buffer without copying when lwIP is built with
+//   LWIP_NETIF_TX_SINGLE_PBUF=0. Only correct when the Ethernet driver has finished reading the buffer, or has
+//   copied it, before lwip_sendto returns, and keeps it coherent with its DMA (CPU cache). Saves one copy per datagram.
+// Both need LWIP_SO_RCVTIMEO=1.
+// #define OPTION_FREERTOS_LWIP_SOCKET_API
 
 //-------------------------------------------------------------------------------
 // Logging
@@ -79,7 +89,7 @@
 //-------------------------------------------------------------------------------
 // XCP server
 #undef OPTION_ENABLE_TCP // TCP support stubs not implemented yet for FreeRTOS
-// OPTION_ENABLE_UDP stays enabled: FreeRTOS targets use the lwIP socket API (OPTION_FREERTOS_LWIP above),
+// OPTION_ENABLE_UDP stays enabled: FreeRTOS targets use lwIP (OPTION_FREERTOS_LWIP above),
 // the POSIX simulator uses host sockets. For targets without any IP stack, use XCPLITE_CONFIGURATION=raw
 // (OPTION_ENABLE_UDP_RAW, hand-crafted UDP/IP over a raw Ethernet HAL) - see docs/SOCKET_RAW.md
 

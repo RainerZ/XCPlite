@@ -18,6 +18,10 @@
 |       socketStartup, socketCleanup, socketOpen (UDP only, TCP not supported),
 |       socketBind, socketShutdown, socketClose,
 |       socketRecvFrom, socketSendTo, socketSetTimeout
+|       Default: lwIP netconn API, SOCKET_HANDLE becomes struct netconn*,
+|         socketSendTo copies each datagram into a pbuf owned by lwIP
+|       + OPTION_FREERTOS_LWIP_SOCKET_API: lwIP socket API, SOCKET_HANDLE is the lwIP socket fd,
+|         zero copy transmit depending on the lwIP build options and the Ethernet driver
 |     OPTION_FREERTOS_LWIP not defined:
 |       All functions are error stubs — the caller must provide the implementation.
 |
@@ -134,6 +138,12 @@ struct socket {
 typedef struct socket *SOCKET_HANDLE;
 #define INVALID_SOCKET_HANDLE NULL
 #define SOCKET_FD(s) ((s)->sock) // Extract the OS socket fd from a SOCKET_HANDLE
+#elif defined(_FREE_RTOS) && !defined(FREE_RTOS_POSIX_SIM) && defined(OPTION_FREERTOS_LWIP) && !defined(OPTION_FREERTOS_LWIP_SOCKET_API)
+// FreeRTOS with the lwIP netconn API: SOCKET_HANDLE is the lwIP netconn
+// There is no socket fd, therefore SOCKET_FD() is deliberately not defined
+struct netconn;
+typedef struct netconn *SOCKET_HANDLE;
+#define INVALID_SOCKET_HANDLE NULL
 #else
 // Linux (without HW timestamps), FreeRTOS, macOS, QNX: SOCKET_HANDLE is the raw OS fd
 typedef SOCKET SOCKET_HANDLE;
