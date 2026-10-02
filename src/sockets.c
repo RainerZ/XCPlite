@@ -68,8 +68,12 @@ const char *socketGetErrorString(int32_t err) {
 // it polls every millisecond until lwIP accepts the datagram. As with a blocking sendto on other platforms,
 // the XCP transmit queue then fills up and DAQ events are dropped and counted at queue entry.
 // A stall is reported after SOCKET_LWIP_TX_STALL_WARNING_MS and then periodically, its end as well.
-// Note: the transmit thread holds the transport layer counter mutex while blocked, so command responses wait as well.
+
+// @@@@ TODO:
+// The transmit thread holds the transport layer counter mutex while blocked, so command responses wait as well.
+// This has impact on GET_DAQ_CLOCK latency
 // A stall which never ends, e.g. a permanently missing link, blocks a graceful XCP server shutdown.
+
 #define SOCKET_LWIP_TX_STALL_WARNING_MS 1000
 
 typedef struct {
@@ -124,15 +128,12 @@ static void socketCheckSegmentSize(uint16_t bufferSize) {
 #if defined(OPTION_FREERTOS_LWIP) && !defined(OPTION_FREERTOS_LWIP_SOCKET_API)
 
 //--------------------------------------------------------------------------
-// lwIP netconn API (default)
+// lwIP netconn API
 //
 // socketSendTo copies the datagram into a PBUF_RAM pbuf which lwIP allocates and reference counts.
 // The Ethernet driver may keep that pbuf beyond the call, for an asynchronous DMA transfer, until
 // transmit completion. The caller's buffer is no longer referenced when socketSendTo returns,
 // regardless of LWIP_NETIF_TX_SINGLE_PBUF and of how the driver handles PBUF_REF pbufs.
-// Drivers which skip cache maintenance for PBUF_REF payloads (e.g. TI CPSW lwipif) do it for PBUF_RAM.
-// The socket API (OPTION_FREERTOS_LWIP_SOCKET_API) passes the caller's buffer as PBUF_REF, when lwIP
-// is built with LWIP_NETIF_TX_SINGLE_PBUF=0.
 
 #include "lwip/api.h"   // netconn_new, netconn_bind, netconn_recv, netconn_sendto, netconn_delete, netbuf_alloc, netbuf_copy
 #include "lwip/ip.h"    // ip_set_option, SOF_REUSEADDR
@@ -311,6 +312,16 @@ bool socketSetTimeout(SOCKET_HANDLE socket, uint32_t timeoutMs) {
 // lwIP is built with LWIP_NETIF_TX_SINGLE_PBUF=0. The driver must then have finished reading it, or have
 // copied it, before lwip_sendto returns, and keep it coherent with its DMA (CPU cache).
 // Otherwise use the netconn API above, the default.
+
+// Drivers which skip cache maintenance for PBUF_REF payloads (e.g. TI CPSW lwipif) will do it for PBUF_RAM.
+// The socket API (OPTION_FREERTOS_LWIP_SOCKET_API) would pass the caller's buffer as PBUF_REF, when lwIP
+// is built with LWIP_NETIF_TX_SINGLE_PBUF=0.
+
+#if !defined(LWIP_NETIF_TX_SINGLE_PBUF) || LWIP_NETIF_TX_SINGLE_PBUF == 0
+#error "FREE_RTOS: LWIP_NETIF_TX_SINGLE_PBUF==0"
+#endif
+
+// @@@@ TODO: Eventually remove the socket API version
 
 #if defined(OPTION_FREERTOS_LWIP)
 #include "lwip/sockets.h" // lwip_socket, lwip_bind, lwip_sendto, lwip_recvfrom, lwip_close, lwip_shutdown, lwip_setsockopt

@@ -250,10 +250,16 @@ a name is looked up in the event list of the ELF file (and of the XCP server whe
 ### Variables and symbols
 
 - The address of a variable comes from its `DW_AT_location`. Variables without a location (declarations, `static const` data in a
-  namespace, the metadata markers in optimized builds) are resolved from the ELF symbol table: by `DW_AT_linkage_name`, by name, by the
-  Itanium mangled name of a namespace scope variable (`_ZN13motor_controlL5inputE`) or by a unique name suffix (`_ZZ4mainE7counter` for a
-  static local). For variables inside a function only symbols with local binding are considered, a global symbol with the same name
-  belongs to a different variable.
+  namespace, the metadata markers in optimized builds) are resolved from the ELF symbol table, by exact symbol names only: by
+  `DW_AT_linkage_name`, by name, by the Itanium mangled name of a namespace scope variable (`_ZN13motor_controlL5inputE`) or of a static
+  local in a C++ function (`_ZZ4mainE7counter`), by the clang name of a static local in a C function (`main.counter`) or by the GCC name
+  of a static local in a C function (`counter.1`, told apart by size). A symbol whose name only ends with the variable name is never
+  used, it belongs to a different object (the function `spiDetachMOSI` is not the variable `MOSI`). For variables inside a function
+  only symbols with local binding are considered, a global symbol with the same name belongs to a different variable.
+- A variable with `DW_AT_const_value` and without location is a compile time constant without memory, for example a pin number
+  `static const uint8_t MOSI = 11` from a board header. It is skipped (log level 4), unless one of the mangled or local static symbol
+  names above exists: GCC describes the metadata markers in a namespace or a function the same way, although they are in memory.
+  The plain name is not looked up for a constant, a symbol with this name is a different variable of another compilation unit.
 - GCC describes a namespace scope variable with a declaration entry inside the namespace and a definition entry at compilation unit level
   (`DW_AT_specification`), both are merged into one variable.
 - Variables with the same name get distinct A2L names: static variables in functions are prefixed with the function (`foo.counter`),

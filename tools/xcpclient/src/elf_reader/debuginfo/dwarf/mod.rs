@@ -74,7 +74,7 @@ mod attributes;
 pub(super) use attributes::get_low_pc_attribute;
 use attributes::{
     get_abstract_origin_attribute, get_linkage_name_attribute, get_location_attribute, get_name_attribute, get_producer_attribute, get_specification_attribute,
-    get_typeref_attribute,
+    get_typeref_attribute, has_const_value_attribute,
 };
 
 mod typereader;
@@ -373,7 +373,10 @@ fn get_epk_from_variable(elffile: &object::read::File, debug_data: &DebugData) -
         None => log::warn!("No EPK string found in the variable xcp_epk__ (XcpCreateEpk), the A2L file gets no EPK. {}", HINT_LINKER),
         Some((addr, _)) => {
             // Not an error: the string at the address is correct, but the address is not the one of the variable itself
-            if !elffile.symbols().any(|sym| sym.address() == *addr && sym.name().is_ok_and(|name| name.contains("xcp_epk__"))) {
+            if !elffile
+                .symbols()
+                .any(|sym| sym.address() == *addr && sym.name().is_ok_and(|name| name.contains("xcp_epk__")))
+            {
                 log::info!(
                     "The EPK address 0x{:08X} is from the debug information only, there is no xcp_epk__ symbol at this address. \
                      The string there is the EPK, it may be a string literal with the same content. {}",
@@ -407,7 +410,7 @@ fn get_symbol_addresses(elffile: &object::read::File) -> HashMap<String, u64> {
 
 // The symbols of the static variables in functions, by the name of the variable: GCC names them <name>.<number> (the number
 // disambiguates the variables of the same name in different functions, it is unrelated to anything in the DWARF), clang names
-// them <function>.<name>, which the unique suffix search finds. Only symbols with local binding are collected, a global symbol
+// them <function>.<name>, which resolve_address_from_symbols looks up. Only symbols with local binding are collected, a global symbol
 // belongs to a different variable. See resolve_local_static_addresses
 fn get_local_static_symbols(elffile: &object::read::File) -> HashMap<String, Vec<(u64, u64)>> {
     let mut map: HashMap<String, Vec<(u64, u64)>> = HashMap::new();
@@ -523,40 +526,23 @@ impl DebugDataReader<'_> {
         self.symbol_addresses.get(symbol_name).copied()
     }
 
-    // Get the address of the only symbol whose (mangled) name ends with the variable name, e.g. _ZZ4mainE7counter for the static variable counter in main
-    fn resolve_address_by_unique_suffix(&self, var_name: &str, local_only: bool) -> Option<u64> {
-        // Very short names are too ambiguous in mangled symbols.
-        if var_name.len() < 4 {
-            return None;
-        }
-
-        let mut matches = self.symbol_addresses.iter().filter_map(|(symbol_name, addr)| {
-            if *addr != 0 && symbol_name.ends_with(var_name) && !(local_only && self.global_symbol_names.contains(symbol_name)) {
-                Some(*addr)
-            } else {
-                None
-            }
-        });
-
-        let first = matches.next()?;
-        if matches.next().is_none() { Some(first) } else { None }
-    }
-
-    // Resolve the address of a variable without location attribute from the symbol table: by linkage name, by name,
-    // by the mangled name of a variable in a namespace or class scope, or by a unique name suffix
-    // local_only: the variable is local to a function, only symbols with local binding (static variables) are considered,
-    // a global symbol with the same name belongs to a different variable
-    // function_linkage: the mangled name of the enclosing C++ function of a local variable, used for the mangled name of a static local
+    // Resolve the address of a variable without location attribute from the symbol table. Only exact symbol names are
+    // looked up, never a part of a name: a symbol whose name merely ends with the variable name belongs to something else
+    // (spiDetachMOSI is not the variable MOSI). The candidates are the linkage name, the plain name, the Itanium mangled
+    // name of a variable in a namespace or class scope or of a static variable in a C++ function, and the clang name of a
+    // static variable in a C function (<function>.<name>). The GCC names of static variables in C functions (<name>.<number>)
+    // are resolved later in resolve_local_static_addresses, where the size of the variable is known
+    // ctx: where the variable is defined, see SymbolContext
     // scopes: the namespaces and classes the variable is defined in (outermost first), used for the mangled name
     fn resolve_address_from_symbols(
         &self,
         entry: &DebuggingInformationEntry<SliceType, usize>,
         unit: &UnitHeader<SliceType>,
         var_name: &str,
-        local_only: bool,
-        function_linkage: Option<&str>,
+        ctx: &SymbolContext,
         scopes: &[String],
     ) -> Option<u64> {
+        let local_only = ctx.function.is_some();
         if let Ok(linkage_name) = get_linkage_name_attribute(entry, &self.dwarf, unit)
             && let Some(addr) = self.symbol_address(&linkage_name, local_only)
         {
@@ -564,14 +550,19 @@ impl DebugDataReader<'_> {
         }
         // A symbol with exactly the name of a variable which is local to a function belongs to a different variable, a static at
         // file scope with the same name (both have local binding, so global_symbol_names does not tell them apart). The symbol of
-        // a static variable in a function is <name>.<number> under GCC, it is resolved in resolve_local_static_addresses
-        if !(local_only && self.local_static_symbols.contains_key(var_name))
+        // a static variable in a function is <name>.<number> under GCC, it is resolved in resolve_local_static_addresses.
+        // A compile time constant (DW_AT_const_value) has no memory, a symbol with its plain name is a different object: a pin
+        // number constant from a header (static const uint8_t MOSI = 11) and a variable MOSI of another compilation unit.
+        // GCC gives a static const variable of C which has memory a DW_AT_location, so the plain name is never needed for it
+        if !ctx.const_value
+            && !(local_only && self.local_static_symbols.contains_key(var_name))
             && let Some(addr) = self.symbol_address(var_name, local_only)
         {
             return Some(addr);
         }
         // GCC emits no linkage name for variables with internal linkage in a namespace (static const in a namespace, e.g. the XCP_COMMENT
-        // metadata markers), and the mangled symbol name of a namespace scope variable (_ZN13motor_controlL5inputE) does not end with the variable name
+        // metadata markers, which have a DW_AT_const_value instead of a location although they are in memory), the symbol is found by the
+        // mangled name of a namespace scope variable (_ZN13motor_controlL5inputE)
         if !local_only && !scopes.is_empty() {
             for mangled in itanium_mangled_names(scopes, var_name) {
                 if let Some(addr) = self.symbol_address(&mangled, local_only) {
@@ -581,20 +572,20 @@ impl DebugDataReader<'_> {
         }
         // GCC emits no linkage name and no location for a static const local variable in a C++ function either (the XCP_COMMENT
         // metadata markers in a function), the symbol is found by the mangled name of a function local static (_ZZ3foovE7counter).
-        // The unique suffix search below is ambiguous as soon as several functions define a static variable with the same name
-        if local_only
-            && let Some(mangled) = function_linkage.and_then(|linkage| itanium_local_static_name(linkage, var_name))
-            && let Some(addr) = self.symbol_address(&mangled, local_only)
-        {
-            return Some(addr);
+        // A function without mangled name in a C++ compilation unit, main or an extern "C" function, is encoded with its plain
+        // name (_ZZ4mainE7counter)
+        if let Some(function) = ctx.function {
+            let mangled = ctx
+                .function_linkage
+                .and_then(|linkage| itanium_local_static_name(linkage, var_name))
+                .unwrap_or_else(|| format!("_ZZ{}{function}E{}{var_name}", function.len(), var_name.len()));
+            if let Some(addr) = self.symbol_address(&mangled, local_only) {
+                return Some(addr);
+            }
+            // clang names the symbol of a static variable in a C function <function>.<name> (foo.static_counter)
+            return self.symbol_address(&format!("{function}.{var_name}"), local_only);
         }
-        // The address of a static variable in a function which has a <name>.<number> symbol is resolved in
-        // resolve_local_static_addresses, where the size of the variable is known. The suffix search below would find the
-        // file scope static of the same name, whose symbol name ends with the variable name as well
-        if local_only && self.local_static_symbols.contains_key(var_name) {
-            return None;
-        }
-        self.resolve_address_by_unique_suffix(var_name, local_only)
+        None
     }
 
     // Resolve the addresses of the static variables in functions which have no DW_AT_location, from the symbols GCC names
@@ -792,7 +783,7 @@ impl DebugDataReader<'_> {
                 if entry.tag() == gimli::constants::DW_TAG_variable {
                     // Get variable information
                     let (function, function_linkage, namespaces, inlined, frame_base) = get_varinfo_from_context(&context);
-                    match self.get_variable(entry, unit, abbreviations, function.is_some(), function_linkage.as_deref(), &namespaces) {
+                    match self.get_variable(entry, unit, abbreviations, function.as_deref(), function_linkage.as_deref(), &namespaces) {
                         Ok((name, typeref, address)) => {
                             let var_infos = variables.entry(name).or_default();
                             // A static variable of an inlined function may be described in the abstract instance and again in each copy
@@ -991,7 +982,10 @@ impl DebugDataReader<'_> {
     // The address is 0 if the entry has no location (a declaration, a variable optimized away by the compiler) or if the location
     // is not a plain address, see evaluate_exprloc. A missing address is resolved from the symbol table if possible
     // (declarations of global variables, static variables without location)
-    // local: the variable is local to a function, only symbols with local binding are considered to resolve the address
+    // A compile time constant (DW_AT_const_value without DW_AT_location, e.g. static const uint8_t MOSI = 11 from a header) has no
+    // memory, it is not a variable and an error is returned, unless its symbol is found by an exact name (see resolve_address_from_symbols)
+    // or it may still get the address of a <name>.<number> symbol in resolve_local_static_addresses
+    // function: the name of the enclosing function of a local variable, only symbols with local binding are considered to resolve the address
     // function_linkage: the mangled name of the enclosing C++ function, to resolve the symbol of a static local variable
     // namespaces: the namespaces the entry is nested in (outermost first)
     fn get_variable<'a>(
@@ -999,75 +993,68 @@ impl DebugDataReader<'_> {
         entry: &DebuggingInformationEntry<SliceType<'a>, usize>,
         unit: &UnitHeader<SliceType<'a>>,
         abbrev: &gimli::Abbreviations,
-        local: bool,
+        function: Option<&str>,
         function_linkage: Option<&str>,
         namespaces: &[String],
     ) -> Result<(String, usize, (u8, u64)), String> {
         // if debugging information entry A has a DW_AT_specification or DW_AT_abstract_origin attribute
         // pointing to another debugging information entry B, any attributes of B are considered to be part of A.
-        if let Some(specification_entry) = get_specification_attribute(entry, unit, abbrev) {
+        // origin is the entry B, origin_scopes the scopes used to resolve the symbol of B
+        let (name, typeref, origin, origin_scopes) = if let Some(specification_entry) = get_specification_attribute(entry, unit, abbrev) {
             // the entry refers to a specification, which contains the name and type reference
             let name = get_name_attribute(&specification_entry, &self.dwarf, unit)?;
-            log::debug!("get_variable '{}':", name);
             let typeref = get_typeref_attribute(&specification_entry, unit)?;
-            let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1, &name).unwrap_or((0u8, 0u64));
             // The definition entry is at compilation unit level, the scope of the variable is the one of its declaration (specification)
             let specification_scopes = specification_entry
                 .offset()
                 .to_debug_info_offset(unit)
                 .map(|o| self.get_scope_path(o.0))
                 .unwrap_or_default();
-            if address == (0u8, 0u64)
-                && let Some(sym_addr) = self
-                    .resolve_address_from_symbols(entry, unit, &name, local, function_linkage, namespaces)
-                    .or_else(|| self.resolve_address_from_symbols(&specification_entry, unit, &name, local, function_linkage, &specification_scopes))
-            {
-                address = (0u8, sym_addr);
-            }
-            if address.0 >= 0x80 {
-                log::debug!("  {} is a register, tls or has unknown location", name);
-            } else if address.1 == 0 {
-                log::debug!("  {} has no address", name);
-            }
-            Ok((name, typeref, address))
+            (name, typeref, Some(specification_entry), specification_scopes)
         } else if let Some(abstract_origin_entry) = get_abstract_origin_attribute(entry, unit, abbrev) {
             // the entry refers to an abstract origin, which should also be considered when getting the name and type ref
             let name = get_name_attribute(entry, &self.dwarf, unit).or_else(|_| get_name_attribute(&abstract_origin_entry, &self.dwarf, unit))?;
-            log::debug!("'{}':", name);
             let typeref = get_typeref_attribute(entry, unit).or_else(|_| get_typeref_attribute(&abstract_origin_entry, unit))?;
-            let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1, &name).unwrap_or((0u8, 0u64));
-            if address == (0u8, 0u64)
-                && let Some(sym_addr) = self
-                    .resolve_address_from_symbols(entry, unit, &name, local, function_linkage, namespaces)
-                    .or_else(|| self.resolve_address_from_symbols(&abstract_origin_entry, unit, &name, local, function_linkage, namespaces))
-            {
-                address = (0u8, sym_addr);
-            }
-            if address.0 >= 0x80 {
-                log::debug!("  {} is a register, tls or has unknown location", name);
-            } else if address.1 == 0 {
-                log::debug!("  {} has no address", name);
-            }
-            Ok((name, typeref, address))
+            (name, typeref, Some(abstract_origin_entry), namespaces.to_vec())
         } else {
             // usual case: there is no specification or abstract origin and all info is part of this entry
             let name = get_name_attribute(entry, &self.dwarf, unit)?;
-            log::debug!("'{}':", name);
             let typeref = get_typeref_attribute(entry, unit)?;
-            let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1, &name).unwrap_or((0u8, 0u64));
-            if address == (0u8, 0u64)
-                && let Some(sym_addr) = self.resolve_address_from_symbols(entry, unit, &name, local, function_linkage, namespaces)
-            {
+            (name, typeref, None, Vec::new())
+        };
+        log::debug!("get_variable '{}':", name);
+
+        let mut address = get_location_attribute(self, entry, unit.encoding(), &self.units.list.len() - 1, &name).unwrap_or((0u8, 0u64));
+        if address == (0u8, 0u64) {
+            let ctx = SymbolContext {
+                function,
+                function_linkage,
+                const_value: has_const_value_attribute(entry) || origin.as_ref().is_some_and(has_const_value_attribute),
+            };
+            if let Some(sym_addr) = self.resolve_address_from_symbols(entry, unit, &name, &ctx, namespaces).or_else(|| {
+                origin
+                    .as_ref()
+                    .and_then(|origin| self.resolve_address_from_symbols(origin, unit, &name, &ctx, &origin_scopes))
+            }) {
                 address = (0u8, sym_addr);
+            } else if ctx.const_value && !(function.is_some() && self.local_static_symbols.contains_key(&name)) {
+                return Err(format!("'{name}' is a compile time constant (DW_AT_const_value) without memory, skipped"));
             }
-            if address.0 >= 0x80 {
-                log::debug!("  {} is a register, tls or has unknown location", name);
-            } else if address.1 == 0 {
-                log::debug!(". {} has no address", name);
-            }
-            Ok((name, typeref, address))
         }
+        if address.0 >= 0x80 {
+            log::debug!("  {} is a register, tls or has unknown location", name);
+        } else if address.1 == 0 {
+            log::debug!("  {} has no address", name);
+        }
+        Ok((name, typeref, address))
     }
+}
+
+// Where a variable without location is defined, for the symbol lookup in resolve_address_from_symbols
+struct SymbolContext<'a> {
+    function: Option<&'a str>,         // name of the enclosing function of a local variable, None at file or namespace scope
+    function_linkage: Option<&'a str>, // mangled name of the enclosing C++ function, None for a C function
+    const_value: bool,                 // the variable has a DW_AT_const_value, it is a compile time constant without memory or a GCC metadata marker
 }
 
 // Tags of debug info entries which are a named scope for the types and variables nested inside of them

@@ -16,71 +16,65 @@ Sections:
   Name: .interp              Addr: 0x00000238 Size: 27 bytes Kind: ReadOnlyData 
   Name: .note.gnu.build-id   Addr: 0x00000254 Size: 36 bytes Kind: Note 
   Name: .note.ABI-tag        Addr: 0x00000278 Size: 32 bytes Kind: Note 
-  Name: .hash                Addr: 0x00000298 Size: 556 bytes Kind: Metadata 
-  Name: .gnu.hash            Addr: 0x000004c8 Size: 28 bytes Kind: Elf(1879048182) 
-  Name: .dynsym              Addr: 0x000004e8 Size: 1680 bytes Kind: Metadata 
-  Name: .dynstr              Addr: 0x00000b78 Size: 796 bytes Kind: Metadata 
-  Name: .gnu.version         Addr: 0x00000e94 Size: 140 bytes Kind: Elf(1879048191) 
-  Name: .gnu.version_r       Addr: 0x00000f20 Size: 80 bytes Kind: Elf(1879048190) 
-  Name: .rela.dyn            Addr: 0x00000f70 Size: 744 bytes Kind: Metadata 
-  Name: .rela.plt            Addr: 0x00001258 Size: 1536 bytes Kind: Metadata 
-  Name: .init                Addr: 0x00001858 Size: 24 bytes Kind: Text 
-  Name: .plt                 Addr: 0x00001870 Size: 1056 bytes Kind: Text 
-  Name: .text                Addr: 0x00001cc0 Size: 42368 bytes Kind: Text 
-  Name: .fini                Addr: 0x0000c240 Size: 20 bytes Kind: Text 
-  Name: .rodata              Addr: 0x0000c258 Size: 13862 bytes Kind: ReadOnlyData 
-  Name: xcp_meta             Addr: 0x0000f880 Size: 410 bytes Kind: ReadOnlyData 
-  Name: xcp_epk              Addr: 0x0000fa1a Size: 8 bytes Kind: ReadOnlyData 
-  Name: .eh_frame_hdr        Addr: 0x0000fa24 Size: 1692 bytes Kind: ReadOnlyData 
-  Name: .eh_frame            Addr: 0x000100c0 Size: 6060 bytes Kind: ReadOnlyData 
-  Name: .init_array          Addr: 0x0002fd48 Size: 16 bytes Kind: Elf(14) 
-  Name: .fini_array          Addr: 0x0002fd58 Size: 8 bytes Kind: Elf(15) 
-  Name: .dynamic             Addr: 0x0002fd60 Size: 528 bytes Kind: Metadata 
+  Name: .gnu.hash            Addr: 0x00000298 Size: 28 bytes Kind: Elf(1879048182) 
+  Name: .dynsym              Addr: 0x000002b8 Size: 1632 bytes Kind: Metadata 
+  Name: .dynstr              Addr: 0x00000918 Size: 726 bytes Kind: Metadata 
+  Name: .gnu.version         Addr: 0x00000bee Size: 136 bytes Kind: Elf(1879048191) 
+  Name: .gnu.version_r       Addr: 0x00000c78 Size: 48 bytes Kind: Elf(1879048190) 
+  Name: .rela.dyn            Addr: 0x00000ca8 Size: 744 bytes Kind: Metadata 
+  Name: .rela.plt            Addr: 0x00000f90 Size: 1488 bytes Kind: Metadata 
+  Name: .init                Addr: 0x00001560 Size: 24 bytes Kind: Text 
+  Name: .plt                 Addr: 0x00001580 Size: 1024 bytes Kind: Text 
+  Name: .text                Addr: 0x00001980 Size: 44784 bytes Kind: Text 
+  Name: .fini                Addr: 0x0000c870 Size: 20 bytes Kind: Text 
+  Name: .rodata              Addr: 0x0000c888 Size: 14815 bytes Kind: ReadOnlyData 
+  Name: xcp_epk              Addr: 0x00010268 Size: 8 bytes Kind: ReadOnlyData 
+  Name: xcp_meta             Addr: 0x00010270 Size: 440 bytes Kind: ReadOnlyData 
+  Name: .eh_frame_hdr        Addr: 0x00010428 Size: 1660 bytes Kind: ReadOnlyData 
+  Name: .eh_frame            Addr: 0x00010aa8 Size: 8004 bytes Kind: ReadOnlyData 
+  Name: .init_array          Addr: 0x0002fd78 Size: 16 bytes Kind: Elf(14) 
+  Name: .fini_array          Addr: 0x0002fd88 Size: 8 bytes Kind: Elf(15) 
+  Name: .dynamic             Addr: 0x0002fd90 Size: 480 bytes Kind: Metadata 
   Name: .got                 Addr: 0x0002ff70 Size: 120 bytes Kind: Data 
-  Name: .got.plt             Addr: 0x0002ffe8 Size: 536 bytes Kind: Data 
-  Name: .data                Addr: 0x00030200 Size: 102 bytes Kind: Data 
-  Name: xcp_cals             Addr: 0x00030268 Size: 96 bytes Kind: Data 
-  Name: xcp_evts             Addr: 0x000302c8 Size: 64 bytes Kind: Data 
-  Name: .bss                 Addr: 0x00030308 Size: 9984 bytes Kind: UninitializedData 
-  Name: .comment             Addr: 0x00000000 Size: 67 bytes Kind: OtherString 
-  Name: .debug_info          Addr: 0x00000000 Size: 32037 bytes Kind: Other 
-  Name: .debug_abbrev        Addr: 0x00000000 Size: 6887 bytes Kind: Other 
-  Name: .debug_line          Addr: 0x00000000 Size: 24747 bytes Kind: Other 
-  Name: .debug_str           Addr: 0x00000000 Size: 13323 bytes Kind: OtherString 
-  Name: .debug_addr          Addr: 0x00000000 Size: 5904 bytes Kind: Other 
-  Name: .debug_line_str      Addr: 0x00000000 Size: 1140 bytes Kind: OtherString 
-  Name: .debug_loclists      Addr: 0x00000000 Size: 16653 bytes Kind: Other 
-  Name: .debug_rnglists      Addr: 0x00000000 Size: 2248 bytes Kind: Other 
-  Name: .debug_str_offsets   Addr: 0x00000000 Size: 6912 bytes Kind: Other 
-  Name: .symtab              Addr: 0x00000000 Size: 14904 bytes Kind: Metadata 
-  Name: .strtab              Addr: 0x00000000 Size: 7311 bytes Kind: Metadata 
-  Name: .shstrtab            Addr: 0x00000000 Size: 422 bytes Kind: Metadata 
+  Name: .got.plt             Addr: 0x0002ffe8 Size: 520 bytes Kind: Data 
+  Name: .data                Addr: 0x000301f0 Size: 100 bytes Kind: Data 
+  Name: xcp_cals             Addr: 0x00030258 Size: 96 bytes Kind: Data 
+  Name: xcp_evts             Addr: 0x000302b8 Size: 64 bytes Kind: Data 
+  Name: .bss                 Addr: 0x000302f8 Size: 9976 bytes Kind: UninitializedData 
+  Name: .comment             Addr: 0x00000000 Size: 39 bytes Kind: OtherString 
+  Name: .debug_aranges       Addr: 0x00000000 Size: 432 bytes Kind: Other 
+  Name: .debug_info          Addr: 0x00000000 Size: 77483 bytes Kind: Other 
+  Name: .debug_abbrev        Addr: 0x00000000 Size: 9136 bytes Kind: Other 
+  Name: .debug_line          Addr: 0x00000000 Size: 28406 bytes Kind: Other 
+  Name: .debug_str           Addr: 0x00000000 Size: 13213 bytes Kind: OtherString 
+  Name: .debug_line_str      Addr: 0x00000000 Size: 1249 bytes Kind: OtherString 
+  Name: .debug_loclists      Addr: 0x00000000 Size: 27031 bytes Kind: Other 
+  Name: .debug_rnglists      Addr: 0x00000000 Size: 1315 bytes Kind: Other 
+  Name: .symtab              Addr: 0x00000000 Size: 12600 bytes Kind: Metadata 
+  Name: .strtab              Addr: 0x00000000 Size: 7045 bytes Kind: Metadata 
+  Name: .shstrtab            Addr: 0x00000000 Size: 406 bytes Kind: Metadata 
 
 [INFO ] Loading DWARF sections
-[INFO ] EPK string read from xcp_epk section: 'V2.1.10' at address 0x0000FA1A
-[WARN ] main_c:163: 'heap_struct': variable location is stack-pointer-relative (DW_OP_breg31 <offset>), not frame-base-relative; not measurable yet, eval_result=RequiresRegister { register: Register(31), base_type: UnitOffset(0) }
-[WARN ] main_c:182: 'delay': location is a register Register(19)
-[WARN ] main_c:241: 'test_int16': variable location is stack-pointer-relative (DW_OP_breg31 <offset>), not frame-base-relative; not measurable yet, eval_result=RequiresRegister { register: Register(31), base_type: UnitOffset(0) }
-[WARN ] main_c:242: 'test_int32': variable location is stack-pointer-relative (DW_OP_breg31 <offset>), not frame-base-relative; not measurable yet, eval_result=RequiresRegister { register: Register(31), base_type: UnitOffset(0) }
-[WARN ] main_c:243: 'test_int64': variable location is stack-pointer-relative (DW_OP_breg31 <offset>), not frame-base-relative; not measurable yet, eval_result=RequiresRegister { register: Register(31), base_type: UnitOffset(0) }
-[WARN ] main_c: 'counter': variable location is stack-pointer-relative (DW_OP_breg31 <offset>), not frame-base-relative; not measurable yet, eval_result=RequiresRegister { register: Register(31), base_type: UnitOffset(0) }
-[WARN ] main_c:363: 'delay': location is a register Register(21)
-[WARN ] main_c:333: 'p_counter_control': location is a register Register(0)
-[WARN ] main_c:346: 'p_params': location is a register Register(21)
-[INFO ] Compiler: Debian clang version 14.0.6
+[INFO ] EPK string read from xcp_epk section: 'V2.1.10' at address 0x00010268
+[WARN ] main_c:333: 'p_counter_control': location is a register Register(2)
+[WARN ] main_c:346: 'p_params': location is a register Register(0)
+[WARN ] main_c:363: 'delay': location is a register Register(24)
+[WARN ] main_c:244: 'test_struct2': the variable is split into 7 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value: Generic(18446744073709551614) } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Bytes { value: EndianSlice(Little, [0x9a, 0x99, 0x99, 0x3e]) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(2) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(3) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Address { address: 0 } }]
+[WARN ] main_c:182: 'delay': location is a register Register(25)
+[INFO ] Compiler: GNU C11 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c11 -fasynchronous-unwind-tables
 
 ====================================================================================================
 DebugData information summary:
   Compilation units: 9 units
-  Compiler: Debian clang version 14.0.6
-  Sections: 29
+  Compiler: GNU C11 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c11 -fasynchronous-unwind-tables
+  Sections: 28
   Endianness: Little Endian
-  Variables 613 with 254 unique names
+  Variables 706 with 267 unique names
   Demangled names: 0 entries
-  Type names: 116 named types
-  Types: 469 total types
-  EPK string: `V2.1.10` at address 0x0000FA1A
-  XCP metadata section (xcp_meta) found at address 0x0000F880, 410 bytes
+  Type names: 109 named types
+  Types: 640 total types
+  EPK string: `V2.1.10` at address 0x00010268
+  XCP metadata section (xcp_meta) found at address 0x00010270, 440 bytes
 
 ====================================================================================================
 Compilation units in debug_data.unit_names:
@@ -99,60 +93,59 @@ DWARF sections by address:
   '.interp': 0x00000238, 568 bytes (595)
   '.note.gnu.build-id': 0x00000254, 28 bytes (632)
   '.note.ABI-tag': 0x00000278, 36 bytes (664)
-  '.hash': 0x00000298, 32 bytes (1220)
-  '.gnu.hash': 0x000004c8, 560 bytes (1252)
-  '.dynsym': 0x000004e8, 32 bytes (2936)
-  '.dynstr': 0x00000b78, 1680 bytes (3732)
-  '.gnu.version': 0x00000e94, 796 bytes (3872)
-  '.gnu.version_r': 0x00000f20, 140 bytes (3952)
-  '.rela.dyn': 0x00000f70, 80 bytes (4696)
-  '.rela.plt': 0x00001258, 744 bytes (6232)
-  '.init': 0x00001858, 1536 bytes (6256)
-  '.plt': 0x00001870, 24 bytes (7312)
-  '.text': 0x00001cc0, 1104 bytes (49728)
-  '.fini': 0x0000c240, 42368 bytes (49748)
-  '.rodata': 0x0000c258, 24 bytes (63614)
-  'xcp_meta': 0x0000f880, 13864 bytes (64026)
-  'xcp_epk': 0x0000fa1a, 410 bytes (64034)
-  '.eh_frame_hdr': 0x0000fa24, 10 bytes (65728)
-  '.eh_frame': 0x000100c0, 1692 bytes (71788)
-  '.init_array': 0x0002fd48, 130184 bytes (195928)
-  '.fini_array': 0x0002fd58, 16 bytes (195936)
-  '.dynamic': 0x0002fd60, 8 bytes (196464)
-  '.got': 0x0002ff70, 528 bytes (196584)
-  '.got.plt': 0x0002ffe8, 120 bytes (197120)
-  '.data': 0x00030200, 536 bytes (197222)
-  'xcp_cals': 0x00030268, 104 bytes (197320)
-  'xcp_evts': 0x000302c8, 96 bytes (197384)
-  '.bss': 0x00030308, 64 bytes (207368)
+  '.gnu.hash': 0x00000298, 32 bytes (692)
+  '.dynsym': 0x000002b8, 32 bytes (2328)
+  '.dynstr': 0x00000918, 1632 bytes (3054)
+  '.gnu.version': 0x00000bee, 726 bytes (3190)
+  '.gnu.version_r': 0x00000c78, 138 bytes (3240)
+  '.rela.dyn': 0x00000ca8, 48 bytes (3984)
+  '.rela.plt': 0x00000f90, 744 bytes (5472)
+  '.init': 0x00001560, 1488 bytes (5496)
+  '.plt': 0x00001580, 32 bytes (6528)
+  '.text': 0x00001980, 1024 bytes (51312)
+  '.fini': 0x0000c870, 44784 bytes (51332)
+  '.rodata': 0x0000c888, 24 bytes (66151)
+  'xcp_epk': 0x00010268, 14816 bytes (66160)
+  'xcp_meta': 0x00010270, 8 bytes (66600)
+  '.eh_frame_hdr': 0x00010428, 440 bytes (68260)
+  '.eh_frame': 0x00010aa8, 1664 bytes (76268)
+  '.init_array': 0x0002fd78, 127696 bytes (195976)
+  '.fini_array': 0x0002fd88, 16 bytes (195984)
+  '.dynamic': 0x0002fd90, 8 bytes (196464)
+  '.got': 0x0002ff70, 480 bytes (196584)
+  '.got.plt': 0x0002ffe8, 120 bytes (197104)
+  '.data': 0x000301f0, 520 bytes (197204)
+  'xcp_cals': 0x00030258, 104 bytes (197304)
+  'xcp_evts': 0x000302b8, 96 bytes (197368)
+  '.bss': 0x000302f8, 64 bytes (207344)
 
 ====================================================================================================
 A2L Creator variables:
-calseg__params':  main_c:'<global>' : addr=0:0x00030268
-xcp_meta__min__params__delay_us':  main_c:'<global>' : addr=0:0x0000F880
-xcp_meta__max__params__delay_us':  main_c:'<global>' : addr=0:0x0000F888
-xcp_meta__unit__params__delay_us':  main_c:'<global>' : addr=0:0x0000F890
-xcp_meta__comment__counter':  main_c:'<global>' : addr=0:0x0000F893
-xcp_meta__read_write__counter':  main_c:'<global>' : addr=0:0x0000F8AF
-xcp_meta__comment__global_counter':  main_c:'<global>' : addr=0:0x0000F8B0
-xcp_meta__read_write__global_counter':  main_c:'<global>' : addr=0:0x0000F8CC
-xcp_meta__comment__static_counter':  main_c:'task' : addr=0:0x0000F8CD
-evt__task':  main_c:'task' : addr=0:0x000302C8
-trg__AASD__task':  main_c:'task' : addr=0:0x00000000
-xcp_meta__comment__bar__static_counter':  main_c:'bar' : addr=0:0x0000F93E
-xcp_meta__read_write__bar__static_counter':  main_c:'bar' : addr=0:0x0000F97A
-evt__bar':  main_c:'bar' : addr=0:0x000302D8
-trg__AAS__bar':  main_c:'bar' : addr=0:0x00000000
-evt__foo':  main_c:'foo' : addr=0:0x000302E8
-trg__AASR__foo':  main_c:'foo' : addr=0:0x00000000
-cap__foo':  main_c:'foo' : addr=128:0x00000000
-xcp_epk__':  main_c:'main' : addr=0:0x0000FA1A
-calseg__counter_control':  main_c:'main' : addr=0:0x00030288
-evt__mainloop':  main_c:'main' : addr=0:0x000302F8
+calseg__params':  main_c:'<global>' : addr=0:0x00030278
+xcp_meta__min__params__delay_us':  main_c:'<global>' : addr=0:0x00010420
+xcp_meta__max__params__delay_us':  main_c:'<global>' : addr=0:0x00010418
+xcp_meta__unit__params__delay_us':  main_c:'<global>' : addr=0:0x00010410
+xcp_meta__comment__counter':  main_c:'<global>' : addr=0:0x000103F0
+xcp_meta__read_write__counter':  main_c:'<global>' : addr=0:0x000103EC
+xcp_meta__comment__global_counter':  main_c:'<global>' : addr=0:0x000103D0
+xcp_meta__read_write__global_counter':  main_c:'<global>' : addr=0:0x000103CC
+xcp_meta__comment__static_counter':  main_c:'main' : addr=0:0x00010270
+calseg__counter_control':  main_c:'main' : addr=0:0x00030258
+evt__mainloop':  main_c:'main' : addr=0:0x000302E8
+xcp_epk__':  main_c:'main' : addr=0:0x00010268
+xcp_epk__keep':  main_c:'main' : addr=2:0x7FFFFFE8
 trg__AAS__mainloop':  main_c:'main' : addr=0:0x00000000
-xcp_epk__keep':  main_c:'main' : addr=128:0x00000000
-XCPLITE__ACSDD':  xcplite_c:'<global>' : addr=0:0x0000C940
-calseg__epk':  xcplite_c:'XcpInit' : addr=0:0x000302A8
+cap__foo':  main_c:'foo' : addr=2:0x7FFFFF88
+evt__foo':  main_c:'foo' : addr=0:0x000302D8
+trg__AASR__foo':  main_c:'foo' : addr=0:0x00000000
+xcp_meta__comment__bar__static_counter':  main_c:'bar' : addr=0:0x00010318
+xcp_meta__read_write__bar__static_counter':  main_c:'bar' : addr=0:0x00010314
+evt__bar':  main_c:'bar' : addr=0:0x000302C8
+trg__AAS__bar':  main_c:'bar' : addr=0:0x00000000
+evt__task':  main_c:'task' : addr=0:0x000302B8
+trg__AASD__task':  main_c:'task' : addr=0:0x00000000
+XCPLITE__ACSDD':  xcplite_c:'<global>' : addr=0:0x0000E8E8
+calseg__epk':  xcplite_c:'XcpInit' : addr=0:0x00030298
 
 [INFO ] ===============================================================
 [INFO ] Target signature found: ACSDD
@@ -160,59 +153,63 @@ calseg__epk':  xcplite_c:'XcpInit' : addr=0:0x000302A8
 [INFO ] ===============================================================
 [INFO ] Registering event information:
 [INFO ] ===============================================================
-[INFO ] Found XCP event descriptor memory section at address = 0x000302C8, size = 64 bytes
-[INFO ] Event definition for event 'task' found in main_c:task, addr = 0x302c8
-[INFO ] New event 'task' found: event id = 0
-[INFO ] Event definition for event 'bar' found in main_c:bar, addr = 0x302d8
-[INFO ] New event 'bar' found: event id = 1
-[INFO ] Event definition for event 'foo' found in main_c:foo, addr = 0x302e8
-[INFO ] New event 'foo' found: event id = 2
-[INFO ] Event definition for event 'mainloop' found in main_c:main, addr = 0x302f8
+[INFO ] Found XCP event descriptor memory section at address = 0x000302B8, size = 64 bytes
+[INFO ] Event definition for event 'mainloop' found in main_c:main, addr = 0x302e8
 [INFO ] New event 'mainloop' found: event id = 3
+[INFO ] Event definition for event 'foo' found in main_c:foo, addr = 0x302d8
+[INFO ] New event 'foo' found: event id = 2
+[INFO ] Event definition for event 'bar' found in main_c:bar, addr = 0x302c8
+[INFO ] New event 'bar' found: event id = 1
+[INFO ] Event definition for event 'task' found in main_c:task, addr = 0x302b8
+[INFO ] New event 'task' found: event id = 0
 [INFO ] ===============================================================
 [INFO ] Registering segment information (absolute addressing mode):
 [INFO ] ===============================================================
 Found 3 segment definition marker variables:
 0: 'epk' - number=Some(0), addr=00000000'
-1: 'params' - number=Some(1), addr=00030268'
-2: 'counter_control' - number=Some(2), addr=00030288'
+1: 'counter_control' - number=Some(1), addr=00030258'
+2: 'params' - number=Some(2), addr=00030278'
 [INFO ] Calibration segment 'epk' not yet defined in registry
-[INFO ] Created segment 0: 'epk':  addr = 0x0000FA1A, size = 32, mem_addr = 0x0000FA1A
-[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xc268, Size = 0x48
-[INFO ] Calibration segment 'params' not yet defined in registry
-[INFO ] Created segment 1: 'params':  addr = 0x0000C268, size = 72, mem_addr = 0x0000C268
-[INFO ] Calibration segment 'counter_control' default page variable found in debug data: Address = 0xc260, Size = 0x4
+[INFO ] Created segment 0: 'epk':  addr = 0x00010268, size = 32, mem_addr = 0x00010268
+[INFO ] Calibration segment 'counter_control' default page variable found in debug data: Address = 0xcab0, Size = 0x4
 [INFO ] Calibration segment 'counter_control' not yet defined in registry
-[INFO ] Created segment 2: 'counter_control':  addr = 0x0000C260, size = 4, mem_addr = 0x0000C260
+[INFO ] Created segment 1: 'counter_control':  addr = 0x0000CAB0, size = 4, mem_addr = 0x0000CAB0
+[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xcab8, Size = 0x48
+[INFO ] Calibration segment 'params' not yet defined in registry
+[INFO ] Created segment 2: 'params':  addr = 0x0000CAB8, size = 72, mem_addr = 0x0000CAB8
 [INFO ] ===============================================================
-[INFO ] EPK string 'V2.1.10' found at address 0x0000FA1A
+[INFO ] EPK string 'V2.1.10' found at address 0x00010268
   EPK 'V2.1.10', ADDR_EPK = 0xFFFFFF00
 [INFO ] ===============================================================
 [INFO ] Registering event locations:
 [INFO ] ===============================================================
-[INFO ] Event task trigger found in main_c:task, address resolver mode AASD
-  Event 'task' trigger in function 'task', frame base FramePointer
-[INFO ] Event bar trigger found in main_c:bar, address resolver mode AAS
-[WARN ] Event 'bar' is triggered in function 'bar', which the compiler inlined: the stack frame of an inlined function is ambiguous, its stack relative variables are not registered. Mark the function XCP_NOINLINE (inc/xcplib.h) to measure them, or capture them with DaqTriggerEventCapture
-  Event 'bar' trigger in function 'bar', frame base FramePointer
-[INFO ] Event foo trigger found in main_c:foo, address resolver mode AASR
-  Event 'foo' trigger in function 'foo', frame base FramePointer
 [INFO ] Event mainloop trigger found in main_c:main, address resolver mode AAS
-  Event 'mainloop' trigger in function 'main', frame base FramePointer
+  Event 'mainloop' trigger in function 'main', frame base Cfa
+[INFO ] Event foo trigger found in main_c:foo, address resolver mode AASR
+  Event 'foo' trigger in function 'foo', frame base Cfa
+[INFO ] Event bar trigger found in main_c:bar, address resolver mode AAS
+  Event 'bar' trigger in function 'bar', frame base Cfa
+[INFO ] Event task trigger found in main_c:task, address resolver mode AASD
+  Event 'task' trigger in function 'task', frame base Cfa
 [INFO ] ===============================================================
 [INFO ] Registering variables:
 [INFO ] ===============================================================
 [INFO ] Default event 'mainloop' (id 3) for global and static variables without an event trigger
 [INFO ] Compilation unit filter: 'main'
+[INFO ] Global variable 'global_running', event id = Some(3)
+        Registered variable 'global_running' type_name = '_Bool', size = 1, event_id = Some(3)
 [INFO ] Global variable 'counter_control', event id = Some(3)
         Registered variable 'counter_control' type_name = 'counter_control', size = 4, event_id = Some(3)
 [INFO ] Global variable 'params', event id = Some(3)
         Registered variable 'params' type_name = 'params', size = 72, event_id = Some(3)
+[INFO ] Global variable 'calseg_id_params', event id = Some(3)
+        Registered variable 'calseg_id_params' type_name = 'tXcpCalSegIndex', size = 2, event_id = Some(3)
 [INFO ] Global variable 'counter', event id = Some(3)
         Registered variable 'counter' type_name = 'uint16_t', size = 2, event_id = Some(3)
-[INFO ] Local variable 'counter' in function 'Some("task")', event id = Some(0), offset = 28
+[INFO ] Local variable 'counter' in function 'Some("bar")', event id = Some(1), offset = -2
+        Registered variable 'bar.counter' type_name = 'uint16_t', size = 2, event_id = Some(1)
+[INFO ] Local variable 'counter' in function 'Some("task")', event id = Some(0), offset = -4
         Registered variable 'task.counter' type_name = 'uint32_t', size = 4, event_id = Some(0)
-[WARN ] Local variable 'counter' in function 'bar' not registered, it has no location in the debug information, not implemented yet
 [INFO ] Global variable 'global_counter', event id = Some(3)
         Registered variable 'global_counter' type_name = 'uint16_t', size = 2, event_id = Some(3)
 [INFO ] Global variable 'global_test_uint8', event id = Some(3)
@@ -241,36 +238,34 @@ Found 3 segment definition marker variables:
         Registered variable 'global_test_array' type_name = 'uint8_t', size = 3, event_id = Some(3)
 [INFO ] Global variable 'global_test_struct', event id = Some(3)
         Registered variable 'global_test_struct' type_name = 'test_struct', size = 12, event_id = Some(3)
-[INFO ] Static variable 'static_counter' local to function 'Some("task")', event id = 0
-        Registered variable 'task.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(0)
-[INFO ] Static variable 'static_counter' local to function 'Some("bar")', event id = 1
-        Registered variable 'bar.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(1)
-[INFO ] Static variable 'static_counter' local to function 'Some("foo")', event id = 2
-        Registered variable 'foo.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(2)
 [INFO ] Static variable 'static_counter' local to function 'Some("main")', event id = 3
         Registered variable 'main.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(3)
+[INFO ] Static variable 'static_counter' local to function 'Some("foo")', event id = 2
+        Registered variable 'foo.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(2)
+[INFO ] Static variable 'static_counter' local to function 'Some("bar")', event id = 1
+        Registered variable 'bar.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(1)
+[INFO ] Static variable 'static_counter' local to function 'Some("task")', event id = 0
+        Registered variable 'task.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(0)
+[INFO ] Static variable 'calseg_id_counter_control' local to function 'Some("main")', event id = 3
+        Registered variable 'calseg_id_counter_control' type_name = 'tXcpCalSegIndex', size = 2, event_id = Some(3)
 [INFO ] Local variable 'test_struct' in function 'Some("foo")', event id = Some(2), offset = -16
         Registered variable 'foo.test_struct' type_name = 'test_struct', size = 12, event_id = Some(2)
-[INFO ] Local variable 'test_array' in function 'Some("foo")', event id = Some(2), offset = 24
+[INFO ] Local variable 'test_array' in function 'Some("foo")', event id = Some(2), offset = -24
         Registered variable 'foo.test_array' type_name = 'uint8_t', size = 3, event_id = Some(2)
-[INFO ] Local variable 'test_float' in function 'Some("foo")', event id = Some(2), offset = -20
+[INFO ] Local variable 'test_float' in function 'Some("foo")', event id = Some(2), offset = -28
         Registered variable 'foo.test_float' type_name = 'float', size = 4, event_id = Some(2)
-[INFO ] Local variable 'test_double' in function 'Some("foo")', event id = Some(2), offset = -32
+[INFO ] Local variable 'test_double' in function 'Some("foo")', event id = Some(2), offset = -40
         Registered variable 'foo.test_double' type_name = 'double', size = 8, event_id = Some(2)
-[INFO ] Local variable 'test_uint8' in function 'Some("foo")', event id = Some(2), offset = -36
+[INFO ] Local variable 'test_uint8' in function 'Some("foo")', event id = Some(2), offset = -41
         Registered variable 'foo.test_uint8' type_name = 'uint8_t', size = 1, event_id = Some(2)
-[INFO ] Local variable 'test_uint16' in function 'Some("foo")', event id = Some(2), offset = -40
+[INFO ] Local variable 'test_uint16' in function 'Some("foo")', event id = Some(2), offset = -44
         Registered variable 'foo.test_uint16' type_name = 'uint16_t', size = 2, event_id = Some(2)
-[INFO ] Local variable 'test_uint32' in function 'Some("foo")', event id = Some(2), offset = -44
+[INFO ] Local variable 'test_uint32' in function 'Some("foo")', event id = Some(2), offset = -48
         Registered variable 'foo.test_uint32' type_name = 'uint32_t', size = 4, event_id = Some(2)
 [INFO ] Local variable 'test_uint64' in function 'Some("foo")', event id = Some(2), offset = -56
         Registered variable 'foo.test_uint64' type_name = 'uint64_t', size = 8, event_id = Some(2)
-[INFO ] Static variable 'calseg_id_counter_control' local to function 'Some("main")', event id = 3
-        Registered variable 'calseg_id_counter_control' type_name = 'tXcpCalSegIndex', size = 2, event_id = Some(3)
-[INFO ] Global variable 'calseg_id_params', event id = Some(3)
-        Registered variable 'calseg_id_params' type_name = 'tXcpCalSegIndex', size = 2, event_id = Some(3)
-[INFO ] Global variable 'global_running', event id = Some(3)
-        Registered variable 'global_running' type_name = '_Bool', size = 1, event_id = Some(3)
+[INFO ] Local variable 'heap_struct' in function 'Some("task")', event id = Some(0), offset = -16
+[WARN ] Variable 'heap_struct' has unsupported type: Pointer(...)
 [INFO ] ===============================================================
 [INFO ] Registering captured variables:
 [INFO ] ===============================================================
@@ -289,14 +284,14 @@ Found 3 segment definition marker variables:
 [INFO ] Metadata xcp_meta__max__params__delay_us applied to typedef field 'params.delay_us'
 [INFO ] Metadata xcp_meta__unit__params__delay_us applied to typedef field 'params.delay_us'
 [INFO ] Metadata comment xcp_meta__comment__counter applied to instance 'counter'
-[INFO ] Metadata comment xcp_meta__comment__counter applied to instance 'task.counter'
 [INFO ] Metadata comment xcp_meta__comment__counter applied to instance 'foo.counter'
+[INFO ] Metadata comment xcp_meta__comment__counter applied to instance 'task.counter'
 [INFO ] Metadata read_write xcp_meta__read_write__counter applied to instance 'counter'
 [INFO ] Metadata comment xcp_meta__comment__global_counter applied to instance 'global_counter'
 [INFO ] Metadata read_write xcp_meta__read_write__global_counter applied to instance 'global_counter'
-[INFO ] Metadata comment xcp_meta__comment__static_counter applied to instance 'task.static_counter'
-[INFO ] Metadata comment xcp_meta__comment__static_counter applied to instance 'foo.static_counter'
 [INFO ] Metadata comment xcp_meta__comment__static_counter applied to instance 'main.static_counter'
+[INFO ] Metadata comment xcp_meta__comment__static_counter applied to instance 'foo.static_counter'
+[INFO ] Metadata comment xcp_meta__comment__static_counter applied to instance 'task.static_counter'
 [INFO ] Metadata comment xcp_meta__comment__bar__static_counter applied to instance 'bar.static_counter'
 [INFO ] Metadata read_write xcp_meta__read_write__bar__static_counter applied to instance 'bar.static_counter'
 [INFO ] ===============================================================

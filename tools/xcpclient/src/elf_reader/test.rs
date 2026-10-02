@@ -26,6 +26,9 @@ const C_INLINED_FUNCTION_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtu
 const C_INLINED_FUNCTION_CLANG_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_inlined_function_clang.elf");
 // The same clang build without frame pointer, the frame base of the functions is the stack pointer
 const C_INLINED_FUNCTION_CLANG_NOFP_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/c_inlined_function_clang_nofp.elf");
+// C++ test fixture with compile time constants and symbols whose names end with a variable name, see fixtures/cpp_const_value_a.cpp
+// (GCC 12.3 arm-none-eabi, DWARF 5, -O1)
+const CPP_CONST_VALUE_ELF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cpp_const_value.elf");
 
 // Load a fixture ELF file and register all its variables
 fn load_fixture(elf_file: &str) -> (ElfReader, Registry) {
@@ -342,6 +345,51 @@ fn test_register_metadata_local_variable_markers() {
     assert_eq!(comment("foo.counter"), "Local measurement variable in function foo");
     assert_eq!(comment("task.static_counter"), "Static local measurement variable in thread function task");
     assert_eq!(comment("foo.static_counter"), "Local static measurement variable in function foo");
+}
+
+// Variables without DW_AT_location get their address from a symbol with exactly their name, never from a symbol whose name only
+// ends with it: the pin constant MOSI (DW_AT_const_value, no memory) is not the function spiDetachMOSI, the undefined sens_value
+// is not the function read_sens_value. A constant does not take the address of a global variable of the same name in another
+// compilation unit (LED_PIN). GCC describes the metadata markers in a namespace and in a function with DW_AT_const_value as well,
+// but they are in memory and are found by their Itanium mangled names, also in functions without mangled name (main, extern "C")
+#[test]
+fn test_register_variables_without_location_exact_symbols() {
+    let elf_reader = ElfReader::new(CPP_CONST_VALUE_ELF, 0, ElfFilter::default()).expect("failed to load fixtures/cpp_const_value.elf");
+    let debug_data = &elf_reader.debug_data;
+    let symbol = |name: &str| *debug_data.symbol_addresses.get(name).unwrap_or_else(|| panic!("symbol '{name}' not found"));
+    let addresses = |name: &str| debug_data.variables.get(name).map(|v| v.iter().map(|v| v.address).collect::<Vec<_>>()).unwrap_or_default();
+
+    // Compile time constants without memory are skipped
+    assert!(debug_data.symbol_addresses.contains_key("spiDetachMOSI"));
+    assert!(!debug_data.variables.contains_key("MOSI"), "MOSI resolved to {:x?}", addresses("MOSI"));
+    // The constant LED_PIN is skipped, only the global variable LED_PIN of the other compilation unit is left
+    assert_eq!(addresses("LED_PIN"), vec![(0, symbol("LED_PIN"))]);
+    // A declaration without definition has no address
+    assert!(debug_data.symbol_addresses.contains_key("read_sens_value"));
+    assert_eq!(addresses("sens_value"), vec![(0, 0)]);
+    // Markers with DW_AT_const_value and memory
+    assert_eq!(addresses("xcp_meta__comment__input"), vec![(0, symbol("_ZN5motorL24xcp_meta__comment__inputE"))]);
+    assert_eq!(addresses("xcp_meta__min__static_counter"), vec![(0, symbol("_ZZ3foovE29xcp_meta__min__static_counter"))]);
+    assert_eq!(addresses("xcp_meta__max__static_counter"), vec![(0, symbol("_ZZ3foovE29xcp_meta__max__static_counter"))]);
+    // Markers in functions without mangled name (main, extern "C") are mangled with the plain function name
+    assert_eq!(
+        addresses("xcp_meta__comment__main_counter"),
+        vec![(0, symbol("_ZZ4mainE31xcp_meta__comment__main_counter"))]
+    );
+    assert_eq!(
+        addresses("xcp_meta__comment__detach_counter"),
+        vec![(0, symbol("_ZZ13spiDetachMOSIE33xcp_meta__comment__detach_counter"))]
+    );
+
+    let mut reg = Registry::new();
+    elf_reader.register_variables(&mut reg, false, 0, None).unwrap();
+    elf_reader.register_metadata(&mut reg, 0).unwrap();
+    let measurement = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None);
+    assert!(measurement("MOSI").is_none());
+    assert!(measurement("sens_value").is_none());
+    assert!(measurement("pin_state").is_some());
+    assert!(measurement("LED_PIN").is_some());
+    assert_eq!(measurement("input").expect("instance 'input' not registered").comment(), "Motor input");
 }
 
 // A marker at file scope which names no instance reaches the field of a typedef instance (delay_us -> params.delay_us),

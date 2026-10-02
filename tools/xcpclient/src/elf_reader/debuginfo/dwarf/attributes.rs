@@ -346,6 +346,14 @@ pub(crate) fn get_byte_stride_attribute(entry: &DebuggingInformationEntry<SliceT
     }
 }
 
+// Does the entry have a DW_AT_const_value attribute, in any form (a number, or a block for a string or a double)?
+// A variable with a constant value but without DW_AT_location is a compile time constant, which usually has no memory.
+// GCC also describes some static const variables this way although they have a symbol, the XCP_COMMENT/XCP_LIMITS metadata
+// markers in a namespace or in a function, see resolve_address_from_symbols
+pub(crate) fn has_const_value_attribute(entry: &DebuggingInformationEntry<SliceType, usize>) -> bool {
+    get_attr_value(entry, gimli::constants::DW_AT_const_value).is_some()
+}
+
 // get the const value of an enumerator from the DW_AT_const_value attribute
 pub(crate) fn get_const_value_attribute(entry: &DebuggingInformationEntry<SliceType, usize>) -> Option<i64> {
     let constval_attr = get_attr_value(entry, gimli::constants::DW_AT_const_value)?;

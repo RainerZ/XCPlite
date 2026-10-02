@@ -23,25 +23,25 @@ Sections:
   Name: .dram0.data          Addr: 0x3fc96f00 Size: 22780 bytes Kind: Data 
   Name: .noinit              Addr: 0x3fc9c7fc Size: 0 bytes Kind: UninitializedData 
   Name: .dram0.bss           Addr: 0x3fc9c800 Size: 66544 bytes Kind: UninitializedData 
-  Name: .flash.text          Addr: 0x42000020 Size: 717284 bytes Kind: Text 
+  Name: .flash.text          Addr: 0x42000020 Size: 717448 bytes Kind: Text 
   Name: .flash_rodata_dummy  Addr: 0x3c000020 Size: 720896 bytes Kind: UninitializedData 
   Name: .flash.appdesc       Addr: 0x3c0b0020 Size: 256 bytes Kind: ReadOnlyData 
-  Name: .flash.rodata        Addr: 0x3c0b0120 Size: 207424 bytes Kind: Data 
-  Name: xcp_epk              Addr: 0x3c0e2b60 Size: 8 bytes Kind: ReadOnlyData 
-  Name: xcp_meta             Addr: 0x3c0e2b68 Size: 640 bytes Kind: ReadOnlyData 
-  Name: .flash.rodata_noload Addr: 0x3c0e2de8 Size: 23251 bytes Kind: UninitializedData 
+  Name: .flash.rodata        Addr: 0x3c0b0120 Size: 207408 bytes Kind: Data 
+  Name: xcp_epk              Addr: 0x3c0e2b50 Size: 8 bytes Kind: ReadOnlyData 
+  Name: xcp_meta             Addr: 0x3c0e2b58 Size: 640 bytes Kind: ReadOnlyData 
+  Name: .flash.rodata_noload Addr: 0x3c0e2dd8 Size: 23251 bytes Kind: UninitializedData 
   Name: .ext_ram.dummy       Addr: 0x3c000020 Size: 983008 bytes Kind: UninitializedData 
   Name: .iram0.text_end      Addr: 0x40386e43 Size: 189 bytes Kind: UninitializedData 
   Name: .iram0.data          Addr: 0x40386f00 Size: 0 bytes Kind: Other 
   Name: .iram0.bss           Addr: 0x40386f00 Size: 0 bytes Kind: Other 
   Name: .dram0.heap_start    Addr: 0x3fcacbf0 Size: 0 bytes Kind: Other 
   Name: .debug_aranges       Addr: 0x00000000 Size: 92296 bytes Kind: Other 
-  Name: .debug_info          Addr: 0x00000000 Size: 8375077 bytes Kind: Other 
-  Name: .debug_abbrev        Addr: 0x00000000 Size: 800920 bytes Kind: Other 
-  Name: .debug_line          Addr: 0x00000000 Size: 3962645 bytes Kind: Other 
+  Name: .debug_info          Addr: 0x00000000 Size: 8376362 bytes Kind: Other 
+  Name: .debug_abbrev        Addr: 0x00000000 Size: 801326 bytes Kind: Other 
+  Name: .debug_line          Addr: 0x00000000 Size: 3963394 bytes Kind: Other 
   Name: .debug_frame         Addr: 0x00000000 Size: 240852 bytes Kind: Other 
-  Name: .debug_str           Addr: 0x00000000 Size: 1012634 bytes Kind: OtherString 
-  Name: .debug_loc           Addr: 0x00000000 Size: 1741484 bytes Kind: Other 
+  Name: .debug_str           Addr: 0x00000000 Size: 1012735 bytes Kind: OtherString 
+  Name: .debug_loc           Addr: 0x00000000 Size: 1742136 bytes Kind: Other 
   Name: .debug_ranges        Addr: 0x00000000 Size: 236712 bytes Kind: Other 
   Name: .debug_line_str      Addr: 0x00000000 Size: 13286 bytes Kind: OtherString 
   Name: .debug_loclists      Addr: 0x00000000 Size: 119501 bytes Kind: Other 
@@ -50,20 +50,20 @@ Sections:
   Name: .xtensa.info         Addr: 0x00000000 Size: 56 bytes Kind: Note 
   Name: .xt.prop             Addr: 0x00000000 Size: 13704 bytes Kind: Other 
   Name: .xt.lit              Addr: 0x00000000 Size: 216 bytes Kind: Other 
-  Name: .symtab              Addr: 0x00000000 Size: 182272 bytes Kind: Metadata 
-  Name: .strtab              Addr: 0x00000000 Size: 220863 bytes Kind: Metadata 
+  Name: .symtab              Addr: 0x00000000 Size: 182320 bytes Kind: Metadata 
+  Name: .strtab              Addr: 0x00000000 Size: 220891 bytes Kind: Metadata 
   Name: .shstrtab            Addr: 0x00000000 Size: 526 bytes Kind: Metadata 
 
 [INFO ] Loading DWARF sections
-[INFO ] EPK string read from xcp_epk section: 'V201' at address 0x3C0E2B60
+[INFO ] EPK string read from xcp_epk section: 'V201' at address 0x3C0E2B50
 [WARN ] xcp_demo_cpp:434: 'phase': location evaluation result not handled Piece { size_in_bits: None, bit_offset: None, location: Bytes { value: EndianSlice(Little, [0x00, 0x00, 0x00, 0x00]) } }
 [WARN ] xcp_demo_cpp:435: 'slow_task_period_ms': location is a register Register(6)
 [WARN ] xcp_demo_cpp:436: 'fast_task_period_ms': location is a register Register(9)
 [WARN ] xcp_demo_cpp:491: 'delayed': location is a register Register(10)
-[WARN ] xcp_demo_cpp:452: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(32), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Value { value: Generic(1007456452) } }]
+[WARN ] xcp_demo_cpp:452: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(32), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Value { value: Generic(1007456428) } }]
 [WARN ] xcp_demo_cpp:375: 'period_ms': location is a register Register(5)
 [WARN ] xcp_demo_cpp:420: 'delayed': location is a register Register(10)
-[WARN ] xcp_demo_cpp:386: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(32), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Value { value: Generic(1007456452) } }]
+[WARN ] xcp_demo_cpp:386: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(32), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Value { value: Generic(1007456428) } }]
 [WARN ] xcp_demo_cpp:331: 'test_float': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(19), base_type: UnitOffset(37) }
 [WARN ] xcp_demo_cpp:332: 'test_double': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(7), base_type: UnitOffset(0) }
 [WARN ] xcp_demo_cpp:334: 'test_uint16': expression not evaluated, unsupported, eval_result=RequiresRegister { register: Register(5), base_type: UnitOffset(0) }
@@ -173,12 +173,12 @@ DebugData information summary:
   Compiler: GNU C17 14.2.0 -mdynconfig=xtensa_esp32s3.so -mlongcalls -mno-disable-hardware-atomics -gdwarf-4 -ggdb -Os -std=gnu17 -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-bzero -ffunction-sections -fdata-sections -freorder-blocks -fstack-protector -fstrict-volatile-bitfields -fno-jump-tables -fno-tree-switch-conversion
   Sections: 16
   Endianness: Little Endian
-  Variables 56676 with 8182 unique names
+  Variables 29930 with 7258 unique names
   Demangled names: 0 entries
-  Type names: 2155 named types
-  Types: 42842 total types
-  EPK string: `V201` at address 0x3C0E2B60
-  XCP metadata section (xcp_meta) found at address 0x3C0E2B68, 640 bytes
+  Type names: 2144 named types
+  Types: 41420 total types
+  EPK string: `V201` at address 0x3C0E2B50
+  XCP metadata section (xcp_meta) found at address 0x3C0E2B58, 640 bytes
 
 ====================================================================================================
 Compilation units in debug_data.unit_names:
@@ -495,52 +495,52 @@ Compilation units in debug_data.unit_names:
   Unit 310: vfs_console_c
   Unit 311: vfs_c
   Unit 312: nullfs_c
-  Unit 313: sockets_c
-  Unit 314: tcpip_c
-  Unit 315: def_c
-  Unit 316: dns_c
-  Unit 317: init_c
-  Unit 318: ip_c
-  Unit 319: mem_c
-  Unit 320: memp_c
-  Unit 321: netif_c
-  Unit 322: pbuf_c
-  Unit 323: raw_c
-  Unit 324: tcp_c
-  Unit 325: tcp_in_c
-  Unit 326: tcp_out_c
-  Unit 327: timeouts_c
-  Unit 328: udp_c
-  Unit 329: dhcp_c
-  Unit 330: etharp_c
-  Unit 331: icmp_c
-  Unit 332: igmp_c
-  Unit 333: ip4_c
-  Unit 334: ip4_napt_c
-  Unit 335: ip4_addr_c
-  Unit 336: ip4_frag_c
-  Unit 337: dhcp6_c
-  Unit 338: icmp6_c
-  Unit 339: ip6_c
-  Unit 340: ip6_addr_c
-  Unit 341: ip6_frag_c
-  Unit 342: mld6_c
-  Unit 343: nd6_c
-  Unit 344: ethernet_c
-  Unit 345: ppp_c
-  Unit 346: pppos_c
-  Unit 347: upap_c
-  Unit 348: vj_c
-  Unit 349: tcp_isn_default_c
-  Unit 350: lwip_default_hooks_c
-  Unit 351: sockets_ext_c
-  Unit 352: sys_arch_c
-  Unit 353: acd_dhcp_check_c
-  Unit 354: vfs_lwip_c
-  Unit 355: api_lib_c
-  Unit 356: api_msg_c
-  Unit 357: err_c
-  Unit 358: netbuf_c
+  Unit 313: api_lib_c
+  Unit 314: api_msg_c
+  Unit 315: err_c
+  Unit 316: netbuf_c
+  Unit 317: sockets_c
+  Unit 318: tcpip_c
+  Unit 319: def_c
+  Unit 320: dns_c
+  Unit 321: init_c
+  Unit 322: ip_c
+  Unit 323: mem_c
+  Unit 324: memp_c
+  Unit 325: netif_c
+  Unit 326: pbuf_c
+  Unit 327: raw_c
+  Unit 328: tcp_c
+  Unit 329: tcp_in_c
+  Unit 330: tcp_out_c
+  Unit 331: timeouts_c
+  Unit 332: udp_c
+  Unit 333: dhcp_c
+  Unit 334: etharp_c
+  Unit 335: icmp_c
+  Unit 336: igmp_c
+  Unit 337: ip4_c
+  Unit 338: ip4_napt_c
+  Unit 339: ip4_addr_c
+  Unit 340: ip4_frag_c
+  Unit 341: dhcp6_c
+  Unit 342: icmp6_c
+  Unit 343: ip6_c
+  Unit 344: ip6_addr_c
+  Unit 345: ip6_frag_c
+  Unit 346: mld6_c
+  Unit 347: nd6_c
+  Unit 348: ethernet_c
+  Unit 349: ppp_c
+  Unit 350: pppos_c
+  Unit 351: upap_c
+  Unit 352: vj_c
+  Unit 353: tcp_isn_default_c
+  Unit 354: lwip_default_hooks_c
+  Unit 355: sockets_ext_c
+  Unit 356: sys_arch_c
+  Unit 357: acd_dhcp_check_c
+  Unit 358: vfs_lwip_c
   Unit 359: sntp_c
   Unit 360: inet_chksum_c
   Unit 361: auth_c
@@ -831,20 +831,20 @@ Compilation units in debug_data.unit_names:
 
 ====================================================================================================
 DWARF sections by address:
-  '.ext_ram.dummy': 0x3c000020, 1006632992 bytes (1007616000)
-  '.flash_rodata_dummy': 0x3c000020, 0 bytes (1007353888)
+  '.flash_rodata_dummy': 0x3c000020, 1006632992 bytes (1007353888)
+  '.ext_ram.dummy': 0x3c000020, 0 bytes (1007616000)
   '.flash.appdesc': 0x3c0b0020, 720896 bytes (1007354144)
-  '.flash.rodata': 0x3c0b0120, 256 bytes (1007561568)
-  'xcp_epk': 0x3c0e2b60, 207424 bytes (1007561576)
-  'xcp_meta': 0x3c0e2b68, 8 bytes (1007562216)
-  '.flash.rodata_noload': 0x3c0e2de8, 640 bytes (1007585467)
-  '.dram0.dummy': 0x3fc88000, 62542360 bytes (1070165760)
+  '.flash.rodata': 0x3c0b0120, 256 bytes (1007561552)
+  'xcp_epk': 0x3c0e2b50, 207408 bytes (1007561560)
+  'xcp_meta': 0x3c0e2b58, 8 bytes (1007562200)
+  '.flash.rodata_noload': 0x3c0e2dd8, 640 bytes (1007585451)
+  '.dram0.dummy': 0x3fc88000, 62542376 bytes (1070165760)
   '.dram0.data': 0x3fc96f00, 61184 bytes (1070188540)
   '.dram0.bss': 0x3fc9c800, 22784 bytes (1070255088)
   '.iram0.vectors': 0x40374000, 7174144 bytes (1077363716)
   '.iram0.text': 0x40374404, 1028 bytes (1077440067)
   '.iram0.text_end': 0x40386e43, 76351 bytes (1077440256)
-  '.flash.text': 0x42000020, 29856221 bytes (1108013572)
+  '.flash.text': 0x42000020, 29856221 bytes (1108013736)
   '.rtc.force_slow': 0x50000200, 234881504 bytes (1342177824)
   '.rtc_reserved': 0x600fffd8, 269483480 bytes (1611661312)
 
@@ -852,40 +852,40 @@ DWARF sections by address:
 A2L Creator variables:
 XCPLITE__ACSDD':  xcplite_c:'<global>' : addr=0:0x00000000
 calseg__epk':  xcplite_c:'XcpInit' : addr=0:0x3C0B0120
-xcp_meta__comment__global_counter':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2DA4
-xcp_meta__read_write__global_counter':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2DA3
-xcp_meta__comment__channel1':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D7A
-xcp_meta__unit__channel1':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D75
-xcp_meta__comment__parameters__counter_max':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D50
-xcp_meta__min__parameters__counter_max':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D48
-xcp_meta__max__parameters__counter_max':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D40
-xcp_meta__comment__parameters__fast_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D1B
-xcp_meta__unit__parameters__fast_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D18
-xcp_meta__min__parameters__fast_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D10
-xcp_meta__max__parameters__fast_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D08
-xcp_meta__comment__parameters__slow_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2CE3
-xcp_meta__unit__parameters__slow_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2CE0
-xcp_meta__min__parameters__slow_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2CD8
-xcp_meta__max__parameters__slow_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2CD0
-xcp_meta__comment__parameters__amplitude':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2CA5
-xcp_meta__unit__parameters__amplitude':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2CA0
-xcp_meta__min__parameters__amplitude':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C98
-xcp_meta__max__parameters__amplitude':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C90
-xcp_meta__comment__parameters__period':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C6A
-xcp_meta__unit__parameters__period':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C68
-xcp_meta__min__parameters__period':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C60
-xcp_meta__max__parameters__period':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C58
+xcp_meta__comment__global_counter':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D94
+xcp_meta__read_write__global_counter':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D93
+xcp_meta__comment__channel1':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D6A
+xcp_meta__unit__channel1':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D65
+xcp_meta__comment__parameters__counter_max':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D40
+xcp_meta__min__parameters__counter_max':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D38
+xcp_meta__max__parameters__counter_max':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D30
+xcp_meta__comment__parameters__fast_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D0B
+xcp_meta__unit__parameters__fast_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D08
+xcp_meta__min__parameters__fast_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2D00
+xcp_meta__max__parameters__fast_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2CF8
+xcp_meta__comment__parameters__slow_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2CD3
+xcp_meta__unit__parameters__slow_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2CD0
+xcp_meta__min__parameters__slow_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2CC8
+xcp_meta__max__parameters__slow_task_period_ms':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2CC0
+xcp_meta__comment__parameters__amplitude':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C95
+xcp_meta__unit__parameters__amplitude':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C90
+xcp_meta__min__parameters__amplitude':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C88
+xcp_meta__max__parameters__amplitude':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C80
+xcp_meta__comment__parameters__period':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C5A
+xcp_meta__unit__parameters__period':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C58
+xcp_meta__min__parameters__period':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C50
+xcp_meta__max__parameters__period':  xcp_demo_cpp:'<global>' : addr=0:0x3C0E2C48
 calseg__parameters':  xcp_demo_cpp:'<global>' : addr=0:0x3C0B0140
-xcp_meta__comment__counter':  xcp_demo_cpp:'slowTask' : addr=0:0x3C0E2B68
+xcp_meta__comment__counter':  xcp_demo_cpp:'slowTask' : addr=0:0x3C0E2B58
 evt__slowTask':  xcp_demo_cpp:'slowTask' : addr=0:0x3C0B0160
 trg__AAS__slowTask':  xcp_demo_cpp:'slowTask' : addr=0:0x00000000
-xcp_meta__comment__static_counter':  xcp_demo_cpp:'fastTask' : addr=0:0x3C0E2B91
+xcp_meta__comment__static_counter':  xcp_demo_cpp:'fastTask' : addr=0:0x3C0E2B81
 evt__fastTask':  xcp_demo_cpp:'fastTask' : addr=0:0x3C0B0170
 trg__AAS__fastTask':  xcp_demo_cpp:'fastTask' : addr=0:0x00000000
 cap__foo':  xcp_demo_cpp:'foo' : addr=2:0x7FFFFFB0
 evt__foo':  xcp_demo_cpp:'foo' : addr=0:0x3C0B0180
 trg__AASR__foo':  xcp_demo_cpp:'foo' : addr=0:0x00000000
-xcp_epk__':  xcp_demo_cpp:'startXcpServer' : addr=0:0x3C0E2B60
+xcp_epk__':  xcp_demo_cpp:'startXcpServer' : addr=0:0x3C0E2B50
 xcp_epk__keep':  xcp_demo_cpp:'startXcpServer' : addr=2:0x7FFFFFD8
 
 [INFO ] ===============================================================
@@ -908,12 +908,12 @@ Found 2 segment definition marker variables:
 0: 'epk' - number=Some(0), addr=00000000'
 1: 'parameters' - number=Some(1), addr=3C0B0140'
 [INFO ] Calibration segment 'epk' not yet defined in registry
-[INFO ] Created segment 0: 'epk':  addr = 0x3C0E2B60, size = 32, mem_addr = 0x3C0E2B60
-[INFO ] Calibration segment 'parameters' default page variable found in debug data: Address = 0x3c0c90c4, Size = 0x14
+[INFO ] Created segment 0: 'epk':  addr = 0x3C0E2B50, size = 32, mem_addr = 0x3C0E2B50
+[INFO ] Calibration segment 'parameters' default page variable found in debug data: Address = 0x3c0c90ac, Size = 0x14
 [INFO ] Calibration segment 'parameters' not yet defined in registry
-[INFO ] Created segment 1: 'parameters':  addr = 0x3C0C90C4, size = 20, mem_addr = 0x3C0C90C4
+[INFO ] Created segment 1: 'parameters':  addr = 0x3C0C90AC, size = 20, mem_addr = 0x3C0C90AC
 [INFO ] ===============================================================
-[INFO ] EPK string 'V201' found at address 0x3C0E2B60
+[INFO ] EPK string 'V201' found at address 0x3C0E2B50
   EPK 'V201', ADDR_EPK = 0xFFFFFF00
 [INFO ] ===============================================================
 [INFO ] Registering event locations:
@@ -929,10 +929,6 @@ Found 2 segment definition marker variables:
 [INFO ] ===============================================================
 [INFO ] Default event 'fastTask' (id 1) for global and static variables without an event trigger
 [INFO ] Compilation unit filter: 'xcp_demo'
-[INFO ] Global variable 'MOSI', event id = Some(1)
-        Registered variable 'MOSI' type_name = 'uint8_t', size = 1, event_id = Some(1)
-[INFO ] Global variable 'MISO', event id = Some(1)
-        Registered variable 'MISO' type_name = 'uint8_t', size = 1, event_id = Some(1)
 [INFO ] Local variable 'counter' in function 'Some("slowTask")', event id = Some(0), offset = -38
         Registered variable 'slowTask.counter' type_name = 'uint16_t', size = 2, event_id = Some(0)
 [INFO ] Local variable 'counter' in function 'Some("fastTask")', event id = Some(1), offset = -38

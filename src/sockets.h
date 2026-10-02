@@ -68,9 +68,7 @@
 |       vectored I/O (socketSendToV/socketSendV), hardware timestamps,
 |       socketGetMAC, socketGetLocalAddr.
 |
-| Copyright (c) Vector Informatik GmbH. All rights reserved.
-| See LICENSE file in the project root for details.
-|
+| Code released into public domain, no attribution required
  ----------------------------------------------------------------------------*/
 
 #include "platform.h" // for platform defines (WIN_, LINUX_, MACOS_) and specific implementation of sockets, clock, thread, mutex, spinlock
