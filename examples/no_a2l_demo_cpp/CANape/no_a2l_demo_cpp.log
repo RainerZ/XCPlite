@@ -225,8 +225,6 @@ Found 4 segment definition marker variables:
         Registered variable 'OPTION_SERVER_ADDR' type_name = 'uint8_t', size = 4, event_id = Some(3)
 [INFO ] Global variable 'params', event id = Some(3)
         Registered variable 'params' type_name = 'params', size = 64, event_id = Some(3)
-[INFO ] Global variable 'calseg_id_params', event id = Some(3)
-        Registered variable 'calseg_id_params' type_name = 'tXcpCalSegIndex', size = 2, event_id = Some(3)
 [INFO ] Global variable 'global_counter', event id = Some(3)
         Registered variable 'global_counter' type_name = 'uint16_t', size = 2, event_id = Some(3)
 [INFO ] Global variable 'global_static_counter', event id = Some(3)
@@ -267,8 +265,6 @@ Found 4 segment definition marker variables:
         Registered variable 'valve_control.input' type_name = 'Input', size = 8, event_id = Some(3)
 [INFO ] Global variable 'counter_ctl_params', event id = Some(3)
         Registered variable 'counter_ctl_params' type_name = 'CounterCtlParams', size = 8, event_id = Some(3)
-[INFO ] Global variable 'calseg_id_counter_ctl_params', event id = Some(3)
-        Registered variable 'calseg_id_counter_ctl_params' type_name = 'tXcpCalSegIndex', size = 2, event_id = Some(3)
 [INFO ] Global variable 'counter_ctl_calseg_handle', event id = Some(3)
         Registered variable 'counter_ctl_calseg_handle' type_name = 'CalSegRef<const CounterCtlParamsTemplate<short unsigned int> >', size = 16, event_id = Some(3)
 [INFO ] Global variable 'counter_ctl', event id = Some(3)
@@ -288,8 +284,6 @@ Found 4 segment definition marker variables:
         Registered variable 'bar.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(1)
 [INFO ] Static variable 'task_counter_ctl_params' local to function 'Some("task")', event id = 0
         Registered variable 'task_counter_ctl_params' type_name = 'TaskCounterCtlParams', size = 12, event_id = Some(0)
-[INFO ] Static variable 'calseg_id_task_counter_ctl_params' local to function 'Some("task")', event id = 0
-        Registered variable 'calseg_id_task_counter_ctl_params' type_name = 'tXcpCalSegIndex', size = 2, event_id = Some(0)
 [WARN ] Local variable 'counter_ctl_task_calseg_handle' in function 'task' not registered, it has no location in the debug information, not implemented yet
 [INFO ] Local variable 'test_struct' in function 'Some("foo")', event id = Some(2), offset = -16
         Registered variable 'foo.test_struct' type_name = 'test_struct', size = 12, event_id = Some(2)

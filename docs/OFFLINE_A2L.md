@@ -262,8 +262,11 @@ a name is looked up in the event list of the ELF file (and of the XCP server whe
   The plain name is not looked up for a constant, a symbol with this name is a different variable of another compilation unit.
 - GCC describes a namespace scope variable with a declaration entry inside the namespace and a definition entry at compilation unit level
   (`DW_AT_specification`), both are merged into one variable.
-- Variables with the same name get distinct A2L names: static variables in functions are prefixed with the function (`foo.counter`),
-  global variables defined in several namespaces with their namespace (`motor_control.input`).
+- The segment index variables `calseg_id_<segment>` and `calblk_id_<block>` of `CalSegDecl`, `CalBlkDecl` and `CalSegDeclRef` are not
+  registered, they are XCPlite internals.
+- Static variables in functions are always prefixed with the function (`foo.counter`), also when the name is unique. The default page
+  of a calibration segment declared in a function keeps the name of its segment. Global variables with the same name defined in several
+  namespaces are prefixed with their namespace (`motor_control.input`).
 
 ### Type names
 
@@ -368,7 +371,7 @@ Messages worth knowing when a variable is missing or looks wrong in the A2L file
 
 The messages about a single variable are only warnings if the variable could become an A2L object at all. The variables of the
 compilation units which `--elf-unit-filter` excludes, and the marker variables which the XCPlite macros generate in the code
-(`evt__`, `trg__`, `cap__`, `xcp_meta__`, `evt_id_<event>`), are reported at log level 4 (`--log-level=4`) instead: they would
+(`evt__`, `trg__`, `cap__`, `xcp_meta__`, `evt_id_<event>`, `calseg_id_<segment>`), are reported at log level 4 (`--log-level=4`) instead: they would
 otherwise bury the relevant warnings under hundreds of messages about the internals of the XCPlite library itself.
 
 xcpclient exits with status 1 when the A2L file could not be created or any other error occurred, scripts can rely on the exit

@@ -390,6 +390,20 @@ fn test_register_variables_without_location_exact_symbols() {
     assert!(measurement("pin_state").is_some());
     assert!(measurement("LED_PIN").is_some());
     assert_eq!(measurement("input").expect("instance 'input' not registered").comment(), "Motor input");
+    // Static variables in functions are always prefixed with the function name, also when the name is unique,
+    // and the marker in the function reaches them
+    assert!(measurement("main_counter").is_none());
+    assert_eq!(
+        measurement("main.main_counter").expect("instance 'main.main_counter' not registered").comment(),
+        "Static local in main"
+    );
+    assert_eq!(
+        measurement("spiDetachMOSI.detach_counter")
+            .expect("instance 'spiDetachMOSI.detach_counter' not registered")
+            .comment(),
+        "Static local in an extern C function"
+    );
+    assert!(measurement("foo.static_counter").is_some());
 }
 
 // A marker at file scope which names no instance reaches the field of a typedef instance (delay_us -> params.delay_us),
@@ -430,6 +444,16 @@ fn test_register_metadata_file_scope_marker_fallback() {
     let comment = |name: &str| reg.instance_list.get_instance(name, McObjectType::Measurement, None).unwrap().comment();
     assert_eq!(comment("params.delay_us"), "Delay");
     assert_eq!(comment("foo.counter"), "");
+}
+
+// The segment index variables of the calibration segment and block declaration macros are not registered as measurements,
+// a variable which only contains such a name is
+#[test]
+fn test_calseg_index_variables_are_internal() {
+    assert!(is_internal_variable("calseg_id_params"));
+    assert!(is_internal_variable("calblk_id_params"));
+    assert!(!is_internal_variable("my_calseg_id_params"));
+    assert!(!is_internal_variable("params"));
 }
 
 // The addressing mode signature is read from the symbol table, so it is found even when the debug information of the XCPlite

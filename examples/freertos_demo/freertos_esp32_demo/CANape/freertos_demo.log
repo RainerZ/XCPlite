@@ -947,8 +947,6 @@ Found 2 segment definition marker variables:
         Registered variable 'fastTaskOverruns' type_name = 'uint32_t', size = 4, event_id = Some(1)
 [INFO ] Global variable 'slowTaskOverruns', event id = Some(1)
         Registered variable 'slowTaskOverruns' type_name = 'uint32_t', size = 4, event_id = Some(1)
-[INFO ] Global variable 'calseg_id_parameters', event id = Some(1)
-        Registered variable 'calseg_id_parameters' type_name = 'tXcpCalSegIndex', size = 2, event_id = Some(1)
 [INFO ] Local variable 'lastWakeTime' in function 'Some("slowTask")', event id = Some(0), offset = -36
         Registered variable 'slowTask.lastWakeTime' type_name = 'TickType_t', size = 4, event_id = Some(0)
 [INFO ] Local variable 'lastWakeTime' in function 'Some("fastTask")', event id = Some(1), offset = -36

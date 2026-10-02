@@ -167,9 +167,10 @@ pub fn is_a2l_variable(name: &str) -> bool {
 }
 
 // Variables which never become A2L objects: the internals of the compiler and of the standard library, XCPlite internals and the A2L creator markers
-// variables and the marker variables of the sections and macros (see the module comment)
+// variables and the marker variables of the sections and macros (see the module comment).
+// calseg_id_<segment> and calblk_id_<block> are the segment index variables of CalSegDecl, CalBlkDecl and CalSegDeclRef (inc/xcplib.h, inc/xcplib.hpp)
 pub fn is_internal_variable(name: &str) -> bool {
-    name.starts_with("__") || name.starts_with("gXcp") || name.starts_with("gA2l") || is_a2l_variable(name)
+    name.starts_with("__") || name.starts_with("gXcp") || name.starts_with("gA2l") || name.starts_with("calseg_id_") || name.starts_with("calblk_id_") || is_a2l_variable(name)
 }
 
 // Variables which the XCPlite instrumentation macros generate in the code of the application, not variables the user wrote.
@@ -982,7 +983,7 @@ impl ElfReader {
                 warn!("Variable '{}' has no variable info", var_name);
             }
 
-            let mut a2l_name = var_name.to_string();
+            let mut a2l_name: String;
             let mut xcp_event_id: Option<u16>;
             // Count the definitions of this name within the compilation unit limit (--elf-unit-limit), including definitions without
             // an address. More than one definition means the A2L name has to be qualified to be unique.
@@ -1074,17 +1075,15 @@ impl ElfReader {
                             xcp_event_id = default_event;
                         }
 
-                        // Multiple variables with this name: local static variables are prefixed with the function name,
-                        // global variables defined in several namespaces with their namespace (motor_control.input, valve_control.input)
-                        if count > 1 {
-                            if let Some(f) = var_function {
-                                a2l_name = format!("{}.{}", f, var_name);
-                            } else if defined_count > 1 && !var_info.namespaces.is_empty() {
-                                a2l_name = format!("{}.{}", var_info.namespaces.join("."), var_name);
-                            } else {
-                                a2l_name = var_name.to_string();
-                            }
-                        }
+                        // Static variables in functions are always prefixed with the function name (foo.counter), the name does not
+                        // depend on other variables of the same name and a metadata marker in the function refers to it (see register_metadata).
+                        // Except the default page of a calibration segment declared in a function, which keeps the name of its segment.
+                        // Global variables defined in several namespaces are prefixed with their namespace (motor_control.input, valve_control.input)
+                        a2l_name = match var_function {
+                            Some(f) if reg.cal_seg_list.find_cal_seg(var_name).is_none() => format!("{}.{}", f, var_name),
+                            None if count > 1 && defined_count > 1 && !var_info.namespaces.is_empty() => format!("{}.{}", var_info.namespaces.join("."), var_name),
+                            _ => var_name.to_string(),
+                        };
                         var_info.address.1
                     }
                 } else if mem_addr_ext == 2 {
@@ -1545,8 +1544,8 @@ impl ElfReader {
 
                     // Path B — direct instance metadata (simple variable or flattened typedef)
                     // The instance with exactly this name first: a marker in a function refers to a variable of this function only,
-                    // the qualified candidate covers a prefixed static local (foo.static_counter), the exact path an unprefixed one
-                    // (static_counter) or an explicit prefix (foo__counter). A marker at file scope names the global variable
+                    // the qualified candidate covers a static local, which is always prefixed (foo.static_counter), the exact path an
+                    // explicit prefix (foo__counter). A marker at file scope names the global variable
                     // (counter) and not the local variables of the same name in functions (foo.counter, task.counter).
                     let escaped = path.replace('.', "\\.");
                     let mut names: Vec<String> = reg.instance_list.find_instances_regex(&format!(r"^{escaped}$"), McObjectType::Unspecified, None);
