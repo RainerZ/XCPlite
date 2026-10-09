@@ -22,7 +22,7 @@ All notable changes to XCPlite are documented in this file.
 
 - `XcpCreateEpk`: the EPK string variable is renamed from `gXcpEpkString` to `xcp_epk__`. Its address is stored in a volatile pointer, so the string is no longer removed by the compiler in optimized builds, or by the linker with `--gc-sections`, when there is no `xcp_epk` section (no `OPTION_SECTION_REGISTRATION`).
 
-- xcpclient changes (xcpclient V4.0.1):
+- xcpclient changes (xcpclient V4.0.2):
     - The DWARF location expression parser no longer floods the log with warnings about variables which are dropped anyway by the filters, or which are markers the XCPlite macros generate in the code of the application (`evt__`, `trg__`, `cap__`, `xcp_meta__`, `evt_id_<event>`, ...).
     - A local variable without any `DW_AT_location` in the debug information is now reported with a warning instead of silently missing from the A2L file.
     - The messages of the location expression parser now name the compilation unit and the declaration line of the variable (`main_c:178: 'delay': ...`), the variable name alone does not identify which of several variables with that name is meant.
@@ -38,6 +38,7 @@ All notable changes to XCPlite are documented in this file.
     - The `epk` calibration segment has the size of the target segment (32 bytes) in an offline A2L file, not the length of the EPK string. In online mode, the different address of the `epk` segment of the target is no longer reported as a mismatch.
     - Bugfix: in online mode with absolute addressing, a calibration segment which the target reported was not used to find the calibration variables in it.
     - Bugfix: `--list-cal` and `--cal` with `--elf` panicked on a calibration segment struct. The registry created from the ELF file is now flattened like a loaded A2L file, the A2L file keeps the typedef structure.
+    - New option `--embed-aml`
 
 
 
