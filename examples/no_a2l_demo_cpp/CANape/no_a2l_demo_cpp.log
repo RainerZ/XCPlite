@@ -17,73 +17,63 @@ Sections:
   Name: .note.gnu.build-id   Addr: 0x00000254 Size: 36 bytes Kind: Note 
   Name: .note.ABI-tag        Addr: 0x00000278 Size: 32 bytes Kind: Note 
   Name: .gnu.hash            Addr: 0x00000298 Size: 28 bytes Kind: Elf(1879048182) 
-  Name: .dynsym              Addr: 0x000002b8 Size: 1800 bytes Kind: Metadata 
-  Name: .dynstr              Addr: 0x000009c0 Size: 1001 bytes Kind: Metadata 
-  Name: .gnu.version         Addr: 0x00000daa Size: 150 bytes Kind: Elf(1879048191) 
-  Name: .gnu.version_r       Addr: 0x00000e40 Size: 128 bytes Kind: Elf(1879048190) 
-  Name: .rela.dyn            Addr: 0x00000ec0 Size: 960 bytes Kind: Metadata 
-  Name: .rela.plt            Addr: 0x00001280 Size: 1608 bytes Kind: Metadata 
-  Name: .init                Addr: 0x000018c8 Size: 24 bytes Kind: Text 
-  Name: .plt                 Addr: 0x000018e0 Size: 1104 bytes Kind: Text 
-  Name: .text                Addr: 0x00001d40 Size: 45376 bytes Kind: Text 
-  Name: .fini                Addr: 0x0000ce80 Size: 20 bytes Kind: Text 
-  Name: .rodata              Addr: 0x0000ce98 Size: 14711 bytes Kind: ReadOnlyData 
-  Name: xcp_epk              Addr: 0x00010810 Size: 8 bytes Kind: ReadOnlyData 
-  Name: xcp_meta             Addr: 0x00010818 Size: 440 bytes Kind: ReadOnlyData 
-  Name: .eh_frame_hdr        Addr: 0x000109d0 Size: 1668 bytes Kind: ReadOnlyData 
-  Name: .eh_frame            Addr: 0x00011058 Size: 8060 bytes Kind: ReadOnlyData 
-  Name: .gcc_except_table    Addr: 0x00012fd4 Size: 51 bytes Kind: ReadOnlyData 
-  Name: .init_array          Addr: 0x0002fd30 Size: 24 bytes Kind: Elf(14) 
-  Name: .fini_array          Addr: 0x0002fd48 Size: 8 bytes Kind: Elf(15) 
-  Name: .data.rel.ro         Addr: 0x0002fd50 Size: 16 bytes Kind: Data 
-  Name: .dynamic             Addr: 0x0002fd60 Size: 512 bytes Kind: Metadata 
-  Name: .got                 Addr: 0x0002ff60 Size: 136 bytes Kind: Data 
-  Name: .got.plt             Addr: 0x0002ffe8 Size: 560 bytes Kind: Data 
-  Name: .data                Addr: 0x00030218 Size: 132 bytes Kind: Data 
-  Name: xcp_cals             Addr: 0x000302a0 Size: 128 bytes Kind: Data 
-  Name: xcp_evts             Addr: 0x00030320 Size: 64 bytes Kind: Data 
-  Name: .bss                 Addr: 0x00030360 Size: 10032 bytes Kind: UninitializedData 
+  Name: .dynsym              Addr: 0x000002b8 Size: 1896 bytes Kind: Metadata 
+  Name: .dynstr              Addr: 0x00000a20 Size: 1044 bytes Kind: Metadata 
+  Name: .gnu.version         Addr: 0x00000e34 Size: 158 bytes Kind: Elf(1879048191) 
+  Name: .gnu.version_r       Addr: 0x00000ed8 Size: 128 bytes Kind: Elf(1879048190) 
+  Name: .rela.dyn            Addr: 0x00000f58 Size: 1080 bytes Kind: Metadata 
+  Name: .rela.plt            Addr: 0x00001390 Size: 1680 bytes Kind: Metadata 
+  Name: .init                Addr: 0x00001a20 Size: 24 bytes Kind: Text 
+  Name: .plt                 Addr: 0x00001a40 Size: 1152 bytes Kind: Text 
+  Name: .text                Addr: 0x00001ec0 Size: 75504 bytes Kind: Text 
+  Name: .fini                Addr: 0x000145b0 Size: 20 bytes Kind: Text 
+  Name: .rodata              Addr: 0x000145c8 Size: 19684 bytes Kind: ReadOnlyData 
+  Name: xcp_meta             Addr: 0x000192b0 Size: 437 bytes Kind: ReadOnlyData 
+  Name: xcp_epk              Addr: 0x00019468 Size: 8 bytes Kind: ReadOnlyData 
+  Name: .eh_frame_hdr        Addr: 0x00019470 Size: 2100 bytes Kind: ReadOnlyData 
+  Name: .eh_frame            Addr: 0x00019ca8 Size: 7980 bytes Kind: ReadOnlyData 
+  Name: .gcc_except_table    Addr: 0x0001bbd4 Size: 33 bytes Kind: ReadOnlyData 
+  Name: .init_array          Addr: 0x0002fd08 Size: 24 bytes Kind: Elf(14) 
+  Name: .fini_array          Addr: 0x0002fd20 Size: 8 bytes Kind: Elf(15) 
+  Name: .data.rel.ro         Addr: 0x0002fd28 Size: 48 bytes Kind: Data 
+  Name: .dynamic             Addr: 0x0002fd58 Size: 512 bytes Kind: Metadata 
+  Name: .got                 Addr: 0x0002ff58 Size: 144 bytes Kind: Data 
+  Name: .got.plt             Addr: 0x0002ffe8 Size: 584 bytes Kind: Data 
+  Name: .data                Addr: 0x00030230 Size: 156 bytes Kind: Data 
+  Name: xcp_cals             Addr: 0x000302d0 Size: 128 bytes Kind: Data 
+  Name: xcp_evts             Addr: 0x00030350 Size: 64 bytes Kind: Data 
+  Name: .bss                 Addr: 0x00030390 Size: 10064 bytes Kind: UninitializedData 
   Name: .comment             Addr: 0x00000000 Size: 39 bytes Kind: OtherString 
-  Name: .debug_aranges       Addr: 0x00000000 Size: 432 bytes Kind: Other 
-  Name: .debug_info          Addr: 0x00000000 Size: 107950 bytes Kind: Other 
-  Name: .debug_abbrev        Addr: 0x00000000 Size: 11522 bytes Kind: Other 
-  Name: .debug_line          Addr: 0x00000000 Size: 29732 bytes Kind: Other 
-  Name: .debug_str           Addr: 0x00000000 Size: 36989 bytes Kind: OtherString 
-  Name: .debug_line_str      Addr: 0x00000000 Size: 1834 bytes Kind: OtherString 
-  Name: .debug_loclists      Addr: 0x00000000 Size: 29593 bytes Kind: Other 
-  Name: .debug_rnglists      Addr: 0x00000000 Size: 1811 bytes Kind: Other 
-  Name: .symtab              Addr: 0x00000000 Size: 13200 bytes Kind: Metadata 
-  Name: .strtab              Addr: 0x00000000 Size: 7963 bytes Kind: Metadata 
-  Name: .shstrtab            Addr: 0x00000000 Size: 437 bytes Kind: Metadata 
+  Name: .debug_aranges       Addr: 0x00000000 Size: 816 bytes Kind: Other 
+  Name: .debug_info          Addr: 0x00000000 Size: 82261 bytes Kind: Other 
+  Name: .debug_abbrev        Addr: 0x00000000 Size: 9904 bytes Kind: Other 
+  Name: .debug_line          Addr: 0x00000000 Size: 20783 bytes Kind: Other 
+  Name: .debug_str           Addr: 0x00000000 Size: 35227 bytes Kind: OtherString 
+  Name: .debug_line_str      Addr: 0x00000000 Size: 1704 bytes Kind: OtherString 
+  Name: .debug_rnglists      Addr: 0x00000000 Size: 609 bytes Kind: Other 
+  Name: .symtab              Addr: 0x00000000 Size: 17424 bytes Kind: Metadata 
+  Name: .strtab              Addr: 0x00000000 Size: 11258 bytes Kind: Metadata 
+  Name: .shstrtab            Addr: 0x00000000 Size: 421 bytes Kind: Metadata 
 
 [INFO ] Loading DWARF sections
-[INFO ] EPK string read from xcp_epk section: 'V2.1.10' at address 0x00010810
-[WARN ] main_cpp:433: 'delay': location is a register Register(24)
-[WARN ] main_cpp:415: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Value { value: Generic(53352) } }]
-[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Register { register: Register(0) } }]
-[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Register { register: Register(0) } }]
-[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Register { register: Register(0) } }]
-[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Register { register: Register(0) } }]
-[WARN ] main_cpp:354: 'delay': location is a register Register(24)
-[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Value { value: Generic(53304) } }]
-[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Value { value: Generic(53304) } }]
-[WARN ] main_cpp:301: 'test_struct2': the variable is split into 7 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value: Generic(18446744073709551614) } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Bytes { value: EndianSlice(Little, [0x9a, 0x99, 0x99, 0x3e]) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(2) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(3) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Address { address: 0 } }]
-[INFO ] Compiler: GNU C++17 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c++17 -fasynchronous-unwind-tables
-[INFO ] Compiler: GNU C11 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c11 -fasynchronous-unwind-tables
+[INFO ] EPK string read from xcp_epk section: 'V2.1.10' at address 0x00019468
+[WARN ] Static variable '__PRETTY_FUNCTION__' in function Some("XcpCheckMemory") has no address, its symbol can not be identified: several static variables of this name and size, or none of the matching size. A metadata marker for it is lost, use the scope prefixed marker name ('XcpCheckMemory____PRETTY_FUNCTION__')
+[INFO ] Compiler: GNU C++17 12.2.0 -mlittle-endian -mabi=lp64 -g -O0 -std=c++17 -fasynchronous-unwind-tables
+[INFO ] Compiler: GNU C11 12.2.0 -mlittle-endian -mabi=lp64 -g -O0 -std=c11 -fasynchronous-unwind-tables
 
 ====================================================================================================
 DebugData information summary:
   Compilation units: 9 units
-  Compiler: GNU C++17 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c++17 -fasynchronous-unwind-tables
-  Compiler: GNU C11 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c11 -fasynchronous-unwind-tables
+  Compiler: GNU C++17 12.2.0 -mlittle-endian -mabi=lp64 -g -O0 -std=c++17 -fasynchronous-unwind-tables
+  Compiler: GNU C11 12.2.0 -mlittle-endian -mabi=lp64 -g -O0 -std=c11 -fasynchronous-unwind-tables
   Sections: 30
   Endianness: Little Endian
-  Variables 737 with 286 unique names
+  Variables 1093 with 405 unique names
   Demangled names: 0 entries
-  Type names: 129 named types
-  Types: 686 total types
-  EPK string: `V2.1.10` at address 0x00010810
-  XCP metadata section (xcp_meta) found at address 0x00010818, 440 bytes
+  Type names: 138 named types
+  Types: 894 total types
+  EPK string: `V2.1.10` at address 0x00019468
+  XCP metadata section (xcp_meta) found at address 0x000192B0, 437 bytes
 
 ====================================================================================================
 Compilation units in debug_data.unit_names:
@@ -103,66 +93,66 @@ DWARF sections by address:
   '.note.gnu.build-id': 0x00000254, 28 bytes (632)
   '.note.ABI-tag': 0x00000278, 36 bytes (664)
   '.gnu.hash': 0x00000298, 32 bytes (692)
-  '.dynsym': 0x000002b8, 32 bytes (2496)
-  '.dynstr': 0x000009c0, 1800 bytes (3497)
-  '.gnu.version': 0x00000daa, 1002 bytes (3648)
-  '.gnu.version_r': 0x00000e40, 150 bytes (3776)
-  '.rela.dyn': 0x00000ec0, 128 bytes (4736)
-  '.rela.plt': 0x00001280, 960 bytes (6344)
-  '.init': 0x000018c8, 1608 bytes (6368)
-  '.plt': 0x000018e0, 24 bytes (7472)
-  '.text': 0x00001d40, 1120 bytes (52864)
-  '.fini': 0x0000ce80, 45376 bytes (52884)
-  '.rodata': 0x0000ce98, 24 bytes (67599)
-  'xcp_epk': 0x00010810, 14712 bytes (67608)
-  'xcp_meta': 0x00010818, 8 bytes (68048)
-  '.eh_frame_hdr': 0x000109d0, 440 bytes (69716)
-  '.eh_frame': 0x00011058, 1672 bytes (77780)
-  '.gcc_except_table': 0x00012fd4, 8060 bytes (77831)
-  '.init_array': 0x0002fd30, 118108 bytes (195912)
-  '.fini_array': 0x0002fd48, 24 bytes (195920)
-  '.data.rel.ro': 0x0002fd50, 8 bytes (195936)
-  '.dynamic': 0x0002fd60, 16 bytes (196448)
-  '.got': 0x0002ff60, 512 bytes (196584)
-  '.got.plt': 0x0002ffe8, 136 bytes (197144)
-  '.data': 0x00030218, 560 bytes (197276)
-  'xcp_cals': 0x000302a0, 136 bytes (197408)
-  'xcp_evts': 0x00030320, 128 bytes (197472)
-  '.bss': 0x00030360, 64 bytes (207504)
+  '.dynsym': 0x000002b8, 32 bytes (2592)
+  '.dynstr': 0x00000a20, 1896 bytes (3636)
+  '.gnu.version': 0x00000e34, 1044 bytes (3794)
+  '.gnu.version_r': 0x00000ed8, 164 bytes (3928)
+  '.rela.dyn': 0x00000f58, 128 bytes (5008)
+  '.rela.plt': 0x00001390, 1080 bytes (6688)
+  '.init': 0x00001a20, 1680 bytes (6712)
+  '.plt': 0x00001a40, 32 bytes (7872)
+  '.text': 0x00001ec0, 1152 bytes (83376)
+  '.fini': 0x000145b0, 75504 bytes (83396)
+  '.rodata': 0x000145c8, 24 bytes (103084)
+  'xcp_meta': 0x000192b0, 19688 bytes (103525)
+  'xcp_epk': 0x00019468, 440 bytes (103536)
+  '.eh_frame_hdr': 0x00019470, 8 bytes (105636)
+  '.eh_frame': 0x00019ca8, 2104 bytes (113620)
+  '.gcc_except_table': 0x0001bbd4, 7980 bytes (113653)
+  '.init_array': 0x0002fd08, 82228 bytes (195872)
+  '.fini_array': 0x0002fd20, 24 bytes (195880)
+  '.data.rel.ro': 0x0002fd28, 8 bytes (195928)
+  '.dynamic': 0x0002fd58, 48 bytes (196440)
+  '.got': 0x0002ff58, 512 bytes (196584)
+  '.got.plt': 0x0002ffe8, 144 bytes (197168)
+  '.data': 0x00030230, 584 bytes (197324)
+  'xcp_cals': 0x000302d0, 160 bytes (197456)
+  'xcp_evts': 0x00030350, 128 bytes (197520)
+  '.bss': 0x00030390, 64 bytes (207584)
 
 ====================================================================================================
 A2L Creator variables:
-calseg__params':  main_cpp:'<global>' : addr=0:0x000302E0
-xcp_meta__min__params__delay_us':  main_cpp:'<global>' : addr=0:0x000109C8
-xcp_meta__max__params__delay_us':  main_cpp:'<global>' : addr=0:0x000109C0
-xcp_meta__unit__params__delay_us':  main_cpp:'<global>' : addr=0:0x000109B8
-xcp_meta__comment__global_counter':  main_cpp:'<global>' : addr=0:0x00010998
-xcp_meta__comment__input':  main_cpp:'<global>' motor_control: addr=0:0x00010980
-calseg__counter_ctl_params':  main_cpp:'<global>' : addr=0:0x000302C0
-xcp_meta__comment__main__counter':  main_cpp:'main' : addr=0:0x00010838
-xcp_meta__comment__main__static_counter':  main_cpp:'main' : addr=0:0x00010818
-evt__mainloop':  main_cpp:'main' : addr=0:0x00030350
-xcp_epk__':  main_cpp:'main' : addr=0:0x00010810
-xcp_epk__keep':  main_cpp:'main' : addr=2:0x7FFFFFE8
-cap__mainloop':  main_cpp:'main' : addr=2:0x7FFFFFE0
-trg__AASR__mainloop':  main_cpp:'main' : addr=0:0x00000000
-calseg__task_counter_ctl_params':  main_cpp:'task' : addr=0:0x000302A0
-xcp_meta__comment__task__static_counter':  main_cpp:'task' : addr=0:0x00010880
-xcp_meta__comment__task__counter':  main_cpp:'task' : addr=0:0x00010850
-evt__task':  main_cpp:'task' : addr=0:0x00030320
-cap__task':  main_cpp:'task' : addr=2:0x7FFFFFF8
-trg__AASR__task':  main_cpp:'task' : addr=0:0x00000000
-xcp_meta__comment__static_counter':  main_cpp:'foo' : addr=0:0x000108F0
-xcp_meta__comment__counter':  main_cpp:'foo' : addr=0:0x000108B8
-cap__foo':  main_cpp:'foo' : addr=2:0x7FFFFF88
-evt__foo':  main_cpp:'foo' : addr=0:0x00030340
-trg__AASR__foo':  main_cpp:'foo' : addr=0:0x00000000
-xcp_meta__comment__bar__static_counter':  main_cpp:'bar' : addr=0:0x00010928
-xcp_meta__read_write__bar__static_counter':  main_cpp:'bar' : addr=0:0x00010924
-evt__bar':  main_cpp:'bar' : addr=0:0x00030330
-trg__AAS__bar':  main_cpp:'bar' : addr=0:0x00000000
-XCPLITE__ACSDD':  xcplite_c:'<global>' : addr=0:0x0000EE90
-calseg__epk':  xcplite_c:'XcpInit' : addr=0:0x00030300
+calseg__params':  main_cpp:'<global>' : addr=0:0x000302D0
+xcp_meta__min__params__delay_us':  main_cpp:'<global>' : addr=0:0x000192B0
+xcp_meta__max__params__delay_us':  main_cpp:'<global>' : addr=0:0x000192B8
+xcp_meta__unit__params__delay_us':  main_cpp:'<global>' : addr=0:0x000192C0
+xcp_meta__comment__global_counter':  main_cpp:'<global>' : addr=0:0x000192C8
+xcp_meta__comment__input':  main_cpp:'<global>' motor_control: addr=0:0x000192E8
+calseg__counter_ctl_params':  main_cpp:'<global>' : addr=0:0x000302F0
+xcp_meta__comment__main__counter':  main_cpp:'main' : addr=0:0x00019430
+xcp_meta__comment__main__static_counter':  main_cpp:'main' : addr=0:0x00019448
+evt__mainloop':  main_cpp:'main' : addr=0:0x00030380
+xcp_epk__':  main_cpp:'main' : addr=0:0x00019468
+xcp_epk__keep':  main_cpp:'main' : addr=2:0x7FFFFFD0
+cap__mainloop':  main_cpp:'main' : addr=2:0x7FFFFFB8
+trg__AASR__mainloop':  main_cpp:'main' : addr=0:0x000302BE
+calseg__task_counter_ctl_params':  main_cpp:'task' : addr=0:0x00030310
+xcp_meta__comment__task__static_counter':  main_cpp:'task' : addr=0:0x000193C8
+xcp_meta__comment__task__counter':  main_cpp:'task' : addr=0:0x00019400
+evt__task':  main_cpp:'task' : addr=0:0x00030370
+cap__task':  main_cpp:'task' : addr=2:0x7FFFFFD0
+trg__AASR__task':  main_cpp:'task' : addr=0:0x000302BA
+xcp_meta__comment__static_counter':  main_cpp:'foo' : addr=0:0x00019358
+xcp_meta__comment__counter':  main_cpp:'foo' : addr=0:0x00019390
+cap__foo':  main_cpp:'foo' : addr=2:0x7FFFFF68
+evt__foo':  main_cpp:'foo' : addr=0:0x00030360
+trg__AASR__foo':  main_cpp:'foo' : addr=0:0x000302B4
+xcp_meta__comment__bar__static_counter':  main_cpp:'bar' : addr=0:0x00019318
+xcp_meta__read_write__bar__static_counter':  main_cpp:'bar' : addr=0:0x00019354
+evt__bar':  main_cpp:'bar' : addr=0:0x00030350
+trg__AAS__bar':  main_cpp:'bar' : addr=0:0x000302B2
+XCPLITE__ACSDD':  xcplite_c:'<global>' : addr=0:0x00014D38
+calseg__epk':  xcplite_c:'XcpInit' : addr=0:0x00030330
 
 [INFO ] ===============================================================
 [INFO ] Target signature found: ACSDD
@@ -170,36 +160,36 @@ calseg__epk':  xcplite_c:'XcpInit' : addr=0:0x00030300
 [INFO ] ===============================================================
 [INFO ] Registering event information:
 [INFO ] ===============================================================
-[INFO ] Found XCP event descriptor memory section at address = 0x00030320, size = 64 bytes
-[INFO ] Event definition for event 'mainloop' found in main_cpp:main, addr = 0x30350
+[INFO ] Found XCP event descriptor memory section at address = 0x00030350, size = 64 bytes
+[INFO ] Event definition for event 'mainloop' found in main_cpp:main, addr = 0x30380
 [INFO ] New event 'mainloop' found: event id = 3
-[INFO ] Event definition for event 'task' found in main_cpp:task, addr = 0x30320
-[INFO ] New event 'task' found: event id = 0
-[INFO ] Event definition for event 'foo' found in main_cpp:foo, addr = 0x30340
-[INFO ] New event 'foo' found: event id = 2
-[INFO ] Event definition for event 'bar' found in main_cpp:bar, addr = 0x30330
-[INFO ] New event 'bar' found: event id = 1
+[INFO ] Event definition for event 'task' found in main_cpp:task, addr = 0x30370
+[INFO ] New event 'task' found: event id = 2
+[INFO ] Event definition for event 'foo' found in main_cpp:foo, addr = 0x30360
+[INFO ] New event 'foo' found: event id = 1
+[INFO ] Event definition for event 'bar' found in main_cpp:bar, addr = 0x30350
+[INFO ] New event 'bar' found: event id = 0
 [INFO ] ===============================================================
 [INFO ] Registering segment information (absolute addressing mode):
 [INFO ] ===============================================================
 Found 4 segment definition marker variables:
 0: 'epk' - number=Some(0), addr=00000000'
-1: 'task_counter_ctl_params' - number=Some(1), addr=000302A0'
-2: 'counter_ctl_params' - number=Some(2), addr=000302C0'
-3: 'params' - number=Some(3), addr=000302E0'
+1: 'params' - number=Some(1), addr=000302D0'
+2: 'counter_ctl_params' - number=Some(2), addr=000302F0'
+3: 'task_counter_ctl_params' - number=Some(3), addr=00030310'
 [INFO ] Calibration segment 'epk' not yet defined in registry
-[INFO ] Created segment 0: 'epk':  addr = 0x00010810, size = 32, mem_addr = 0x00010810
-[INFO ] Calibration segment 'task_counter_ctl_params' default page variable found in debug data: Address = 0xd038, Size = 0xc
-[INFO ] Calibration segment 'task_counter_ctl_params' not yet defined in registry
-[INFO ] Created segment 1: 'task_counter_ctl_params':  addr = 0x0000D038, size = 12, mem_addr = 0x0000D038
-[INFO ] Calibration segment 'counter_ctl_params' default page variable found in debug data: Address = 0xd060, Size = 0x8
-[INFO ] Calibration segment 'counter_ctl_params' not yet defined in registry
-[INFO ] Created segment 2: 'counter_ctl_params':  addr = 0x0000D060, size = 8, mem_addr = 0x0000D060
-[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xd068, Size = 0x40
+[INFO ] Created segment 0: 'epk':  addr = 0x00019468, size = 32, mem_addr = 0x00019468
+[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0x145f8, Size = 0x40
 [INFO ] Calibration segment 'params' not yet defined in registry
-[INFO ] Created segment 3: 'params':  addr = 0x0000D068, size = 64, mem_addr = 0x0000D068
+[INFO ] Created segment 1: 'params':  addr = 0x000145F8, size = 64, mem_addr = 0x000145F8
+[INFO ] Calibration segment 'counter_ctl_params' default page variable found in debug data: Address = 0x14640, Size = 0x8
+[INFO ] Calibration segment 'counter_ctl_params' not yet defined in registry
+[INFO ] Created segment 2: 'counter_ctl_params':  addr = 0x00014640, size = 8, mem_addr = 0x00014640
+[INFO ] Calibration segment 'task_counter_ctl_params' default page variable found in debug data: Address = 0x14688, Size = 0xc
+[INFO ] Calibration segment 'task_counter_ctl_params' not yet defined in registry
+[INFO ] Created segment 3: 'task_counter_ctl_params':  addr = 0x00014688, size = 12, mem_addr = 0x00014688
 [INFO ] ===============================================================
-[INFO ] EPK string 'V2.1.10' found at address 0x00010810
+[INFO ] EPK string 'V2.1.10' found at address 0x00019468
   EPK 'V2.1.10', ADDR_EPK = 0xFFFFFF00
 [INFO ] ===============================================================
 [INFO ] Registering event locations:
@@ -217,14 +207,76 @@ Found 4 segment definition marker variables:
 [INFO ] ===============================================================
 [INFO ] Default event 'mainloop' (id 3) for global and static variables without an event trigger
 [INFO ] Compilation unit filter: 'main'
+[INFO ] Function parameters:
+[INFO ]   main_cpp:__static_initialization_and_destruction_0() entry 0x2800, frame base Cfa, no event trigger
+[INFO ]     #0 int __initialize_p: DW_OP_fbreg -4
+[INFO ]     #1 int __priority: DW_OP_fbreg -8
+[INFO ]   main_cpp:foo() entry 0x20ec, frame base Cfa, event 'foo' id 1
+[INFO ]     #0 uint8_t test_par_uint8: DW_OP_fbreg -161
+[INFO ]     #1 double test_par_double: DW_OP_fbreg -176
+[INFO ]   main_cpp:getIndex() entry 0x2d8c, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(CalSegRef<const params>) this: DW_OP_fbreg -8
+[INFO ]   main_cpp:getIndex() entry 0x2eb8, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(CalSegRef<const CounterCtlParamsTemplate<unsigned int> >) this: DW_OP_fbreg -8
+[INFO ]   main_cpp:getIndex() entry 0x2f50, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(CalSegRef<const CounterCtlParamsTemplate<short unsigned int> >) this: DW_OP_fbreg -8
+[INFO ]   main_cpp:lock() entry 0x2b7c, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(CalSegRef<const params>) this: DW_OP_fbreg -8
+[INFO ]   main_cpp:lock() entry 0x2cf8, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(CalSegRef<const CounterCtlParamsTemplate<unsigned int> >) this: DW_OP_fbreg -8
+[INFO ]   main_cpp:lock() entry 0x2e24, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(CalSegRef<const CounterCtlParamsTemplate<short unsigned int> >) this: DW_OP_fbreg -8
+[INFO ]   main_cpp:main() entry 0x2434, frame base Cfa, event 'mainloop' id 3
+[INFO ]     #0 int argc: DW_OP_fbreg -84
+[INFO ]     #1 pointer(char) argv: DW_OP_fbreg -96
+[INFO ]   main_cpp:operator bool() entry 0x28e0, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(atomic<bool>) this: DW_OP_fbreg -24
+[INFO ]   main_cpp:operator&() entry 0x2898, frame base Cfa, no event trigger
+[INFO ]     #0 memory_order __m: DW_OP_fbreg -4
+[INFO ]     #1 __memory_order_modifier __mod: DW_OP_fbreg -8
+[INFO ]   main_cpp:operator->() entry 0x2bf8, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(CalSegGuard) this: DW_OP_fbreg -8
+[INFO ]   main_cpp:operator->() entry 0x2d74, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(CalSegGuard) this: DW_OP_fbreg -8
+[INFO ]   main_cpp:operator->() entry 0x2ea0, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(CalSegGuard) this: DW_OP_fbreg -8
+[INFO ]   main_cpp:operator=() entry 0x28b8, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(atomic<bool>) this: DW_OP_fbreg -8
+[INFO ]     #1 bool __i: DW_OP_fbreg -9
+[INFO ]   main_cpp:operator=() entry 0x2984, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(__atomic_base<bool>) this: DW_OP_fbreg -40
+[INFO ]     #1 __int_type __i: DW_OP_fbreg -41
+[INFO ]   main_cpp:signal_handler() entry 0x2014, frame base Cfa, no event trigger
+[INFO ]     #0 int signal: DW_OP_fbreg -4
+[INFO ]   main_cpp:step() entry 0x2aa4, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(CounterControl<unsigned int, CounterCtlParamsTemplate<unsigned int> >) this: DW_OP_fbreg -24
+[INFO ]     #1 pointer(unsigned int) value: DW_OP_fbreg -32
+[INFO ]   main_cpp:step() entry 0x2c10, frame base Cfa, no event trigger
+[INFO ]     #0 pointer(CounterControl<short unsigned int, CounterCtlParamsTemplate<short unsigned int> >) this: DW_OP_fbreg -24
+[INFO ]     #1 pointer(short unsigned int) value: DW_OP_fbreg -32
+[INFO ]   main_cpp:task() entry 0x22fc, frame base Cfa, event 'task' id 2
+[INFO ]     #0 pointer(void) p: DW_OP_fbreg -56
 [INFO ] Global variable 'gRun', event id = Some(3)
         Registered variable 'gRun' type_name = 'atomic<bool>', size = 1, event_id = Some(3)
 [INFO ] Global variable 'OPTION_PROJECT_NAME', event id = Some(3)
         Registered variable 'OPTION_PROJECT_NAME' type_name = 'char', size = 16, event_id = Some(3)
+[INFO ] Global variable 'OPTION_USE_TCP', event id = Some(3)
+        Registered variable 'OPTION_USE_TCP' type_name = 'bool', size = 1, event_id = Some(3)
 [INFO ] Global variable 'OPTION_SERVER_ADDR', event id = Some(3)
         Registered variable 'OPTION_SERVER_ADDR' type_name = 'uint8_t', size = 4, event_id = Some(3)
+[INFO ] Global variable 'OPTION_SERVER_PORT', event id = Some(3)
+        Registered variable 'OPTION_SERVER_PORT' type_name = 'uint16_t', size = 2, event_id = Some(3)
+[INFO ] Global variable 'OPTION_QUEUE_SIZE', event id = Some(3)
+        Registered variable 'OPTION_QUEUE_SIZE' type_name = 'uint32_t', size = 4, event_id = Some(3)
+[INFO ] Global variable 'OPTION_LOG_LEVEL', event id = Some(3)
+        Registered variable 'OPTION_LOG_LEVEL' type_name = 'int', size = 4, event_id = Some(3)
 [INFO ] Global variable 'params', event id = Some(3)
         Registered variable 'params' type_name = 'params', size = 64, event_id = Some(3)
+[INFO ] Local variable 'params' in function 'Some("main")', event id = Some(3), offset = -64
+[INFO ] Struct/class type 'CalSegGuard' in main_cpp registered as typedef 'xcp.CalSegRef_const_params_.CalSegGuard', the type name is used in different scopes
+        Registered variable 'main.params' type_name = 'CalSegGuard', size = 16, event_id = Some(3)
+[INFO ] Global variable 'params_calseg', event id = Some(3)
+        Registered variable 'params_calseg' type_name = 'CalSegRef<const params>', size = 16, event_id = Some(3)
 [INFO ] Global variable 'global_counter', event id = Some(3)
         Registered variable 'global_counter' type_name = 'uint16_t', size = 2, event_id = Some(3)
 [INFO ] Global variable 'global_static_counter', event id = Some(3)
@@ -269,53 +321,71 @@ Found 4 segment definition marker variables:
         Registered variable 'counter_ctl_calseg_handle' type_name = 'CalSegRef<const CounterCtlParamsTemplate<short unsigned int> >', size = 16, event_id = Some(3)
 [INFO ] Global variable 'counter_ctl', event id = Some(3)
         Registered variable 'counter_ctl' type_name = 'CounterControl<short unsigned int, CounterCtlParamsTemplate<short unsigned int> >', size = 16, event_id = Some(3)
-[WARN ] Local variable 'counter_ctl' in function 'task' not registered, it has no location in the debug information, not implemented yet
-[WARN ] Local variable 'cal' in function 'step' not registered, it has no location in the debug information, not implemented yet
-[WARN ] Local variable 'cal' in function 'step' not registered, it has no location in the debug information, not implemented yet
-[INFO ] Local variable 'counter' in function 'Some("bar")', event id = Some(1), offset = -2
-        Registered variable 'bar.counter' type_name = 'uint16_t', size = 2, event_id = Some(1)
+[INFO ] Local variable 'counter_ctl' in function 'Some("task")', event id = Some(2), offset = -40
+        Registered variable 'task.counter_ctl' type_name = 'CounterControl<unsigned int, CounterCtlParamsTemplate<unsigned int> >', size = 16, event_id = Some(2)
+[WARN ] Local variable 'cal' in function Some("step") skipped, could not find event for dyn addressing mode
+[WARN ] Local variable 'cal' in function Some("step") skipped, could not find event for dyn addressing mode
+[INFO ] Parameter 'argc' in function 'Some("main")', event id = Some(3), offset = -84
+        Registered variable 'main.argc' type_name = 'int', size = 4, event_id = Some(3)
+[INFO ] Parameter 'argv' in function 'Some("main")', event id = Some(3), offset = -96
+[WARN ] Variable 'argv' has unsupported type: Pointer(...)
+[INFO ] Local variable 'counter' in function 'Some("bar")', event id = Some(0), offset = -2
+        Registered variable 'bar.counter' type_name = 'uint16_t', size = 2, event_id = Some(0)
 [INFO ] Static variable 'static_counter' local to function 'Some("main")', event id = 3
         Registered variable 'main.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(3)
-[INFO ] Static variable 'static_counter' local to function 'Some("task")', event id = 0
-        Registered variable 'task.static_counter' type_name = 'uint32_t', size = 4, event_id = Some(0)
-[INFO ] Static variable 'static_counter' local to function 'Some("foo")', event id = 2
-        Registered variable 'foo.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(2)
-[INFO ] Static variable 'static_counter' local to function 'Some("bar")', event id = 1
-        Registered variable 'bar.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(1)
-[INFO ] Static variable 'task_counter_ctl_params' local to function 'Some("task")', event id = 0
-        Registered variable 'task_counter_ctl_params' type_name = 'TaskCounterCtlParams', size = 12, event_id = Some(0)
-[WARN ] Local variable 'counter_ctl_task_calseg_handle' in function 'task' not registered, it has no location in the debug information, not implemented yet
-[INFO ] Local variable 'test_struct' in function 'Some("foo")', event id = Some(2), offset = -16
-        Registered variable 'foo.test_struct' type_name = 'test_struct', size = 12, event_id = Some(2)
-[INFO ] Local variable 'test_array' in function 'Some("foo")', event id = Some(2), offset = -24
-        Registered variable 'foo.test_array' type_name = 'uint8_t', size = 3, event_id = Some(2)
-[INFO ] Local variable 'test_float' in function 'Some("foo")', event id = Some(2), offset = -28
-        Registered variable 'foo.test_float' type_name = 'float', size = 4, event_id = Some(2)
-[INFO ] Local variable 'test_double' in function 'Some("foo")', event id = Some(2), offset = -40
-        Registered variable 'foo.test_double' type_name = 'double', size = 8, event_id = Some(2)
-[INFO ] Local variable 'test_uint8' in function 'Some("foo")', event id = Some(2), offset = -41
-        Registered variable 'foo.test_uint8' type_name = 'uint8_t', size = 1, event_id = Some(2)
-[INFO ] Local variable 'test_uint16' in function 'Some("foo")', event id = Some(2), offset = -44
-        Registered variable 'foo.test_uint16' type_name = 'uint16_t', size = 2, event_id = Some(2)
-[INFO ] Local variable 'test_uint32' in function 'Some("foo")', event id = Some(2), offset = -48
-        Registered variable 'foo.test_uint32' type_name = 'uint32_t', size = 4, event_id = Some(2)
-[INFO ] Local variable 'test_uint64' in function 'Some("foo")', event id = Some(2), offset = -56
-        Registered variable 'foo.test_uint64' type_name = 'uint64_t', size = 8, event_id = Some(2)
+[INFO ] Static variable 'static_counter' local to function 'Some("task")', event id = 2
+        Registered variable 'task.static_counter' type_name = 'uint32_t', size = 4, event_id = Some(2)
+[INFO ] Static variable 'static_counter' local to function 'Some("foo")', event id = 1
+        Registered variable 'foo.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(1)
+[INFO ] Static variable 'static_counter' local to function 'Some("bar")', event id = 0
+        Registered variable 'bar.static_counter' type_name = 'uint16_t', size = 2, event_id = Some(0)
+[INFO ] Static variable 'evt_id_mainloop' local to function 'Some("main")', event id = 3
+        Registered variable 'main.evt_id_mainloop' type_name = 'tXcpEventId', size = 2, event_id = Some(3)
+[INFO ] Local variable 'delay' in function 'Some("main")', event id = Some(3), offset = -4
+        Registered variable 'main.delay' type_name = 'unsigned int', size = 4, event_id = Some(3)
+[INFO ] Local variable 'delay' in function 'Some("task")', event id = Some(2), offset = -4
+        Registered variable 'task.delay' type_name = 'uint32_t', size = 4, event_id = Some(2)
+[INFO ] Parameter 'p' in function 'Some("task")', event id = Some(2), offset = -56
+[WARN ] Variable 'p' has unsupported type: Pointer(...)
+[INFO ] Static variable 'task_counter_ctl_params' local to function 'Some("task")', event id = 2
+        Registered variable 'task_counter_ctl_params' type_name = 'TaskCounterCtlParams', size = 12, event_id = Some(2)
+[INFO ] Static variable 'counter_ctl_task_calseg_handle' local to function 'Some("task")', event id = 2
+        Registered variable 'task.counter_ctl_task_calseg_handle' type_name = 'CalSegRef<const CounterCtlParamsTemplate<unsigned int> >', size = 16, event_id = Some(2)
+[INFO ] Static variable 'evt_id_task' local to function 'Some("task")', event id = 2
+        Registered variable 'task.evt_id_task' type_name = 'tXcpEventId', size = 2, event_id = Some(2)
+[INFO ] Local variable 'test_struct' in function 'Some("foo")', event id = Some(1), offset = -16
+        Registered variable 'foo.test_struct' type_name = 'test_struct', size = 12, event_id = Some(1)
+[INFO ] Local variable 'test_array' in function 'Some("foo")', event id = Some(1), offset = -24
+        Registered variable 'foo.test_array' type_name = 'uint8_t', size = 3, event_id = Some(1)
+[INFO ] Local variable 'test_float' in function 'Some("foo")', event id = Some(1), offset = -28
+        Registered variable 'foo.test_float' type_name = 'float', size = 4, event_id = Some(1)
+[INFO ] Local variable 'test_double' in function 'Some("foo")', event id = Some(1), offset = -40
+        Registered variable 'foo.test_double' type_name = 'double', size = 8, event_id = Some(1)
+[INFO ] Local variable 'test_uint8' in function 'Some("foo")', event id = Some(1), offset = -41
+        Registered variable 'foo.test_uint8' type_name = 'uint8_t', size = 1, event_id = Some(1)
+[INFO ] Local variable 'test_uint16' in function 'Some("foo")', event id = Some(1), offset = -44
+        Registered variable 'foo.test_uint16' type_name = 'uint16_t', size = 2, event_id = Some(1)
+[INFO ] Local variable 'test_uint32' in function 'Some("foo")', event id = Some(1), offset = -48
+        Registered variable 'foo.test_uint32' type_name = 'uint32_t', size = 4, event_id = Some(1)
+[INFO ] Local variable 'test_uint64' in function 'Some("foo")', event id = Some(1), offset = -56
+        Registered variable 'foo.test_uint64' type_name = 'uint64_t', size = 8, event_id = Some(1)
 [INFO ] ===============================================================
 [INFO ] Registering captured variables:
 [INFO ] ===============================================================
 [INFO ] Capture of event 'mainloop' in function 'main' with 1 variables
 [INFO ] Captured variable 'counter' in function 'main', event id = 3, offset = 0
 [INFO ] Capture of event 'task' in function 'task' with 1 variables
-[INFO ] Captured variable 'counter' in function 'task', event id = 0, offset = 0
-[INFO ] Capture of event 'foo' in function 'foo' with 7 variables
-[INFO ] Captured variable 'test_struct2' in function 'foo', event id = 2, offset = 0
-[INFO ] Captured variable 'test_array2' in function 'foo', event id = 2, offset = 12
-[INFO ] Captured variable 'counter' in function 'foo', event id = 2, offset = 16
-[INFO ] Captured variable 'test_int8' in function 'foo', event id = 2, offset = 20
-[INFO ] Captured variable 'test_int16' in function 'foo', event id = 2, offset = 22
-[INFO ] Captured variable 'test_int32' in function 'foo', event id = 2, offset = 24
-[INFO ] Captured variable 'test_int64' in function 'foo', event id = 2, offset = 32
+[INFO ] Captured variable 'counter' in function 'task', event id = 2, offset = 0
+[INFO ] Capture of event 'foo' in function 'foo' with 9 variables
+[INFO ] Captured variable 'test_par_uint8' in function 'foo', event id = 1, offset = 0
+[INFO ] Captured variable 'test_par_double' in function 'foo', event id = 1, offset = 8
+[INFO ] Captured variable 'test_struct2' in function 'foo', event id = 1, offset = 16
+[INFO ] Captured variable 'test_array2' in function 'foo', event id = 1, offset = 28
+[INFO ] Captured variable 'counter' in function 'foo', event id = 1, offset = 32
+[INFO ] Captured variable 'test_int8' in function 'foo', event id = 1, offset = 36
+[INFO ] Captured variable 'test_int16' in function 'foo', event id = 1, offset = 38
+[INFO ] Captured variable 'test_int32' in function 'foo', event id = 1, offset = 40
+[INFO ] Captured variable 'test_int64' in function 'foo', event id = 1, offset = 48
 [INFO ] ===============================================================
 [INFO ] Registering metadata from xcp_meta section:
 [INFO ] ===============================================================
