@@ -207,7 +207,7 @@ void bar(void) {
 
 // Avoid inlining to be able to measure local variables
 // xcpclient ELF->A2L does not support inlined function and silently drops them
-XCP_NOINLINE void foo(void) {
+XCP_NOINLINE void foo(uint8_t test_par_uint8, double test_par_double) {
 
     // Static local scope measurement variable
     XCP_COMMENT(static_counter, "Local static measurement variable in function `foo`");
@@ -249,21 +249,7 @@ XCP_NOINLINE void foo(void) {
     counter = global_counter;
     bar();
 
-    DaqCreateAndTriggerEventCapture(foo, test_struct2, test_array2, counter, test_int8, test_int16, test_int32, test_int64);
-    // DaqCreateAndTriggerEventCapture must have at least one argument to capture
-
-    // Check the xcpclient log (--log-level=2 --verbose=0 --elf-unit-filter main ...)
-    /*
-    // clang: SP relative not implemented yet
-        [WARN ] 'test_int16': variable location is stack-pointer-relative (DW_OP_breg31 <offset>), not frame-base-relative; not measurable yet, eval_result=RequiresRegister {
-    register: Register(31), base_type: UnitOffset(0) }
-    // gcc: pieces not implemented yet
-    [WARN ] 'test_struct2': the variable is split into 7 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value:
-    Generic(1) } }, Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value: Generic(18446744073709551614) } }, Piece { size_in_bits: Some(32), bit_offset: None,
-    location: Bytes { value: EndianSlice(Little, [0x9a, 0x99, 0x99, 0x3e]) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(1) } }, Piece {
-    size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(2) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(3) } },
-    Piece { size_in_bits: Some(8), bit_offset: None, location: Address { address: 0 } }]
-    */
+    DaqCreateAndTriggerEventCapture(foo, test_par_uint8, test_par_double, test_struct2, test_array2, counter, test_int8, test_int16, test_int32, test_int64);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -354,7 +340,7 @@ int main(int argc, char *argv[]) {
         CalSegUnlock(params);
 
         // Function calls
-        foo(); // Call a function to demonstrate the DaqCreateAndTriggerEvent macro in foo
+        foo(counter & 0xFF, counter * 0.00001);
 
         // Trigger the measurement event "mainloop"
         DaqTriggerEvent(mainloop);

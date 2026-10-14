@@ -264,7 +264,7 @@ void bar() {
 
 // Avoid inlining to be able to measure local variables
 // xcpclient ELF->A2L does not support inlined function and silently drops them
-XCP_NOINLINE void foo(void) {
+XCP_NOINLINE void foo(uint8_t test_par_uint8, double test_par_double) {
 
     // Static local scope measurement variable
     XCP_COMMENT(static_counter, "Local static measurement variable in function `foo`");
@@ -306,7 +306,7 @@ XCP_NOINLINE void foo(void) {
     counter = global_counter;
     bar();
 
-    DaqCreateAndTriggerEventCapture(foo, test_struct2, test_array2, counter, test_int8, test_int16, test_int32, test_int64);
+    DaqCreateAndTriggerEventCapture(foo, test_par_uint8, test_par_double, test_struct2, test_array2, counter, test_int8, test_int16, test_int32, test_int64);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -424,7 +424,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Function calls
-        foo(); // Call a function to demonstrate the DaqCreateAndTriggerEvent macro in foo
+        foo(counter & 0xFF, counter * 0.00001);
 
         // Trigger the measurement event "mainloop"
         DaqTriggerEventCapture(mainloop, counter);

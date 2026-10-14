@@ -25,14 +25,14 @@ Sections:
   Name: .rela.plt            Addr: 0x00001280 Size: 1608 bytes Kind: Metadata 
   Name: .init                Addr: 0x000018c8 Size: 24 bytes Kind: Text 
   Name: .plt                 Addr: 0x000018e0 Size: 1104 bytes Kind: Text 
-  Name: .text                Addr: 0x00001d40 Size: 45376 bytes Kind: Text 
-  Name: .fini                Addr: 0x0000ce80 Size: 20 bytes Kind: Text 
-  Name: .rodata              Addr: 0x0000ce98 Size: 14711 bytes Kind: ReadOnlyData 
-  Name: xcp_epk              Addr: 0x00010810 Size: 8 bytes Kind: ReadOnlyData 
-  Name: xcp_meta             Addr: 0x00010818 Size: 440 bytes Kind: ReadOnlyData 
-  Name: .eh_frame_hdr        Addr: 0x000109d0 Size: 1668 bytes Kind: ReadOnlyData 
-  Name: .eh_frame            Addr: 0x00011058 Size: 8060 bytes Kind: ReadOnlyData 
-  Name: .gcc_except_table    Addr: 0x00012fd4 Size: 51 bytes Kind: ReadOnlyData 
+  Name: .text                Addr: 0x00001d40 Size: 41280 bytes Kind: Text 
+  Name: .fini                Addr: 0x0000be80 Size: 20 bytes Kind: Text 
+  Name: .rodata              Addr: 0x0000be98 Size: 14719 bytes Kind: ReadOnlyData 
+  Name: xcp_epk              Addr: 0x0000f818 Size: 8 bytes Kind: ReadOnlyData 
+  Name: xcp_meta             Addr: 0x0000f820 Size: 440 bytes Kind: ReadOnlyData 
+  Name: .eh_frame_hdr        Addr: 0x0000f9d8 Size: 1668 bytes Kind: ReadOnlyData 
+  Name: .eh_frame            Addr: 0x00010060 Size: 8076 bytes Kind: ReadOnlyData 
+  Name: .gcc_except_table    Addr: 0x00011fec Size: 51 bytes Kind: ReadOnlyData 
   Name: .init_array          Addr: 0x0002fd30 Size: 24 bytes Kind: Elf(14) 
   Name: .fini_array          Addr: 0x0002fd48 Size: 8 bytes Kind: Elf(15) 
   Name: .data.rel.ro         Addr: 0x0002fd50 Size: 16 bytes Kind: Data 
@@ -45,28 +45,28 @@ Sections:
   Name: .bss                 Addr: 0x00030360 Size: 10032 bytes Kind: UninitializedData 
   Name: .comment             Addr: 0x00000000 Size: 39 bytes Kind: OtherString 
   Name: .debug_aranges       Addr: 0x00000000 Size: 432 bytes Kind: Other 
-  Name: .debug_info          Addr: 0x00000000 Size: 107950 bytes Kind: Other 
-  Name: .debug_abbrev        Addr: 0x00000000 Size: 11522 bytes Kind: Other 
-  Name: .debug_line          Addr: 0x00000000 Size: 29732 bytes Kind: Other 
-  Name: .debug_str           Addr: 0x00000000 Size: 36989 bytes Kind: OtherString 
+  Name: .debug_info          Addr: 0x00000000 Size: 108029 bytes Kind: Other 
+  Name: .debug_abbrev        Addr: 0x00000000 Size: 11520 bytes Kind: Other 
+  Name: .debug_line          Addr: 0x00000000 Size: 29757 bytes Kind: Other 
+  Name: .debug_str           Addr: 0x00000000 Size: 37038 bytes Kind: OtherString 
   Name: .debug_line_str      Addr: 0x00000000 Size: 1834 bytes Kind: OtherString 
-  Name: .debug_loclists      Addr: 0x00000000 Size: 29593 bytes Kind: Other 
-  Name: .debug_rnglists      Addr: 0x00000000 Size: 1811 bytes Kind: Other 
-  Name: .symtab              Addr: 0x00000000 Size: 13200 bytes Kind: Metadata 
-  Name: .strtab              Addr: 0x00000000 Size: 7963 bytes Kind: Metadata 
+  Name: .debug_loclists      Addr: 0x00000000 Size: 29659 bytes Kind: Other 
+  Name: .debug_rnglists      Addr: 0x00000000 Size: 1816 bytes Kind: Other 
+  Name: .symtab              Addr: 0x00000000 Size: 13176 bytes Kind: Metadata 
+  Name: .strtab              Addr: 0x00000000 Size: 7968 bytes Kind: Metadata 
   Name: .shstrtab            Addr: 0x00000000 Size: 437 bytes Kind: Metadata 
 
 [INFO ] Loading DWARF sections
-[INFO ] EPK string read from xcp_epk section: 'V2.1.10' at address 0x00010810
+[INFO ] EPK string read from xcp_epk section: 'V2.1.10' at address 0x0000F818
 [WARN ] main_cpp:433: 'delay': location is a register Register(24)
-[WARN ] main_cpp:415: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Value { value: Generic(53352) } }]
+[WARN ] main_cpp:415: 'params': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Value { value: Generic(49264) } }]
 [WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Register { register: Register(0) } }]
 [WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Register { register: Register(0) } }]
 [WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Register { register: Register(0) } }]
 [WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Register { register: Register(0) } }]
 [WARN ] main_cpp:354: 'delay': location is a register Register(24)
-[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Value { value: Generic(53304) } }]
-[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Value { value: Generic(53304) } }]
+[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Value { value: Generic(49216) } }]
+[WARN ] main_cpp: 'cal': the variable is split into 2 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(64), bit_offset: None, location: Address { address: 0 } }, Piece { size_in_bits: Some(64), bit_offset: None, location: Value { value: Generic(49216) } }]
 [WARN ] main_cpp:301: 'test_struct2': the variable is split into 7 slices (DW_OP_piece), not measurable: [Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(16), bit_offset: None, location: Value { value: Generic(18446744073709551614) } }, Piece { size_in_bits: Some(32), bit_offset: None, location: Bytes { value: EndianSlice(Little, [0x9a, 0x99, 0x99, 0x3e]) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(1) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(2) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Value { value: Generic(3) } }, Piece { size_in_bits: Some(8), bit_offset: None, location: Address { address: 0 } }]
 [INFO ] Compiler: GNU C++17 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c++17 -fasynchronous-unwind-tables
 [INFO ] Compiler: GNU C11 12.2.0 -mlittle-endian -mabi=lp64 -g -O1 -std=c11 -fasynchronous-unwind-tables
@@ -82,8 +82,8 @@ DebugData information summary:
   Demangled names: 0 entries
   Type names: 129 named types
   Types: 686 total types
-  EPK string: `V2.1.10` at address 0x00010810
-  XCP metadata section (xcp_meta) found at address 0x00010818, 440 bytes
+  EPK string: `V2.1.10` at address 0x0000F818
+  XCP metadata section (xcp_meta) found at address 0x0000F820, 440 bytes
 
 ====================================================================================================
 Compilation units in debug_data.unit_names:
@@ -111,15 +111,15 @@ DWARF sections by address:
   '.rela.plt': 0x00001280, 960 bytes (6344)
   '.init': 0x000018c8, 1608 bytes (6368)
   '.plt': 0x000018e0, 24 bytes (7472)
-  '.text': 0x00001d40, 1120 bytes (52864)
-  '.fini': 0x0000ce80, 45376 bytes (52884)
-  '.rodata': 0x0000ce98, 24 bytes (67599)
-  'xcp_epk': 0x00010810, 14712 bytes (67608)
-  'xcp_meta': 0x00010818, 8 bytes (68048)
-  '.eh_frame_hdr': 0x000109d0, 440 bytes (69716)
-  '.eh_frame': 0x00011058, 1672 bytes (77780)
-  '.gcc_except_table': 0x00012fd4, 8060 bytes (77831)
-  '.init_array': 0x0002fd30, 118108 bytes (195912)
+  '.text': 0x00001d40, 1120 bytes (48768)
+  '.fini': 0x0000be80, 41280 bytes (48788)
+  '.rodata': 0x0000be98, 24 bytes (63511)
+  'xcp_epk': 0x0000f818, 14720 bytes (63520)
+  'xcp_meta': 0x0000f820, 8 bytes (63960)
+  '.eh_frame_hdr': 0x0000f9d8, 440 bytes (65628)
+  '.eh_frame': 0x00010060, 1672 bytes (73708)
+  '.gcc_except_table': 0x00011fec, 8076 bytes (73759)
+  '.init_array': 0x0002fd30, 122180 bytes (195912)
   '.fini_array': 0x0002fd48, 24 bytes (195920)
   '.data.rel.ro': 0x0002fd50, 8 bytes (195936)
   '.dynamic': 0x0002fd60, 16 bytes (196448)
@@ -133,35 +133,35 @@ DWARF sections by address:
 ====================================================================================================
 A2L Creator variables:
 calseg__params':  main_cpp:'<global>' : addr=0:0x000302E0
-xcp_meta__min__params__delay_us':  main_cpp:'<global>' : addr=0:0x000109C8
-xcp_meta__max__params__delay_us':  main_cpp:'<global>' : addr=0:0x000109C0
-xcp_meta__unit__params__delay_us':  main_cpp:'<global>' : addr=0:0x000109B8
-xcp_meta__comment__global_counter':  main_cpp:'<global>' : addr=0:0x00010998
-xcp_meta__comment__input':  main_cpp:'<global>' motor_control: addr=0:0x00010980
+xcp_meta__min__params__delay_us':  main_cpp:'<global>' : addr=0:0x0000F9D0
+xcp_meta__max__params__delay_us':  main_cpp:'<global>' : addr=0:0x0000F9C8
+xcp_meta__unit__params__delay_us':  main_cpp:'<global>' : addr=0:0x0000F9C0
+xcp_meta__comment__global_counter':  main_cpp:'<global>' : addr=0:0x0000F9A0
+xcp_meta__comment__input':  main_cpp:'<global>' motor_control: addr=0:0x0000F988
 calseg__counter_ctl_params':  main_cpp:'<global>' : addr=0:0x000302C0
-xcp_meta__comment__main__counter':  main_cpp:'main' : addr=0:0x00010838
-xcp_meta__comment__main__static_counter':  main_cpp:'main' : addr=0:0x00010818
+xcp_meta__comment__main__counter':  main_cpp:'main' : addr=0:0x0000F840
+xcp_meta__comment__main__static_counter':  main_cpp:'main' : addr=0:0x0000F820
 evt__mainloop':  main_cpp:'main' : addr=0:0x00030350
-xcp_epk__':  main_cpp:'main' : addr=0:0x00010810
+xcp_epk__':  main_cpp:'main' : addr=0:0x0000F818
 xcp_epk__keep':  main_cpp:'main' : addr=2:0x7FFFFFE8
 cap__mainloop':  main_cpp:'main' : addr=2:0x7FFFFFE0
 trg__AASR__mainloop':  main_cpp:'main' : addr=0:0x00000000
 calseg__task_counter_ctl_params':  main_cpp:'task' : addr=0:0x000302A0
-xcp_meta__comment__task__static_counter':  main_cpp:'task' : addr=0:0x00010880
-xcp_meta__comment__task__counter':  main_cpp:'task' : addr=0:0x00010850
+xcp_meta__comment__task__static_counter':  main_cpp:'task' : addr=0:0x0000F888
+xcp_meta__comment__task__counter':  main_cpp:'task' : addr=0:0x0000F858
 evt__task':  main_cpp:'task' : addr=0:0x00030320
 cap__task':  main_cpp:'task' : addr=2:0x7FFFFFF8
 trg__AASR__task':  main_cpp:'task' : addr=0:0x00000000
-xcp_meta__comment__static_counter':  main_cpp:'foo' : addr=0:0x000108F0
-xcp_meta__comment__counter':  main_cpp:'foo' : addr=0:0x000108B8
-cap__foo':  main_cpp:'foo' : addr=2:0x7FFFFF88
+xcp_meta__comment__static_counter':  main_cpp:'foo' : addr=0:0x0000F8F8
+xcp_meta__comment__counter':  main_cpp:'foo' : addr=0:0x0000F8C0
+cap__foo':  main_cpp:'foo' : addr=2:0x7FFFFF78
 evt__foo':  main_cpp:'foo' : addr=0:0x00030340
 trg__AASR__foo':  main_cpp:'foo' : addr=0:0x00000000
-xcp_meta__comment__bar__static_counter':  main_cpp:'bar' : addr=0:0x00010928
-xcp_meta__read_write__bar__static_counter':  main_cpp:'bar' : addr=0:0x00010924
+xcp_meta__comment__bar__static_counter':  main_cpp:'bar' : addr=0:0x0000F930
+xcp_meta__read_write__bar__static_counter':  main_cpp:'bar' : addr=0:0x0000F92C
 evt__bar':  main_cpp:'bar' : addr=0:0x00030330
 trg__AAS__bar':  main_cpp:'bar' : addr=0:0x00000000
-XCPLITE__ACSDD':  xcplite_c:'<global>' : addr=0:0x0000EE90
+XCPLITE__ACSDD':  xcplite_c:'<global>' : addr=0:0x0000DE98
 calseg__epk':  xcplite_c:'XcpInit' : addr=0:0x00030300
 
 [INFO ] ===============================================================
@@ -188,18 +188,18 @@ Found 4 segment definition marker variables:
 2: 'counter_ctl_params' - number=Some(2), addr=000302C0'
 3: 'params' - number=Some(3), addr=000302E0'
 [INFO ] Calibration segment 'epk' not yet defined in registry
-[INFO ] Created segment 0: 'epk':  addr = 0x00010810, size = 32, mem_addr = 0x00010810
-[INFO ] Calibration segment 'task_counter_ctl_params' default page variable found in debug data: Address = 0xd038, Size = 0xc
+[INFO ] Created segment 0: 'epk':  addr = 0x0000F818, size = 32, mem_addr = 0x0000F818
+[INFO ] Calibration segment 'task_counter_ctl_params' default page variable found in debug data: Address = 0xc040, Size = 0xc
 [INFO ] Calibration segment 'task_counter_ctl_params' not yet defined in registry
-[INFO ] Created segment 1: 'task_counter_ctl_params':  addr = 0x0000D038, size = 12, mem_addr = 0x0000D038
-[INFO ] Calibration segment 'counter_ctl_params' default page variable found in debug data: Address = 0xd060, Size = 0x8
+[INFO ] Created segment 1: 'task_counter_ctl_params':  addr = 0x0000C040, size = 12, mem_addr = 0x0000C040
+[INFO ] Calibration segment 'counter_ctl_params' default page variable found in debug data: Address = 0xc068, Size = 0x8
 [INFO ] Calibration segment 'counter_ctl_params' not yet defined in registry
-[INFO ] Created segment 2: 'counter_ctl_params':  addr = 0x0000D060, size = 8, mem_addr = 0x0000D060
-[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xd068, Size = 0x40
+[INFO ] Created segment 2: 'counter_ctl_params':  addr = 0x0000C068, size = 8, mem_addr = 0x0000C068
+[INFO ] Calibration segment 'params' default page variable found in debug data: Address = 0xc070, Size = 0x40
 [INFO ] Calibration segment 'params' not yet defined in registry
-[INFO ] Created segment 3: 'params':  addr = 0x0000D068, size = 64, mem_addr = 0x0000D068
+[INFO ] Created segment 3: 'params':  addr = 0x0000C070, size = 64, mem_addr = 0x0000C070
 [INFO ] ===============================================================
-[INFO ] EPK string 'V2.1.10' found at address 0x00010810
+[INFO ] EPK string 'V2.1.10' found at address 0x0000F818
   EPK 'V2.1.10', ADDR_EPK = 0xFFFFFF00
 [INFO ] ===============================================================
 [INFO ] Registering event locations:
@@ -308,14 +308,16 @@ Found 4 segment definition marker variables:
 [INFO ] Captured variable 'counter' in function 'main', event id = 3, offset = 0
 [INFO ] Capture of event 'task' in function 'task' with 1 variables
 [INFO ] Captured variable 'counter' in function 'task', event id = 0, offset = 0
-[INFO ] Capture of event 'foo' in function 'foo' with 7 variables
-[INFO ] Captured variable 'test_struct2' in function 'foo', event id = 2, offset = 0
-[INFO ] Captured variable 'test_array2' in function 'foo', event id = 2, offset = 12
-[INFO ] Captured variable 'counter' in function 'foo', event id = 2, offset = 16
-[INFO ] Captured variable 'test_int8' in function 'foo', event id = 2, offset = 20
-[INFO ] Captured variable 'test_int16' in function 'foo', event id = 2, offset = 22
-[INFO ] Captured variable 'test_int32' in function 'foo', event id = 2, offset = 24
-[INFO ] Captured variable 'test_int64' in function 'foo', event id = 2, offset = 32
+[INFO ] Capture of event 'foo' in function 'foo' with 9 variables
+[INFO ] Captured variable 'test_par_uint8' in function 'foo', event id = 2, offset = 0
+[INFO ] Captured variable 'test_par_double' in function 'foo', event id = 2, offset = 8
+[INFO ] Captured variable 'test_struct2' in function 'foo', event id = 2, offset = 16
+[INFO ] Captured variable 'test_array2' in function 'foo', event id = 2, offset = 28
+[INFO ] Captured variable 'counter' in function 'foo', event id = 2, offset = 32
+[INFO ] Captured variable 'test_int8' in function 'foo', event id = 2, offset = 36
+[INFO ] Captured variable 'test_int16' in function 'foo', event id = 2, offset = 38
+[INFO ] Captured variable 'test_int32' in function 'foo', event id = 2, offset = 40
+[INFO ] Captured variable 'test_int64' in function 'foo', event id = 2, offset = 48
 [INFO ] ===============================================================
 [INFO ] Registering metadata from xcp_meta section:
 [INFO ] ===============================================================

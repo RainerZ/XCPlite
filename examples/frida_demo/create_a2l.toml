@@ -1,0 +1,36 @@
+# xcpclient configuration file for frida_demo A2L generation
+#
+# Usage: xcpclient --config create_a2l.toml [additional CLI overrides]
+# Command-line arguments always take precedence over values in this file.
+# All keys are optional; missing keys fall back to the built-in defaults shown below.
+#
+# --udp --offline --elf-unit-filter '^main_c$' --default-event=mainloop
+
+
+# Program flow log level: Off=0, Error=1, Warn=2, Info=3, Debug=4, Trace=5
+log_level = 3
+
+# Content information detail verbosity level (0 = minimal, higher = more output)
+verbose = 1
+
+# No network connection
+offline = true
+
+# Build a complete A2L file from XCP server event/segment info + ELF DWARF data
+create_a2l = true
+
+# Limit ELF parsing to compilation units with index <= this value.
+# Useful to speed up processing of large binaries. Default = no limit.
+# elf_unit_limit = 18446744073709551615   # usize::MAX — omit to parse all units
+
+# Regex filter: only register variables whose name matches
+elf_var_filter = ""
+
+# Regex filter: only register variables from compilation units whose path matches
+elf_unit_filter = "^main_c$"
+
+# Skip variables that have no metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT)
+elf_skip_no_metadata = false
+
+# Set default event for absolute addressing mode
+default_event = "mainloop"
