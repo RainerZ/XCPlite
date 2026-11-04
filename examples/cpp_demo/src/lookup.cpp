@@ -22,22 +22,19 @@ constexpr float lookup_axis[] = {0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f,
 
 void lookup_table::LookupTableT::A2lRegisterTypedef() const {
 
-    // A2l global once registration of LookupTableT typedef
-    if (A2lOnce()) {
+    // A2l global once registration of LookupTableT typedef (A2lCreateTypedef executes once, thread-safe)
+    // The array dimensions are detected from the member types
 #ifdef CANAPE_24
-        // New feature in CANape 24, shared axis in typedefs
-        A2lTypedefBegin(LookupTableT, this, "A2L typedef for LookupTableT");
-        A2lTypedefCurveComponentWithSharedAxis(values, kLookupTableSize, "Lookup table with shared axis", "", -1.0, 1.0, "lookup_axis");
-        A2lTypedefAxisComponent(lookup_axis, kLookupTableSize, "Axis for lookup table in", "", -0.0, 1.0);
-        A2lTypedefEnd();
+    // New feature in CANape 24, shared axis in typedefs
+    A2lCreateTypedef(LookupTableT, "A2L typedef for LookupTableT",                                                       //
+                     A2L_CURVE_WITH_AXIS_COMPONENT(values, "Lookup table with shared axis", "", -1.0, 1.0, lookup_axis), //
+                     A2L_AXIS_COMPONENT(lookup_axis, "Axis for lookup table in", "", -0.0, 1.0));
 #else
-        // No support for shared axis in nested typedefs, which means, it is not possible to reference an individual axis in typedef instance
-        // Using a fixed axis instead
-        A2lTypedefBegin(LookupTableT, this, "A2L typedef for LookupTableT");
-        A2lTypedefCurveComponent(values, kLookupTableSize, "Lookup table", "", -1.0, 1.0);
-        A2lTypedefEnd();
+    // No support for shared axis in nested typedefs, which means, it is not possible to reference an individual axis in typedef instance
+    // Using a fixed axis instead
+    A2lCreateTypedef(LookupTableT, "A2L typedef for LookupTableT", //
+                     A2L_CURVE_COMPONENT(values, "Lookup table", "", -1.0, 1.0));
 #endif
-    }
 }
 
 float lookup_table::LookupTableT::Lookup(float input) const {

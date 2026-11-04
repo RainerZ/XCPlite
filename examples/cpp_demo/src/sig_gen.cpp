@@ -9,6 +9,7 @@ Depending on calibration parameters ampl, phase, offset and period
 #include <cmath>    // for fmod, sin
 #include <cstdint>  // for uintxx_t
 #include <iostream> // for std::cout
+#include <string>   // for std::string
 #include <thread>
 
 // Include XCPlite/libxcplite C++ headers
@@ -33,16 +34,21 @@ SignalGenerator::SignalGenerator(const char *instance_name, const SignalParamete
 
         params->lookup.A2lRegisterTypedef(); // Register the lookup table typedef
 
-        A2lTypedefBegin(SignalParametersT, params, "A2L typedef for SignalParametersT");
         A2lCreateEnumConversion(signal_type_enum, "5 0 \"SINE\" 1 \"SQUARE\" 2 \"TRIANGLE\" 3 \"SAWTOOTH\" 4 \"ARBITRARY\"");
-        A2lTypedefParameterComponent(signal_type, "Signal type", "conv.signal_type_enum", 0, 4);
-        A2lTypedefParameterComponent(ampl, "Amplitude", "Volt", 0, 100);
-        A2lTypedefParameterComponent(phase, "Phase", "", 0, k2Pi);
-        A2lTypedefParameterComponent(offset, "Offset", "Volt", -100, 100);
-        A2lTypedefParameterComponent(period, "Period", "s", 0.01, 10.0);
-        A2lTypedefParameterComponent(delay_us, "Delay time in us", "us", 0, 100000);
-        A2lTypedefComponent(lookup, LookupTableT, 1);
-        A2lTypedefEnd();
+        A2lCreateTypedef(SignalParametersT, "A2L typedef for SignalParametersT",                             //
+                         A2L_PARAMETER_COMPONENT(signal_type, "Signal type", "conv.signal_type_enum", 0, 4), //
+                         A2L_PARAMETER_COMPONENT(ampl, "Amplitude", "Volt", 0, 100),                         //
+                         A2L_PARAMETER_COMPONENT(phase, "Phase", "", 0, k2Pi),                               //
+                         A2L_PARAMETER_COMPONENT(offset, "Offset", "Volt", -100, 100),                       //
+                         A2L_PARAMETER_COMPONENT(period, "Period", "s", 0.01, 10.0),                         //
+                         A2L_PARAMETER_COMPONENT(delay_us, "Delay time in us", "us", 0, 100000),             //
+                         A2L_TYPEDEF_COMPONENT(lookup, "LookupTableT", 1));
+
+        // A2L typedef for the measurement variables of class SignalGenerator (members value and normalized_time_)
+        // Registered from a member function, so private members are accessible
+        A2lCreateTypedef(SignalGenerator, "A2L typedef for SignalGenerator",                            //
+                         A2L_MEASUREMENT_COMPONENT(value, "Signal generator output", ""),               //
+                         A2L_MEASUREMENT_COMPONENT(normalized_time_, "Normalized time in [0..1[", "")); //
     }
 
     // Create an instance of the signal generators calibration segment
@@ -74,11 +80,13 @@ void SignalGenerator::Task() {
     DaqCreateEvent_s(instance_name_);
 
     // A2L registration
-    // Register the member variable 'value' of each instance as measurements by using the instance name as a prefix
+    // Register this instance of SignalGenerator as an instance of the SignalGenerator typedef named '<instance_name_>_generator', relative to this
+    // (the name instance_name_ itself is already used by the calibration segment instance)
     // Register the local (stack) measurement variable 'time' for each instance
+    std::string generator_instance_name = std::string(instance_name_) + "_generator";
     A2lLock(); // Take care for thread safety when registering measurements and parameters in multiple threads
     A2lSetRelativeAddrMode_s(instance_name_, this);
-    A2lCreatePhysMeasurementInstance(instance_name_, value, "Signal generator output", "", -100, 100);
+    A2lCreateInstance(generator_instance_name.c_str(), SignalGenerator, 0, this, "Signal generator instance");
     A2lSetStackAddrMode_s(instance_name_);
     A2lCreatePhysMeasurementInstance(instance_name_, time, "Signal generator time", "s", 0, 3600);
     A2lUnlock();

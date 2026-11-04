@@ -122,10 +122,9 @@ int main() {
     auto calseg = CalSegCreate(kParameters);
 
     // Add the calibration segment description as a typedef instance to the A2L file
-    A2lTypedefBegin(ParametersT, &kParameters, "A2L Typedef for ParametersT");
-    A2lTypedefParameterComponent(counter_max, "Maximum counter value", "", 0, 2000);
-    A2lTypedefParameterComponent(delay_us, "Mainloop delay time in us", "us", 0, 999999);
-    A2lTypedefEnd();
+    A2lCreateTypedef(ParametersT, "A2L Typedef for ParametersT",                                 //
+                     A2L_PARAMETER_COMPONENT(counter_max, "Maximum counter value", "", 0, 2000), //
+                     A2L_PARAMETER_COMPONENT(delay_us, "Mainloop delay time in us", "us", 0, 999999));
     calseg.CreateA2lTypedefInstance("ParametersT", "Main parameters");
 
     // Local variables
