@@ -39,8 +39,11 @@ if (A2lThreadOnce()) {
 
 #ifdef __cplusplus
 
+#include <array>
+#include <cstddef>
 #include <mutex>
 #include <thread>
+#include <type_traits>
 
 namespace xcp {
 namespace a2l {
@@ -119,10 +122,82 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
 // );
 // =============================================================================
 
+// Compile-time field layout checks used by the A2L_*_COMPONENT macros below
+//
+// The component macros describe a field by its offsetof() offset inside the struct, its basic element type and its array
+// dimensions. These helpers derive the dimensions from C arrays and std::array alike and reject fields whose description
+// would not match the memory the XCP tool accesses at the resulting address:
+// - reference members: offsetof() yields the location of the hidden pointer, not of the referenced object
+// - pointer members of nested typedef components: the typedef would be placed at the location of the pointer
+// - array rank mismatch, e.g. a 2D array passed to a curve component or an array passed to a scalar component
+// - dimensions which do not fit into the 16 bit A2L dimension parameters
+
+/// Struct/class type of an A2L typedef
+/// With OPTION_A2L_STANDARD_LAYOUT_ONLY, non-standard-layout types are rejected, so offsetof() is never applied to a type
+/// for which it is only conditionally-supported in C++17 and -Winvalid-offsetof can not occur
+template <typename StructType> struct A2lStructInfo {
+#ifdef OPTION_A2L_STANDARD_LAYOUT_ONLY
+    static_assert(std::is_standard_layout_v<StructType>,
+                  "A2L typedef: OPTION_A2L_STANDARD_LAYOUT_ONLY requires a standard-layout type (no virtual functions, no data members in both base and derived class, "
+                  "same access control for all data members, only standard-layout members)");
+#endif
+    using type = StructType;
+};
+
+/// Number of elements in dimension I of a C array or std::array (nested arrays of both kinds are supported), 0 if T is
+/// not an array in dimension I
+template <typename T, unsigned I> struct A2lExtent : std::integral_constant<size_t, 0> {};
+template <typename T, size_t N> struct A2lExtent<T[N], 0> : std::integral_constant<size_t, N> {};
+template <typename T, size_t N, unsigned I> struct A2lExtent<T[N], I> : A2lExtent<std::remove_cv_t<T>, I - 1> {};
+template <typename T, size_t N> struct A2lExtent<std::array<T, N>, 0> : std::integral_constant<size_t, N> {};
+template <typename T, size_t N, unsigned I> struct A2lExtent<std::array<T, N>, I> : A2lExtent<std::remove_cv_t<T>, I - 1> {};
+
+/// Innermost element type of a (nested) C array or std::array, T itself if T is not an array
+template <typename T> struct A2lArrayElement {
+    using type = T;
+};
+template <typename T, size_t N> struct A2lArrayElement<T[N]> {
+    using type = typename A2lArrayElement<std::remove_cv_t<T>>::type;
+};
+template <typename T, size_t N> struct A2lArrayElement<std::array<T, N>> {
+    using type = typename A2lArrayElement<std::remove_cv_t<T>>::type;
+};
+
+/// Element type and dimensions of a scalar (Rank 0), 1D (Rank 1) or 2D (Rank 2) basic type field of an A2L typedef
+template <typename FieldType, unsigned Rank> struct A2lFieldInfo {
+    static_assert(!std::is_reference_v<FieldType>, "A2L typedef component: reference members are not supported, offsetof() yields the location of the hidden pointer");
+    using Field = std::remove_cv_t<FieldType>;
+    using ElementType = typename A2lArrayElement<Field>::type;
+    static constexpr size_t x_dim = Rank >= 1 ? A2lExtent<Field, 0>::value : 1;
+    static constexpr size_t y_dim = Rank >= 2 ? A2lExtent<Field, 1>::value : 1;
+    static_assert(Rank == 0 || x_dim > 0, "A2L typedef component: curve, axis, map and array components require an array member (C array or std::array)");
+    static_assert(Rank < 2 || y_dim > 0, "A2L typedef component: map components require a 2 dimensional array member");
+    static_assert(sizeof(Field) == x_dim * y_dim * sizeof(ElementType), "A2L typedef component: array rank of the member does not match the component macro");
+    static_assert(x_dim <= 0xFFFF && y_dim <= 0xFFFF, "A2L typedef component: array dimension exceeds 65535");
+};
+
+/// Element count of a nested typedef field (scalar, 1D or multi dimensional C array or std::array of a struct/class)
+template <typename FieldType> struct A2lTypedefFieldInfo {
+    static_assert(!std::is_reference_v<FieldType>, "A2L typedef component: reference members are not supported, offsetof() yields the location of the hidden pointer");
+    using Field = std::remove_cv_t<FieldType>;
+    using ElementType = typename A2lArrayElement<Field>::type;
+    static_assert(!std::is_pointer_v<ElementType>, "A2L typedef component: pointer members are not supported, the typedef would be placed at the location of the pointer");
+    static constexpr size_t count = sizeof(Field) / sizeof(ElementType);
+    static_assert(count <= 0xFFFF, "A2L typedef component: array dimension exceeds 65535");
+};
+
 // Helper lambda-based macros used with A2lCreateTypedef
 //
 // Each expands to a lambda that A2lCreateTypedef calls with a `TypeName*` to derive the field's offset and type via
 // offsetof/decltype - so these may only be used as arguments to A2lCreateTypedef, not evaluated standalone.
+// The field layout is checked at compile time, see A2lFieldInfo/A2lTypedefFieldInfo above. Array members may be C arrays
+// or std::array.
+// Non-standard-layout types (virtual functions, data members in base and derived class, multiple inheritance, mixed
+// access control, non-standard-layout members) cause -Winvalid-offsetof on GCC and Clang: offsetof on such types is
+// conditionally-supported in C++17. GCC, Clang and MSVC support it and compute the offset from the layout they use for
+// the objects, see test/type_detection_test/src/typedef_component_test.cpp. Members of virtual base classes have no
+// constant offset and are a compile error. Use standard-layout types where the warning is not acceptable,
+// OPTION_A2L_STANDARD_LAYOUT_ONLY (xcplib_cfg.h) enforces this at compile time.
 // @param field_name member of the typedef'd struct/class this component describes; its address is never taken directly,
 // only offsetof(StructType, field_name), so it is safe to use on members that are not yet initialized
 // @param comment free-text description
@@ -132,9 +207,10 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
 /// Scalar calibration parameter component
 #define A2L_PARAMETER_COMPONENT(field_name, comment, unit, min_value, max_value)                                                                                                   \
     [](auto type_ptr) {                                                                                                                                                            \
-        using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
-        using FieldType = decltype(StructType::field_name);                                                                                                                        \
-        return xcp::a2l::A2lParameterComponentInfo<FieldType>(#field_name, (uint16_t)offsetof(StructType, field_name), 1, 1, comment, unit, min_value, max_value, NULL, NULL);     \
+        using StructType = typename xcp::a2l::A2lStructInfo<std::remove_pointer_t<decltype(type_ptr)>>::type;                                                                      \
+        using FieldInfo = xcp::a2l::A2lFieldInfo<decltype(StructType::field_name), 0>;                                                                                             \
+        return xcp::a2l::A2lParameterComponentInfo<typename FieldInfo::ElementType>(#field_name, offsetof(StructType, field_name), 1, 1, comment, unit, min_value, max_value,      \
+                                                                                    NULL, NULL);                                                                                   \
     }
 
 // Multi dimensional parameters (curve, map, axis), auto-detect array dimensions (automatic size detection from type)
@@ -144,59 +220,47 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
 /// field's array extent. No shared axis - the XCP tool creates a default one.
 #define A2L_CURVE_COMPONENT(field_name, comment, unit, min_value, max_value)                                                                                                       \
     [](auto type_ptr) {                                                                                                                                                            \
-        using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
-        using FieldType = decltype(StructType::field_name);                                                                                                                        \
-        using ElementType = std::remove_reference_t<decltype(std::declval<StructType>().field_name[0])>;                                                                           \
-        constexpr size_t x_dim = std::extent_v<FieldType, 0>;                                                                                                                      \
-        return xcp::a2l::A2lParameterComponentInfo<ElementType>(#field_name, (uint16_t)offsetof(StructType, field_name), x_dim, 1, comment, unit, min_value, max_value, NULL,      \
-                                                                NULL);                                                                                                             \
+        using StructType = typename xcp::a2l::A2lStructInfo<std::remove_pointer_t<decltype(type_ptr)>>::type;                                                                      \
+        using FieldInfo = xcp::a2l::A2lFieldInfo<decltype(StructType::field_name), 1>;                                                                                             \
+        return xcp::a2l::A2lParameterComponentInfo<typename FieldInfo::ElementType>(#field_name, offsetof(StructType, field_name), (uint16_t)FieldInfo::x_dim, 1, comment, unit,   \
+                                                                                    min_value, max_value, NULL, NULL);                                                             \
     }
 /// Like A2L_CURVE_COMPONENT, but shares its axis with an A2L_AXIS_COMPONENT of the same typedef.
 /// @param axis identifier of the sibling A2L_AXIS_COMPONENT field to share (stringified, not evaluated)
 #define A2L_CURVE_WITH_AXIS_COMPONENT(field_name, comment, unit, min_value, max_value, axis)                                                                                       \
     [](auto type_ptr) {                                                                                                                                                            \
-        using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
-        using FieldType = decltype(StructType::field_name);                                                                                                                        \
-        using ElementType = std::remove_reference_t<decltype(std::declval<StructType>().field_name[0])>;                                                                           \
-        constexpr size_t x_dim = std::extent_v<FieldType, 0>;                                                                                                                      \
-        return xcp::a2l::A2lParameterComponentInfo<ElementType>(#field_name, (uint16_t)offsetof(StructType, field_name), x_dim, 1, comment, unit, min_value, max_value, #axis,     \
-                                                                NULL);                                                                                                             \
+        using StructType = typename xcp::a2l::A2lStructInfo<std::remove_pointer_t<decltype(type_ptr)>>::type;                                                                      \
+        using FieldInfo = xcp::a2l::A2lFieldInfo<decltype(StructType::field_name), 1>;                                                                                             \
+        return xcp::a2l::A2lParameterComponentInfo<typename FieldInfo::ElementType>(#field_name, offsetof(StructType, field_name), (uint16_t)FieldInfo::x_dim, 1, comment, unit,   \
+                                                                                    min_value, max_value, #axis, NULL);                                                            \
     }
 /// 2-dimensional calibration map component (field_name must be a 2D array member); x_dim/y_dim are auto-detected. No
 /// shared axes - the XCP tool creates default ones.
 #define A2L_MAP_COMPONENT(field_name, comment, unit, min_value, max_value)                                                                                                         \
     [](auto type_ptr) {                                                                                                                                                            \
-        using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
-        using FieldType = decltype(StructType::field_name);                                                                                                                        \
-        using ElementType = std::remove_reference_t<decltype(std::declval<StructType>().field_name[0][0])>;                                                                        \
-        constexpr size_t x_dim = std::extent_v<FieldType, 0>;                                                                                                                      \
-        constexpr size_t y_dim = std::extent_v<FieldType, 1>;                                                                                                                      \
-        return xcp::a2l::A2lParameterComponentInfo<ElementType>(#field_name, (uint16_t)offsetof(StructType, field_name), x_dim, y_dim, comment, unit, min_value, max_value, NULL,  \
-                                                                NULL);                                                                                                             \
+        using StructType = typename xcp::a2l::A2lStructInfo<std::remove_pointer_t<decltype(type_ptr)>>::type;                                                                      \
+        using FieldInfo = xcp::a2l::A2lFieldInfo<decltype(StructType::field_name), 2>;                                                                                             \
+        return xcp::a2l::A2lParameterComponentInfo<typename FieldInfo::ElementType>(#field_name, offsetof(StructType, field_name), (uint16_t)FieldInfo::x_dim,                     \
+                                                                                    (uint16_t)FieldInfo::y_dim, comment, unit, min_value, max_value, NULL, NULL);                  \
     }
 /// Like A2L_MAP_COMPONENT, but shares its axes with two A2L_AXIS_COMPONENT fields of the same typedef.
 /// @param x_axis, y_axis identifiers of the sibling A2L_AXIS_COMPONENT fields to share (stringified, not evaluated)
 #define A2L_MAP_WITH_AXIS_COMPONENT(field_name, comment, unit, min_value, max_value, x_axis, y_axis)                                                                               \
     [](auto type_ptr) {                                                                                                                                                            \
-        using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
-        using FieldType = decltype(StructType::field_name);                                                                                                                        \
-        using ElementType = std::remove_reference_t<decltype(std::declval<StructType>().field_name[0][0])>;                                                                        \
-        constexpr size_t x_dim = std::extent_v<FieldType, 0>;                                                                                                                      \
-        constexpr size_t y_dim = std::extent_v<FieldType, 1>;                                                                                                                      \
-        return xcp::a2l::A2lParameterComponentInfo<ElementType>(#field_name, (uint16_t)offsetof(StructType, field_name), x_dim, y_dim, comment, unit, min_value, max_value,        \
-                                                                #x_axis, #y_axis);                                                                                                 \
+        using StructType = typename xcp::a2l::A2lStructInfo<std::remove_pointer_t<decltype(type_ptr)>>::type;                                                                      \
+        using FieldInfo = xcp::a2l::A2lFieldInfo<decltype(StructType::field_name), 2>;                                                                                             \
+        return xcp::a2l::A2lParameterComponentInfo<typename FieldInfo::ElementType>(#field_name, offsetof(StructType, field_name), (uint16_t)FieldInfo::x_dim,                     \
+                                                                                    (uint16_t)FieldInfo::y_dim, comment, unit, min_value, max_value, #x_axis, #y_axis);            \
     }
 /// Standalone axis component (field_name must be a 1D array member), usable as the shared axis of one or more
 /// A2L_CURVE_WITH_AXIS_COMPONENT/A2L_MAP_WITH_AXIS_COMPONENT fields in the same typedef. Internally a parameter
 /// component with y_dim forced to 0, which is what marks it as an axis rather than a curve.
 #define A2L_AXIS_COMPONENT(field_name, comment, unit, min_value, max_value)                                                                                                        \
     [](auto type_ptr) {                                                                                                                                                            \
-        using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
-        using FieldType = decltype(StructType::field_name);                                                                                                                        \
-        using ElementType = std::remove_reference_t<decltype(std::declval<StructType>().field_name[0])>;                                                                           \
-        constexpr size_t x_dim = std::extent_v<FieldType, 0>;                                                                                                                      \
-        return xcp::a2l::A2lParameterComponentInfo<ElementType>(#field_name, (uint16_t)offsetof(StructType, field_name), x_dim, 0, comment, unit, min_value, max_value, NULL,      \
-                                                                NULL);                                                                                                             \
+        using StructType = typename xcp::a2l::A2lStructInfo<std::remove_pointer_t<decltype(type_ptr)>>::type;                                                                      \
+        using FieldInfo = xcp::a2l::A2lFieldInfo<decltype(StructType::field_name), 1>;                                                                                             \
+        return xcp::a2l::A2lParameterComponentInfo<typename FieldInfo::ElementType>(#field_name, offsetof(StructType, field_name), (uint16_t)FieldInfo::x_dim, 0, comment, unit,   \
+                                                                                    min_value, max_value, NULL, NULL);                                                             \
     }
 
 /// Scalar measurement component.
@@ -205,20 +269,18 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
 /// @param unit physical unit string, or a "conv.<name>" reference to a conversion (see A2L_PARAMETER_COMPONENT above)
 #define A2L_MEASUREMENT_COMPONENT(field_name, comment, unit)                                                                                                                       \
     [](auto type_ptr) {                                                                                                                                                            \
-        using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
-        using FieldType = decltype(StructType::field_name);                                                                                                                        \
-        return xcp::a2l::A2lMeasurementComponentInfo<FieldType>(#field_name, (uint16_t)offsetof(StructType, field_name), 1, comment, unit);                                        \
+        using StructType = typename xcp::a2l::A2lStructInfo<std::remove_pointer_t<decltype(type_ptr)>>::type;                                                                      \
+        using FieldInfo = xcp::a2l::A2lFieldInfo<decltype(StructType::field_name), 0>;                                                                                             \
+        return xcp::a2l::A2lMeasurementComponentInfo<typename FieldInfo::ElementType>(#field_name, offsetof(StructType, field_name), 1, comment, unit);                            \
     }
 
 /// 1-dimensional array measurement component (field_name must be a 1D array member); dim is auto-detected.
 /// @param comment, unit as in A2L_MEASUREMENT_COMPONENT above
 #define A2L_MEASUREMENT_ARRAY_COMPONENT(field_name, comment, unit)                                                                                                                 \
     [](auto type_ptr) {                                                                                                                                                            \
-        using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
-        using FieldType = decltype(StructType::field_name);                                                                                                                        \
-        using ElementType = std::remove_reference_t<decltype(std::declval<StructType>().field_name[0])>;                                                                           \
-        constexpr size_t x_dim = std::extent_v<FieldType, 0>;                                                                                                                      \
-        return xcp::a2l::A2lMeasurementComponentInfo<ElementType>(#field_name, (uint16_t)offsetof(StructType, field_name), x_dim, comment, unit);                                  \
+        using StructType = typename xcp::a2l::A2lStructInfo<std::remove_pointer_t<decltype(type_ptr)>>::type;                                                                      \
+        using FieldInfo = xcp::a2l::A2lFieldInfo<decltype(StructType::field_name), 1>;                                                                                             \
+        return xcp::a2l::A2lMeasurementComponentInfo<typename FieldInfo::ElementType>(#field_name, offsetof(StructType, field_name), (uint16_t)FieldInfo::x_dim, comment, unit);   \
     }
 
 /// Nested-typedef component: field_name's own type was itself registered as an A2L typedef via a separate
@@ -226,12 +288,14 @@ template <bool WithMutex, int Location> class A2lOnceGuard<WithMutex, true, Loca
 /// C++ type does not map to a single scalar A2L type id.
 /// @param field_name member of the enclosing typedef'd struct/class
 /// @param type_name name of field_name's own type, as registered with A2lCreateTypedef(type_name, ...) - not auto-detected
-/// @param dim 1 for a scalar member, or the array length for an array of that typedef - not auto-detected
+/// @param dim 1 for a scalar member, or the total element count for an array (C array or std::array) of that typedef;
+/// must be a constant expression, checked at compile time against the member's type
 #define A2L_TYPEDEF_COMPONENT(field_name, type_name, dim)                                                                                                                          \
     [](auto type_ptr) {                                                                                                                                                            \
-        using StructType = std::remove_pointer_t<decltype(type_ptr)>;                                                                                                              \
-        using FieldType = decltype(StructType::field_name);                                                                                                                        \
-        return xcp::a2l::A2lTypedefComponentInfo<FieldType>(#field_name, type_name, (uint16_t)(dim), (uint16_t)offsetof(StructType, field_name));                                  \
+        using StructType = typename xcp::a2l::A2lStructInfo<std::remove_pointer_t<decltype(type_ptr)>>::type;                                                                      \
+        using FieldInfo = xcp::a2l::A2lTypedefFieldInfo<decltype(StructType::field_name)>;                                                                                         \
+        static_assert((dim) == FieldInfo::count || ((dim) == 0 && FieldInfo::count == 1), "A2L_TYPEDEF_COMPONENT: dim does not match the element count of the member");            \
+        return xcp::a2l::A2lTypedefComponentInfo<typename FieldInfo::Field>(#field_name, type_name, (uint16_t)FieldInfo::count, offsetof(StructType, field_name));                 \
     }
 
 // Helper struct to hold typedef component information for parameter components
@@ -307,12 +371,13 @@ template <typename T> void A2lCreateTypedefComponentTemplate(const A2lTypedefCom
 // Template function for typedef creation
 template <typename TypeName, typename... ComponentBuilders>
 void A2lCreateTypedefTemplate(const char *type_name, size_t type_size, const char *comment, ComponentBuilders &&...builders) {
+    using StructType = typename A2lStructInfo<TypeName>::type; // Layout check
     if (XcpIsActivated()) {
         static std::once_flag once_flag;
         std::call_once(once_flag, [&]() {
             A2lLock();
             A2lTypedefBegin_(type_name, (uint32_t)type_size, comment);
-            (A2lCreateTypedefComponentTemplate(builders((TypeName *)nullptr)), ...);
+            (A2lCreateTypedefComponentTemplate(builders((StructType *)nullptr)), ...);
             A2lTypedefEnd_();
             A2lUnlock();
         });

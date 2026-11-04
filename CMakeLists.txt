@@ -125,7 +125,7 @@ endif()
 #     shm      -> hello_xcp (SHM mode), hello_xcp_cpp (SHM mode)
 #     rtos     -> freertos_demo (downloads FreeRTOS-Kernel via FetchContent)
 #   XCPLITE_BUILD_TESTS
-#     default  -> a2l_test, cal_test, daq_test, daq_config_test, clock_test, queue_test, type_detection_test_*, passive_test_c, passive_test_cpp, persistence_test
+#     default  -> a2l_test, cal_test, daq_test, daq_config_test, clock_test, queue_test, type_detection_test_* (incl. _cpp_std_layout), passive_test_c, passive_test_cpp, persistence_test
 #     ptp      -> clock_test
 #     others   -> (none)
 #   XCPLITE_BUILD_TOOLS
@@ -458,8 +458,15 @@ if(XCPLITE_BUILD_TESTS)
         add_executable(type_detection_test_c test/type_detection_test/src/main.c test/type_detection_test/src/c_version_test.c)
         target_link_libraries(type_detection_test_c PRIVATE xcplite)
 
-        add_executable(type_detection_test_cpp test/type_detection_test/src/main.cpp test/type_detection_test/src/cpp_version_test.cpp)
+        add_executable(type_detection_test_cpp test/type_detection_test/src/main.cpp test/type_detection_test/src/cpp_version_test.cpp
+                                             test/type_detection_test/src/typedef_component_test.cpp)
         target_link_libraries(type_detection_test_cpp PRIVATE xcplite)
+
+        # Same test with OPTION_A2L_STANDARD_LAYOUT_ONLY, the typedef macros accept standard-layout types only
+        add_executable(type_detection_test_cpp_std_layout test/type_detection_test/src/main.cpp test/type_detection_test/src/cpp_version_test.cpp
+                                                        test/type_detection_test/src/typedef_component_test.cpp)
+        target_link_libraries(type_detection_test_cpp_std_layout PRIVATE xcplite)
+        target_compile_definitions(type_detection_test_cpp_std_layout PRIVATE OPTION_A2L_STANDARD_LAYOUT_ONLY)
 
         add_executable(a2l_test test/a2l_test/src/main.c)
         target_link_libraries(a2l_test PRIVATE xcplite)
@@ -504,6 +511,7 @@ if(XCPLITE_BUILD_TESTS)
         foreach(_xcp_unit_test
                 type_detection_test_c
                 type_detection_test_cpp
+                type_detection_test_cpp_std_layout
                 daq_config_test
                 eth_transport_test
                 socket_recv_test

@@ -185,6 +185,13 @@
 // Used for convenience to get an existing ip address in A2L, when bound to ANY 0.0.0.0
 // #define OPTION_ENABLE_GET_LOCAL_ADDR
 
+// Accept only standard-layout types in the C++ typedef macros A2lCreateTypedef and A2L_*_COMPONENT (a2l.hpp)
+// offsetof on non-standard-layout types (virtual functions, data members in base and derived class, mixed access control, ...) is
+// conditionally-supported in C++17, GCC, Clang and MSVC compute correct offsets, but GCC and Clang report -Winvalid-offsetof
+// Enable this, where the warning is not acceptable (e.g. safety coding guidelines), to turn these cases into compile errors
+// Header only, affects the application code including a2l.hpp, may also be defined on the application compiler command line
+// #define OPTION_A2L_STANDARD_LAYOUT_ONLY
+
 //-------------------------------------------------------------------------------
 // Buildtime A2L generation
 

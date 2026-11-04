@@ -6,6 +6,12 @@ All notable changes to XCPlite are documented in this file.
 ## [V2.3.3]
 
 - Added a new persistence_test
+- Fixed socket_raw_test
+- Bugfixes in the C++ typedef component macros `A2L_*_COMPONENT` in `a2l.hpp`:
+    - Member offsets were truncated to 16 bit, members at offsets >= 64 KiB were described at a wrong address.
+    - `std::array` members were detected with dimension 0 in `A2L_CURVE_COMPONENT`, `A2L_MAP_COMPONENT`, `A2L_AXIS_COMPONENT` and `A2L_MEASUREMENT_ARRAY_COMPONENT`, they are supported now.
+- New compile-time checks in the `A2L_*_COMPONENT` macros: reference members, pointer members in `A2L_TYPEDEF_COMPONENT`, array rank mismatches (e.g. an array in a scalar component, a 2D array in a curve component) and dimensions above 65535 are rejected. The `dim` parameter of `A2L_TYPEDEF_COMPONENT` must now be a constant expression matching the element count of the member.
+- New option `OPTION_A2L_STANDARD_LAYOUT_ONLY` (header only, `xcplib_cfg.h` or application compiler command line): `A2lCreateTypedef` and the `A2L_*_COMPONENT` macros accept only standard-layout types. Non-standard-layout types (virtual functions, data members in base and derived class, mixed access control, ...) become a compile error instead of a `-Winvalid-offsetof` warning, for coding guidelines which do not accept the warning. The offsets are correct either way, verified by the new non-standard-layout cases in `type_detection_test_cpp`. New test variant `type_detection_test_cpp_std_layout` with the option enabled.
 
 
 ## [V2.3.2]
@@ -13,6 +19,7 @@ All notable changes to XCPlite are documented in this file.
 - Bugfixes: 
     - `DaqTriggerEventExt` and the C variant of `DaqEventVar` in `xcplib.h` initialized their event id marker with `XCP_UNDEFINED_EVENT_ID` instead of the link-time id `XCP_EVENT_SECTION_GET_LINKTIME_ID`. Affected only clang on Linux.
     - Example point_cloud_demo, duplicate event in section registration mode,
+    - Fixed wrong file_pos when freezing calibration changes to .bin (#141)
 
 - New macros `DaqDeclareEvent` / `DaqDeclareEventExt` in `xcplib.h` (section registration only): declare an event at file scope. Pure declarations without a statement, usable with any compiler.
 

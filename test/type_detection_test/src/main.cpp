@@ -58,6 +58,9 @@ int main() {
     extern void cpp_version_test();
     cpp_version_test();
 
+    extern int typedef_component_test();
+    int typedef_component_failures = typedef_component_test();
+
     TestStruct test_instance = {};
 
     std::cout << "\nC++ Type Detection Test Results:\n";
@@ -92,5 +95,5 @@ int main() {
     std::cout << "  A2lGetArrayElementTypeId(curve_data): " << type_id_to_string(A2lGetArray1DElementTypeId(test_instance.curve_data)) << "\n";
     std::cout << "  A2lGetArray2DElementTypeId(map_data): " << type_id_to_string(A2lGetArray2DElementTypeId(test_instance.map_data)) << "\n";
 
-    return 0;
+    return typedef_component_failures == 0 ? 0 : 1;
 }

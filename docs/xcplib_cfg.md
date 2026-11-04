@@ -121,6 +121,7 @@ Exactly one queue variant is selected, see `src/queue.h`.
 |-----------|-------------|
 | `OPTION_ENABLE_A2L_GENERATOR` | Enables the on-target A2L generator (default: defined, undefined in `no_a2l` and `rtos`) |
 | `OPTION_ENABLE_A2L_UPLOAD` | Enables A2L file upload to the XCP client (GET_ID and XCP protocol UPLOAD commands) |
+| `OPTION_A2L_STANDARD_LAYOUT_ONLY` | C++ only, header only: `A2lCreateTypedef` and the `A2L_*_COMPONENT` macros accept only standard-layout types, a non-standard-layout type (virtual functions, data members in base and derived class, mixed access control, ...) is a compile error instead of a `-Winvalid-offsetof` warning. For coding guidelines which do not accept the warning. The offsets are correct either way on GCC, Clang and MSVC (default: undefined) |
 
 ### Build-time A2L Generation Options
 

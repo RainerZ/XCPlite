@@ -489,7 +489,7 @@ Namespace `xcp::a2l`. Everything requires **`OPTION_ENABLE_A2L_GENERATOR`**. The
 | `A2L_AXIS_COMPONENT(field, …)` | macro | Axis field | — | hello_xcp_cpp |
 | `A2L_MEASUREMENT_COMPONENT(field, comment, unit)` | macro | Scalar measurement field | — | hello_xcp_cpp, point_cloud_demo, silkit_demo |
 | `A2L_MEASUREMENT_ARRAY_COMPONENT(field, comment, unit)` | macro | Array measurement field | — | hello_xcp_cpp |
-| `A2L_TYPEDEF_COMPONENT(field, type_name, dim)` | macro | Nested typedef field | — | point_cloud_demo |
+| `A2L_TYPEDEF_COMPONENT(field, type_name, dim)` | macro | Nested typedef field, dim checked at compile time | — | point_cloud_demo |
 | `A2lParameterComponentInfo<T>`, `A2lMeasurementComponentInfo<T>`, `A2lTypedefComponentInfo<T>` | struct template | Component descriptors | — | — |
 | `A2lCreateTypedefTemplate<T>(…)`, `A2lCreateTypedefComponentTemplate(info)` | function template | Implementation of `A2lCreateTypedef` | — | — |
 
