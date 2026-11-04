@@ -49,6 +49,9 @@
 #include <stdbool.h> // for bool
 #include <stddef.h>  // for offsetof
 #include <stdint.h>  // for uintxx_t
+#ifdef __cplusplus
+#include <type_traits> // for std::is_standard_layout_v, used by A2lTypedefBegin
+#endif
 
 #include "xcplib.h" // for tXcpEventId, tXcpCalSegIndex, ...
 
@@ -524,18 +527,49 @@ void A2lSetAutoAddrMode(tXcpEventId event_id, const uint8_t *frame_ptr, const ui
 
 /// Begin a typedef for the struct type 'typedef_name'
 /// @param typedef_name struct type as identifier, used as A2L typedef name
-/// @param type_instance pointer to an instance of the type, only used to compute the field offsets
+/// @param type_instance pointer to an instance of the type or NULL, see the field offset computation below
 /// @param ... comment, printf style format string and arguments
+///
+/// Field offset computation of the component macros:
+/// - C: offsetof(typedef_name, field), type_instance is not used and may be NULL
+/// - C++, standard-layout type: offsetof(typedef_name, field), type_instance is not used and may be NULL
+/// - C++, non-standard-layout type (virtual functions, data members in base and derived class, mixed access control, ...):
+///   address of the field minus address of the instance, no offsetof and no -Winvalid-offsetof. type_instance must point to
+///   a real object, e.g. this. NULL or nullptr is a compile error, a pointer variable which is NULL at runtime an assertion
+///   (member access through a null pointer is undefined behavior).
+#ifdef __cplusplus
 #define A2lTypedefBegin(typedef_name, type_instance, ...)                                                                                                                          \
     {                                                                                                                                                                              \
+        static_assert(std::is_standard_layout_v<typedef_name> || std::is_pointer_v<std::remove_reference_t<decltype(type_instance)>>,                                              \
+                      "A2lTypedefBegin: a non-standard-layout type requires a pointer to a real instance (e.g. this), not NULL");                                                  \
         const typedef_name *__A2lTypedefBegin_instance = type_instance;                                                                                                            \
+        (void)__A2lTypedefBegin_instance;                                                                                                                                          \
         A2lTypedefBegin_(#typedef_name, (uint32_t)sizeof(typedef_name), __VA_ARGS__);
+// The lambda is generic, so the branch not taken is not instantiated and offsetof is never applied to a non-standard-layout type
+#define A2L_TYPEDEF_FIELD_OFFSET_(field_name)                                                                                                                                      \
+    [](auto instance) -> size_t {                                                                                                                                                  \
+        using T = std::remove_cv_t<std::remove_pointer_t<decltype(instance)>>;                                                                                                     \
+        if constexpr (std::is_standard_layout_v<T>) {                                                                                                                              \
+            return offsetof(T, field_name);                                                                                                                                        \
+        } else {                                                                                                                                                                   \
+            assert(instance != nullptr && "A2lTypedefBegin: a non-standard-layout type requires a pointer to a real instance (e.g. this)");                                        \
+            return (size_t)((const uint8_t *)&(instance->field_name) - (const uint8_t *)instance);                                                                                 \
+        }                                                                                                                                                                          \
+    }(__A2lTypedefBegin_instance)
+#else
+#define A2lTypedefBegin(typedef_name, type_instance, ...)                                                                                                                          \
+    {                                                                                                                                                                              \
+        typedef typedef_name __A2lTypedefBegin_type;                                                                                                                               \
+        const typedef_name *__A2lTypedefBegin_instance = type_instance;                                                                                                            \
+        (void)__A2lTypedefBegin_instance;                                                                                                                                          \
+        A2lTypedefBegin_(#typedef_name, (uint32_t)sizeof(typedef_name), __VA_ARGS__);
+#define A2L_TYPEDEF_FIELD_OFFSET_(field_name) offsetof(__A2lTypedefBegin_type, field_name)
+#endif
 
 /// Component of a given type, for nested structs (another typedef) or explicitly typed fields
 /// @param field_type_name name of another typedef, or of a predefined TYPEDEF_MEASUREMENT/TYPEDEF_CHARACTERISTIC (see A2lGetTypeName_M/_C), as identifier
 /// @param field_dim number of array elements, 1 for a scalar
-#define A2lTypedefComponent(field_name, field_type_name, field_dim)                                                                                                                \
-    A2lTypedefComponent_(#field_name, #field_type_name, field_dim, ((uint8_t *)&(__A2lTypedefBegin_instance->field_name) - (uint8_t *)__A2lTypedefBegin_instance))
+#define A2lTypedefComponent(field_name, field_type_name, field_dim) A2lTypedefComponent_(#field_name, #field_type_name, field_dim, A2L_TYPEDEF_FIELD_OFFSET_(field_name))
 
 /// End a typedef started with A2lTypedefBegin
 #define A2lTypedefEnd()                                                                                                                                                            \
@@ -548,31 +582,30 @@ void A2lSetAutoAddrMode(tXcpEventId event_id, const uint8_t *frame_ptr, const ui
 /// Scalar measurement field
 #define A2lTypedefMeasurementComponent(field_name, comment)                                                                                                                        \
     do {                                                                                                                                                                           \
-        A2lTypedefMeasurementComponent_(#field_name, A2lGetTypeId(__A2lTypedefBegin_instance->field_name), 1,                                                                      \
-                                        ((uint8_t *)&(__A2lTypedefBegin_instance->field_name) - (uint8_t *)__A2lTypedefBegin_instance), comment, NULL, 0.0, 0.0);                  \
+        A2lTypedefMeasurementComponent_(#field_name, A2lGetTypeId(__A2lTypedefBegin_instance->field_name), 1, A2L_TYPEDEF_FIELD_OFFSET_(field_name), comment, NULL, 0.0, 0.0);     \
     } while (0)
 
 /// 1D array measurement field, dimension detected from the type
 #define A2lTypedefMeasurementArrayComponent(field_name, comment)                                                                                                                   \
     do {                                                                                                                                                                           \
         A2lTypedefMeasurementComponent_(#field_name, A2lGetArray1DElementTypeId(__A2lTypedefBegin_instance->field_name),                                                           \
-                                        sizeof(__A2lTypedefBegin_instance->field_name) / sizeof(__A2lTypedefBegin_instance->field_name[0]),                                        \
-                                        ((uint8_t *)&(__A2lTypedefBegin_instance->field_name) - (uint8_t *)__A2lTypedefBegin_instance), comment, NULL, 0.0, 0.0);                  \
+                                        sizeof(__A2lTypedefBegin_instance->field_name) / sizeof(__A2lTypedefBegin_instance->field_name[0]), A2L_TYPEDEF_FIELD_OFFSET_(field_name), \
+                                        comment, NULL, 0.0, 0.0);                                                                                                                  \
     } while (0)
 
 /// Scalar measurement field with a physical unit or conversion and limits
 #define A2lTypedefPhysMeasurementComponent(field_name, comment, unit_or_conversion, min, max)                                                                                      \
     do {                                                                                                                                                                           \
-        A2lTypedefMeasurementComponent_(#field_name, A2lGetTypeId(__A2lTypedefBegin_instance->field_name), 1,                                                                      \
-                                        ((uint8_t *)&(__A2lTypedefBegin_instance->field_name) - (uint8_t *)__A2lTypedefBegin_instance), comment, unit_or_conversion, min, max);    \
+        A2lTypedefMeasurementComponent_(#field_name, A2lGetTypeId(__A2lTypedefBegin_instance->field_name), 1, A2L_TYPEDEF_FIELD_OFFSET_(field_name), comment, unit_or_conversion,  \
+                                        min, max);                                                                                                                                 \
     } while (0)
 
 /// 1D array measurement field with a physical unit or conversion and limits, dimension detected from the type
 #define A2lTypedefPhysMeasurementArrayComponent(field_name, comment, unit_or_conversion, min, max)                                                                                 \
     do {                                                                                                                                                                           \
         A2lTypedefMeasurementComponent_(#field_name, A2lGetArray1DElementTypeId(__A2lTypedefBegin_instance->field_name),                                                           \
-                                        sizeof(__A2lTypedefBegin_instance->field_name) / sizeof(__A2lTypedefBegin_instance->field_name[0]),                                        \
-                                        ((uint8_t *)&(__A2lTypedefBegin_instance->field_name) - (uint8_t *)__A2lTypedefBegin_instance), comment, unit_or_conversion, min, max);    \
+                                        sizeof(__A2lTypedefBegin_instance->field_name) / sizeof(__A2lTypedefBegin_instance->field_name[0]), A2L_TYPEDEF_FIELD_OFFSET_(field_name), \
+                                        comment, unit_or_conversion, min, max);                                                                                                    \
     } while (0)
 
 // Parameter components
@@ -581,45 +614,45 @@ void A2lSetAutoAddrMode(tXcpEventId event_id, const uint8_t *frame_ptr, const ui
 /// Scalar calibration parameter field
 #define A2lTypedefParameterComponent(field_name, comment, unit, min, max)                                                                                                          \
     do {                                                                                                                                                                           \
-        A2lTypedefParameterComponent_(#field_name, A2lGetTypeId(__A2lTypedefBegin_instance->field_name), 1, 1,                                                                     \
-                                      ((uint8_t *)&(__A2lTypedefBegin_instance->field_name) - (uint8_t *)__A2lTypedefBegin_instance), comment, unit, min, max, NULL, NULL);        \
+        A2lTypedefParameterComponent_(#field_name, A2lGetTypeId(__A2lTypedefBegin_instance->field_name), 1, 1, A2L_TYPEDEF_FIELD_OFFSET_(field_name), comment, unit, min, max,     \
+                                      NULL, NULL);                                                                                                                                 \
     } while (0)
 
 /// 1D calibration curve field with x_dim elements (no shared axis, the tool creates a default axis)
 #define A2lTypedefCurveComponent(field_name, x_dim, comment, unit, min, max)                                                                                                       \
     do {                                                                                                                                                                           \
-        A2lTypedefParameterComponent_(#field_name, A2lGetArray1DElementTypeId(__A2lTypedefBegin_instance->field_name), x_dim, 1,                                                   \
-                                      ((uint8_t *)&(__A2lTypedefBegin_instance->field_name) - (uint8_t *)__A2lTypedefBegin_instance), comment, unit, min, max, NULL, NULL);        \
+        A2lTypedefParameterComponent_(#field_name, A2lGetArray1DElementTypeId(__A2lTypedefBegin_instance->field_name), x_dim, 1, A2L_TYPEDEF_FIELD_OFFSET_(field_name), comment,   \
+                                      unit, min, max, NULL, NULL);                                                                                                                 \
     } while (0)
 
 /// 1D calibration curve field, which shares the axis field x_axis (A2lTypedefAxisComponent) of the same typedef
 /// @param x_axis name of the axis field as string
 #define A2lTypedefCurveComponentWithSharedAxis(field_name, x_dim, comment, unit, min, max, x_axis)                                                                                 \
     do {                                                                                                                                                                           \
-        A2lTypedefParameterComponent_(#field_name, A2lGetArray1DElementTypeId(__A2lTypedefBegin_instance->field_name), x_dim, 1,                                                   \
-                                      ((uint8_t *)&(__A2lTypedefBegin_instance->field_name) - (uint8_t *)__A2lTypedefBegin_instance), comment, unit, min, max, x_axis, NULL);      \
+        A2lTypedefParameterComponent_(#field_name, A2lGetArray1DElementTypeId(__A2lTypedefBegin_instance->field_name), x_dim, 1, A2L_TYPEDEF_FIELD_OFFSET_(field_name), comment,   \
+                                      unit, min, max, x_axis, NULL);                                                                                                               \
     } while (0)
 
 /// 2D calibration map field with x_dim * y_dim elements (no shared axes)
 #define A2lTypedefMapComponent(field_name, x_dim, y_dim, comment, unit, min, max)                                                                                                  \
     do {                                                                                                                                                                           \
-        A2lTypedefParameterComponent_(#field_name, A2lGetArray2DElementTypeId(__A2lTypedefBegin_instance->field_name), x_dim, y_dim,                                               \
-                                      ((uint8_t *)&(__A2lTypedefBegin_instance->field_name) - (uint8_t *)__A2lTypedefBegin_instance), comment, unit, min, max, NULL, NULL);        \
+        A2lTypedefParameterComponent_(#field_name, A2lGetArray2DElementTypeId(__A2lTypedefBegin_instance->field_name), x_dim, y_dim, A2L_TYPEDEF_FIELD_OFFSET_(field_name),        \
+                                      comment, unit, min, max, NULL, NULL);                                                                                                        \
     } while (0)
 
 /// 2D calibration map field, which shares the axis fields x_axis and y_axis of the same typedef
 /// @param x_axis, y_axis names of the axis fields as string
 #define A2lTypedefMapComponentWithSharedAxis(field_name, x_dim, y_dim, comment, unit, min, max, x_axis, y_axis)                                                                    \
     do {                                                                                                                                                                           \
-        A2lTypedefParameterComponent_(#field_name, A2lGetArray2DElementTypeId(__A2lTypedefBegin_instance->field_name), x_dim, y_dim,                                               \
-                                      ((uint8_t *)&(__A2lTypedefBegin_instance->field_name) - (uint8_t *)__A2lTypedefBegin_instance), comment, unit, min, max, x_axis, y_axis);    \
+        A2lTypedefParameterComponent_(#field_name, A2lGetArray2DElementTypeId(__A2lTypedefBegin_instance->field_name), x_dim, y_dim, A2L_TYPEDEF_FIELD_OFFSET_(field_name),        \
+                                      comment, unit, min, max, x_axis, y_axis);                                                                                                    \
     } while (0)
 
 /// Axis field with x_dim elements, usable as shared axis of curve and map fields of the same typedef
 #define A2lTypedefAxisComponent(field_name, x_dim, comment, unit, min, max)                                                                                                        \
     do {                                                                                                                                                                           \
-        A2lTypedefParameterComponent_(#field_name, A2lGetArray1DElementTypeId(__A2lTypedefBegin_instance->field_name), x_dim, 0,                                                   \
-                                      ((uint8_t *)&(__A2lTypedefBegin_instance->field_name) - (uint8_t *)__A2lTypedefBegin_instance), comment, unit, min, max, NULL, NULL);        \
+        A2lTypedefParameterComponent_(#field_name, A2lGetArray1DElementTypeId(__A2lTypedefBegin_instance->field_name), x_dim, 0, A2L_TYPEDEF_FIELD_OFFSET_(field_name), comment,   \
+                                      unit, min, max, NULL, NULL);                                                                                                                 \
     } while (0)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

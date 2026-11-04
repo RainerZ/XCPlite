@@ -51,9 +51,9 @@ void check(bool condition, const char *what) {
 template <typename Builder> auto build(Builder builder) { return builder((Cloud *)nullptr); }
 
 // -----------------------------------------------------------------------------
-// Non-standard-layout types, not available with OPTION_A2L_STANDARD_LAYOUT_ONLY, which turns them into compile errors
-#ifndef OPTION_A2L_STANDARD_LAYOUT_ONLY
-
+// Non-standard-layout types
+// With OPTION_A2L_STANDARD_LAYOUT_ONLY, the A2L_*_COMPONENT builders reject them (non_standard_layout_test() is skipped),
+// the a2l.h typedef macros with a real instance still accept them (c_typedef_macro_test())
 // C++17 [support.types.layout]: offsetof on a type which is not standard-layout is conditionally-supported. GCC and
 // Clang support it and report -Winvalid-offsetof, MSVC supports it silently. The only case without a constant offset,
 // a member of a virtual base class, is a hard compile error on all three compilers.
@@ -89,7 +89,9 @@ class MixedAccess {
     double last = 0.0;
 
     // Private members can only be registered from inside the class, as point_cloud_demo does
+#ifndef OPTION_A2L_STANDARD_LAYOUT_ONLY
     static size_t hiddenOffsetFromBuilder() { return A2L_MEASUREMENT_COMPONENT(hidden, "", "")((MixedAccess *)nullptr).offset; }
+#endif
     static size_t hiddenOffsetFromObject() {
         MixedAccess obj;
         return (size_t)((const uint8_t *)&obj.hidden - (const uint8_t *)&obj);
@@ -159,6 +161,8 @@ static_assert(!std::is_standard_layout_v<WithVirtualMember>);
 
 // Offset of a member in a real object
 template <typename T, typename M> size_t objectOffset(const T &obj, const M &member) { return (size_t)((const uint8_t *)&member - (const uint8_t *)&obj); }
+
+#ifndef OPTION_A2L_STANDARD_LAYOUT_ONLY
 
 void non_standard_layout_test() {
 
@@ -247,11 +251,62 @@ void non_standard_layout_test() {
     }
 }
 
+#endif // OPTION_A2L_STANDARD_LAYOUT_ONLY
+
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
 
-#endif // OPTION_A2L_STANDARD_LAYOUT_ONLY
+// a2l.h typedef macros (A2lTypedefBegin ... A2lTypedefEnd), outside of the warning suppression above
+// Standard-layout types: offsetof, the instance may be NULL. Non-standard-layout types: address difference in a real
+// instance, no offsetof, so neither -Winvalid-offsetof nor an error with OPTION_A2L_STANDARD_LAYOUT_ONLY.
+// A2lTypedefBegin_ and the component functions do nothing without an open A2L file, A2L_TYPEDEF_FIELD_OFFSET_ is the
+// offset expression the component macros use.
+void c_typedef_macro_test() {
+
+    printf("  a2l.h typedef macros:\n");
+
+    // Standard-layout, NULL instance (the NULL literal, as in the C examples), offset beyond 64 KiB
+    A2lTypedefBegin(BigStruct, NULL, "BigStruct");
+    {
+        size_t o = A2L_TYPEDEF_FIELD_OFFSET_(scalar);
+        check(o == offsetof(BigStruct, scalar) && o > 0xFFFF, "a2l.h BigStruct.scalar, NULL instance");
+    }
+    A2lTypedefParameterComponent(scalar, "", "", 0, 1);
+    A2lTypedefMapComponent(map, 4, 3, "", "", 0, 1);
+    A2lTypedefEnd();
+
+    // Standard-layout, nullptr instance
+    A2lTypedefBegin(StdArrayStruct, nullptr, "StdArrayStruct");
+    check(A2L_TYPEDEF_FIELD_OFFSET_(map) == offsetof(StdArrayStruct, map), "a2l.h StdArrayStruct.map, nullptr instance");
+    A2lTypedefEnd();
+
+    // Non-standard-layout, real instance
+    VirtualClass v;
+    A2lTypedefBegin(VirtualClass, &v, "VirtualClass");
+    check(A2L_TYPEDEF_FIELD_OFFSET_(value) == objectOffset(v, v.value), "a2l.h VirtualClass.value");
+    A2lTypedefMeasurementComponent(counter, "");
+    A2lTypedefCurveComponent(curve, 4, "", "", 0, 1);
+    A2lTypedefEnd();
+
+    MultiDerived m;
+    A2lTypedefBegin(MultiDerived, &m, "MultiDerived");
+    check(A2L_TYPEDEF_FIELD_OFFSET_(b) == objectOffset(m, m.b) && objectOffset(m, m.b) > 0, "a2l.h MultiDerived.b in second base");
+    check(A2L_TYPEDEF_FIELD_OFFSET_(own) == objectOffset(m, m.own), "a2l.h MultiDerived.own");
+    A2lTypedefEnd();
+
+    PolyDerived p;
+    const PolyDerived *pp = &p;
+    A2lTypedefBegin(PolyDerived, pp, "PolyDerived");
+    check(A2L_TYPEDEF_FIELD_OFFSET_(pb) == objectOffset(p, p.pb), "a2l.h PolyDerived.pb");
+    A2lTypedefEnd();
+
+    printf("    BigStruct.scalar=%zu VirtualClass.value=%zu MultiDerived.b=%zu PolyDerived.pb=%zu\n", offsetof(BigStruct, scalar), objectOffset(v, v.value), objectOffset(m, m.b),
+           objectOffset(p, p.pb));
+
+    // Must not compile: non-standard-layout type with a NULL instance
+    // A2lTypedefBegin(VirtualClass, NULL, "VirtualClass"); A2lTypedefEnd();
+}
 
 } // namespace
 
@@ -301,6 +356,8 @@ int typedef_component_test() {
 #else
     printf("  non-standard-layout types: skipped, OPTION_A2L_STANDARD_LAYOUT_ONLY\n");
 #endif
+
+    c_typedef_macro_test();
 
     // Complete typedef registration, instantiates A2lCreateTypedefTemplate including the layout check (no-op at runtime
     // without XcpInit)

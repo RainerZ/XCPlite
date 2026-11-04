@@ -2,6 +2,7 @@
 
 #include <assert.h>  // for assert
 #include <stdbool.h> // for bool
+#include <stddef.h>  // for offsetof
 #include <stdint.h>  // for uintxx_t
 #include <stdio.h>   // for printf
 #include <string.h>  // for sprintf
@@ -93,5 +94,23 @@ int main() {
     assert(A2lGetArray1DElementTypeId(test_instance.curve_data) == A2L_TYPE_UINT16);
     assert(A2lGetArray2DElementTypeId(test_instance.map_data) == A2L_TYPE_FLOAT);
 
-    return 0;
+    // Typedef field offsets with a NULL instance, computed with offsetof in C (no member access through a null pointer)
+    // A2lTypedefBegin_ and the component functions do nothing without an open A2L file
+    int failures = 0;
+    printf("\nTypedef field offsets (A2lTypedefBegin with NULL instance):\n");
+    A2lTypedefBegin(TestStruct, NULL, "TestStruct");
+    {
+        size_t o1 = A2L_TYPEDEF_FIELD_OFFSET_(double_value);
+        size_t o2 = A2L_TYPEDEF_FIELD_OFFSET_(map_data);
+        printf("  double_value=%zu map_data=%zu\n", o1, o2);
+        if (o1 != offsetof(TestStruct, double_value) || o2 != offsetof(TestStruct, map_data)) {
+            printf("  FAILED\n");
+            failures++;
+        }
+    }
+    A2lTypedefParameterComponent(double_value, "", "", 0, 1);
+    A2lTypedefMapComponent(map_data, 5, 8, "", "", 0, 1);
+    A2lTypedefEnd();
+
+    return failures == 0 ? 0 : 1;
 }

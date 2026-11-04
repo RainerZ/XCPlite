@@ -74,11 +74,11 @@ void SignalGenerator::Task() {
     DaqCreateEvent_s(instance_name_);
 
     // A2L registration
-    // Register the member variable 'value_' of each instance as measurements by using the instance name as a prefix
+    // Register the member variable 'value' of each instance as measurements by using the instance name as a prefix
     // Register the local (stack) measurement variable 'time' for each instance
     A2lLock(); // Take care for thread safety when registering measurements and parameters in multiple threads
     A2lSetRelativeAddrMode_s(instance_name_, this);
-    A2lCreatePhysMeasurementInstance(instance_name_, value_, "Signal generator output", "", -100, 100);
+    A2lCreatePhysMeasurementInstance(instance_name_, value, "Signal generator output", "", -100, 100);
     A2lSetStackAddrMode_s(instance_name_);
     A2lCreatePhysMeasurementInstance(instance_name_, time, "Signal generator time", "s", 0, 3600);
     A2lUnlock();
@@ -112,7 +112,7 @@ void SignalGenerator::Task() {
                 v = sin((normalized_time_ * k2Pi) + p->phase);
                 break;
             }
-            value_ = (p->ampl * v) + p->offset;
+            value = (p->ampl * v) + p->offset;
         }
 
         // XCP event by event name, event lookup is once and will be cached in a static thread local variable

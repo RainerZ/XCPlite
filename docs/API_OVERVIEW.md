@@ -364,7 +364,7 @@ Set the addressing mode before the registrations it applies to. It stays active 
 
 | Name | Kind | Description | Option | Examples |
 |---|---|---|---|---|
-| `A2lTypedefBegin(type, instance_ptr, comment)` … `A2lTypedefEnd()` | macro | Bracket for a struct typedef definition | — | c_demo, cpp_demo, struct_demo, multi_thread_demo, point_cloud_demo, silkit_demo |
+| `A2lTypedefBegin(type, instance_ptr, comment)` … `A2lTypedefEnd()` | macro | Bracket for a struct typedef definition. `instance_ptr` may be `NULL` (offsets via `offsetof`), except for non-standard-layout C++ types, which need a real instance such as `this` | — | c_demo, cpp_demo, struct_demo, multi_thread_demo, point_cloud_demo, silkit_demo |
 | `A2lTypedefComponent(field, type_name, dim)` | macro | Field that is itself a typedef | — | cpp_demo, struct_demo |
 | `A2lTypedefMeasurementComponent(field, comment)` | macro | Scalar measurement field | — | c_demo, struct_demo, multi_thread_demo |
 | `A2lTypedefMeasurementArrayComponent(field, comment)` | macro | Array measurement field | — | struct_demo |

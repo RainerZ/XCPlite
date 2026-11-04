@@ -48,7 +48,6 @@ class SignalGenerator {
     std::thread *thread_;             // Thread for the signal generator task
     std::atomic<bool> running_{true}; // Stop flag for the worker thread
 
-    double value_{0};           // Current value
     double normalized_time_{0}; // Current normalized time in [0.0..1.0[
 
     void Task();
@@ -59,7 +58,10 @@ class SignalGenerator {
     SignalGenerator(const char *instance_name, const SignalParametersT *params);
     ~SignalGenerator();
 
-    [[nodiscard]] double GetValue() const { return value_; } // Getter for the current value
+    [[nodiscard]] double GetValue() const { return value; } // Getter for the current value
+
+    // @@@@ TODO: Test, moved to public to test non standard layout behaviour
+    double value{0}; // Current value
 };
 
 } // namespace signal_generator

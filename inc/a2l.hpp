@@ -197,7 +197,8 @@ template <typename FieldType> struct A2lTypedefFieldInfo {
 // conditionally-supported in C++17. GCC, Clang and MSVC support it and compute the offset from the layout they use for
 // the objects, see test/type_detection_test/src/typedef_component_test.cpp. Members of virtual base classes have no
 // constant offset and are a compile error. Use standard-layout types where the warning is not acceptable,
-// OPTION_A2L_STANDARD_LAYOUT_ONLY (xcplib_cfg.h) enforces this at compile time.
+// OPTION_A2L_STANDARD_LAYOUT_ONLY (xcplib_cfg.h) enforces this at compile time. For non-standard-layout types, the a2l.h
+// macros A2lTypedefBegin(type, this, ...) ... A2lTypedefEnd() compute the offsets from a real instance without offsetof.
 // @param field_name member of the typedef'd struct/class this component describes; its address is never taken directly,
 // only offsetof(StructType, field_name), so it is safe to use on members that are not yet initialized
 // @param comment free-text description
