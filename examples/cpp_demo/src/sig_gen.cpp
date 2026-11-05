@@ -44,10 +44,10 @@ SignalGenerator::SignalGenerator(const char *instance_name, const SignalParamete
                          A2L_PARAMETER_COMPONENT(delay_us, "Delay time in us", "us", 0, 100000),             //
                          A2L_TYPEDEF_COMPONENT(lookup, "LookupTableT", 1));
 
-        // A2L typedef for the measurement variables of class SignalGenerator (members value and normalized_time_)
+        // A2L typedef for the measurement variables of class SignalGenerator (members value_ and normalized_time_)
         // Registered from a member function, so private members are accessible
         A2lCreateTypedef(SignalGenerator, "A2L typedef for SignalGenerator",                            //
-                         A2L_MEASUREMENT_COMPONENT(value, "Signal generator output", ""),               //
+                         A2L_MEASUREMENT_COMPONENT(value_, "Signal generator output", ""),              //
                          A2L_MEASUREMENT_COMPONENT(normalized_time_, "Normalized time in [0..1[", "")); //
     }
 
@@ -120,7 +120,7 @@ void SignalGenerator::Task() {
                 v = sin((normalized_time_ * k2Pi) + p->phase);
                 break;
             }
-            value = (p->ampl * v) + p->offset;
+            value_ = (p->ampl * v) + p->offset;
         }
 
         // XCP event by event name, event lookup is once and will be cached in a static thread local variable

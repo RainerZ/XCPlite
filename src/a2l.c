@@ -57,6 +57,7 @@ static char gA2lConvName[XCP_A2L_MAX_SYMBOL_NAME_LENGTH] = {0}; // static buffer
 static char gA2lAutoGroupName[XCP_A2L_MAX_SYMBOL_NAME_LENGTH] = {0}; // Current open group
 static bool gA2lAutoGroupIsParameter = false;                        // Group is a parameter group
 static bool gA2lAutoGroupIsMeasurement = false;                      // Group is a measurement group
+static uint32_t gA2lAutoGroupMemberCount = 0;                        // Number of members added to the current open group
 
 // Addressing mode
 static tXcpEventId gA2lFixedEvent = XCP_UNDEFINED_EVENT_ID;
@@ -1353,6 +1354,7 @@ void A2lBeginGroup(const char *symbol_name, const char *comment, bool is_paramet
             gA2lAutoGroupName[XCP_A2L_MAX_SYMBOL_NAME_LENGTH - 1] = '\0'; // Ensure null termination
             gA2lAutoGroupIsParameter = is_parameter_group;
             gA2lAutoGroupIsMeasurement = !is_parameter_group;
+            gA2lAutoGroupMemberCount = 0;
             fprintf(gA2lGroupsFile, "/begin GROUP %s \"%s\" %s", pname, comment, is_root_group ? "ROOT" : "");
             fprintf(gA2lGroupsFile, " /begin REF_%s", is_parameter_group ? "CHARACTERISTIC" : "MEASUREMENT");
         }
@@ -1365,6 +1367,7 @@ void A2lAddToGroup(const char *name) {
     if (gA2lFile != NULL && gA2lGroupsFile != NULL) {
         if (gA2lAutoGroupIsParameter || gA2lAutoGroupIsMeasurement) {
             fprintf(gA2lGroupsFile, " %s", name);
+            gA2lAutoGroupMemberCount++;
         }
     }
 }
@@ -1379,6 +1382,7 @@ void A2lEndGroup(void) {
             gA2lAutoGroupName[0] = '\0';
             gA2lAutoGroupIsParameter = false;
             gA2lAutoGroupIsMeasurement = false;
+            gA2lAutoGroupMemberCount = 0;
         }
     }
 }
@@ -1501,7 +1505,11 @@ void A2lLock(void) {
 }
 void A2lUnlock(void) {
     if (gA2lFile != NULL) {
-        if ((gA2lMode & A2L_MODE_AUTO_GROUPS)) {
+        // Close the open auto group at the end of a locked registration block, but keep a group without members open
+        // A lock block which does not add group members (e.g. A2lCreateTypedef) between opening a group (e.g. by the CalSeg constructor) and adding its
+        // members (e.g. CreateA2lTypedefInstance) would otherwise write the group empty and the members into a second group with the same name
+        // A group which never gets members is still written at the next group change or at finalization, as before
+        if ((gA2lMode & A2L_MODE_AUTO_GROUPS) && gA2lAutoGroupMemberCount > 0) {
             A2lEndGroup();
         }
         mutexUnlock(&gA2lMutex);

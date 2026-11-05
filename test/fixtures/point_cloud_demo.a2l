@@ -127,7 +127,6 @@ ALIGNMENT_INT64 1
 /begin TYPEDEF_MEASUREMENT M_count_ "Current number of points in the cloud" UWORD NO_COMPU_METHOD 0 0 0 65535 /end TYPEDEF_MEASUREMENT
 
 /* Groups */
-/begin GROUP Parameters "Calibration Segment" ROOT /begin REF_CHARACTERISTIC /end REF_CHARACTERISTIC /end GROUP
 /begin GROUP Parameters "Calibration Segment" ROOT /begin REF_CHARACTERISTIC Parameters /end REF_CHARACTERISTIC /end GROUP
 /begin GROUP step "Measurement event group"  /begin REF_MEASUREMENT count_ real_time_ boundary_ step_counter_ points_ /end REF_MEASUREMENT /end GROUP
 
