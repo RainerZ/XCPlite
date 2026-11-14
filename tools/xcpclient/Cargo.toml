@@ -50,6 +50,9 @@ xcp_registry = { path = "../../../xcp-lite-RainerZ/xcp_registry", features = ["a
 dead_code = "allow"
 unused_variables = "allow"
 
+[dev-dependencies]
+serde_json = "1"
+
 [build-dependencies]
 
 

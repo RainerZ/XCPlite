@@ -1097,6 +1097,7 @@ dependencies = [
  "parking_lot",
  "regex",
  "serde",
+ "serde_json",
  "thiserror 2.0.20",
  "tokio",
  "xcp_registry",
