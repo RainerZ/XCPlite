@@ -423,6 +423,9 @@ impl<W: Write> PerfettoWriter<W> {
                 let pid = pid_of(&entry.name);
                 let kind = if skip.contains(&i) {
                     SignalKind::Skip
+                } else if entry.is_array() {
+                    warn!("Perfetto trace: {} is an array, arrays are not supported in the trace, skipped", entry.name);
+                    SignalKind::Skip
                 } else if entry.conversion.is_enum() {
                     let tid = state_tid;
                     state_tid += 1;
@@ -778,6 +781,7 @@ mod tests {
         OdtEntry {
             name: name.to_string(),
             a2l_type: A2lType { size, encoding },
+            dim: [1, 1],
             a2l_addr: A2lAddr { ext: 0, addr: 0, event: Some(0) },
             conversion: A2lConversion::new(None, None, unit),
             offset,

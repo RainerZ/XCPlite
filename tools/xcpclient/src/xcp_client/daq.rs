@@ -48,9 +48,9 @@ struct DaqListPlan {
 /// The signals are in address order in the DAQ packet, the span record of a context is moved to the front, because it has to be
 /// in one DAQ list (it is decoded as a whole). The order of the signals in a DAQ list is the order of the measurement objects.
 fn split_daq_lists(objects: &[XcpClientMeasurementObject], max_odt_entry_count: usize, max_odt_entry_size: usize, max_odt_size: usize) -> Result<Vec<DaqListPlan>, String> {
-    // Signal size, a signal can not be split over several ODT entries, ODTs or DAQ lists
+    // Signal size (all elements of an array), a signal can not be split over several ODT entries, ODTs or DAQ lists
     for m in objects {
-        let size = m.a2l_type.size;
+        let size = m.size();
         if size > max_odt_entry_size {
             return Err(format!(
                 "Measurement object {} is too large: {} bytes, a signal can not be split and the XCP server supports {} bytes per signal (ODT entry)",
@@ -94,7 +94,7 @@ fn split_daq_lists(objects: &[XcpClientMeasurementObject], max_odt_entry_count: 
         let mut blocks: Vec<(DaqBlock, Vec<usize>)> = Vec::new();
         for i in indices {
             let A2lAddr { ext, addr, .. } = objects[i].a2l_addr;
-            let size = objects[i].a2l_type.size;
+            let size = objects[i].size();
             if let Some((block, signals)) = blocks.last_mut() {
                 let end = addr as u64 + size as u64;
                 if block.ext == ext
@@ -187,24 +187,31 @@ impl XcpClient {
             encoding: instance.value_type().into(),
         };
         let conversion = A2lConversion::from(instance.get_mc_support_data());
-        XcpClientMeasurementObject::new(name, a2l_addr, a2l_type, conversion)
+        XcpClientMeasurementObject::new(name, a2l_addr, a2l_type, conversion).with_dim([instance.x_dim(), instance.y_dim()])
+    }
+
+    /// Arrays are supported up to the maximum size of an ODT entry of the XCP server
+    fn is_supported_array_size(&self, o: &XcpClientMeasurementObject) -> bool {
+        o.size() <= self.max_odt_entry_size as usize
     }
 
     /// Create a measurement object by name from the registry
-    /// The instance must be measurable (see is_measurable) and a scalar, arrays are not supported yet
+    /// The instance must be measurable (see is_measurable), an array must fit into one ODT entry (max_odt_entry_size)
     /// Returns None and logs the reason, if the instance can not be measured
     pub fn create_measurement_object(&mut self, name: &str) -> Option<XcpMeasurementObjectHandle> {
         let instance = self.measurable_instance(name)?;
-        if is_array(instance) {
+        let o = self.measurement_object_from_instance(name, instance);
+        if is_array(instance) && !self.is_supported_array_size(&o) {
             warn!(
-                "{} is an array [{}x{}], measuring arrays is not supported yet, skipped",
+                "{} is an array [{}x{}] of {} bytes, arrays larger than one ODT entry ({} bytes) are not supported yet, skipped",
                 name,
                 instance.x_dim(),
-                instance.y_dim()
+                instance.y_dim(),
+                o.size(),
+                self.max_odt_entry_size
             );
             return None;
         }
-        let o = self.measurement_object_from_instance(name, instance);
         // Measurement objects without a fixed event (global variables) are measured with the default event, if specified
         if o.a2l_addr.event.is_none() {
             log::warn!(
@@ -233,8 +240,8 @@ impl XcpClient {
         if instance.object_type() == xcp_registry::McObjectType::Characteristic {
             s.push_str(" characteristic");
         }
-        if is_array(instance) {
-            s.push_str(", array not supported yet");
+        if is_array(instance) && !self.is_supported_array_size(&o) {
+            s.push_str(", array larger than one ODT entry not supported yet");
         }
         Some(s)
     }
@@ -330,6 +337,7 @@ impl XcpClient {
                 odt_entries.push(OdtEntry {
                     name: m.name.clone(),
                     a2l_type: m.a2l_type,
+                    dim: m.dim,
                     a2l_addr: m.a2l_addr,
                     conversion: m.conversion.clone(),
                     offset: offset as u16,
@@ -535,17 +543,21 @@ mod tests {
         // Characteristic with an event, as written by xcplib for a measurement array (absolute, DEFAULT_EVENT_LIST)
         add("value", McObjectType::Characteristic, 1, 1, McAddress::new_a2l_with_event(2, 0x3000, 1));
         add("pixels", McObjectType::Characteristic, 2048, 1536, McAddress::new_a2l_with_event(2, 0x28068, 1));
-        // Measurement array
+        // Measurement arrays, one dimensional, and two dimensional with the maximum size of an ODT entry (248 bytes) and one byte more
         add("curve", McObjectType::Measurement, 16, 1, McAddress::new_event_dyn(0, 1, -64));
+        add("map", McObjectType::Measurement, 8, 31, McAddress::new_a2l_with_event(1, 0x4000, 1));
+        add("map_too_large", McObjectType::Measurement, 249, 1, McAddress::new_a2l_with_event(1, 0x5000, 1));
         // Calibration parameter without event
         add("params.delay_us", McObjectType::Characteristic, 1, 1, McAddress::new_a2l(0x8001_0000, 0));
         reg
     }
 
+    // Client with the maximum ODT entry size of XCPlite
     fn measurable_client() -> XcpClient {
         let addr: std::net::SocketAddr = "127.0.0.1:5555".parse().unwrap();
         let mut client = XcpClient::new("UDP", addr, addr, 0);
         client.set_registry(measurable_registry());
+        client.max_odt_entry_size = 248;
         client
     }
 
@@ -555,7 +567,7 @@ mod tests {
         let client = measurable_client();
         let mut names = client.find_measurements(".*");
         names.sort();
-        assert_eq!(names, vec!["counter", "curve", "global", "pixels", "value"]);
+        assert_eq!(names, vec!["counter", "curve", "global", "map", "map_too_large", "pixels", "value"]);
         assert_eq!(client.find_measurements("^val"), vec!["value"]);
         assert!(client.find_measurements("(").is_empty()); // Invalid regular expression
     }
@@ -595,13 +607,19 @@ mod tests {
         assert!(client.create_measurement_object("unknown").is_none());
     }
 
-    // Arrays are skipped (not supported yet), measurement arrays no longer measure only their first element
+    // Arrays up to the maximum size of an ODT entry are measured as a whole, larger arrays are skipped
     #[test]
-    fn test_create_measurement_object_of_array_is_skipped() {
+    fn test_create_measurement_object_of_array() {
         let mut client = measurable_client();
+        let h = client.create_measurement_object("curve").expect("small array not measurable");
+        let o = client.get_measurement_object(h);
+        assert_eq!((o.dim, o.get_a2l_type().size, o.size()), ([16, 1], 1, 16));
+        let h = client.create_measurement_object("map").expect("array of 248 bytes not measurable");
+        let o = client.get_measurement_object(h);
+        assert_eq!((o.dim, o.size()), ([8, 31], 248));
+        assert!(client.create_measurement_object("map_too_large").is_none());
         assert!(client.create_measurement_object("pixels").is_none());
-        assert!(client.create_measurement_object("curve").is_none());
-        assert_eq!(client.measurement_object_list.len(), 0);
+        assert_eq!(client.measurement_object_list.len(), 2);
     }
 
     // --list-mea output: characteristics and arrays are marked, describing does not create measurement objects
@@ -615,12 +633,31 @@ mod tests {
         assert_eq!(client.describe_measurement("value").unwrap(), "value 1:0x00003000 event 2 1 byte unsigned characteristic");
         assert_eq!(
             client.describe_measurement("pixels").unwrap(),
-            "pixels 1:0x00028068 event 2 1 byte unsigned [2048x1536] characteristic, array not supported yet"
+            "pixels 1:0x00028068 event 2 1 byte unsigned [2048x1536] characteristic, array larger than one ODT entry not supported yet"
         );
         assert_eq!(
             client.describe_measurement("curve").unwrap(),
-            format!("curve 2:0x{:08X} event 1 1 byte unsigned [16x1], array not supported yet", (1 << 22) | 0xFFC0)
+            format!("curve 2:0x{:08X} event 1 1 byte unsigned [16x1]", (1 << 22) | 0xFFC0)
         );
         assert_eq!(client.measurement_object_list.len(), 0);
+    }
+
+    // An array is one signal of its complete size: it is merged with adjacent signals into a block, it can not be split
+    #[test]
+    fn test_split_daq_lists_with_arrays() {
+        let array = |name: &str, addr: u32, dim: [u16; 2]| object(name, 1, 0, addr, 2).with_dim(dim);
+        // Array of 16 u16 (32 bytes) and an adjacent scalar: one block of 34 bytes
+        let objects = vec![array("curve", 0x100, [16, 1]), object("s", 1, 0, 0x120, 2)];
+        let plan = split_daq_lists(&objects, 0x7B, 248, 1016).unwrap();
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].blocks, vec![DaqBlock { ext: 0, addr: 0x100, size: 34 }]);
+        assert_eq!(plan[0].signals, vec![(0, 0), (1, 32)]);
+        assert_eq!(plan[0].size, 34);
+        // Array of 124 u16 (248 bytes, the maximum) and an adjacent scalar: two blocks
+        let objects = vec![array("map", 0x100, [4, 31]), object("s", 1, 0, 0x1F8, 2)];
+        let plan = split_daq_lists(&objects, 0x7B, 248, 1016).unwrap();
+        assert_eq!(plan[0].blocks, vec![DaqBlock { ext: 0, addr: 0x100, size: 248 }, DaqBlock { ext: 0, addr: 0x1F8, size: 2 }]);
+        // Array larger than an ODT entry
+        assert!(split_daq_lists(&[array("too_large", 0x100, [125, 1])], 0x7B, 248, 1016).is_err());
     }
 }

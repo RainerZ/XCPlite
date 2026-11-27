@@ -340,7 +340,17 @@ A signal can not be split over several ODT entries, ODTs or DAQ lists. xcpclient
 - The maximum size of an ODT entry (`MAX_ODT_ENTRY_SIZE_DAQ` from `GET_DAQ_RESOLUTION_INFO`). In XCPlite this is `XCP_MAX_ODT_ENTRY_SIZE` (248 bytes). It is the limit for merged signals as well. The protocol limit is 255 bytes, a larger signal can not be measured as one signal.
 - The payload of a DAQ packet, `MAX_DTO` without the 4 byte header and the 4 byte timestamp. In XCPlite this is `XCPTL_MAX_DTO_SIZE - 8`, 1016 bytes by default and 240 bytes with `OPTION_QUEUE_64_FIX_SIZE`. If a signal does not fit, `XCPTL_MAX_DTO_SIZE` has to be increased.
 
-Structs and arrays are not affected, they are measured as their basic type elements (`points_._0.x`, `parameters.counter_max`).
+Structs are not affected, they are measured as their basic type members (`points_._0.x`, `parameters.counter_max`).
+
+Measurable are MEASUREMENTs and CHARACTERISTICs with an event (`IF_DATA XCP DAQ_EVENT` with a fixed event or a default event list, as xcplib writes measurement arrays). A characteristic without event, for example a calibration parameter, can not be measured, also not with `--default-event`. `--list-mea` marks characteristics and arrays (`[x x y]`).
+
+An array (`MATRIX_DIM`) is measured as one signal with all its elements, so it has to fit into one ODT entry (248 bytes in XCPlite), larger arrays are skipped with a warning. The elements are in memory order, x varies fastest (a C array `[y][x]` has `MATRIX_DIM x y`):
+
+- Console: the first 16 elements, `curve = [0 1 2 ...]`
+- CSV: arrays are skipped
+- MDF: one channel of the element type with a CA block (fixed size array), the dimensions are row oriented (last varies fastest), so `MATRIX_DIM x y` is `[y, x]` in the MDF file
+- MCAP: a fixed size ros1 array of the elements, `float32[32] matrix_f32`, the dimensions are in the channel metadata (`matrix_f32.dim` = `8x4`)
+- Perfetto: arrays are skipped
 
 ### Lost packets and UDP receive buffer
 

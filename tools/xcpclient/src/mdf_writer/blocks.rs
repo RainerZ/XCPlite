@@ -37,6 +37,10 @@ pub const CN_VAL_REAL_LE: u8 = 4;
 pub const CN_VAL_BYTE_ARRAY: u8 = 10;
 pub const CN_FLAG_DISCRETE_VALUES: u32 = 1 << 6;
 
+// CA block
+pub const CA_TYPE_ARRAY: u8 = 0;
+pub const CA_STORAGE_CN_TEMPLATE: u8 = 0;
+
 // CC types
 pub const CC_LINEAR: u8 = 1;
 pub const CC_VALUE_TO_TEXT: u8 = 7;
@@ -58,8 +62,9 @@ pub struct Channel {
     pub name: u64,       // TX block
     pub source: u64,     // SI block
     pub conversion: u64, // CC block
-    pub unit: u64,       // TX block
-    pub next: u64,       // Next CN block
+    pub unit: u64,        // TX block
+    pub composition: u64, // CA block of an array channel, NIL for a scalar
+    pub next: u64,        // Next CN block
 }
 
 /// Builds the metadata blocks of an MDF4 file in memory
@@ -216,7 +221,24 @@ impl BlockBuffer {
         for _ in 0..6 {
             data.extend_from_slice(&0f64.to_le_bytes()); // value range and limits, not valid
         }
-        self.block(b"CN", &[c.next, NIL, c.name, c.source, c.conversion, NIL, c.unit, NIL], &data)
+        self.block(b"CN", &[c.next, c.composition, c.name, c.source, c.conversion, NIL, c.unit, NIL], &data)
+    }
+
+    /// CA block of a fixed size array channel (ca_type array, ca_storage CN template, no flags), links: composition
+    /// The CN block of the channel describes the first element, the element with the indices (i1, .., iD) has the byte offset
+    /// cn_byte_offset + byte_offset_base * (i1 * d2 * .. * dD + .. + iD): row oriented, the last dimension varies fastest
+    pub fn ca_array(&mut self, dim_sizes: &[u64], byte_offset_base: i32) -> u64 {
+        let mut data = Vec::with_capacity(16 + 8 * dim_sizes.len());
+        data.push(CA_TYPE_ARRAY);
+        data.push(CA_STORAGE_CN_TEMPLATE);
+        data.extend_from_slice(&(dim_sizes.len() as u16).to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes()); // flags
+        data.extend_from_slice(&byte_offset_base.to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes()); // invalidation bit position base
+        for d in dim_sizes {
+            data.extend_from_slice(&d.to_le_bytes());
+        }
+        self.block(b"CA", &[NIL], &data)
     }
 
     /// CC block, links: name, unit, comment, inverse, refs

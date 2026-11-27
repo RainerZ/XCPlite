@@ -3,6 +3,7 @@
 //
 // Format: time_ns,daq,name,value,unit  (one row per signal and DAQ packet)
 // Values are physical values (factor and offset applied), the value of an enum is its label.
+// Arrays are not written, they are skipped with a warning at measurement start.
 
 use std::collections::HashSet;
 use std::io::{self, Write};
@@ -55,12 +56,18 @@ impl<W: Write + Send> DaqWriter for CsvWriter<W> {
         "CSV"
     }
 
-    fn start(&mut self, _layout: &DaqLayout, _start_ns: u64) -> io::Result<()> {
+    fn start(&mut self, layout: &DaqLayout, _start_ns: u64) -> io::Result<()> {
+        for entry in layout.daq_lists.iter().flat_map(|d| d.entries.iter()).filter(|e| e.is_array()) {
+            warn!("CSV: {} is an array, arrays are not supported in the CSV file, skipped", entry.name);
+        }
         writeln!(self.writer, "time_ns,daq,name,value,unit")
     }
 
     fn write(&mut self, s: &DaqSample) -> io::Result<()> {
         for entry in s.daq_list.entries.iter().filter(|e| !self.skip.contains(&e.name)) {
+            if entry.is_array() {
+                continue; // Arrays are skipped, see start
+            }
             let value = match entry.decode(s.data) {
                 Some(value) => value.to_string(),
                 None => {
@@ -107,6 +114,7 @@ mod tests {
                 size: 1,
                 encoding: A2lTypeEncoding::Unsigned,
             },
+            dim: [1, 1],
             a2l_addr: A2lAddr { ext: 0, addr: 0, event: Some(0) },
             conversion: A2lConversion::new(None, None, unit),
             offset,
@@ -136,5 +144,58 @@ mod tests {
         w.write(&sample).unwrap();
         w.stop(100).unwrap();
         assert_eq!(String::from_utf8(w.into_inner()).unwrap(), "time_ns,daq,name,value,unit\n100,0,a,7,\"m,s\"\n100,0,b,ON,\n");
+    }
+
+    // Arrays are skipped, the other signals are written
+    #[test]
+    fn test_csv_writer_array() {
+        let layout = DaqLayout::new(
+            4,
+            1,
+            vec![XcpDaqList {
+                event_id: 0,
+                event_name: None,
+                entries: vec![
+                    OdtEntry {
+                        name: "curve".to_string(),
+                        a2l_type: A2lType {
+                            size: 1,
+                            encoding: A2lTypeEncoding::Unsigned,
+                        },
+                        dim: [4, 1],
+                        a2l_addr: A2lAddr { ext: 0, addr: 0, event: Some(0) },
+                        conversion: A2lConversion::new(Some(0.5), None, "V"),
+                        offset: 0,
+                    },
+                    OdtEntry {
+                        name: "s".to_string(),
+                        a2l_type: A2lType {
+                            size: 1,
+                            encoding: A2lTypeEncoding::Unsigned,
+                        },
+                        dim: [1, 1],
+                        a2l_addr: A2lAddr { ext: 0, addr: 0, event: Some(0) },
+                        conversion: A2lConversion::default(),
+                        offset: 4,
+                    },
+                ],
+                size: 5,
+            }],
+        );
+        let mut w = CsvWriter::new(Vec::new());
+        w.start(&layout, 0).unwrap();
+        let data = [1u8, 2, 3, 4, 5];
+        let sample = DaqSample {
+            daq: 0,
+            daq_list: &layout.daq_lists[0],
+            lost: 0,
+            timestamp: 100,
+            time_ns: 100,
+            packet: &data,
+            data: &data,
+        };
+        w.write(&sample).unwrap();
+        w.stop(100).unwrap();
+        assert_eq!(String::from_utf8(w.into_inner()).unwrap(), "time_ns,daq,name,value,unit\n100,0,s,5,\n");
     }
 }

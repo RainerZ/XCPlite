@@ -340,7 +340,8 @@ impl XcpMeasurementObjectHandle {
 pub struct XcpClientMeasurementObject {
     pub(super) name: String,
     pub a2l_addr: A2lAddr,
-    pub a2l_type: A2lType,
+    pub a2l_type: A2lType, // Type of one element
+    pub dim: [u16; 2],     // Array dimensions x, y (MATRIX_DIM), [1, 1] for a scalar, the elements are stored x fastest
     pub conversion: A2lConversion,
     pub daq: u16,
     pub odt: u8,
@@ -353,11 +354,21 @@ impl XcpClientMeasurementObject {
             name: name.to_string(),
             a2l_addr,
             a2l_type,
+            dim: [1, 1],
             conversion,
             daq: 0,
             odt: 0,
             offset: 0,
         }
+    }
+    /// Set the array dimensions x, y
+    pub fn with_dim(mut self, dim: [u16; 2]) -> XcpClientMeasurementObject {
+        self.dim = dim;
+        self
+    }
+    /// Size of the object in bytes, all elements of an array
+    pub fn size(&self) -> usize {
+        self.a2l_type.size * self.dim[0] as usize * self.dim[1] as usize
     }
     pub fn get_name(&self) -> &str {
         &self.name

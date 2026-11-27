@@ -324,6 +324,7 @@ mod tests {
                     size: 2,
                     encoding: A2lTypeEncoding::Unsigned,
                 },
+                dim: [1, 1],
                 a2l_addr: A2lAddr { ext: 0, addr: 0, event: Some(1) },
                 conversion: A2lConversion::default(),
                 offset: 0,

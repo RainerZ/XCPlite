@@ -20,23 +20,53 @@ pub const DAQ_TIMESTAMP_SIZE: usize = 4;
 #[derive(Debug)]
 pub struct OdtEntry {
     pub name: String,
-    pub a2l_type: A2lType,
+    pub a2l_type: A2lType,         // type of one element
+    pub dim: [u16; 2],             // array dimensions x, y (MATRIX_DIM), [1, 1] for a scalar, the elements are stored x fastest
     pub a2l_addr: A2lAddr,
-    pub conversion: A2lConversion, // conversion from raw to physical value
+    pub conversion: A2lConversion, // conversion from raw to physical value, for each element
     pub offset: u16,               // offset from data start, not including daq header and timestamp
 }
 
 impl OdtEntry {
-    /// Decode the raw value of this entry from the DAQ data (without daq header and timestamp)
+    /// Number of elements, 1 for a scalar
+    pub fn element_count(&self) -> usize {
+        self.dim[0] as usize * self.dim[1] as usize
+    }
+
+    /// The entry is an array (more than one element)
+    pub fn is_array(&self) -> bool {
+        self.element_count() > 1
+    }
+
+    /// Size of the entry in bytes, all elements of an array
+    pub fn size(&self) -> usize {
+        self.a2l_type.size * self.element_count()
+    }
+
+    /// Dimensions as text: "16" for a one dimensional array, "2048x1536" (x, y) for a two dimensional array
+    pub fn dim_text(&self) -> String {
+        if self.dim[1] > 1 { format!("{}x{}", self.dim[0], self.dim[1]) } else { self.dim[0].to_string() }
+    }
+
+    /// Decode the raw value of this entry, the first element of an array, from the DAQ data (without daq header and timestamp)
     /// Returns None for a blob or when the data is too short
     pub fn decode_raw(&self, data: &[u8]) -> Option<A2lValue> {
         self.a2l_type.decode(data.get(self.offset as usize..)?)
     }
 
-    /// Decode the physical value of this entry from the DAQ data (without daq header and timestamp)
+    /// Decode the physical value of this entry, the first element of an array, from the DAQ data (without daq header and timestamp)
     /// Returns None for a blob or when the data is too short
     pub fn decode(&self, data: &[u8]) -> Option<A2lValue> {
         self.decode_raw(data).map(|raw| self.conversion.convert(raw))
+    }
+
+    /// Decode the physical values of all elements, in memory order (x fastest), from the DAQ data (without daq header and timestamp)
+    /// Returns None for a blob or when the data is too short
+    pub fn decode_array(&self, data: &[u8]) -> Option<Vec<A2lValue>> {
+        let data = data.get(self.offset as usize..self.offset as usize + self.size())?;
+        data.chunks_exact(self.a2l_type.size)
+            .map(|bytes| self.a2l_type.decode(bytes).map(|raw| self.conversion.convert(raw)))
+            .collect()
     }
 }
 
@@ -132,6 +162,33 @@ mod tests {
         let mut e = DaqTimestampExtender::new(0x10);
         assert_eq!(e.extend(0xFFFF_FFF0), 0);
         assert_eq!(e.extend(0x20), 0x20);
+    }
+    // Array: element count, size, dimensions text and decoding of all elements with the conversion of each element
+    #[test]
+    fn test_odt_entry_decode_array() {
+        use crate::xcp_client::types::A2lTypeEncoding;
+        let entry = OdtEntry {
+            name: "map".to_string(),
+            a2l_type: A2lType {
+                size: 2,
+                encoding: A2lTypeEncoding::Unsigned,
+            },
+            dim: [3, 2],
+            a2l_addr: A2lAddr { ext: 0, addr: 0, event: Some(0) },
+            conversion: A2lConversion::new(Some(0.5), None, ""),
+            offset: 1,
+        };
+        assert!(entry.is_array());
+        assert_eq!((entry.element_count(), entry.size(), entry.dim_text()), (6, 12, "3x2".to_string()));
+        let data: Vec<u8> = [0xFFu8].into_iter().chain((1u16..=6).flat_map(|v| v.to_le_bytes())).collect();
+        let values: Vec<f64> = entry.decode_array(&data).unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+        assert_eq!(values, [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]);
+        assert_eq!(entry.decode(&data).unwrap().as_f64(), Some(0.5)); // First element
+        assert!(entry.decode_array(&data[..12]).is_none()); // Too short
+        let entry = OdtEntry { dim: [16, 1], ..entry };
+        assert_eq!(entry.dim_text(), "16");
+        let entry = OdtEntry { dim: [1, 1], ..entry };
+        assert!(!entry.is_array());
     }
 }
 
