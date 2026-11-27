@@ -82,12 +82,14 @@ Concurrent work items may write to data owned by their index (e.g. `result[index
 |---|---|
 | `work_init` | Calibration segment `mandelbrot`, pixel buffer, RGB image and color map |
 | `work_begin_batch` | Copy the calibration parameters for the whole batch, compute the area on the complex plane, return the number of lines. With auto restart, a new image is only rendered when the parameters changed |
-| `work_execute(line)` | Render one line: iteration count per pixel, at most 254 iterations, 255 marks a point in the set |
+| `work_execute(line)` | Render one line: iteration count per pixel, at most 254 iterations, 255 marks a point in the set. Vectorized with GCC/Clang vector extensions (`OPTION_RENDER_VECTOR`, `RENDER_VECTOR_WIDTH` pixels at once), scalar on other compilers |
 | `work_complete` | Map the iteration counts to colors of the visible spectrum and write `mandelbrot.png` to the current directory |
 | `work_shutdown` | Free the buffers |
 
 The resolution is `X_RES` x `Y_RES` = 2048 x 1536 (`#define` in `work.c`). Each line is written only by the worker which renders it, no synchronization needed.
-Rendering takes about 0.6 s with 8 worker threads, writing the PNG file about 0.8 s on the main thread (MacBook Pro M3, debug build).
+Rendering takes about 57 ms with 8 worker threads (242 ms scalar), coloring and writing the PNG file about 125 ms on the main thread (MacBook Pro M3, clang, release build).
+On a Raspberry Pi 5 rendering takes 207 ms with clang (vector width 8) and 292 ms with gcc 12 (vector width 2, gcc is slower with wider vectors there).
+The console shows when a new image is started and how long rendering and writing took.
 
 ### Calibration parameters (`params`, `mandelbrot`)
 

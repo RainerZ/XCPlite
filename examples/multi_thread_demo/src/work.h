@@ -7,7 +7,8 @@
 //
 // Call sequence and threading contract:
 //
-//   work_init()                  main thread, once, after XCP and A2L initialization, before the worker threads are started
+//   work_init()                  main thread, once, after XCP and A2L initialization, before the worker threads are started,
+//                                the event batch_done exists, main.c triggers it after work_complete (measure the batch result with it)
 //   loop:
 //     n = work_begin_batch(req)  main thread, no batch running, on request or cyclic with auto restart
 //     work_execute(index)        worker threads, concurrently, called exactly once for each index 0..n-1

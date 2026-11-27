@@ -41,8 +41,8 @@
 #define OPTION_USE_TCP false                    // TCP or UDP
 #define OPTION_SERVER_PORT 5555                 // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}         // Bind addr, 0.0.0.0 = ANY
-#define OPTION_QUEUE_SIZE (1024 * 1024)         // Size of the measurement queue in bytes, must be a multiple of 8
-#define OPTION_LOG_LEVEL 3                      // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
+#define OPTION_QUEUE_SIZE (1024 * 1024 * 16)    // Size of the measurement queue in bytes, must be a multiple of 8, must hold the DTOs of a complete image (3 MB)
+#define OPTION_LOG_LEVEL 4                      // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
@@ -209,6 +209,9 @@ int main(void) {
     A2lCreateParameter(params.poll_us, "Worker poll interval when there is nothing to do", "us", 10, 1000000);
     A2lCreateParameter(params.cycle_us, "Main loop cycle time", "us", 100, 1000000);
 
+    // Instrumentation: Create the batch completion event before the work is initialized, the work may register measurements for it (e.g. the result image)
+    DaqCreateEvent(batch_done);
+
     // Initialize the work, before the worker threads are started
     if (!work_init()) {
         return 1;
@@ -239,8 +242,7 @@ int main(void) {
     A2lCreateMeasurement(work_remaining, "Number of work items not fetched yet");
     A2lCreateMeasurement(work_done, "Number of work items completed");
 
-    // Instrumentation: Batch completion event and measurement variables for the result of the completed batch
-    DaqCreateEvent(batch_done);
+    // Instrumentation: Measurement variables for the result of the completed batch, event batch_done was created before work_init
     A2lSetStackAddrMode(batch_done);
     A2lCreateMeasurement(batch_count, "Number of completed batches");
     A2lCreateMeasurement(batch_errors, "Number of completed batches with an invalid result");
