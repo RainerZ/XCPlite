@@ -80,9 +80,15 @@ fi
 kill -0 "$DEMO_PID" 2>/dev/null || fail "multi_thread_demo terminated, see $TMP_DIR/demo/demo.log"
 
 # Measure the image in continuous render mode, without zoom animation, so the image is the default area of work.c
+# The demo starts zooming in continuous mode: switch continuous mode off (ends the zoom), set zoom 1, the measurement switches
+# continuous mode on again, the zoom restarts at the default width
 # The calibration parameters persist in the demo, xcpclient sets one with each call
-(cd "$TMP_DIR/client" && "$XCPCLIENT" --dest-addr 127.0.0.1 --port 5555 --udp --upload-a2l --cal mandelbrot.zoom 1 >xcpclient_zoom.log 2>&1) ||
-    fail "xcpclient could not set mandelbrot.zoom, see $TMP_DIR/client/xcpclient_zoom.log"
+set_cal() {
+    (cd "$TMP_DIR/client" && "$XCPCLIENT" --dest-addr 127.0.0.1 --port 5555 --udp --upload-a2l --cal "$1" "$2" >>xcpclient_cal.log 2>&1) ||
+        fail "xcpclient could not set $1, see $TMP_DIR/client/xcpclient_cal.log"
+}
+set_cal mandelbrot.continuous 0
+set_cal mandelbrot.zoom 1
 echo "Measuring pixels for ${MEASURE_TIME} s ..."
 (cd "$TMP_DIR/client" &&
     "$XCPCLIENT" --dest-addr 127.0.0.1 --port 5555 --udp --a2l multi_thread_demo.a2l --cal mandelbrot.continuous 1 --mea pixels --time "$MEASURE_TIME" --mdf pixels.mf4 \

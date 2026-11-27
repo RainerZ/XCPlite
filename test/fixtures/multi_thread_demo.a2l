@@ -73,28 +73,29 @@ ALIGNMENT_INT64 1
 /begin CHARACTERISTIC mandelbrot.x "Center of the area to render, real part" VALUE 0x80020000 F64 0 NO_COMPU_METHOD -2 2 /end CHARACTERISTIC
 /begin CHARACTERISTIC mandelbrot.y "Center of the area to render, imaginary part" VALUE 0x80020008 F64 0 NO_COMPU_METHOD -2 2 /end CHARACTERISTIC
 /begin CHARACTERISTIC mandelbrot.width "Width of the area to render" VALUE 0x80020010 F64 0 NO_COMPU_METHOD 0 4 /end CHARACTERISTIC
-/begin CHARACTERISTIC mandelbrot.zoom "Zoom factor per second in continuous mode, 1 = no zoom, < 1 zooms in" VALUE 0x80020018 F64 0 NO_COMPU_METHOD 0.01 100 /end CHARACTERISTIC
-/begin CHARACTERISTIC mandelbrot.continuous "Render a new image in every batch (with params.auto_restart), no PNG file is written" VALUE 0x80020020 U8 0 NO_COMPU_METHOD 0 1 /end CHARACTERISTIC
-/begin CHARACTERISTIC pixels "Mandelbrot iteration count per pixel, 255 = in the set" VAL_BLK 0x38000 U8 0 NO_COMPU_METHOD 0 255 MATRIX_DIM 1600 1200 ECU_ADDRESS_EXTENSION 1 /begin IF_DATA XCP /begin DAQ_EVENT VARIABLE /begin DEFAULT_EVENT_LIST EVENT 0x0 /end DEFAULT_EVENT_LIST /end DAQ_EVENT /end IF_DATA /end CHARACTERISTIC
-/begin MEASUREMENT batch_running "Batch is running" UBYTE NO_COMPU_METHOD 0 0 0 255  ECU_ADDRESS 0x80FF97 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x2 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT work_remaining "Number of work items not fetched yet" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0x80FF8C ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x2 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT work_done "Number of work items completed" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0x80FF88 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x2 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT batch_count "Number of completed batches" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0xFF9C ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT batch_errors "Number of completed batches with an invalid result" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0xFF98 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT batch_size "Number of work items of the batch" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0xFF90 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT batch_time "Runtime of the batch until all work items were completed" A_UINT64 conv.ns_to_us 0 0 0 1e+08  ECU_ADDRESS 0xFF80 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT batch_speedup "Sum of work item durations / runtime of the batch" FLOAT64_IEEE NO_COMPU_METHOD 0 0 -1e+12 1e+12  ECU_ADDRESS 0xFF78 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT batch_duration "Overall duration of the batch, from batch start until work_complete returned" A_UINT64 conv.ns_to_us 0 0 0 1e+08  ECU_ADDRESS 0xFF70 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT worker_id "Index of the worker thread which completed the work item" UWORD NO_COMPU_METHOD 0 0 0 65535  ECU_ADDRESS 0x40FFF6 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x1 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT work_index "Index of the completed work item" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0x40FFF0 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x1 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT work_time "Duration of the work item" A_UINT64 conv.ns_to_us 0 0 0 1e+06  ECU_ADDRESS 0x40FFE8 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x1 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
-/begin MEASUREMENT work_latency "Time from batch start to start of the work item" A_UINT64 conv.ns_to_us 0 0 0 1e+07  ECU_ADDRESS 0x40FFE0 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x1 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin CHARACTERISTIC mandelbrot.zoom "Zoom factor per image in continuous mode, 1 = no zoom, < 1 zooms in" VALUE 0x80020018 F64 0 NO_COMPU_METHOD 0.5 2 /end CHARACTERISTIC
+/begin CHARACTERISTIC mandelbrot.images "Images of a zoom sequence in continuous mode, 0 = restart at the width limit only" VALUE 0x80020020 U32 0 NO_COMPU_METHOD 0 1e+06 /end CHARACTERISTIC
+/begin CHARACTERISTIC mandelbrot.continuous "Render a new image in every batch (with params.auto_restart), a PNG file is written for the first image only" VALUE 0x80020024 U8 0 NO_COMPU_METHOD 0 1 /end CHARACTERISTIC
+/begin CHARACTERISTIC pixels "Mandelbrot iteration count per pixel, 255 = in the set" VAL_BLK 0x1A4000 U8 0 NO_COMPU_METHOD 0 255 MATRIX_DIM 1600 1200 ECU_ADDRESS_EXTENSION 1 /begin IF_DATA XCP /begin DAQ_EVENT VARIABLE /begin DEFAULT_EVENT_LIST EVENT 0x0 /end DEFAULT_EVENT_LIST /end DAQ_EVENT /end IF_DATA /end CHARACTERISTIC
+/begin MEASUREMENT batch_running "Batch is running" UBYTE NO_COMPU_METHOD 0 0 0 255  ECU_ADDRESS 0x80FF43 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x2 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT work_remaining "Number of work items not fetched yet" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0x80FF38 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x2 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT work_done "Number of work items completed" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0x80FF34 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x2 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT batch_count "Number of completed batches" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0xFF48 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT batch_errors "Number of completed batches with an invalid result" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0xFF44 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT batch_size "Number of work items of the batch" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0xFF3C ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT batch_time "Runtime of the batch until all work items were completed" A_UINT64 conv.ns_to_us 0 0 0 1e+08  ECU_ADDRESS 0xFF28 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT batch_speedup "Sum of work item durations / runtime of the batch" FLOAT64_IEEE NO_COMPU_METHOD 0 0 -1e+12 1e+12  ECU_ADDRESS 0xFF20 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT batch_duration "Overall duration of the batch, from batch start until work_complete returned" A_UINT64 conv.ns_to_us 0 0 0 1e+08  ECU_ADDRESS 0xFF18 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x0 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT worker_id "Index of the worker thread which completed the work item" UWORD NO_COMPU_METHOD 0 0 0 65535  ECU_ADDRESS 0x40FFAE ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x1 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT work_index "Index of the completed work item" ULONG NO_COMPU_METHOD 0 0 0 4.29497e+09  ECU_ADDRESS 0x40FFA8 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x1 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT work_time "Duration of the work item" A_UINT64 conv.ns_to_us 0 0 0 1e+06  ECU_ADDRESS 0x40FFA0 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x1 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
+/begin MEASUREMENT work_latency "Time from batch start to start of the work item" A_UINT64 conv.ns_to_us 0 0 0 1e+07  ECU_ADDRESS 0x40FF98 ECU_ADDRESS_EXTENSION 2 READ_WRITE /begin IF_DATA XCP /begin DAQ_EVENT FIXED_EVENT_LIST EVENT 0x1 /end DAQ_EVENT /end IF_DATA /end MEASUREMENT
 
 /* Typedefs */
 
 /* Groups */
 /begin GROUP params "Calibration Segment" ROOT /begin REF_CHARACTERISTIC params.start_request params.auto_restart params.poll_us params.cycle_us /end REF_CHARACTERISTIC /end GROUP
-/begin GROUP mandelbrot "Calibration Segment" ROOT /begin REF_CHARACTERISTIC mandelbrot.x mandelbrot.y mandelbrot.width mandelbrot.zoom mandelbrot.continuous /end REF_CHARACTERISTIC /end GROUP
+/begin GROUP mandelbrot "Calibration Segment" ROOT /begin REF_CHARACTERISTIC mandelbrot.x mandelbrot.y mandelbrot.width mandelbrot.zoom mandelbrot.images mandelbrot.continuous /end REF_CHARACTERISTIC /end GROUP
 /begin GROUP batch_done "Measurement event group"  /begin REF_MEASUREMENT pixels /end REF_MEASUREMENT /end GROUP
 /begin GROUP mainloop "Measurement event group"  /begin REF_MEASUREMENT batch_running work_remaining work_done /end REF_MEASUREMENT /end GROUP
 /begin GROUP batch_done "Measurement event group"  /begin REF_MEASUREMENT batch_count batch_errors batch_size batch_time batch_speedup batch_duration /end REF_MEASUREMENT /end GROUP
@@ -109,7 +110,7 @@ ALIGNMENT_INT64 1
 /begin GROUP Events "Events" ROOT /begin SUB_GROUP batch_done work_done mainloop /end SUB_GROUP /end GROUP
 
 /begin MOD_PAR ""
-EPK "V5_22_49_58" ADDR_EPK 0x80000000
+EPK "V5_23_17_37" ADDR_EPK 0x80000000
 /begin MEMORY_SEGMENT epk "" DATA FLASH INTERN 0x80000000 32 -1 -1 -1 -1 -1
 /begin IF_DATA XCP
   /begin SEGMENT 0 /* number */ 2 /* pages */ 0 /*addr_ext*/ 0 0

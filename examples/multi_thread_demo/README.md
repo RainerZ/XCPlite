@@ -33,7 +33,8 @@ inspired by the Mandelbrot example in the book "Programming Rust" by Jim Blandy 
 | `src/main.c` | Generic part — worker threads, work distribution, batch control, instrumentation |
 | `src/work.h` | Work interface and threading contract |
 | `src/work.c` | Work implementation — Mandelbrot set, replace with the real work |
-| `src/stb_image_write.h` | PNG writer, single header library from [stb](https://github.com/nothings/stb), public domain or MIT |
+| `src/mjpeg.h`, `src/mjpeg.c` | MJPEG HTTP server: streams the images as video to a browser |
+| `src/stb_image_write.h` | PNG and JPEG writer, single header library from [stb](https://github.com/nothings/stb), public domain or MIT |
 | `CANape/` | CANape project (A2L auto-upload, XCP UDP, port 5555) |
 
 ---
@@ -103,8 +104,9 @@ The console shows one line for each image: the area, the render time and the tim
 | `mandelbrot.x` | -0.8015 | Center of the area to render, real part |
 | `mandelbrot.y` | 0.1561 | Center of the area to render, imaginary part |
 | `mandelbrot.width` | 0.0055 | Width of the area to render, the height follows from the aspect ratio (-0.5, 0.0, 3.0 shows the complete set) |
-| `mandelbrot.zoom` | 0.9 | Zoom factor per second in continuous mode, the width is multiplied by it every second (0.9 zooms in by 10 % per second, 1 = no zoom). The zoom restarts at `mandelbrot.width` when the area is changed or the width gets smaller than 1e-10 (double precision) |
-| `mandelbrot.continuous` | false | Render a new image in every batch (with `params.auto_restart`), also when the area was not changed, zooming with `mandelbrot.zoom`. No PNG file is written |
+| `mandelbrot.zoom` | 0.99416 | Zoom factor per image in continuous mode, the width is multiplied by it for each image (0.99416 = 0.9^(1/18), about 10 % per second at 18 images per second, 1 = no zoom, > 1 zooms out). The sequence of images does not depend on the frame rate |
+| `mandelbrot.images` | 1730 | Images of a zoom sequence in continuous mode, then the zoom restarts at `mandelbrot.width` (1730 images zoom to a width of about 2e-7). The zoom also restarts when the area is changed or the width gets smaller than 1e-10 (double precision), 0 = restart at this limit only |
+| `mandelbrot.continuous` | true | Render a new image in every batch (with `params.auto_restart`), also when the area was not changed, zooming with `mandelbrot.zoom`. The PNG file is written for the first image only |
 
 ### Measurements
 
@@ -140,17 +142,69 @@ cmake --build build --target multi_thread_demo
 ./build/multi_thread_demo
 ```
 
-The first image is rendered at startup. Change the area with xcpclient and measure the rendering of the new image:
+The demo renders continuously from the start (`mandelbrot.continuous`), zooming into the area of `mandelbrot.x`, `mandelbrot.y`
+and `mandelbrot.width`. The PNG file `mandelbrot.png` is written for the first image, and for each image when continuous mode is
+off, then a new image is rendered when the area changes. Measure the rendering of the images:
 
 ```bash
-xcpclient --udp --upload-a2l --cal mandelbrot.width 0.02 --mea worker_id work_index work_time work_latency batch_speedup --time 5
+xcpclient --udp --upload-a2l --mea worker_id work_index work_time work_latency batch_speedup --time 5
 ```
 
-Measure the image (`pixels`, event `batch_done`) in continuous mode. xcpclient sets the calibration parameters before the measurement starts, a single new image would be rendered before the DAQ setup of the large array is complete, continuous mode keeps rendering:
+Measure the image (`pixels`, event `batch_done`) to an MDF file:
 
 ```bash
-xcpclient --udp --upload-a2l --cal mandelbrot.continuous 1 --mea pixels --time 5 --mdf pixels.mf4
+xcpclient --udp --upload-a2l --mea pixels --time 5 --mdf pixels.mf4
 ```
+
+Render single images and write `mandelbrot.png`: switch continuous mode off, then change the area:
+
+```bash
+xcpclient --udp --upload-a2l --cal mandelbrot.continuous 0
+xcpclient --udp --upload-a2l --cal mandelbrot.width 0.02
+```
+
+In this mode a single new image is rendered before xcpclient has completed the DAQ setup of a large array (`--cal` is applied
+before the measurement starts), so measure `pixels` in continuous mode.
+
+### Video in the browser
+
+The demo streams each image as MJPEG video over HTTP, without XCP: open `http://localhost:8080` (or the IP address of the host) in a
+browser to watch the zoom animation. The video has half the resolution (800 x 600, the mean color
+of each 2 x 2 pixel block, JPEG quality 75), the server encodes the newest image and drops images when encoding or the browser is
+slower than rendering. One browser at a time, a new connection is served when the previous one is closed.
+`http://localhost:8080/stream` is the MJPEG stream itself. Configured with `OPTION_HTTP_PORT` in `work.c` (0 disables the server).
+
+Start the demo and watch the video:
+
+1. Build and start the demo (a release build renders faster):
+
+   ```bash
+   ./build.sh release examples
+   ./build/multi_thread_demo
+   ```
+
+   The console shows `MJPEG stream 800x600 on http://localhost:8080` and one line for each image.
+
+2. Open `http://localhost:8080` in a browser. It shows the zoom animation: the zoom into the center (`mandelbrot.x`,
+   `mandelbrot.y`) by the factor `mandelbrot.zoom` per image, about 10 % per second at 18 images per second. After
+   `mandelbrot.images` images (1730) it starts again at `mandelbrot.width`. The console line of each image shows its number in
+   the zoom sequence, `Image 1731 (zoom 1): ...`.
+   On another computer use the IP address of the host running the demo, for example `http://192.168.0.206:8080`.
+
+3. Change the animation while it runs, with xcpclient or CANape (calibration window), for example zoom faster, zoom out, a
+   shorter sequence, or another area. The parameters stay set in the demo, xcpclient may be closed:
+
+   ```bash
+   xcpclient --udp --upload-a2l --cal mandelbrot.zoom 0.98
+   xcpclient --udp --upload-a2l --cal mandelbrot.zoom 1.006
+   xcpclient --udp --upload-a2l --cal mandelbrot.images 500
+   xcpclient --udp --upload-a2l --cal mandelbrot.width 3.0
+   ```
+
+   Stop the animation with `--cal mandelbrot.continuous 0`, the browser shows the image of the calibrated area again,
+   `--cal mandelbrot.continuous 1` starts it again.
+
+4. Stop the demo with Ctrl+C.
 
 ---
 

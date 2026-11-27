@@ -5,17 +5,18 @@
 //
 // - The area of the complex plane to render is defined by the calibration segment 'mandelbrot' (center x, y and width)
 // - A new image is rendered when the area was changed, or in every batch in continuous mode (mandelbrot.continuous)
-// - In continuous mode the image zooms into the center by the factor mandelbrot.zoom per second, the zoom restarts when the area
-//   is changed or the width leaves ZOOM_MIN_WIDTH..ZOOM_MAX_WIDTH
-// - The image is written to the file mandelbrot.png when all lines are rendered, not in continuous mode
+// - In continuous mode the image zooms into the center by the factor mandelbrot.zoom per image, the zoom restarts after
+//   mandelbrot.images images, when the area is changed or when the width leaves ZOOM_MIN_WIDTH..ZOOM_MAX_WIDTH
+// - The image is written to the file mandelbrot.png when all lines are rendered, in continuous mode only the first image
 // - The console shows one line for each image
+// - Each image is streamed as MJPEG video with half the resolution over HTTP (mjpeg.c), open http://localhost:8080 in a browser
 //
 // See the interface contract in work.h
 
 #include "work.h"
 
 #include <assert.h> // for assert
-#include <math.h>   // for powf, pow
+#include <math.h>   // for powf
 #include <stdio.h>  // for printf
 #include <stdlib.h> // for malloc, free
 
@@ -23,6 +24,8 @@
 #include "xcplib.h" // for application programming interface
 
 #include "platform.h" // for clockGetMonotonicNs
+
+#include "mjpeg.h" // for mjpeg_start, mjpeg_publish, mjpeg_shutdown
 
 // PNG writer, single header library, public domain or MIT, see https://github.com/nothings/stb
 #if defined(_MSC_VER)
@@ -41,6 +44,13 @@
 #define X_RES 1600   // Image width in pixels
 #define Y_RES 1200   // Image height in pixels, number of work items in a batch
 #define MAX_ITER 254 // Iteration limit, pixel value 255 marks a point in the set
+
+// MJPEG video over HTTP, each image downscaled 2x2
+#define OPTION_HTTP_PORT 8080 // TCP port of the HTTP server, 0 = no HTTP server
+#define MJPEG_QUALITY 75      // JPEG quality 1..100
+#define PREVIEW_X_RES (X_RES / 2)
+#define PREVIEW_Y_RES (Y_RES / 2)
+_Static_assert(X_RES % 2 == 0 && Y_RES % 2 == 0, "X_RES and Y_RES must be even for the 2x2 downscaled preview");
 
 // Vectorized rendering: RENDER_VECTOR_WIDTH pixels of a line are iterated together with GCC/Clang vector extensions
 // The compiler maps the vector operations to the SIMD instructions of the target (e.g. 4x NEON 128 bit on ARM64 for a width of 8),
@@ -70,13 +80,15 @@ typedef struct mandelbrot {
     double x;        // Center of the area to render, real part
     double y;        // Center of the area to render, imaginary part
     double width;    // Width of the area to render, the height is given by the image aspect ratio
-    double zoom;     // Zoom factor per second in continuous mode, the width is multiplied by zoom every second, 1 = no zoom
-    bool continuous; // Render a new image in every batch, also when the area was not changed, no PNG file is written
+    double zoom;     // Zoom factor per image in continuous mode, the width is multiplied by zoom for each image, 1 = no zoom
+    uint32_t images; // Images of a zoom sequence in continuous mode, then the zoom restarts, 0 = restart at the width limit only
+    bool continuous; // Render a new image in every batch, also when the area was not changed, the PNG file is written for the first image only
 } mandelbrot_t;
 
 // Default parameters
-// static const mandelbrot_t mandelbrot = {.x = -0.5, .y = 0.0, .width = 3.0, .zoom = 0.9, .continuous = false}; // Complete set
-static const mandelbrot_t mandelbrot = {.x = -0.8015, .y = 0.1561, .width = 0.0055, .zoom = 0.9, .continuous = false};
+// Zoom 0.99416 = 0.9^(1/18), about 10 % per second at 18 images per second, 1730 images zoom to a width of about 2e-7
+// static const mandelbrot_t mandelbrot = {.x = -0.5, .y = 0.0, .width = 3.0, .zoom = 0.99416, .images = 0, .continuous = true}; // Complete set
+static const mandelbrot_t mandelbrot = {.x = -0.8015, .y = 0.1561, .width = 0.0055, .zoom = 0.99416, .images = 1730, .continuous = true};
 
 // Calibration segment handle
 static tXcpCalSegIndex mandelbrot_calseg = XCP_UNDEFINED_CALSEG;
@@ -99,7 +111,7 @@ static double gPixelSize; // Size of a pixel on the complex plane
 static bool gZooming = false;   // Zoom animation is running
 static mandelbrot_t gZoomStart; // Calibration parameters at the start of the zoom, a change of the area restarts it
 static double gZoomWidth;       // Current width
-static uint64_t gZoomTime;      // Time of the last image in ns
+static uint32_t gZoomImage;     // Number of the current image in the zoom sequence, starting with 1
 
 // Logging of the image creation
 static uint64_t gInitTime = 0;        // Time of work_init in ns, the log timestamps are relative to it
@@ -109,6 +121,9 @@ static uint32_t gImageCount = 0;      // Number of the current image, starting w
 // Iteration count per pixel, line by line, each line is owned by the worker which renders it
 // Static (not heap), to be measurable with absolute addressing, measured as a matrix with the event batch_done
 uint8_t pixels[Y_RES][X_RES];
+
+// RGB image of the MJPEG stream, 2x2 downscaled
+static uint8_t gPreview[PREVIEW_Y_RES][PREVIEW_X_RES][3];
 
 // RGB image and color map for the PNG file
 static uint8_t *gImage = NULL;
@@ -232,8 +247,9 @@ bool work_init(void) {
     A2lCreateParameter(mandelbrot.x, "Center of the area to render, real part", "", -2.0, 2.0);
     A2lCreateParameter(mandelbrot.y, "Center of the area to render, imaginary part", "", -2.0, 2.0);
     A2lCreateParameter(mandelbrot.width, "Width of the area to render", "", 0.0, 4.0);
-    A2lCreateParameter(mandelbrot.zoom, "Zoom factor per second in continuous mode, 1 = no zoom, < 1 zooms in", "", 0.01, 100.0);
-    A2lCreateParameter(mandelbrot.continuous, "Render a new image in every batch (with params.auto_restart), no PNG file is written", "", 0, 1);
+    A2lCreateParameter(mandelbrot.zoom, "Zoom factor per image in continuous mode, 1 = no zoom, < 1 zooms in", "", 0.5, 2.0);
+    A2lCreateParameter(mandelbrot.images, "Images of a zoom sequence in continuous mode, 0 = restart at the width limit only", "", 0, 1000000);
+    A2lCreateParameter(mandelbrot.continuous, "Render a new image in every batch (with params.auto_restart), a PNG file is written for the first image only", "", 0, 1);
 
     // Measure the iteration counts of the image as a matrix with the event batch_done, triggered by main.c after work_complete
     A2lSetAbsoluteAddrMode(batch_done);
@@ -246,6 +262,10 @@ bool work_init(void) {
     }
 
     init_color_map();
+
+#if OPTION_HTTP_PORT != 0
+    mjpeg_start(OPTION_HTTP_PORT, PREVIEW_X_RES, PREVIEW_Y_RES, MJPEG_QUALITY); // The demo runs without the server, if it can not be started
+#endif
 
 #ifdef RENDER_VECTOR
     printf("Mandelbrot rendering vectorized, %d pixels per vector\n", RENDER_VECTOR_WIDTH);
@@ -262,20 +282,23 @@ uint32_t work_begin_batch(void) {
     mandelbrot_t p = *params;
     XcpUnlockCalSeg(mandelbrot_calseg);
 
-    // Continuous mode: zoom into the center x, y by the factor zoom per second (independent of the frame rate), starting at width
+    // Continuous mode: zoom into the center x, y by the factor zoom per image, starting at width
+    // The sequence of images does not depend on the frame rate, it restarts after p.images images
     uint64_t now = clockGetMonotonicNs();
     if (p.continuous) {
-        if (!gZooming || p.x != gZoomStart.x || p.y != gZoomStart.y || p.width != gZoomStart.width) {
-            gZooming = true; // Start or restart, the area was changed
+        if (!gZooming || p.x != gZoomStart.x || p.y != gZoomStart.y || p.width != gZoomStart.width || (p.images != 0 && gZoomImage >= p.images)) {
+            gZooming = true; // Start or restart: the area was changed, or the end of the sequence
             gZoomStart = p;
             gZoomWidth = p.width;
+            gZoomImage = 1;
         } else {
-            gZoomWidth *= pow(p.zoom, (double)(now - gZoomTime) / 1e9);
+            gZoomWidth *= p.zoom;
+            gZoomImage++;
             if (!(gZoomWidth >= ZOOM_MIN_WIDTH && gZoomWidth <= ZOOM_MAX_WIDTH)) {
-                gZoomWidth = p.width; // Restart, also on an invalid zoom factor (NaN)
+                gZoomWidth = p.width; // Restart at the width limit, also on an invalid zoom factor (NaN)
+                gZoomImage = 1;
             }
         }
-        gZoomTime = now;
         p.width = gZoomWidth;
     } else {
         gZooming = false;
@@ -326,10 +349,11 @@ bool work_complete(uint32_t lines) {
     assert(lines == Y_RES);
     (void)lines;
 
-    // Convert iteration counts to RGB and write the PNG file, not in continuous mode
+    // Convert iteration counts to RGB and write the PNG file, in continuous mode only for the first image
     uint64_t t1 = clockGetMonotonicNs();
     bool ok = true;
-    if (!gBatchParams.continuous) {
+    bool write_png = !gBatchParams.continuous || gImageCount == 1;
+    if (write_png) {
         const uint8_t *p = &pixels[0][0];
         for (size_t i = 0; i < (size_t)X_RES * Y_RES; i++) {
             const uint8_t *rgb = gColorMap[p[i]];
@@ -341,16 +365,38 @@ bool work_complete(uint32_t lines) {
     }
     uint64_t t2 = clockGetMonotonicNs();
 
+#if OPTION_HTTP_PORT != 0
+    // MJPEG stream: the mean color of each 2x2 pixel block
+    for (uint32_t y = 0; y < PREVIEW_Y_RES; y++) {
+        const uint8_t *row0 = pixels[2 * y];
+        const uint8_t *row1 = pixels[2 * y + 1];
+        for (uint32_t x = 0; x < PREVIEW_X_RES; x++) {
+            const uint8_t *c0 = gColorMap[row0[2 * x]];
+            const uint8_t *c1 = gColorMap[row0[2 * x + 1]];
+            const uint8_t *c2 = gColorMap[row1[2 * x]];
+            const uint8_t *c3 = gColorMap[row1[2 * x + 1]];
+            for (int k = 0; k < 3; k++) {
+                gPreview[y][x][k] = (uint8_t)((c0[k] + c1[k] + c2[k] + c3[k] + 2) / 4);
+            }
+        }
+    }
+    mjpeg_publish(&gPreview[0][0][0]);
+#endif
+
     // One log line per image
     // Render time is from work_begin_batch until all lines were rendered and the main loop detected completion (includes up to one main loop cycle)
     const mandelbrot_t *p = &gBatchParams;
-    printf("[%9.3f s] Image %u: x=%g, y=%g, width=%g, %dx%d, render %.1f ms", (double)(t2 - gInitTime) / 1e9, gImageCount, p->x, p->y, p->width, X_RES, Y_RES,
+    printf("[%9.3f s] Image %u", (double)(t2 - gInitTime) / 1e9, gImageCount);
+    if (p->continuous) {
+        printf(" (zoom %u)", gZoomImage);
+    }
+    printf(": x=%g, y=%g, width=%g, %dx%d, render %.1f ms", p->x, p->y, p->width, X_RES, Y_RES,
            (double)(t1 - gRenderStartTime) / 1e6);
     if (!ok) {
         printf(", failed to write %s\n", IMAGE_FILE_NAME);
         return false;
     }
-    if (!p->continuous) {
+    if (write_png) {
         printf(", color+PNG write %.1f ms", (double)(t2 - t1) / 1e6);
     }
     printf("\n");
@@ -358,6 +404,9 @@ bool work_complete(uint32_t lines) {
 }
 
 void work_shutdown(void) {
+#if OPTION_HTTP_PORT != 0
+    mjpeg_shutdown();
+#endif
     free(gImage);
     gImage = NULL;
 }
