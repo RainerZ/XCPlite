@@ -121,6 +121,23 @@ Requires a prior `./build.sh examples`. Optional tools on `PATH`: `xcpclient`, `
 On a fixture mismatch the script **overwrites the fixture** and records it in the summary — review
 the diff in `test/test_*.log` before committing an updated fixture.
 
+## Large array end-to-end script: `test_multi_thread_image.sh`
+
+[`test_multi_thread_image.sh`](test_multi_thread_image.sh) measures the image of `multi_thread_demo` (the array `pixels`,
+1600 x 1200 bytes in one DAQ list with 242 ODTs) with `xcpclient` in continuous render mode to an MDF file. It checks that
+complete samples arrive without lost packets or dropped incomplete samples, and compares the last sample with a reference
+render of the same area ([`mdf_image_check.py`](mdf_image_check.py), every 10th line, isolated rounding differences at the
+boundary of the set are accepted). Self-verifying, about 10 s.
+
+```bash
+./test_multi_thread_image.sh           # measure 3 s
+./test_multi_thread_image.sh --keep    # keep the temporary directory with the logs and the MDF file
+XCPCLIENT=../tools/xcpclient/target/release/xcpclient ./test_multi_thread_image.sh
+```
+
+Requires a prior `./build.sh examples`, `xcpclient` on `PATH` (or `XCPCLIENT`) and `python3` (standard library only).
+It uses UDP port 5555, no other XCP server may be running. Not registered with CTest, it needs `xcpclient`.
+
 ## Hardware / privileged shell scripts
 
 | Script | Needs | Purpose |

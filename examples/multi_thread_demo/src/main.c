@@ -1,8 +1,8 @@
 // multi_thread_demo XCPlite example
 //
 // A fixed set of worker threads processes batches of work items:
-//   - The main loop starts a batch of work items on an external request (calibration parameter start_request),
-//     or asks the work cyclically for a new batch while no batch is running (calibration parameter auto_restart)
+//   - The main loop asks the work for a new batch of work items on an external request (calibration parameter start_request),
+//     or cyclically while no batch is running (calibration parameter auto_restart), the work decides if there is something to do
 //   - Each worker thread fetches the next work item index from a shared atomic counter and calls work_execute(index)
 //   - When there is nothing to do, the worker sleeps for the poll interval and checks again
 //   - The main loop detects when all work items of a batch are completed
@@ -42,13 +42,13 @@
 #define OPTION_SERVER_PORT 5555                 // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}         // Bind addr, 0.0.0.0 = ANY
 #define OPTION_QUEUE_SIZE (1024 * 1024 * 16)    // Size of the measurement queue in bytes, must be a multiple of 8, must hold the DTOs of a complete image (about 2 MB)
-#define OPTION_LOG_LEVEL 4                      // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
+#define OPTION_LOG_LEVEL 3                      // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 //-----------------------------------------------------------------------------------------------------
 // Demo calibration parameters
 
 typedef struct params {
-    uint32_t start_request; // Increment to request a new batch, the main loop starts a batch when the value changes
+    uint32_t start_request; // Increment to request a new batch, the main loop asks the work for a new batch when the value changes
     bool auto_restart;      // Ask the work for a new batch cyclically while no batch is running, the work decides if there is something to do
     uint32_t poll_us;       // Worker poll interval in us, when there is nothing to do
     uint32_t cycle_us;      // Main loop cycle time in us
@@ -204,7 +204,7 @@ int main(void) {
 
     // Register calibration parameters in the calibration segment
     A2lSetSegmentAddrMode(calseg, params);
-    A2lCreateParameter(params.start_request, "Increment to start a new batch", "", 0, 4294967295.0);
+    A2lCreateParameter(params.start_request, "Increment to ask the work for a new batch", "", 0, 4294967295.0);
     A2lCreateParameter(params.auto_restart, "Ask the work for a new batch cyclically while no batch is running", "", 0, 1);
     A2lCreateParameter(params.poll_us, "Worker poll interval when there is nothing to do", "us", 10, 1000000);
     A2lCreateParameter(params.cycle_us, "Main loop cycle time", "us", 100, 1000000);
@@ -235,11 +235,6 @@ int main(void) {
     uint64_t batch_duration = 0; // Overall duration of the last batch in ns, from batch start until work_complete returned
     uint32_t last_start_request = params.start_request;
 
-    // Logging of the batches, at most one batch per second is logged, batches which follow each other faster are counted only
-    uint64_t last_batch_log_time = 0; // Start time of the last logged batch in ns
-    bool batch_logged = false;        // The current batch is logged
-    uint32_t batches_not_logged = 0;  // Batches not logged since the last logged one
-
     // Instrumentation: Main loop event and measurement variables for the progress of the current batch
     DaqCreateEvent(mainloop);
     A2lSetStackAddrMode(mainloop);
@@ -263,7 +258,7 @@ int main(void) {
         create_thread(&t[i], NULL, worker, (void *)(uintptr_t)i);
     }
 
-    printf("Started %d worker threads, increment params.start_request to start a batch of work\n", THREAD_COUNT);
+    printf("Started %d worker threads, increment params.start_request to ask for a batch of work\n", THREAD_COUNT);
 
     // Main loop
     while (gRun) {
@@ -293,24 +288,16 @@ int main(void) {
                 // Instrumentation: Batch completion event
                 DaqTriggerEvent(batch_done);
 
-                if (batch_logged) {
-                    printf("Batch %u completed%s: %u work items in %.3f ms, speedup %.2f", batch_count, ok ? "" : " with errors", batch_size, (double)batch_time / 1000000.0,
-                           batch_speedup);
-                    if (batches_not_logged > 0) {
-                        printf(" (%u batches not logged)", batches_not_logged);
-                        batches_not_logged = 0;
-                    }
-                    printf("\n");
-                } else {
-                    batches_not_logged++;
+                // The work logs its result, only a batch with errors is logged here
+                if (!ok) {
+                    printf("Batch %u completed with error\n", batch_count);
                 }
             }
         } else {
-            // Start a new batch on request, or ask the work for a new batch with auto restart
-            bool requested = (start_request != last_start_request);
-            if (requested || auto_restart) {
+            // Ask the work for a new batch on request or with auto restart
+            if (start_request != last_start_request || auto_restart) {
                 last_start_request = start_request;
-                uint32_t items = work_begin_batch(requested);
+                uint32_t items = work_begin_batch();
                 if (items > 0) {
                     batch_size = items;
                     work_remaining = batch_size;
@@ -318,11 +305,6 @@ int main(void) {
                     batch_time = 0;
                     batch_running = 1;
                     start_batch(batch_size);
-                    batch_logged = (gBatchStartTime - last_batch_log_time >= 1000000000ULL);
-                    if (batch_logged) {
-                        last_batch_log_time = gBatchStartTime;
-                        printf("Batch %u started: %u work items\n", batch_count + 1, batch_size);
-                    }
                 }
             }
         }

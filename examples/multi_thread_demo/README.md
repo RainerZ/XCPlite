@@ -21,7 +21,7 @@ inspired by the Mandelbrot example in the book "Programming Rust" by Jim Blandy 
 | Stack addressing across threads | Worker local variables registered once, captured from the stack frame of the triggering thread |
 | Lock-free work distribution | Shared atomic counter, fetched with a compare-and-swap loop, no thread pool library |
 | Batch completion detection | Separate atomic completion counter with release/acquire ordering |
-| Calibration as external request | Main loop starts a batch when `params.start_request` changes, or when the work reports changed input (`params.auto_restart`) |
+| Calibration as external request | Main loop asks the work for a batch when `params.start_request` changes, or cyclically (`params.auto_restart`), the work decides if there is something to do |
 | Parallel speedup | Sum of work item durations / batch runtime |
 | Uneven work item cost | Lines crossing the Mandelbrot set take more iterations, balanced by fetching one line at a time |
 | Generic work interface | The work is defined in `work.c` behind the interface `work.h`, `main.c` only knows work item indices |
@@ -45,7 +45,7 @@ main loop                                   worker threads (THREAD_COUNT)
 ---------                                   -----------------------------
 work_init()
 start_request changed or auto_restart:      loop:
-  n = work_begin_batch(req)                   fetch_work(&index):  CAS gWorkRemaining n -> n-1 if n > 0
+  n = work_begin_batch()                      fetch_work(&index):  CAS gWorkRemaining n -> n-1 if n > 0
   gWorkDone = 0                               if fetched:
   gWorkRemaining = n  (release)                 work_execute(index)
                                                 trigger event work_done
@@ -68,7 +68,7 @@ work_shutdown()
 | Function | Called by | Purpose |
 |---|---|---|
 | `bool work_init(void)` | main thread, once, before the worker threads are started | Create calibration segments, register parameters and measurements, allocate resources |
-| `uint32_t work_begin_batch(bool requested)` | main thread, no batch running, on request or cyclic with `auto_restart` | Define the work items of a new batch and prepare their input data, return the number of work items (0 = no batch). `requested` is true on an explicit `start_request` |
+| `uint32_t work_begin_batch(void)` | main thread, no batch running, on request (`start_request`) or cyclic with `auto_restart` | Define the work items of a new batch and prepare their input data, return the number of work items (0 = no batch) |
 | `void work_execute(uint32_t index)` | worker threads, concurrently, each index exactly once | Execute one work item |
 | `bool work_complete(uint32_t items)` | main thread, after all work items are executed | Evaluate the batch result, false counts as batch error |
 | `void work_shutdown(void)` | main thread, after the worker threads are joined | Release resources |
@@ -81,7 +81,7 @@ Concurrent work items may write to data owned by their index (e.g. `result[index
 | Function | Mandelbrot |
 |---|---|
 | `work_init` | Calibration segment `mandelbrot`, pixel buffer, RGB image and color map |
-| `work_begin_batch` | Copy the calibration parameters for the whole batch, compute the area on the complex plane, return the number of lines. With auto restart, a new image is only rendered when the parameters changed |
+| `work_begin_batch` | Copy the calibration parameters for the whole batch, compute the area on the complex plane, return the number of lines. A new image is only rendered for the first image, when the parameters changed or in continuous mode |
 | `work_execute(line)` | Render one line: iteration count per pixel, at most 254 iterations, 255 marks a point in the set. Vectorized with GCC/Clang vector extensions (`OPTION_RENDER_VECTOR`, `RENDER_VECTOR_WIDTH` pixels at once), scalar on other compilers |
 | `work_complete` | Map the iteration counts to colors of the visible spectrum and write `mandelbrot.png` to the current directory |
 | `work_shutdown` | Free the buffers |
@@ -90,20 +90,21 @@ The resolution is `X_RES` x `Y_RES` = 1600 x 1200 (`#define` in `work.c`). Each 
 The image is measured as one array with the event `batch_done`: 1920000 bytes, 242 ODTs of one DAQ list with `XCPTL_MAX_DTO_SIZE` 7960 (`OPTION_MTU` 8000, at most 251 ODTs), about 50 KB DAQ memory (`OPTION_DAQ_MEM_SIZE`).
 At 2048 x 1536, rendering takes about 57 ms with 8 worker threads (242 ms scalar), coloring and writing the PNG file about 125 ms on the main thread (MacBook Pro M3, clang, release build).
 On a Raspberry Pi 5 rendering takes 207 ms with clang (vector width 8) and 292 ms with gcc 12 (vector width 2, gcc is slower with wider vectors there).
-The console shows when a new image is started and how long rendering and writing took.
+The console shows one line for each image: the area, the render time and the time for coloring and writing the PNG file.
 
 ### Calibration parameters (`params`, `mandelbrot`)
 
 | Parameter | Default | Description |
 |---|---|---|
-| `start_request` | 0 | Increment to start a new batch |
+| `start_request` | 0 | Increment to ask the work for a new batch (useful without `auto_restart`) |
 | `auto_restart` | true | Ask the work for a new batch cyclically while no batch is running, the work decides if there is something to do |
 | `poll_us` | 1000 | Worker poll interval when there is nothing to do |
 | `cycle_us` | 10000 | Main loop cycle time |
 | `mandelbrot.x` | -0.8015 | Center of the area to render, real part |
 | `mandelbrot.y` | 0.1561 | Center of the area to render, imaginary part |
 | `mandelbrot.width` | 0.0055 | Width of the area to render, the height follows from the aspect ratio (-0.5, 0.0, 3.0 shows the complete set) |
-| `mandelbrot.continuous` | false | Render a new image in every batch (with `params.auto_restart`), also when the area was not changed. No PNG file is written, the console shows one summary line per second |
+| `mandelbrot.zoom` | 0.9 | Zoom factor per second in continuous mode, the width is multiplied by it every second (0.9 zooms in by 10 % per second, 1 = no zoom). The zoom restarts at `mandelbrot.width` when the area is changed or the width gets smaller than 1e-10 (double precision) |
+| `mandelbrot.continuous` | false | Render a new image in every batch (with `params.auto_restart`), also when the area was not changed, zooming with `mandelbrot.zoom`. No PNG file is written |
 
 ### Measurements
 

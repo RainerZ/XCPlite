@@ -4,15 +4,18 @@
 // Ported from the rayon_demo of XCP-Lite Rust, inspired by the mandelbrot rayon example in the book "Programming Rust" by Jim Blandy and Jason Orendorff
 //
 // - The area of the complex plane to render is defined by the calibration segment 'mandelbrot' (center x, y and width)
-// - A new image is rendered when the area was changed or on explicit request, or in every batch in continuous mode (mandelbrot.continuous)
+// - A new image is rendered when the area was changed, or in every batch in continuous mode (mandelbrot.continuous)
+// - In continuous mode the image zooms into the center by the factor mandelbrot.zoom per second, the zoom restarts when the area
+//   is changed or the width leaves ZOOM_MIN_WIDTH..ZOOM_MAX_WIDTH
 // - The image is written to the file mandelbrot.png when all lines are rendered, not in continuous mode
+// - The console shows one line for each image
 //
 // See the interface contract in work.h
 
 #include "work.h"
 
 #include <assert.h> // for assert
-#include <math.h>   // for powf
+#include <math.h>   // for powf, pow
 #include <stdio.h>  // for printf
 #include <stdlib.h> // for malloc, free
 
@@ -67,12 +70,13 @@ typedef struct mandelbrot {
     double x;        // Center of the area to render, real part
     double y;        // Center of the area to render, imaginary part
     double width;    // Width of the area to render, the height is given by the image aspect ratio
+    double zoom;     // Zoom factor per second in continuous mode, the width is multiplied by zoom every second, 1 = no zoom
     bool continuous; // Render a new image in every batch, also when the area was not changed, no PNG file is written
 } mandelbrot_t;
 
 // Default parameters
-// static const mandelbrot_t mandelbrot = {.x = -0.5, .y = 0.0, .width = 3.0, .continuous = false}; // Complete set
-static const mandelbrot_t mandelbrot = {.x = -0.8015, .y = 0.1561, .width = 0.0055, .continuous = false};
+// static const mandelbrot_t mandelbrot = {.x = -0.5, .y = 0.0, .width = 3.0, .zoom = 0.9, .continuous = false}; // Complete set
+static const mandelbrot_t mandelbrot = {.x = -0.8015, .y = 0.1561, .width = 0.0055, .zoom = 0.9, .continuous = false};
 
 // Calibration segment handle
 static tXcpCalSegIndex mandelbrot_calseg = XCP_UNDEFINED_CALSEG;
@@ -87,16 +91,20 @@ static double gUpperLeftRe; // Upper left corner of the area to render
 static double gUpperLeftIm;
 static double gPixelSize; // Size of a pixel on the complex plane
 
+// Zoom animation in continuous mode
+// The calibration parameters are not changed, the animated width is used for the image
+// Below ZOOM_MIN_WIDTH the image gets blocky (double precision) and dark (MAX_ITER), the zoom restarts at mandelbrot.width
+#define ZOOM_MIN_WIDTH 1e-10
+#define ZOOM_MAX_WIDTH 4.0
+static bool gZooming = false;   // Zoom animation is running
+static mandelbrot_t gZoomStart; // Calibration parameters at the start of the zoom, a change of the area restarts it
+static double gZoomWidth;       // Current width
+static uint64_t gZoomTime;      // Time of the last image in ns
+
 // Logging of the image creation
 static uint64_t gInitTime = 0;        // Time of work_init in ns, the log timestamps are relative to it
 static uint64_t gRenderStartTime = 0; // Time of work_begin_batch of the current image in ns
 static uint32_t gImageCount = 0;      // Number of the current image, starting with 1
-
-// Logging in continuous mode: one summary line per second
-#define CONTINUOUS_LOG_INTERVAL_NS 1000000000ULL
-static uint64_t gContinuousLogTime = 0;  // Time of the last summary line in ns
-static uint32_t gContinuousCount = 0;    // Images since the last summary line
-static uint64_t gContinuousRenderNs = 0; // Sum of the render times of these images in ns
 
 // Iteration count per pixel, line by line, each line is owned by the worker which renders it
 // Static (not heap), to be measurable with absolute addressing, measured as a matrix with the event batch_done
@@ -224,6 +232,7 @@ bool work_init(void) {
     A2lCreateParameter(mandelbrot.x, "Center of the area to render, real part", "", -2.0, 2.0);
     A2lCreateParameter(mandelbrot.y, "Center of the area to render, imaginary part", "", -2.0, 2.0);
     A2lCreateParameter(mandelbrot.width, "Width of the area to render", "", 0.0, 4.0);
+    A2lCreateParameter(mandelbrot.zoom, "Zoom factor per second in continuous mode, 1 = no zoom, < 1 zooms in", "", 0.01, 100.0);
     A2lCreateParameter(mandelbrot.continuous, "Render a new image in every batch (with params.auto_restart), no PNG file is written", "", 0, 1);
 
     // Measure the iteration counts of the image as a matrix with the event batch_done, triggered by main.c after work_complete
@@ -246,19 +255,36 @@ bool work_init(void) {
     return true;
 }
 
-uint32_t work_begin_batch(bool requested) {
+uint32_t work_begin_batch(void) {
 
     // Take a copy of the parameters for this batch
     const mandelbrot_t *params = (const mandelbrot_t *)XcpLockCalSeg(mandelbrot_calseg);
     mandelbrot_t p = *params;
     XcpUnlockCalSeg(mandelbrot_calseg);
 
-    // Render a new image only if requested, in continuous mode, for the first image, or if the area was changed
-    if (!requested && !p.continuous && gValid && p.x == gBatchParams.x && p.y == gBatchParams.y && p.width == gBatchParams.width) {
+    // Continuous mode: zoom into the center x, y by the factor zoom per second (independent of the frame rate), starting at width
+    uint64_t now = clockGetMonotonicNs();
+    if (p.continuous) {
+        if (!gZooming || p.x != gZoomStart.x || p.y != gZoomStart.y || p.width != gZoomStart.width) {
+            gZooming = true; // Start or restart, the area was changed
+            gZoomStart = p;
+            gZoomWidth = p.width;
+        } else {
+            gZoomWidth *= pow(p.zoom, (double)(now - gZoomTime) / 1e9);
+            if (!(gZoomWidth >= ZOOM_MIN_WIDTH && gZoomWidth <= ZOOM_MAX_WIDTH)) {
+                gZoomWidth = p.width; // Restart, also on an invalid zoom factor (NaN)
+            }
+        }
+        gZoomTime = now;
+        p.width = gZoomWidth;
+    } else {
+        gZooming = false;
+    }
+
+    // Render a new image only in continuous mode, for the first image, or if the area was changed
+    if (!p.continuous && gValid && p.x == gBatchParams.x && p.y == gBatchParams.y && p.width == gBatchParams.width) {
         return 0;
     }
-    const char *reason = requested ? "requested" : p.continuous ? "continuous" : gValid ? "parameters changed" : "first image";
-    bool continuous_started = p.continuous && !(gValid && gBatchParams.continuous);
     gBatchParams = p;
     gValid = true;
 
@@ -268,17 +294,7 @@ uint32_t work_begin_batch(bool requested) {
     gUpperLeftIm = p.y + gPixelSize * Y_RES / 2.0;
 
     gImageCount++;
-    gRenderStartTime = clockGetMonotonicNs();
-    if (p.continuous && !continuous_started) {
-        return Y_RES; // Continuous mode: no log line for each image, see work_complete
-    }
-    if (continuous_started) {
-        gContinuousLogTime = gRenderStartTime;
-        gContinuousCount = 0;
-        gContinuousRenderNs = 0;
-    }
-    printf("[%9.3f s] Image %u: rendering started (%s), x=%g, y=%g, width=%g, %dx%d pixels\n", (double)(gRenderStartTime - gInitTime) / 1e9, gImageCount, reason, p.x, p.y, p.width,
-           X_RES, Y_RES);
+    gRenderStartTime = now; // The log line for the image is printed in work_complete
     return Y_RES;
 }
 
@@ -310,42 +326,34 @@ bool work_complete(uint32_t lines) {
     assert(lines == Y_RES);
     (void)lines;
 
-    // Continuous mode: no PNG file, one summary line per second
+    // Convert iteration counts to RGB and write the PNG file, not in continuous mode
     uint64_t t1 = clockGetMonotonicNs();
-    if (gBatchParams.continuous) {
-        gContinuousCount++;
-        gContinuousRenderNs += t1 - gRenderStartTime;
-        if (t1 - gContinuousLogTime >= CONTINUOUS_LOG_INTERVAL_NS) {
-            printf("[%9.3f s] Image %u: continuous rendering, %.1f images/s, render %.1f ms\n", (double)(t1 - gInitTime) / 1e9, gImageCount,
-                   (double)gContinuousCount * 1e9 / (double)(t1 - gContinuousLogTime), (double)gContinuousRenderNs / 1e6 / gContinuousCount);
-            gContinuousLogTime = t1;
-            gContinuousCount = 0;
-            gContinuousRenderNs = 0;
+    bool ok = true;
+    if (!gBatchParams.continuous) {
+        const uint8_t *p = &pixels[0][0];
+        for (size_t i = 0; i < (size_t)X_RES * Y_RES; i++) {
+            const uint8_t *rgb = gColorMap[p[i]];
+            gImage[i * 3 + 0] = rgb[0];
+            gImage[i * 3 + 1] = rgb[1];
+            gImage[i * 3 + 2] = rgb[2];
         }
-        return true;
+        ok = stbi_write_png(IMAGE_FILE_NAME, X_RES, Y_RES, 3, gImage, X_RES * 3) != 0;
     }
-
-    // Convert iteration counts to RGB and write the PNG file
-    const uint8_t *p = &pixels[0][0];
-    for (size_t i = 0; i < (size_t)X_RES * Y_RES; i++) {
-        const uint8_t *rgb = gColorMap[p[i]];
-        gImage[i * 3 + 0] = rgb[0];
-        gImage[i * 3 + 1] = rgb[1];
-        gImage[i * 3 + 2] = rgb[2];
-    }
-    bool ok = stbi_write_png(IMAGE_FILE_NAME, X_RES, Y_RES, 3, gImage, X_RES * 3) != 0;
     uint64_t t2 = clockGetMonotonicNs();
 
+    // One log line per image
     // Render time is from work_begin_batch until all lines were rendered and the main loop detected completion (includes up to one main loop cycle)
-    double render_ms = (double)(t1 - gRenderStartTime) / 1e6;
-    double write_ms = (double)(t2 - t1) / 1e6;
-    double total_ms = (double)(t2 - gRenderStartTime) / 1e6;
+    const mandelbrot_t *p = &gBatchParams;
+    printf("[%9.3f s] Image %u: x=%g, y=%g, width=%g, %dx%d, render %.1f ms", (double)(t2 - gInitTime) / 1e9, gImageCount, p->x, p->y, p->width, X_RES, Y_RES,
+           (double)(t1 - gRenderStartTime) / 1e6);
     if (!ok) {
-        printf("[%9.3f s] Image %u: failed to write %s\n", (double)(t2 - gInitTime) / 1e9, gImageCount, IMAGE_FILE_NAME);
+        printf(", failed to write %s\n", IMAGE_FILE_NAME);
         return false;
     }
-    printf("[%9.3f s] Image %u: created %s in %.1f ms (render %.1f ms, color+PNG write %.1f ms)\n", (double)(t2 - gInitTime) / 1e9, gImageCount, IMAGE_FILE_NAME, total_ms,
-           render_ms, write_ms);
+    if (!p->continuous) {
+        printf(", color+PNG write %.1f ms", (double)(t2 - t1) / 1e6);
+    }
+    printf("\n");
     return true;
 }
 
