@@ -337,6 +337,8 @@ xcpclient uses one DAQ list with one ODT (one DAQ packet) for up to 123 ODT entr
 
 A large signal (an array larger than one ODT entry) is measured with a dedicated DAQ list, it is not merged or mixed with other signals. It is split into consecutive ODT entries, in as many ODTs as needed. The packets of the first ODT have the timestamp, the others not. xcpclient reassembles the packets of a sample, the outputs get the complete signal with the timestamp of the first ODT. A sample with a lost ODT (a gap of the transport layer counter, or an ODT out of sequence) is dropped as a whole, the measurement summary shows the number of DAQ packets and of dropped samples.
 
+The ODT entries are written with `WRITE_DAQ_MULTIPLE`, up to (`MAX_CTO` - 2) / 8 = 30 ODT entries per command with the 248 byte `MAX_CTO` of XCPlite. If the XCP server answers `ERR_CMD_UNKNOWN`, xcpclient uses `WRITE_DAQ` for the rest of the session.
+
 A signal can not be split over several DAQ lists. xcpclient reports a signal which is too large as an error and does not start the measurement. The limits are properties of the XCP server:
 
 - The maximum size of an ODT entry (`MAX_ODT_ENTRY_SIZE_DAQ` from `GET_DAQ_RESOLUTION_INFO`). In XCPlite this is `XCP_MAX_ODT_ENTRY_SIZE` (248 bytes), the protocol limit is 255 bytes. It is the limit for merged signals and for the parts of a large signal.

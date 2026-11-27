@@ -354,6 +354,36 @@ impl XcpClient {
     }
 
     /// Start DAQ
+    /// Write the ODT entries of an ODT, the DAQ pointer is set to its first ODT entry
+    /// WRITE_DAQ_MULTIPLE with up to (MAX_CTO - 2) / 8 ODT entries per command, WRITE_DAQ if the XCP server does not support it:
+    /// the first ERR_CMD_UNKNOWN switches to WRITE_DAQ for the rest of the session, the DAQ pointer is unchanged then
+    async fn write_odt_entries(&mut self, daq: u16, odt: usize, blocks: &[DaqBlock]) -> Result<(), Box<dyn Error>> {
+        let max_entries = (self.max_cto_size as usize).saturating_sub(2) / 8;
+        let mut i = 0;
+        while i < blocks.len() {
+            if self.write_daq_multiple && max_entries > 1 {
+                let chunk: Vec<(u8, u32, u8)> = blocks[i..blocks.len().min(i + max_entries)].iter().map(|b| (b.ext, b.addr, b.size as u8)).collect();
+                debug!("WRITE_DAQ_MULTIPLE daq={}, odt={}, idx={}, count={}", daq, odt, i, chunk.len());
+                match self.write_daq_multiple(&chunk).await {
+                    Ok(()) => {
+                        i += chunk.len();
+                        continue;
+                    }
+                    Err(e) if e.downcast_ref::<XcpError>().is_some_and(|e| e.get_error_code() == CRC_CMD_UNKNOWN) => {
+                        info!("XCP server does not support WRITE_DAQ_MULTIPLE, using WRITE_DAQ");
+                        self.write_daq_multiple = false;
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            let b = &blocks[i];
+            debug!("WRITE_DAQ daq={}, odt={}, ext={}, addr=0x{:08X}, size={}", daq, odt, b.ext, b.addr, b.size);
+            self.write_daq(b.ext, b.addr, b.size as u8).await?;
+            i += 1;
+        }
+        Ok(())
+    }
+
     pub async fn start_measurement(&mut self) -> Result<(), Box<dyn Error>> {
         debug!("Start measurement");
 
@@ -395,10 +425,8 @@ impl XcpClient {
             let mut blocks = plan.blocks.iter();
             for (odt, &odt_entry_count) in plan.odt_blocks.iter().enumerate() {
                 self.set_daq_ptr(daq, odt as u8, 0).await?;
-                for block in blocks.by_ref().take(odt_entry_count) {
-                    debug!("WRITE_DAQ daq={}, odt={}, ext={}, addr=0x{:08X}, size={}", daq, odt, block.ext, block.addr, block.size);
-                    self.write_daq(block.ext, block.addr, block.size as u8).await?;
-                }
+                let odt_blocks: Vec<DaqBlock> = blocks.by_ref().take(odt_entry_count).copied().collect();
+                self.write_odt_entries(daq, odt, &odt_blocks).await?;
             }
 
             // Signals of this daq list, for the DAQ decoder, they start in the first ODT

@@ -287,6 +287,13 @@ impl XcpClient {
         Ok(())
     }
 
+    /// WRITE_DAQ_MULTIPLE: ODT entries (ext, addr, size) from the DAQ pointer on, at most (MAX_CTO - 2) / 8 in one command
+    pub(super) async fn write_daq_multiple(&mut self, entries: &[(u8, u32, u8)]) -> Result<(), Box<dyn Error>> {
+        assert!(!entries.is_empty() && 2 + 8 * entries.len() <= self.max_cto_size as usize);
+        self.send_command(write_daq_multiple_command(entries).build()).await?;
+        Ok(())
+    }
+
     pub(super) async fn write_daq(&mut self, ext: u8, addr: u32, len: u8) -> Result<(), Box<dyn Error>> {
         self.send_command(
             XcpCommandBuilder::new(CC_WRITE_DAQ)
@@ -430,5 +437,37 @@ impl XcpClient {
         let timestamp64 = self.get_daq_clock_raw().await?;
         let timestamp_ns = timestamp64 * self.timestamp_resolution_ns;
         Ok(timestamp_ns)
+    }
+}
+
+/// WRITE_DAQ_MULTIPLE command: code, count, then 8 bytes per ODT entry: bit offset, size, address (u32), address extension, dummy
+fn write_daq_multiple_command(entries: &[(u8, u32, u8)]) -> XcpCommandBuilder {
+    let mut cmd = XcpCommandBuilder::new(CC_WRITE_DAQ_MULTIPLE);
+    cmd.add_u8(entries.len() as u8);
+    for &(ext, addr, size) in entries {
+        cmd.add_u8(0) // bit offset
+            .add_u8(size)
+            .add_u32(addr)
+            .add_u8(ext)
+            .add_u8(0); // dummy
+    }
+    cmd
+}
+
+#[cfg(test)]
+mod write_daq_multiple_tests {
+    use super::*;
+
+    // Layout as decoded by XCPlite (xcp.h CRO_WRITE_DAQ_MULTIPLE_*): count at CRO byte 1, element i at CRO byte 2 + 8 * i
+    #[test]
+    fn test_write_daq_multiple_command() {
+        let mut cmd = write_daq_multiple_command(&[(1, 0x0002_8068, 248), (2, 0x0040_FFC0, 4)]);
+        let bytes = cmd.build().to_vec();
+        let cro = &bytes[4..]; // behind the transport layer header (len, ctr)
+        assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]) as usize, cro.len());
+        assert_eq!(cro.len(), 2 + 2 * 8);
+        assert_eq!(&cro[0..2], &[CC_WRITE_DAQ_MULTIPLE, 2]);
+        assert_eq!(&cro[2..10], &[0, 248, 0x68, 0x80, 0x02, 0x00, 1, 0]);
+        assert_eq!(&cro[10..18], &[0, 4, 0xC0, 0xFF, 0x40, 0x00, 2, 0]);
     }
 }

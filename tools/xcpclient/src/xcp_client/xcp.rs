@@ -73,6 +73,7 @@ pub const CC_ALLOC_DAQ: u8 = 0xD5;
 pub const CC_ALLOC_ODT: u8 = 0xD4;
 pub const CC_ALLOC_ODT_ENTRY: u8 = 0xD3;
 pub const CC_TIME_CORRELATION_PROPERTIES: u8 = 0xC6;
+pub const CC_WRITE_DAQ_MULTIPLE: u8 = 0xC7;
 pub const CC_GET_VERSION: u8 = 0xC0;
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------
@@ -268,6 +269,7 @@ pub enum XcpCommand {
     ClearDaqList = CC_CLEAR_DAQ_LIST as isize,
     SetDaqPtr = CC_SET_DAQ_PTR as isize,
     WriteDaq = CC_WRITE_DAQ as isize,
+    WriteDaqMultiple = CC_WRITE_DAQ_MULTIPLE as isize,
     SetDaqListMode = CC_SET_DAQ_LIST_MODE as isize,
     GetDaqListMode = CC_GET_DAQ_LIST_MODE as isize,
     StartStopDaqList = CC_START_STOP_DAQ_LIST as isize,
@@ -311,6 +313,7 @@ impl From<u8> for XcpCommand {
             CC_CLEAR_DAQ_LIST => XcpCommand::ClearDaqList,
             CC_SET_DAQ_PTR => XcpCommand::SetDaqPtr,
             CC_WRITE_DAQ => XcpCommand::WriteDaq,
+            CC_WRITE_DAQ_MULTIPLE => XcpCommand::WriteDaqMultiple,
             CC_SET_DAQ_LIST_MODE => XcpCommand::SetDaqListMode,
             CC_GET_DAQ_LIST_MODE => XcpCommand::GetDaqListMode,
             CC_START_STOP_DAQ_LIST => XcpCommand::StartStopDaqList,
