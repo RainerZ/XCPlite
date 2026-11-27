@@ -41,7 +41,7 @@
 #define OPTION_USE_TCP false                    // TCP or UDP
 #define OPTION_SERVER_PORT 5555                 // Port
 #define OPTION_SERVER_ADDR {0, 0, 0, 0}         // Bind addr, 0.0.0.0 = ANY
-#define OPTION_QUEUE_SIZE (1024 * 1024 * 16)    // Size of the measurement queue in bytes, must be a multiple of 8, must hold the DTOs of a complete image (3 MB)
+#define OPTION_QUEUE_SIZE (1024 * 1024 * 16)    // Size of the measurement queue in bytes, must be a multiple of 8, must hold the DTOs of a complete image (about 2 MB)
 #define OPTION_LOG_LEVEL 4                      // Log level, 0 = no log, 1 = error, 2 = warning, 3 = info, 4 = debug
 
 //-----------------------------------------------------------------------------------------------------
@@ -235,6 +235,11 @@ int main(void) {
     uint64_t batch_duration = 0; // Overall duration of the last batch in ns, from batch start until work_complete returned
     uint32_t last_start_request = params.start_request;
 
+    // Logging of the batches, at most one batch per second is logged, batches which follow each other faster are counted only
+    uint64_t last_batch_log_time = 0; // Start time of the last logged batch in ns
+    bool batch_logged = false;        // The current batch is logged
+    uint32_t batches_not_logged = 0;  // Batches not logged since the last logged one
+
     // Instrumentation: Main loop event and measurement variables for the progress of the current batch
     DaqCreateEvent(mainloop);
     A2lSetStackAddrMode(mainloop);
@@ -288,8 +293,17 @@ int main(void) {
                 // Instrumentation: Batch completion event
                 DaqTriggerEvent(batch_done);
 
-                printf("Batch %u completed%s: %u work items in %.3f ms, speedup %.2f\n", batch_count, ok ? "" : " with errors", batch_size, (double)batch_time / 1000000.0,
-                       batch_speedup);
+                if (batch_logged) {
+                    printf("Batch %u completed%s: %u work items in %.3f ms, speedup %.2f", batch_count, ok ? "" : " with errors", batch_size, (double)batch_time / 1000000.0,
+                           batch_speedup);
+                    if (batches_not_logged > 0) {
+                        printf(" (%u batches not logged)", batches_not_logged);
+                        batches_not_logged = 0;
+                    }
+                    printf("\n");
+                } else {
+                    batches_not_logged++;
+                }
             }
         } else {
             // Start a new batch on request, or ask the work for a new batch with auto restart
@@ -304,7 +318,11 @@ int main(void) {
                     batch_time = 0;
                     batch_running = 1;
                     start_batch(batch_size);
-                    printf("Batch %u started: %u work items\n", batch_count + 1, batch_size);
+                    batch_logged = (gBatchStartTime - last_batch_log_time >= 1000000000ULL);
+                    if (batch_logged) {
+                        last_batch_log_time = gBatchStartTime;
+                        printf("Batch %u started: %u work items\n", batch_count + 1, batch_size);
+                    }
                 }
             }
         }

@@ -86,8 +86,9 @@ Concurrent work items may write to data owned by their index (e.g. `result[index
 | `work_complete` | Map the iteration counts to colors of the visible spectrum and write `mandelbrot.png` to the current directory |
 | `work_shutdown` | Free the buffers |
 
-The resolution is `X_RES` x `Y_RES` = 2048 x 1536 (`#define` in `work.c`). Each line is written only by the worker which renders it, no synchronization needed.
-Rendering takes about 57 ms with 8 worker threads (242 ms scalar), coloring and writing the PNG file about 125 ms on the main thread (MacBook Pro M3, clang, release build).
+The resolution is `X_RES` x `Y_RES` = 1600 x 1200 (`#define` in `work.c`). Each line is written only by the worker which renders it, no synchronization needed.
+The image is measured as one array with the event `batch_done`: 1920000 bytes, 242 ODTs of one DAQ list with `XCPTL_MAX_DTO_SIZE` 7960 (`OPTION_MTU` 8000, at most 251 ODTs), about 50 KB DAQ memory (`OPTION_DAQ_MEM_SIZE`).
+At 2048 x 1536, rendering takes about 57 ms with 8 worker threads (242 ms scalar), coloring and writing the PNG file about 125 ms on the main thread (MacBook Pro M3, clang, release build).
 On a Raspberry Pi 5 rendering takes 207 ms with clang (vector width 8) and 292 ms with gcc 12 (vector width 2, gcc is slower with wider vectors there).
 The console shows when a new image is started and how long rendering and writing took.
 
@@ -102,6 +103,7 @@ The console shows when a new image is started and how long rendering and writing
 | `mandelbrot.x` | -0.8015 | Center of the area to render, real part |
 | `mandelbrot.y` | 0.1561 | Center of the area to render, imaginary part |
 | `mandelbrot.width` | 0.0055 | Width of the area to render, the height follows from the aspect ratio (-0.5, 0.0, 3.0 shows the complete set) |
+| `mandelbrot.continuous` | false | Render a new image in every batch (with `params.auto_restart`), also when the area was not changed. No PNG file is written, the console shows one summary line per second |
 
 ### Measurements
 
@@ -141,6 +143,12 @@ The first image is rendered at startup. Change the area with xcpclient and measu
 
 ```bash
 xcpclient --udp --upload-a2l --cal mandelbrot.width 0.02 --mea worker_id work_index work_time work_latency batch_speedup --time 5
+```
+
+Measure the image (`pixels`, event `batch_done`) in continuous mode. xcpclient sets the calibration parameters before the measurement starts, a single new image would be rendered before the DAQ setup of the large array is complete, continuous mode keeps rendering:
+
+```bash
+xcpclient --udp --upload-a2l --cal mandelbrot.continuous 1 --mea pixels --time 5 --mdf pixels.mf4
 ```
 
 ---

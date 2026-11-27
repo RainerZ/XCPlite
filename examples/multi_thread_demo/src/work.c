@@ -4,8 +4,8 @@
 // Ported from the rayon_demo of XCP-Lite Rust, inspired by the mandelbrot rayon example in the book "Programming Rust" by Jim Blandy and Jason Orendorff
 //
 // - The area of the complex plane to render is defined by the calibration segment 'mandelbrot' (center x, y and width)
-// - A new image is rendered when the area was changed or on explicit request
-// - The image is written to the file mandelbrot.png when all lines are rendered
+// - A new image is rendered when the area was changed or on explicit request, or in every batch in continuous mode (mandelbrot.continuous)
+// - The image is written to the file mandelbrot.png when all lines are rendered, not in continuous mode
 //
 // See the interface contract in work.h
 
@@ -32,8 +32,11 @@
 // Image
 
 #define IMAGE_FILE_NAME "mandelbrot.png"
-#define X_RES 2048   // Image width in pixels
-#define Y_RES 1536   // Image height in pixels, number of work items in a batch
+// The image is measured as one array (pixels, event batch_done), it has to fit into one DAQ list of the XCP client:
+// 1600 x 1200 = 1920000 bytes need 242 ODTs with XCPTL_MAX_DTO_SIZE 7960 (OPTION_MTU 8000), at most 251 ODTs are possible,
+// and about 50 KB of DAQ memory (OPTION_DAQ_MEM_SIZE)
+#define X_RES 1600   // Image width in pixels
+#define Y_RES 1200   // Image height in pixels, number of work items in a batch
 #define MAX_ITER 254 // Iteration limit, pixel value 255 marks a point in the set
 
 // Vectorized rendering: RENDER_VECTOR_WIDTH pixels of a line are iterated together with GCC/Clang vector extensions
@@ -61,14 +64,15 @@ _Static_assert(X_RES % RENDER_VECTOR_WIDTH == 0, "X_RES must be a multiple of RE
 // Calibration parameters
 
 typedef struct mandelbrot {
-    double x;     // Center of the area to render, real part
-    double y;     // Center of the area to render, imaginary part
-    double width; // Width of the area to render, the height is given by the image aspect ratio
+    double x;        // Center of the area to render, real part
+    double y;        // Center of the area to render, imaginary part
+    double width;    // Width of the area to render, the height is given by the image aspect ratio
+    bool continuous; // Render a new image in every batch, also when the area was not changed, no PNG file is written
 } mandelbrot_t;
 
 // Default parameters
-// static const mandelbrot_t mandelbrot = {.x = -0.5, .y = 0.0, .width = 3.0}; // Complete set
-static const mandelbrot_t mandelbrot = {.x = -0.8015, .y = 0.1561, .width = 0.0055};
+// static const mandelbrot_t mandelbrot = {.x = -0.5, .y = 0.0, .width = 3.0, .continuous = false}; // Complete set
+static const mandelbrot_t mandelbrot = {.x = -0.8015, .y = 0.1561, .width = 0.0055, .continuous = false};
 
 // Calibration segment handle
 static tXcpCalSegIndex mandelbrot_calseg = XCP_UNDEFINED_CALSEG;
@@ -87,6 +91,12 @@ static double gPixelSize; // Size of a pixel on the complex plane
 static uint64_t gInitTime = 0;        // Time of work_init in ns, the log timestamps are relative to it
 static uint64_t gRenderStartTime = 0; // Time of work_begin_batch of the current image in ns
 static uint32_t gImageCount = 0;      // Number of the current image, starting with 1
+
+// Logging in continuous mode: one summary line per second
+#define CONTINUOUS_LOG_INTERVAL_NS 1000000000ULL
+static uint64_t gContinuousLogTime = 0;  // Time of the last summary line in ns
+static uint32_t gContinuousCount = 0;    // Images since the last summary line
+static uint64_t gContinuousRenderNs = 0; // Sum of the render times of these images in ns
 
 // Iteration count per pixel, line by line, each line is owned by the worker which renders it
 // Static (not heap), to be measurable with absolute addressing, measured as a matrix with the event batch_done
@@ -214,6 +224,7 @@ bool work_init(void) {
     A2lCreateParameter(mandelbrot.x, "Center of the area to render, real part", "", -2.0, 2.0);
     A2lCreateParameter(mandelbrot.y, "Center of the area to render, imaginary part", "", -2.0, 2.0);
     A2lCreateParameter(mandelbrot.width, "Width of the area to render", "", 0.0, 4.0);
+    A2lCreateParameter(mandelbrot.continuous, "Render a new image in every batch (with params.auto_restart), no PNG file is written", "", 0, 1);
 
     // Measure the iteration counts of the image as a matrix with the event batch_done, triggered by main.c after work_complete
     A2lSetAbsoluteAddrMode(batch_done);
@@ -242,11 +253,12 @@ uint32_t work_begin_batch(bool requested) {
     mandelbrot_t p = *params;
     XcpUnlockCalSeg(mandelbrot_calseg);
 
-    // Render a new image only if requested, or for the first image, or if the area was changed
-    if (!requested && gValid && p.x == gBatchParams.x && p.y == gBatchParams.y && p.width == gBatchParams.width) {
+    // Render a new image only if requested, in continuous mode, for the first image, or if the area was changed
+    if (!requested && !p.continuous && gValid && p.x == gBatchParams.x && p.y == gBatchParams.y && p.width == gBatchParams.width) {
         return 0;
     }
-    const char *reason = requested ? "requested" : gValid ? "parameters changed" : "first image";
+    const char *reason = requested ? "requested" : p.continuous ? "continuous" : gValid ? "parameters changed" : "first image";
+    bool continuous_started = p.continuous && !(gValid && gBatchParams.continuous);
     gBatchParams = p;
     gValid = true;
 
@@ -257,6 +269,14 @@ uint32_t work_begin_batch(bool requested) {
 
     gImageCount++;
     gRenderStartTime = clockGetMonotonicNs();
+    if (p.continuous && !continuous_started) {
+        return Y_RES; // Continuous mode: no log line for each image, see work_complete
+    }
+    if (continuous_started) {
+        gContinuousLogTime = gRenderStartTime;
+        gContinuousCount = 0;
+        gContinuousRenderNs = 0;
+    }
     printf("[%9.3f s] Image %u: rendering started (%s), x=%g, y=%g, width=%g, %dx%d pixels\n", (double)(gRenderStartTime - gInitTime) / 1e9, gImageCount, reason, p.x, p.y, p.width,
            X_RES, Y_RES);
     return Y_RES;
@@ -290,8 +310,22 @@ bool work_complete(uint32_t lines) {
     assert(lines == Y_RES);
     (void)lines;
 
-    // Convert iteration counts to RGB and write the PNG file
+    // Continuous mode: no PNG file, one summary line per second
     uint64_t t1 = clockGetMonotonicNs();
+    if (gBatchParams.continuous) {
+        gContinuousCount++;
+        gContinuousRenderNs += t1 - gRenderStartTime;
+        if (t1 - gContinuousLogTime >= CONTINUOUS_LOG_INTERVAL_NS) {
+            printf("[%9.3f s] Image %u: continuous rendering, %.1f images/s, render %.1f ms\n", (double)(t1 - gInitTime) / 1e9, gImageCount,
+                   (double)gContinuousCount * 1e9 / (double)(t1 - gContinuousLogTime), (double)gContinuousRenderNs / 1e6 / gContinuousCount);
+            gContinuousLogTime = t1;
+            gContinuousCount = 0;
+            gContinuousRenderNs = 0;
+        }
+        return true;
+    }
+
+    // Convert iteration counts to RGB and write the PNG file
     const uint8_t *p = &pixels[0][0];
     for (size_t i = 0; i < (size_t)X_RES * Y_RES; i++) {
         const uint8_t *rgb = gColorMap[p[i]];
