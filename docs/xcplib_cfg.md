@@ -196,7 +196,7 @@ This section describes the transport layer configuration parameters in xcptl_cfg
 | Parameter | Description |
 |-----------|-------------|
 | `XCPTL_MAX_CTO_SIZE` | Maximum size of XCP command packets (CRO/CRM) in bytes. Must be divisible by 8 and <= `XCPTL_MAX_DTO_SIZE` (default: 248) |
-| `XCPTL_MAX_DTO_SIZE` | Maximum size of XCP data packets (DAQ/STIM) in bytes. Must be divisible by 8 and <= `XCPTL_MAX_SEGMENT_SIZE` (default: 1024, 248 with `OPTION_QUEUE_64_FIX_SIZE`) |
+| `XCPTL_MAX_DTO_SIZE` | Maximum size of XCP data packets (DAQ/STIM) in bytes. Must be divisible by 8 and <= `XCPTL_MAX_SEGMENT_SIZE` - `XCPTL_TRANSPORT_LAYER_HEADER_SIZE` (4), so the largest valid value is `XCPTL_MAX_SEGMENT_SIZE - 8` (default: 1024, 248 with `OPTION_QUEUE_64_FIX_SIZE`) |
 | `XCPTL_MAX_SEGMENT_SIZE` | Maximum data buffer size for socket send operations, for UDP the maximum UDP payload size. Calculated as `(OPTION_MTU - 20 - 8) & ~7` (IPv4 and UDP headers, aligned down to 8) |
 | `XCPTL_PACKET_ALIGNMENT` | Size granularity of the protocol layer packet inside a transport layer message; the packet is padded to this alignment so that concatenated messages in a segment stay aligned. Only 4 is supported, enforced by an `#error` in `queue.h`. Note the fill is included in the message LEN — see "Transport Layer Message Padding" in [TECHNICAL.md](TECHNICAL.md) (default: 4) |
 | `XCPTL_TRANSPORT_LAYER_HEADER_SIZE` | Transport layer message header size in bytes (fixed: 4) |
