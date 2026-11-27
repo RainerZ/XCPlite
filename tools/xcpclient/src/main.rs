@@ -1158,9 +1158,8 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
             println!("Measurement variables:");
             if !mea_objects.is_empty() {
                 for name in &mea_objects {
-                    if let Some(h) = xcp_client.create_measurement_object(name) {
-                        let o = xcp_client.get_measurement_object(h);
-                        println!(" {} {} {}", o.get_name(), o.get_a2l_addr(), o.get_a2l_type());
+                    if let Some(description) = xcp_client.describe_measurement(name) {
+                        println!(" {}", description);
                     }
                 }
                 println!();

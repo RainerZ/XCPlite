@@ -142,55 +142,114 @@ fn split_daq_lists(objects: &[XcpClientMeasurementObject], max_odt_entry_count: 
     Ok(daq_lists)
 }
 
+/// A registry instance is measurable, if it is a MEASUREMENT, or a CHARACTERISTIC with an event
+/// (IF_DATA XCP DAQ_EVENT with a fixed event or a default event list, the A2L reader takes the first event of the list)
+pub(crate) fn is_measurable(instance: &xcp_registry::McInstance) -> bool {
+    match instance.object_type() {
+        xcp_registry::McObjectType::Measurement => true,
+        xcp_registry::McObjectType::Characteristic => instance.event_id().is_some(),
+        _ => false,
+    }
+}
+
+/// A registry instance is an array, if it has more than one element (MATRIX_DIM)
+fn is_array(instance: &xcp_registry::McInstance) -> bool {
+    instance.x_dim() > 1 || instance.y_dim() > 1
+}
+
 impl XcpClient {
     //------------------------------------------------------------------------
     // XcpMeasurementObject, XcpMeasurementObjectHandle (index pointer to XcpMeasurementObject)
 
-    /// Create a measurement object by name from the registry
-    /// name may be a regular expression matching exactly one measurement
-    pub fn create_measurement_object(&mut self, name: &str) -> Option<XcpMeasurementObjectHandle> {
-        let registry = self.registry.as_ref().unwrap();
-        match registry.instance_list.get_instance(name, xcp_registry::McObjectType::Measurement, None) {
-            None => {
-                debug!("Measurement {} not found", name);
-                None
-            }
-            Some(instance) => {
-                let (ext, addr) = instance.get_address().get_a2l_addr(registry);
-                // Measurement objects without a fixed event (global variables) are measured with the default event, if specified
-                let event = instance.event_id().or(self.default_event);
-                if event.is_none() {
-                    log::warn!(
-                        "Measurement object {} has no event and no default event is specified (--default-event), addr = {}:0x{:0X}",
-                        name,
-                        ext,
-                        addr
-                    );
-                    return None;
-                }
-                let a2l_addr: A2lAddr = A2lAddr { ext, addr, event };
-                let a2l_type: A2lType = A2lType {
-                    size: instance.value_size(),
-                    encoding: instance.value_type().into(),
-                };
-                let conversion = A2lConversion::from(instance.get_mc_support_data());
-                let o = XcpClientMeasurementObject::new(name, a2l_addr, a2l_type, conversion);
-                debug!("Create measurement object {}: addr = {:08X} type = {:?}", name, a2l_addr.addr, a2l_type);
-                debug!("-> {:?} ", o);
-                self.measurement_object_list.push(o);
-                Some(XcpMeasurementObjectHandle(self.measurement_object_list.len() - 1))
-            }
+    /// Find a measurable instance by name in the registry
+    /// Returns None and logs the reason, if the instance does not exist or is not measurable, see is_measurable
+    fn measurable_instance(&self, name: &str) -> Option<&xcp_registry::McInstance> {
+        let registry = self.registry.as_ref()?;
+        let Some(instance) = registry.instance_list.get_instance(name, xcp_registry::McObjectType::Unspecified, None) else {
+            debug!("Measurement {} not found", name);
+            return None;
+        };
+        if !is_measurable(instance) {
+            warn!("{} is a {:?} without event (IF_DATA DAQ_EVENT), it can not be measured", name, instance.object_type());
+            return None;
         }
+        Some(instance)
+    }
+
+    /// Measurement object of a registry instance, the fixed or default event of the instance or the default event of the client
+    fn measurement_object_from_instance(&self, name: &str, instance: &xcp_registry::McInstance) -> XcpClientMeasurementObject {
+        let registry = self.registry.as_ref().unwrap();
+        let (ext, addr) = instance.get_address().get_a2l_addr(registry);
+        let event = instance.event_id().or(self.default_event);
+        let a2l_addr: A2lAddr = A2lAddr { ext, addr, event };
+        let a2l_type: A2lType = A2lType {
+            size: instance.value_size(),
+            encoding: instance.value_type().into(),
+        };
+        let conversion = A2lConversion::from(instance.get_mc_support_data());
+        XcpClientMeasurementObject::new(name, a2l_addr, a2l_type, conversion)
+    }
+
+    /// Create a measurement object by name from the registry
+    /// The instance must be measurable (see is_measurable) and a scalar, arrays are not supported yet
+    /// Returns None and logs the reason, if the instance can not be measured
+    pub fn create_measurement_object(&mut self, name: &str) -> Option<XcpMeasurementObjectHandle> {
+        let instance = self.measurable_instance(name)?;
+        if is_array(instance) {
+            warn!(
+                "{} is an array [{}x{}], measuring arrays is not supported yet, skipped",
+                name,
+                instance.x_dim(),
+                instance.y_dim()
+            );
+            return None;
+        }
+        let o = self.measurement_object_from_instance(name, instance);
+        // Measurement objects without a fixed event (global variables) are measured with the default event, if specified
+        if o.a2l_addr.event.is_none() {
+            log::warn!(
+                "Measurement object {} has no event and no default event is specified (--default-event), addr = {}:0x{:0X}",
+                name,
+                o.a2l_addr.ext,
+                o.a2l_addr.addr
+            );
+            return None;
+        }
+        debug!("Create measurement object {}: addr = {:08X} type = {:?}", name, o.a2l_addr.addr, o.a2l_type);
+        debug!("-> {:?} ", o);
+        self.measurement_object_list.push(o);
+        Some(XcpMeasurementObjectHandle(self.measurement_object_list.len() - 1))
+    }
+
+    /// Description of a measurable instance for --list-mea: name, address, event and type of the measurement object,
+    /// marked if it is a characteristic or an array, None if it can not be measured
+    pub fn describe_measurement(&self, name: &str) -> Option<String> {
+        let instance = self.measurable_instance(name)?;
+        let o = self.measurement_object_from_instance(name, instance);
+        let mut s = format!("{} {} {}", o.get_name(), o.get_a2l_addr(), o.get_a2l_type());
+        if is_array(instance) {
+            s.push_str(&format!(" [{}x{}]", instance.x_dim(), instance.y_dim()));
+        }
+        if instance.object_type() == xcp_registry::McObjectType::Characteristic {
+            s.push_str(" characteristic");
+        }
+        if is_array(instance) {
+            s.push_str(", array not supported yet");
+        }
+        Some(s)
     }
 
     pub fn get_measurement_object(&self, handle: XcpMeasurementObjectHandle) -> &XcpClientMeasurementObject {
         &self.measurement_object_list[handle.0]
     }
 
-    /// Unique name of the fixed event of a measurement object, None if it has none or the event is not in the registry event list
+    /// Unique name of the fixed or default event of a measurable instance, None if it has none or the event is not in the registry event list
     pub fn measurement_event_name(&self, name: &str) -> Option<String> {
         let registry = self.registry.as_ref()?;
-        let instance = registry.instance_list.get_instance(name, xcp_registry::McObjectType::Measurement, None)?;
+        let instance = registry.instance_list.get_instance(name, xcp_registry::McObjectType::Unspecified, None)?;
+        if !is_measurable(instance) {
+            return None;
+        }
         self.event_name(instance.event_id()?)
     }
 
@@ -450,5 +509,118 @@ mod tests {
         let objects: Vec<_> = (0..MAX_DAQ_COUNT as u32 + 1).map(|i| object(&format!("s{}", i), 1, 0, i * 2, 1)).collect();
         assert!(split_daq_lists(&objects, 1, 255, 1016).is_err());
         assert!(split_daq_lists(&objects[..MAX_DAQ_COUNT], 1, 255, 1016).is_ok());
+    }
+
+    //------------------------------------------------------------------------
+    // Measurable registry instances: MEASUREMENTs and CHARACTERISTICs with an event, arrays are skipped
+
+    // Registry with measurements and characteristics, with and without event, scalars and arrays
+    fn measurable_registry() -> xcp_registry::Registry {
+        use xcp_registry::{McAddress, McDimType, McEvent, McInstance, McObjectType, McSupportData, McValueType};
+        let mut reg = xcp_registry::Registry::new();
+        reg.event_list.add_event(McEvent::new("mainloop", 0, 1, 0)).unwrap();
+        reg.event_list.add_event(McEvent::new("batch_done", 0, 2, 0)).unwrap();
+        let mut add = |name: &'static str, object_type: McObjectType, x_dim: u16, y_dim: u16, address: McAddress| {
+            reg.instance_list.push(McInstance::new(
+                name,
+                McDimType::new(McValueType::Ubyte, x_dim, y_dim),
+                McSupportData::new(object_type),
+                address,
+            ));
+        };
+        // Measurement on the stack, fixed event 1
+        add("counter", McObjectType::Measurement, 1, 1, McAddress::new_event_dyn(0, 1, -16));
+        // Global measurement without event
+        add("global", McObjectType::Measurement, 1, 1, McAddress::new_a2l(0x2000, 1));
+        // Characteristic with an event, as written by xcplib for a measurement array (absolute, DEFAULT_EVENT_LIST)
+        add("value", McObjectType::Characteristic, 1, 1, McAddress::new_a2l_with_event(2, 0x3000, 1));
+        add("pixels", McObjectType::Characteristic, 2048, 1536, McAddress::new_a2l_with_event(2, 0x28068, 1));
+        // Measurement array
+        add("curve", McObjectType::Measurement, 16, 1, McAddress::new_event_dyn(0, 1, -64));
+        // Calibration parameter without event
+        add("params.delay_us", McObjectType::Characteristic, 1, 1, McAddress::new_a2l(0x8001_0000, 0));
+        reg
+    }
+
+    fn measurable_client() -> XcpClient {
+        let addr: std::net::SocketAddr = "127.0.0.1:5555".parse().unwrap();
+        let mut client = XcpClient::new("UDP", addr, addr, 0);
+        client.set_registry(measurable_registry());
+        client
+    }
+
+    // Characteristics with an event are found like measurements, characteristics without event are not, arrays are included
+    #[test]
+    fn test_find_measurements_includes_characteristics_with_event() {
+        let client = measurable_client();
+        let mut names = client.find_measurements(".*");
+        names.sort();
+        assert_eq!(names, vec!["counter", "curve", "global", "pixels", "value"]);
+        assert_eq!(client.find_measurements("^val"), vec!["value"]);
+        assert!(client.find_measurements("(").is_empty()); // Invalid regular expression
+    }
+
+    // A characteristic with an event is a measurement object with this event, the default event of the client does not override it
+    #[test]
+    fn test_create_measurement_object_of_characteristic_with_event() {
+        let mut client = measurable_client();
+        client.set_default_event(Some(1));
+        let h = client.create_measurement_object("value").expect("characteristic with event not measurable");
+        let o = client.get_measurement_object(h);
+        assert_eq!(o.get_a2l_addr().event, Some(2));
+        assert_eq!((o.get_a2l_addr().ext, o.get_a2l_addr().addr), (1, 0x3000));
+        assert_eq!(o.get_a2l_type().size, 1);
+        assert_eq!(client.measurement_event_name("value").as_deref(), Some("batch_done"));
+    }
+
+    // Measurements: with a fixed event, without event only with a default event of the client
+    #[test]
+    fn test_create_measurement_object_of_measurement() {
+        let mut client = measurable_client();
+        assert!(client.create_measurement_object("counter").is_some());
+        assert!(client.create_measurement_object("global").is_none());
+        client.set_default_event(Some(1));
+        let h = client.create_measurement_object("global").unwrap();
+        assert_eq!(client.get_measurement_object(h).get_a2l_addr().event, Some(1));
+    }
+
+    // Characteristics without event are not measurable, also not with a default event of the client, unknown names neither
+    #[test]
+    fn test_create_measurement_object_not_measurable() {
+        let mut client = measurable_client();
+        client.set_default_event(Some(1));
+        assert!(client.create_measurement_object("params.delay_us").is_none());
+        assert!(client.measurement_event_name("params.delay_us").is_none());
+        assert!(client.describe_measurement("params.delay_us").is_none());
+        assert!(client.create_measurement_object("unknown").is_none());
+    }
+
+    // Arrays are skipped (not supported yet), measurement arrays no longer measure only their first element
+    #[test]
+    fn test_create_measurement_object_of_array_is_skipped() {
+        let mut client = measurable_client();
+        assert!(client.create_measurement_object("pixels").is_none());
+        assert!(client.create_measurement_object("curve").is_none());
+        assert_eq!(client.measurement_object_list.len(), 0);
+    }
+
+    // --list-mea output: characteristics and arrays are marked, describing does not create measurement objects
+    #[test]
+    fn test_describe_measurement() {
+        let client = measurable_client();
+        assert_eq!(
+            client.describe_measurement("counter").unwrap(),
+            format!("counter 2:0x{:08X} event 1 1 byte unsigned", (1 << 22) | 0xFFF0)
+        );
+        assert_eq!(client.describe_measurement("value").unwrap(), "value 1:0x00003000 event 2 1 byte unsigned characteristic");
+        assert_eq!(
+            client.describe_measurement("pixels").unwrap(),
+            "pixels 1:0x00028068 event 2 1 byte unsigned [2048x1536] characteristic, array not supported yet"
+        );
+        assert_eq!(
+            client.describe_measurement("curve").unwrap(),
+            format!("curve 2:0x{:08X} event 1 1 byte unsigned [16x1], array not supported yet", (1 << 22) | 0xFFC0)
+        );
+        assert_eq!(client.measurement_object_list.len(), 0);
     }
 }
