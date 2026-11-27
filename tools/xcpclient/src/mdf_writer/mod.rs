@@ -338,12 +338,14 @@ mod tests {
                         entry("counter", 2, A2lTypeEncoding::Unsigned, 0, A2lConversion::default()),
                         entry("temperature", 4, A2lTypeEncoding::Float, 4, A2lConversion::new(Some(2.0), Some(-1.0), "°C")),
                     ],
+                    odt_sizes: Vec::new(),
                     size: 8,
                 },
                 XcpDaqList {
                     event_id: 7,
                     event_name: None,
                     entries: vec![entry("state", 1, A2lTypeEncoding::Unsigned, 0, A2lConversion::new(None, None, r#"0 "OFF" 1 "ON""#))],
+                    odt_sizes: Vec::new(),
                     size: 1,
                 },
             ],
@@ -511,6 +513,7 @@ mod tests {
                 event_id: 0,
                 event_name: None,
                 entries: vec![map, curve],
+                odt_sizes: Vec::new(),
                 size: 32,
             }],
         );

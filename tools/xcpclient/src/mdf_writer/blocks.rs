@@ -59,9 +59,9 @@ pub struct Channel {
     pub byte_offset: u32, // Offset in the record, behind the record id
     pub bit_count: u32,
     pub flags: u32,
-    pub name: u64,       // TX block
-    pub source: u64,     // SI block
-    pub conversion: u64, // CC block
+    pub name: u64,        // TX block
+    pub source: u64,      // SI block
+    pub conversion: u64,  // CC block
     pub unit: u64,        // TX block
     pub composition: u64, // CA block of an array channel, NIL for a scalar
     pub next: u64,        // Next CN block

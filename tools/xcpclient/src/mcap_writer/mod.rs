@@ -330,12 +330,14 @@ mod tests {
                         entry("counter", 2, A2lTypeEncoding::Unsigned, 0, A2lConversion::default()),
                         entry("_raw", 3, A2lTypeEncoding::Blob, 8, A2lConversion::default()),
                     ],
+                    odt_sizes: Vec::new(),
                     size: 12,
                 },
                 XcpDaqList {
                     event_id: 7,
                     event_name: None,
                     entries: vec![entry("state", 1, A2lTypeEncoding::Unsigned, 0, A2lConversion::new(None, None, r#"0 "OFF" 1 "ON""#))],
+                    odt_sizes: Vec::new(),
                     size: 1,
                 },
             ],
@@ -385,6 +387,7 @@ mod tests {
                 entry("b", 2, A2lTypeEncoding::Unsigned, 2, A2lConversion::default()),
                 entry("c", 2, A2lTypeEncoding::Unsigned, 4, A2lConversion::default()),
             ],
+            odt_sizes: Vec::new(),
             size: 6,
         };
         let (definition, _) = ros1_message_definition(0, &daq_list);
@@ -456,6 +459,7 @@ mod tests {
             event_id: 0,
             event_name: None,
             entries: vec![map, entry("s", 1, A2lTypeEncoding::Unsigned, 12, A2lConversion::default())],
+            odt_sizes: Vec::new(),
             size: 13,
         };
         let (definition, metadata) = ros1_message_definition(0, &daq_list);

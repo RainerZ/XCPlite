@@ -114,6 +114,7 @@ mod tests {
                 event_id: 3,
                 event_name: Some("mainloop".to_string()),
                 entries: vec![entry("short", [3, 1], 0), entry("long", [5, 4], 3)],
+                odt_sizes: Vec::new(),
                 size: 23,
             }],
         );

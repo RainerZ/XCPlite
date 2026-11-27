@@ -819,6 +819,7 @@ mod tests {
                 event_id: i as u16,
                 event_name: None,
                 entries,
+                odt_sizes: Vec::new(),
                 size: 0,
             })
             .collect();
@@ -1045,6 +1046,7 @@ mod tests {
                 event_id: i as u16,
                 event_name: None,
                 entries,
+                odt_sizes: Vec::new(),
                 size: 0,
             })
             .collect();
@@ -1080,6 +1082,7 @@ mod tests {
                 event_id: i as u16,
                 event_name: None,
                 entries,
+                odt_sizes: Vec::new(),
                 size: 0,
             })
             .collect();
@@ -1174,6 +1177,7 @@ mod tests {
                 entry("channel_x", 8, A2lTypeEncoding::Float, 0, "Volt"),
                 entry("SigGen1.value_", 8, A2lTypeEncoding::Float, 8, "Volt"),
             ],
+            odt_sizes: Vec::new(),
             size: 16,
         }];
         writer.start_trace(&daq_lists, 1000);

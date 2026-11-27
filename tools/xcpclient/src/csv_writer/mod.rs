@@ -126,6 +126,7 @@ mod tests {
                 event_id: 0,
                 event_name: None,
                 entries: vec![entry("a", 0, "m,s"), entry("b", 1, r#"0 "OFF" 1 "ON""#), entry("skipped", 2, "")],
+                odt_sizes: Vec::new(),
                 size: 3,
             }],
         );
@@ -179,6 +180,7 @@ mod tests {
                         offset: 4,
                     },
                 ],
+                odt_sizes: Vec::new(),
                 size: 5,
             }],
         );

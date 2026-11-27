@@ -20,8 +20,8 @@ pub const DAQ_TIMESTAMP_SIZE: usize = 4;
 #[derive(Debug)]
 pub struct OdtEntry {
     pub name: String,
-    pub a2l_type: A2lType,         // type of one element
-    pub dim: [u16; 2],             // array dimensions x, y (MATRIX_DIM), [1, 1] for a scalar, the elements are stored x fastest
+    pub a2l_type: A2lType, // type of one element
+    pub dim: [u16; 2],     // array dimensions x, y (MATRIX_DIM), [1, 1] for a scalar, the elements are stored x fastest
     pub a2l_addr: A2lAddr,
     pub conversion: A2lConversion, // conversion from raw to physical value, for each element
     pub offset: u16,               // offset from data start, not including daq header and timestamp
@@ -45,7 +45,11 @@ impl OdtEntry {
 
     /// Dimensions as text: "16" for a one dimensional array, "2048x1536" (x, y) for a two dimensional array
     pub fn dim_text(&self) -> String {
-        if self.dim[1] > 1 { format!("{}x{}", self.dim[0], self.dim[1]) } else { self.dim[0].to_string() }
+        if self.dim[1] > 1 {
+            format!("{}x{}", self.dim[0], self.dim[1])
+        } else {
+            self.dim[0].to_string()
+        }
     }
 
     /// Decode the raw value of this entry, the first element of an array, from the DAQ data (without daq header and timestamp)
@@ -74,14 +78,28 @@ impl OdtEntry {
 // XcpDaqList — describes one DAQ list
 
 /// DAQ list information
-/// A DAQ list is attached to exactly one event and has one ODT
-/// The DAQ packet of a DAQ list is: DAQ header, timestamp (DAQ_TIMESTAMP_SIZE), payload (size bytes), the transport layer may add fill bytes
+/// A DAQ list is attached to exactly one event and has one or more ODTs
+/// The DAQ packet of the first ODT is: DAQ header, timestamp (DAQ_TIMESTAMP_SIZE), payload, the following ODTs have no timestamp,
+/// the transport layer may add fill bytes. The payload of the DAQ list is the payload of all ODTs (size bytes).
 #[derive(Debug)]
 pub struct XcpDaqList {
     pub event_id: u16,              // id of the event the DAQ list is attached to
     pub event_name: Option<String>, // unique name of the event (with instance index), None if the event is not in the registry event list
-    pub entries: Vec<OdtEntry>,     // signals of the DAQ list, offsets are relative to the payload
-    pub size: usize,                // payload size in bytes, without DAQ header and timestamp
+    pub entries: Vec<OdtEntry>,     // signals of the DAQ list, offsets are relative to the payload of all ODTs
+    pub odt_sizes: Vec<usize>,      // payload size of each ODT, empty for one ODT with size bytes
+    pub size: usize,                // payload size in bytes of all ODTs, without DAQ header and timestamp
+}
+
+impl XcpDaqList {
+    /// Number of ODTs
+    pub fn odt_count(&self) -> usize {
+        self.odt_sizes.len().max(1)
+    }
+
+    /// Payload size of ODT odt, without DAQ header and timestamp
+    pub fn odt_size(&self, odt: usize) -> usize {
+        if self.odt_sizes.is_empty() { self.size } else { self.odt_sizes[odt] }
+    }
 }
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------
@@ -240,6 +258,16 @@ pub trait XcpDaqDecoder {
 
     /// Get the number of lost DAQ packets, from the gaps of the transport layer counter
     fn get_lost_count(&self) -> usize {
+        0
+    }
+
+    /// Get the number of DAQ packets received, a sample of a DAQ list with more than one ODT has more than one packet
+    fn get_packet_count(&self) -> usize {
+        0
+    }
+
+    /// Get the number of incomplete samples of DAQ lists with more than one ODT, dropped because an ODT was lost
+    fn get_dropped_count(&self) -> usize {
         0
     }
 }
