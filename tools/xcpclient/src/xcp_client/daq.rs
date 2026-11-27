@@ -40,7 +40,13 @@ struct DaqListPlan {
 ///
 /// Signals of an event which are adjacent in memory (same address extension, no gap) are merged to a block, which is measured
 /// with one ODT entry of up to max_odt_entry_size bytes (limit of the XCP server). This saves DAQ memory and copy operations in
-/// the XCP server. A signal can not be split, it has to fit into one ODT entry and into one ODT.
+/// the XCP server.
+///
+/// A large signal (an array larger than max_odt_entry_size) is split into consecutive ODT entries of max_odt_entry_size bytes,
+/// it is measured with a dedicated DAQ list, it is not merged or mixed with other signals. Its parts are addressed as address +
+/// n * max_odt_entry_size, the object is contiguous in memory and the address encodings of XCPlite are linear. The ODT entries are
+/// consecutive in the DAQ packet, so the signal is contiguous in the payload. A signal can not be split over several ODTs or DAQ
+/// lists, it has to fit into one ODT (max_odt_size bytes, max_odt_entry_count ODT entries).
 ///
 /// There is only one ODT per DAQ list. An event with more ODT entries than fit into one ODT (max_odt_entry_count entries,
 /// max_odt_size bytes) gets as many DAQ lists as needed. The XCP server samples all DAQ lists of an event with the same timestamp.
@@ -48,23 +54,27 @@ struct DaqListPlan {
 /// The signals are in address order in the DAQ packet, the span record of a context is moved to the front, because it has to be
 /// in one DAQ list (it is decoded as a whole). The order of the signals in a DAQ list is the order of the measurement objects.
 fn split_daq_lists(objects: &[XcpClientMeasurementObject], max_odt_entry_count: usize, max_odt_entry_size: usize, max_odt_size: usize) -> Result<Vec<DaqListPlan>, String> {
-    // Signal size (all elements of an array), a signal can not be split over several ODT entries, ODTs or DAQ lists
+    // Signal size (all elements of an array), a signal can not be split over several ODTs or DAQ lists
+    if max_odt_entry_size == 0 {
+        return Err("The XCP server supports no ODT entries (MAX_ODT_ENTRY_SIZE_DAQ = 0)".to_string());
+    }
     for m in objects {
         let size = m.size();
-        if size > max_odt_entry_size {
-            return Err(format!(
-                "Measurement object {} is too large: {} bytes, a signal can not be split and the XCP server supports {} bytes per signal (ODT entry)",
-                m.name, size, max_odt_entry_size
-            ));
-        }
         if size > max_odt_size {
             return Err(format!(
-                "Measurement object {} is too large: {} bytes, a signal can not be split and a DAQ packet of the XCP server holds {} bytes (MAX_DTO without header and timestamp)",
+                "Measurement object {} is too large: {} bytes, a signal can not be split over DAQ packets and a DAQ packet of the XCP server holds {} bytes (MAX_DTO without header and timestamp)",
                 m.name, size, max_odt_size
+            ));
+        }
+        if size.div_ceil(max_odt_entry_size) > max_odt_entry_count {
+            return Err(format!(
+                "Measurement object {} is too large: {} bytes need more than {} ODT entries of {} bytes",
+                m.name, size, max_odt_entry_count, max_odt_entry_size
             ));
         }
     }
     let max_block_size = max_odt_entry_size.min(max_odt_size);
+    let is_large = |m: &XcpClientMeasurementObject| m.size() > max_odt_entry_size;
 
     // Events, sorted by event id
     let mut events: Vec<u16> = objects.iter().filter_map(|m| m.a2l_addr.event).collect();
@@ -73,7 +83,9 @@ fn split_daq_lists(objects: &[XcpClientMeasurementObject], max_odt_entry_count: 
 
     let mut daq_lists: Vec<DaqListPlan> = Vec::new();
     for event in events {
-        let mut indices: Vec<usize> = (0..objects.len()).filter(|&i| objects[i].a2l_addr.event == Some(event)).collect();
+        // Large signals of this event, each in a dedicated DAQ list behind the DAQ lists of the other signals
+        let large: Vec<usize> = (0..objects.len()).filter(|&i| objects[i].a2l_addr.event == Some(event) && is_large(&objects[i])).collect();
+        let mut indices: Vec<usize> = (0..objects.len()).filter(|&i| objects[i].a2l_addr.event == Some(event) && !is_large(&objects[i])).collect();
 
         // Sort by address, the span record of a context to the front
         let contexts: Vec<&str> = indices.iter().filter_map(|&i| objects[i].name.strip_suffix(".span")).collect();
@@ -130,7 +142,29 @@ fn split_daq_lists(objects: &[XcpClientMeasurementObject], max_odt_entry_count: 
             daq_list.blocks.push(block);
             daq_list.size += block.size;
         }
-        daq_lists.push(daq_list);
+        if !daq_list.blocks.is_empty() {
+            daq_lists.push(daq_list);
+        }
+
+        // Large signals: consecutive ODT entries of max_odt_entry_size bytes
+        for i in large {
+            let A2lAddr { ext, addr, .. } = objects[i].a2l_addr;
+            let size = objects[i].size();
+            let blocks = (0..size)
+                .step_by(max_odt_entry_size)
+                .map(|offset| DaqBlock {
+                    ext,
+                    addr: addr.wrapping_add(offset as u32),
+                    size: max_odt_entry_size.min(size - offset),
+                })
+                .collect();
+            daq_lists.push(DaqListPlan {
+                event,
+                blocks,
+                signals: vec![(i, 0)],
+                size,
+            });
+        }
     }
     for daq_list in &mut daq_lists {
         daq_list.signals.sort_unstable();
@@ -190,25 +224,30 @@ impl XcpClient {
         XcpClientMeasurementObject::new(name, a2l_addr, a2l_type, conversion).with_dim([instance.x_dim(), instance.y_dim()])
     }
 
-    /// Arrays are supported up to the maximum size of an ODT entry of the XCP server
+    /// Maximum payload of a DAQ packet (one ODT): MAX_DTO without the DAQ header and the timestamp, 0 before connect
+    fn max_odt_size(&self) -> usize {
+        (self.max_dto_size as usize).saturating_sub(self.daq_header_size as usize + DAQ_TIMESTAMP_SIZE)
+    }
+
+    /// Arrays are supported up to the maximum payload of a DAQ packet, larger arrays would need more than one ODT
     fn is_supported_array_size(&self, o: &XcpClientMeasurementObject) -> bool {
-        o.size() <= self.max_odt_entry_size as usize
+        o.size() <= self.max_odt_size()
     }
 
     /// Create a measurement object by name from the registry
-    /// The instance must be measurable (see is_measurable), an array must fit into one ODT entry (max_odt_entry_size)
+    /// The instance must be measurable (see is_measurable), an array must fit into one DAQ packet (max_odt_size)
     /// Returns None and logs the reason, if the instance can not be measured
     pub fn create_measurement_object(&mut self, name: &str) -> Option<XcpMeasurementObjectHandle> {
         let instance = self.measurable_instance(name)?;
         let o = self.measurement_object_from_instance(name, instance);
         if is_array(instance) && !self.is_supported_array_size(&o) {
             warn!(
-                "{} is an array [{}x{}] of {} bytes, arrays larger than one ODT entry ({} bytes) are not supported yet, skipped",
+                "{} is an array [{}x{}] of {} bytes, arrays larger than one DAQ packet ({} bytes) are not supported yet, skipped",
                 name,
                 instance.x_dim(),
                 instance.y_dim(),
                 o.size(),
-                self.max_odt_entry_size
+                self.max_odt_size()
             );
             return None;
         }
@@ -241,7 +280,7 @@ impl XcpClient {
             s.push_str(" characteristic");
         }
         if is_array(instance) && !self.is_supported_array_size(&o) {
-            s.push_str(", array larger than one ODT entry not supported yet");
+            s.push_str(", array larger than one DAQ packet not supported yet");
         }
         Some(s)
     }
@@ -285,7 +324,7 @@ impl XcpClient {
         // Distribute the signals to DAQ lists, an event may need more than one
         // Limits are checked here, before the DAQ setup of the XCP server is changed
         // Payload of the ODT: MAX_DTO without the DAQ header and the timestamp
-        let max_odt_size = (self.max_dto_size as usize).saturating_sub(self.daq_header_size as usize + DAQ_TIMESTAMP_SIZE);
+        let max_odt_size = self.max_odt_size();
         let daq_list_plan = split_daq_lists(&self.measurement_object_list, MAX_ODT_ENTRY_COUNT, self.max_odt_entry_size as usize, max_odt_size)?;
         let daq_count: u16 = daq_list_plan.len() as u16;
         debug!("daq count = {}", daq_count);
@@ -508,10 +547,12 @@ mod tests {
         let objects = vec![object("a", 1, 2, 0x0005_7FFC, 4), object("b", 1, 2, 0x0005_8000, 4), object("c", 1, 2, 0x0005_8004, 4)];
         assert_eq!(plan(&objects, 123, 248, 1016)[0].1, vec![(0x0005_7FFC, 4), (0x0005_8000, 8)]);
 
-        // Signal too large for an ODT entry (limit of the XCP server) or for the ODT
-        assert!(split_daq_lists(&[object("big", 1, 0, 0, 249)], 123, 248, 1016).is_err());
-        assert!(split_daq_lists(&[object("big", 1, 0, 0, 248)], 123, 248, 1016).is_ok());
+        // Signal too large for the ODT, or needing more ODT entries than an ODT has, larger than an ODT entry is split
+        assert!(split_daq_lists(&[object("big", 1, 0, 0, 249)], 123, 248, 1016).is_ok());
+        assert!(split_daq_lists(&[object("big", 1, 0, 0, 1017)], 123, 248, 1016).is_err());
         assert!(split_daq_lists(&[object("big", 1, 0, 0, 32)], 123, 255, 16).is_err());
+        assert!(split_daq_lists(&[object("big", 1, 0, 0, 497)], 2, 248, 1016).is_err());
+        assert!(split_daq_lists(&[object("big", 1, 0, 0, 496)], 2, 248, 1016).is_ok());
 
         // Too many DAQ lists
         let objects: Vec<_> = (0..MAX_DAQ_COUNT as u32 + 1).map(|i| object(&format!("s{}", i), 1, 0, i * 2, 1)).collect();
@@ -546,18 +587,21 @@ mod tests {
         // Measurement arrays, one dimensional, and two dimensional with the maximum size of an ODT entry (248 bytes) and one byte more
         add("curve", McObjectType::Measurement, 16, 1, McAddress::new_event_dyn(0, 1, -64));
         add("map", McObjectType::Measurement, 8, 31, McAddress::new_a2l_with_event(1, 0x4000, 1));
-        add("map_too_large", McObjectType::Measurement, 249, 1, McAddress::new_a2l_with_event(1, 0x5000, 1));
+        add("map_too_large", McObjectType::Measurement, 1017, 1, McAddress::new_a2l_with_event(1, 0x5000, 1));
+        // Array with the maximum size of a DAQ packet (MAX_DTO 1024 - 8)
+        add("large", McObjectType::Measurement, 254, 4, McAddress::new_a2l_with_event(1, 0x6000, 1));
         // Calibration parameter without event
         add("params.delay_us", McObjectType::Characteristic, 1, 1, McAddress::new_a2l(0x8001_0000, 0));
         reg
     }
 
-    // Client with the maximum ODT entry size of XCPlite
+    // Client with the maximum ODT entry size and the default DTO size of XCPlite, a DAQ packet holds 1016 bytes
     fn measurable_client() -> XcpClient {
         let addr: std::net::SocketAddr = "127.0.0.1:5555".parse().unwrap();
         let mut client = XcpClient::new("UDP", addr, addr, 0);
         client.set_registry(measurable_registry());
         client.max_odt_entry_size = 248;
+        client.max_dto_size = 1024;
         client
     }
 
@@ -567,7 +611,7 @@ mod tests {
         let client = measurable_client();
         let mut names = client.find_measurements(".*");
         names.sort();
-        assert_eq!(names, vec!["counter", "curve", "global", "map", "map_too_large", "pixels", "value"]);
+        assert_eq!(names, vec!["counter", "curve", "global", "large", "map", "map_too_large", "pixels", "value"]);
         assert_eq!(client.find_measurements("^val"), vec!["value"]);
         assert!(client.find_measurements("(").is_empty()); // Invalid regular expression
     }
@@ -607,7 +651,7 @@ mod tests {
         assert!(client.create_measurement_object("unknown").is_none());
     }
 
-    // Arrays up to the maximum size of an ODT entry are measured as a whole, larger arrays are skipped
+    // Arrays up to the maximum payload of a DAQ packet are measured as a whole, larger arrays are skipped
     #[test]
     fn test_create_measurement_object_of_array() {
         let mut client = measurable_client();
@@ -617,9 +661,11 @@ mod tests {
         let h = client.create_measurement_object("map").expect("array of 248 bytes not measurable");
         let o = client.get_measurement_object(h);
         assert_eq!((o.dim, o.size()), ([8, 31], 248));
+        let h = client.create_measurement_object("large").expect("array of 1016 bytes not measurable");
+        assert_eq!(client.get_measurement_object(h).size(), 1016);
         assert!(client.create_measurement_object("map_too_large").is_none());
         assert!(client.create_measurement_object("pixels").is_none());
-        assert_eq!(client.measurement_object_list.len(), 2);
+        assert_eq!(client.measurement_object_list.len(), 3);
     }
 
     // --list-mea output: characteristics and arrays are marked, describing does not create measurement objects
@@ -633,7 +679,7 @@ mod tests {
         assert_eq!(client.describe_measurement("value").unwrap(), "value 1:0x00003000 event 2 1 byte unsigned characteristic");
         assert_eq!(
             client.describe_measurement("pixels").unwrap(),
-            "pixels 1:0x00028068 event 2 1 byte unsigned [2048x1536] characteristic, array larger than one ODT entry not supported yet"
+            "pixels 1:0x00028068 event 2 1 byte unsigned [2048x1536] characteristic, array larger than one DAQ packet not supported yet"
         );
         assert_eq!(
             client.describe_measurement("curve").unwrap(),
@@ -657,7 +703,40 @@ mod tests {
         let objects = vec![array("map", 0x100, [4, 31]), object("s", 1, 0, 0x1F8, 2)];
         let plan = split_daq_lists(&objects, 0x7B, 248, 1016).unwrap();
         assert_eq!(plan[0].blocks, vec![DaqBlock { ext: 0, addr: 0x100, size: 248 }, DaqBlock { ext: 0, addr: 0x1F8, size: 2 }]);
-        // Array larger than an ODT entry
-        assert!(split_daq_lists(&[array("too_large", 0x100, [125, 1])], 0x7B, 248, 1016).is_err());
+    }
+
+    // An array larger than an ODT entry is split into consecutive ODT entries of a dedicated DAQ list, behind the DAQ list of
+    // the other signals of its event, it is not merged with adjacent signals
+    #[test]
+    fn test_split_daq_lists_with_large_arrays() {
+        let array = |name: &str, event: u16, addr: u32, dim: [u16; 2]| object(name, event, 0, addr, 2).with_dim(dim);
+        // 250 byte array, adjacent to a scalar before and after it, and a 1016 byte array (the maximum), event 1, a scalar of event 2
+        let objects = vec![
+            object("before", 1, 0, 0x0FE, 2),
+            array("large", 1, 0x100, [125, 1]),
+            object("after", 1, 0, 0x1FA, 2),
+            array("max", 1, 0x1000, [254, 2]),
+            object("other", 2, 0, 0x2000, 2),
+        ];
+        let plan = split_daq_lists(&objects, 0x7B, 248, 1016).unwrap();
+        type DaqListSummary = (u16, Vec<(u32, usize)>, Vec<(usize, usize)>, usize); // Event, blocks (addr, size), signals, size
+        let summary: Vec<DaqListSummary> = plan
+            .iter()
+            .map(|d| (d.event, d.blocks.iter().map(|b| (b.addr, b.size)).collect(), d.signals.clone(), d.size))
+            .collect();
+        assert_eq!(
+            summary,
+            vec![
+                (1, vec![(0x0FE, 2), (0x1FA, 2)], vec![(0, 0), (2, 2)], 4),
+                (1, vec![(0x100, 248), (0x1F8, 2)], vec![(1, 0)], 250),
+                (1, vec![(0x1000, 248), (0x10F8, 248), (0x11F0, 248), (0x12E8, 248), (0x13E0, 24)], vec![(3, 0)], 1016),
+                (2, vec![(0x2000, 2)], vec![(4, 0)], 2),
+            ]
+        );
+        // A large array alone gets no empty DAQ list for the other signals
+        let plan = split_daq_lists(&objects[1..2], 0x7B, 248, 1016).unwrap();
+        assert_eq!(plan.len(), 1);
+        // Larger than a DAQ packet
+        assert!(split_daq_lists(&[array("too_large", 1, 0x100, [254, 2]), array("x", 1, 0, [1, 1])], 0x7B, 248, 1015).is_err());
     }
 }

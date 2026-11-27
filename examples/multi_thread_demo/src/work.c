@@ -90,7 +90,7 @@ static uint32_t gImageCount = 0;      // Number of the current image, starting w
 
 // Iteration count per pixel, line by line, each line is owned by the worker which renders it
 // Static (not heap), to be measurable with absolute addressing, measured as a matrix with the event batch_done
-static uint8_t pixels[Y_RES][X_RES];
+uint8_t pixels[Y_RES][X_RES];
 
 // RGB image and color map for the PNG file
 static uint8_t *gImage = NULL;
@@ -257,8 +257,8 @@ uint32_t work_begin_batch(bool requested) {
 
     gImageCount++;
     gRenderStartTime = clockGetMonotonicNs();
-    printf("[%9.3f s] Image %u: rendering started (%s), x=%g, y=%g, width=%g, %dx%d pixels\n", (double)(gRenderStartTime - gInitTime) / 1e9, gImageCount,
-           reason, p.x, p.y, p.width, X_RES, Y_RES);
+    printf("[%9.3f s] Image %u: rendering started (%s), x=%g, y=%g, width=%g, %dx%d pixels\n", (double)(gRenderStartTime - gInitTime) / 1e9, gImageCount, reason, p.x, p.y, p.width,
+           X_RES, Y_RES);
     return Y_RES;
 }
 

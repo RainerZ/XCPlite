@@ -335,16 +335,16 @@ Signals of an event which are adjacent in memory (same address extension, no gap
 
 xcpclient uses one DAQ list with one ODT (one DAQ packet) for up to 123 ODT entries of an event. An event with more ODT entries, or with more signal bytes than fit into one DAQ packet, gets as many DAQ lists as needed. The XCP server samples all DAQ lists of an event with the same timestamp. In the console output and in the CSV file such an event appears once per DAQ list, with the same event name and timestamp and a different `daq` number.
 
-A signal can not be split over several ODT entries, ODTs or DAQ lists. xcpclient reports a signal which is too large as an error and does not start the measurement. There are two limits, both are properties of the XCP server:
+A signal can not be split over several ODTs or DAQ lists. xcpclient reports a signal which is too large as an error and does not start the measurement. The limits are properties of the XCP server:
 
-- The maximum size of an ODT entry (`MAX_ODT_ENTRY_SIZE_DAQ` from `GET_DAQ_RESOLUTION_INFO`). In XCPlite this is `XCP_MAX_ODT_ENTRY_SIZE` (248 bytes). It is the limit for merged signals as well. The protocol limit is 255 bytes, a larger signal can not be measured as one signal.
-- The payload of a DAQ packet, `MAX_DTO` without the 4 byte header and the 4 byte timestamp. In XCPlite this is `XCPTL_MAX_DTO_SIZE - 8`, 1016 bytes by default and 240 bytes with `OPTION_QUEUE_64_FIX_SIZE`. If a signal does not fit, `XCPTL_MAX_DTO_SIZE` has to be increased.
+- The maximum size of an ODT entry (`MAX_ODT_ENTRY_SIZE_DAQ` from `GET_DAQ_RESOLUTION_INFO`). In XCPlite this is `XCP_MAX_ODT_ENTRY_SIZE` (248 bytes), the protocol limit is 255 bytes. It is the limit for merged signals. A larger signal (an array) is split into consecutive ODT entries of this size and measured with a dedicated DAQ list, it is not merged or mixed with other signals.
+- The payload of a DAQ packet, `MAX_DTO` without the 4 byte header and the 4 byte timestamp. In XCPlite this is `XCPTL_MAX_DTO_SIZE - 8`, 1016 bytes by default and 240 bytes with `OPTION_QUEUE_64_FIX_SIZE`. If a signal does not fit, `XCPTL_MAX_DTO_SIZE` has to be increased (at most `XCPTL_MAX_SEGMENT_SIZE - 8`, jumbo frames with a larger `OPTION_MTU`).
 
 Structs are not affected, they are measured as their basic type members (`points_._0.x`, `parameters.counter_max`).
 
 Measurable are MEASUREMENTs and CHARACTERISTICs with an event (`IF_DATA XCP DAQ_EVENT` with a fixed event or a default event list, as xcplib writes measurement arrays). A characteristic without event, for example a calibration parameter, can not be measured, also not with `--default-event`. `--list-mea` marks characteristics and arrays (`[x x y]`).
 
-An array (`MATRIX_DIM`) is measured as one signal with all its elements, so it has to fit into one ODT entry (248 bytes in XCPlite), larger arrays are skipped with a warning. The elements are in memory order, x varies fastest (a C array `[y][x]` has `MATRIX_DIM x y`):
+An array (`MATRIX_DIM`) is measured as one signal with all its elements, so it has to fit into one DAQ packet (1016 bytes in XCPlite by default), larger arrays are skipped with a warning. The elements are in memory order, x varies fastest (a C array `[y][x]` has `MATRIX_DIM x y`):
 
 - Console: the first 16 elements, `curve = [0 1 2 ...]`
 - CSV: arrays are skipped
