@@ -34,20 +34,6 @@
 // Transport layer version
 #define XCP_TRANSPORT_LAYER_VERSION 0x0104
 
-// CTO size
-// Maximum size of a XCP command packet (CRO,CRM)
-// Must be %8, must be smaller or equal than XCPTL_MAX_DTO_SIZE
-#define XCPTL_MAX_CTO_SIZE (248)
-
-// DTO size
-// Maximum size of a XCP data packet (DAQ,STIM)
-#ifdef OPTION_QUEUE_64_FIX_SIZE
-// Must be %8, must result in a queue entry size (including header) that is a multiple of the cache line size for optimal performance
-#define XCPTL_MAX_DTO_SIZE (248) // CACHE_LINE_LIZE - QUEUE_HEADER_SIZE - XCPTL_TRANSPORT_LAYER_HEADER_SIZE = 248 for optimal fixed size tl queue entry size
-#else
-#define XCPTL_MAX_DTO_SIZE (1024) // Must be %8, must be <= XCPTL_MAX_SEGMENT_SIZE - XCPTL_TRANSPORT_LAYER_HEADER_SIZE, the largest valid value is XCPTL_MAX_SEGMENT_SIZE - 8
-#endif
-
 // Segment size is the maximum data buffer size given to socket send/sendTo; for UDP, it is the maximum UDP payload size.
 // Subtract the minimum IPv4 and UDP headers from the IP MTU, then align down as required by the transport layer.
 // Jumbo frames are supported, but it might be more efficient to use a smaller segment size.
@@ -79,6 +65,22 @@
 // fragments or drops it according to its own IP_FRAG build setting. socketSendTo therefore compares
 // the segment against netif_default->mtu itself and warns once, but it still hands the datagram to
 // lwIP: the check is a diagnostic, not a guard. On lwIP, OPTION_MTU has to be right.
+
+// DTO size
+// Maximum size of a XCP data packet (DAQ,STIM)
+#ifdef OPTION_QUEUE_64_FIX_SIZE
+// Must be %8, must result in a queue entry size (including header) that is a multiple of the cache line size for optimal performance
+// CACHE_LINE_LIZE - QUEUE_HEADER_SIZE - XCPTL_TRANSPORT_LAYER_HEADER_SIZE = 248 for optimal fixed size tl queue entry size
+#define XCPTL_MAX_DTO_SIZE (248)
+#else
+// Must be %8, must be <= XCPTL_MAX_SEGMENT_SIZE - XCPTL_TRANSPORT_LAYER_HEADER_SIZE
+#define XCPTL_MAX_DTO_SIZE (XCPTL_MAX_SEGMENT_SIZE - 8)
+#endif
+
+// CTO size
+// Maximum size of a XCP command packet (CRO,CRM)
+// Must be %8, must be smaller or equal than XCPTL_MAX_DTO_SIZE
+#define XCPTL_MAX_CTO_SIZE (248)
 
 // Receive timeout in milliseconds (rate of periodic checks for shutdown and background tasks in the receive thread)
 #define XCPTL_RECV_TIMEOUT_MS 100

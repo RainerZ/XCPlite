@@ -107,7 +107,6 @@
 
 #if defined(XCPTL_MAX_DTO_SIZE)
 // A DTO is transmitted with its transport layer header in one segment, the largest valid value (%8) is XCPTL_MAX_SEGMENT_SIZE - 8
-// A larger DTO would never fit into a segment and stall the transmit queue
 #if (XCPTL_MAX_DTO_SIZE > (XCPTL_MAX_SEGMENT_SIZE - XCPTL_TRANSPORT_LAYER_HEADER_SIZE))
 #error "XCPTL_MAX_DTO_SIZE too large, must be <= XCPTL_MAX_SEGMENT_SIZE - XCPTL_TRANSPORT_LAYER_HEADER_SIZE"
 #endif
