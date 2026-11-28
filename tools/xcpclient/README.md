@@ -335,12 +335,28 @@ Signals of an event which are adjacent in memory (same address extension, no gap
 
 xcpclient uses one DAQ list with one ODT (one DAQ packet) for up to 123 ODT entries of an event. An event with more ODT entries, or with more signal bytes than fit into one DAQ packet, gets as many DAQ lists as needed. The XCP server samples all DAQ lists of an event with the same timestamp. In the console output and in the CSV file such an event appears once per DAQ list, with the same event name and timestamp and a different `daq` number.
 
-A signal can not be split over several ODT entries, ODTs or DAQ lists. xcpclient reports a signal which is too large as an error and does not start the measurement. There are two limits, both are properties of the XCP server:
+A large signal (an array larger than one ODT entry) is measured with a dedicated DAQ list, it is not merged or mixed with other signals. It is split into consecutive ODT entries, in as many ODTs as needed. The packets of the first ODT have the timestamp, the others not. xcpclient reassembles the packets of a sample, the outputs get the complete signal with the timestamp of the first ODT. A sample with a lost ODT (a gap of the transport layer counter, or an ODT out of sequence) is dropped as a whole, the measurement summary shows the number of DAQ packets and of dropped samples.
 
-- The maximum size of an ODT entry (`MAX_ODT_ENTRY_SIZE_DAQ` from `GET_DAQ_RESOLUTION_INFO`). In XCPlite this is `XCP_MAX_ODT_ENTRY_SIZE` (248 bytes). It is the limit for merged signals as well. The protocol limit is 255 bytes, a larger signal can not be measured as one signal.
-- The payload of a DAQ packet, `MAX_DTO` without the 4 byte header and the 4 byte timestamp. In XCPlite this is `XCPTL_MAX_DTO_SIZE - 8`, 1016 bytes by default and 240 bytes with `OPTION_QUEUE_64_FIX_SIZE`. If a signal does not fit, `XCPTL_MAX_DTO_SIZE` has to be increased.
+The ODT entries are written with `WRITE_DAQ_MULTIPLE`, up to (`MAX_CTO` - 2) / 8 = 30 ODT entries per command with the 248 byte `MAX_CTO` of XCPlite. If the XCP server answers `ERR_CMD_UNKNOWN`, xcpclient uses `WRITE_DAQ` for the rest of the session.
 
-Structs and arrays are not affected, they are measured as their basic type elements (`points_._0.x`, `parameters.counter_max`).
+A signal can not be split over several DAQ lists. xcpclient reports a signal which is too large as an error and does not start the measurement. The limits are properties of the XCP server:
+
+- The maximum size of an ODT entry (`MAX_ODT_ENTRY_SIZE_DAQ` from `GET_DAQ_RESOLUTION_INFO`). In XCPlite this is `XCP_MAX_ODT_ENTRY_SIZE` (248 bytes), the protocol limit is 255 bytes. It is the limit for merged signals and for the parts of a large signal.
+- The payload of a DAQ packet, `MAX_DTO` without the 4 byte header and the 4 byte timestamp (the timestamp only in the first ODT of a DAQ list). In XCPlite this is `XCPTL_MAX_DTO_SIZE - 8`, 1016 bytes by default and 240 bytes with `OPTION_QUEUE_64_FIX_SIZE`. `XCPTL_MAX_DTO_SIZE` can be increased up to `XCPTL_MAX_SEGMENT_SIZE - 8`, jumbo frames with a larger `OPTION_MTU`.
+- 251 ODTs per DAQ list: the ODT number is the PID of the DAQ packet, 0xFC..0xFF are reserved. A large signal can have 1016 + 250 * 1020 = 256016 bytes with the default `XCPTL_MAX_DTO_SIZE` of 1024, about 2 MB with 7960 (`OPTION_MTU` 8000).
+- The DAQ memory of the XCP server (`OPTION_DAQ_MEM_SIZE` in XCPlite, 12 KiB by default): 12 bytes per DAQ list, 8 per ODT and 6 per ODT entry, a large signal needs about 6 bytes per 248 bytes. A setup which does not fit is rejected by the server with a memory overflow error.
+
+Structs are not affected, they are measured as their basic type members (`points_._0.x`, `parameters.counter_max`).
+
+Measurable are MEASUREMENTs and CHARACTERISTICs with an event (`IF_DATA XCP DAQ_EVENT` with a fixed event or a default event list, as xcplib writes measurement arrays). A characteristic without event, for example a calibration parameter, can not be measured, also not with `--default-event`. `--list-mea` marks characteristics and arrays (`[x x y]`).
+
+An array (`MATRIX_DIM`) is measured as one signal with all its elements, so it has to fit into one DAQ list (see above), larger arrays are skipped with a warning. The elements are in memory order, x varies fastest (a C array `[y][x]` has `MATRIX_DIM x y`):
+
+- Console: the first 16 elements, `curve = [0 1 2 ...]`
+- CSV: arrays are skipped
+- MDF: one channel of the element type with a CA block (fixed size array), the dimensions are row oriented (last varies fastest), so `MATRIX_DIM x y` is `[y, x]` in the MDF file
+- MCAP: a fixed size ros1 array of the elements, `float32[32] matrix_f32`, the dimensions are in the channel metadata (`matrix_f32.dim` = `8x4`)
+- Perfetto: arrays are skipped
 
 ### Lost packets and UDP receive buffer
 

@@ -1158,9 +1158,8 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
             println!("Measurement variables:");
             if !mea_objects.is_empty() {
                 for name in &mea_objects {
-                    if let Some(h) = xcp_client.create_measurement_object(name) {
-                        let o = xcp_client.get_measurement_object(h);
-                        println!(" {} {} {}", o.get_name(), o.get_a2l_addr(), o.get_a2l_type());
+                    if let Some(description) = xcp_client.describe_measurement(name) {
+                        println!(" {}", description);
                     }
                 }
                 println!();
@@ -1284,19 +1283,28 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
                         let event_count = daq_decoder.get_event_count();
                         let byte_count = daq_decoder.get_byte_count();
                         let lost_count = daq_decoder.get_lost_count();
+                        let packet_count = daq_decoder.get_packet_count();
+                        let dropped_count = daq_decoder.get_dropped_count();
                         info!(
-                            "Measurement done, {} events, {:.0} event/s, {:.3} Mbytes/s, {} packets lost",
+                            "Measurement done, {} events, {:.0} event/s, {:.3} Mbytes/s, {} packets, {} packets lost",
                             event_count,
                             event_count as f64 * 1_000_000.0 / elapsed_time as f64,
                             byte_count as f64 / elapsed_time as f64,
+                            packet_count,
                             lost_count
                         );
                         if lost_count > 0 {
                             warn!(
                                 "{} of {} DAQ packets lost ({:.3}%), in the transmit queue of the XCP server or in the UDP receive buffer",
                                 lost_count,
-                                event_count + lost_count,
-                                lost_count as f64 * 100.0 / (event_count + lost_count) as f64
+                                packet_count + lost_count,
+                                lost_count as f64 * 100.0 / (packet_count + lost_count) as f64
+                            );
+                        }
+                        if dropped_count > 0 {
+                            warn!(
+                                "{} incomplete samples of DAQ lists with more than one ODT dropped, an ODT was lost or out of sequence",
+                                dropped_count
                             );
                         }
                     }

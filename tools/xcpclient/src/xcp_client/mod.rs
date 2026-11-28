@@ -144,6 +144,9 @@ pub struct XcpClient {
 
     // Event id used for the DAQ measurement of objects without a fixed event (global variables), None: such objects can not be measured
     default_event: Option<u16>,
+
+    // The XCP server supports WRITE_DAQ_MULTIPLE, false after it answered ERR_CMD_UNKNOWN, WRITE_DAQ is used then
+    write_daq_multiple: bool,
 }
 
 impl XcpClient {
@@ -183,6 +186,7 @@ impl XcpClient {
             calibration_object_list: Vec::new(),
             measurement_object_list: Vec::new(),
             default_event: None,
+            write_daq_multiple: true,
         }
     }
 

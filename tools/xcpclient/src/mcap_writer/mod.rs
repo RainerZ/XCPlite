@@ -12,6 +12,8 @@
 // Values are raw values, MCAP has no conversions or units. They are in the comments of the message definition and in the channel
 // metadata ("<field>.unit", "<field>.factor", "<field>.offset", "<field>.labels", "<field>.name" is the name of the signal).
 // The ros1 field names are the signal names with all characters except letters, digits and '_' replaced by '_'.
+// An array is a fixed size ros1 array of its elements in memory order (x fastest), a two dimensional array is flattened,
+// its dimensions are in the channel metadata ("<field>.dim" = "<x>x<y>").
 //
 // The messages are written in chunks of 1 MB, compressed with zstd. The summary (index and statistics) is written at measurement stop,
 // if xcpclient is killed, the last chunk is lost and the file has no summary, `mcap recover` repairs it.
@@ -121,7 +123,7 @@ fn ros1_message_definition(daq: usize, daq_list: &XcpDaqList) -> (String, BTreeM
     let mut pos = 0;
     for entry in entries {
         let offset = entry.offset as usize;
-        if offset < pos || offset + entry.a2l_type.size > daq_list.size {
+        if offset < pos || offset + entry.size() > daq_list.size {
             warn!(
                 "MCAP: {} at offset {} can not be described in the message definition of DAQ list {}, skipped",
                 entry.name, offset, daq
@@ -131,7 +133,7 @@ fn ros1_message_definition(daq: usize, daq_list: &XcpDaqList) -> (String, BTreeM
         if offset > pos {
             add_padding(&mut definition, &mut names, offset - pos);
         }
-        pos = offset + entry.a2l_type.size;
+        pos = offset + entry.size();
 
         let field = unique_name(&mut names, ros1_name(&entry.name));
         let mut comment = one_line(&entry.name);
@@ -155,7 +157,14 @@ fn ros1_message_definition(daq: usize, daq_list: &XcpDaqList) -> (String, BTreeM
                 metadata.insert(format!("{}.unit", field), unit);
             }
         }
-        let _ = writeln!(definition, "{} {}  # {}", ros1_type(&entry.a2l_type), field, comment);
+        if entry.is_array() {
+            let dim = entry.dim_text();
+            let _ = write!(comment, " dim {}", dim);
+            metadata.insert(format!("{}.dim", field), dim);
+            let _ = writeln!(definition, "{}[{}] {}  # {}", ros1_type(&entry.a2l_type), entry.element_count(), field, comment);
+        } else {
+            let _ = writeln!(definition, "{} {}  # {}", ros1_type(&entry.a2l_type), field, comment);
+        }
     }
     if daq_list.size > pos {
         add_padding(&mut definition, &mut names, daq_list.size - pos);
@@ -301,6 +310,7 @@ mod tests {
         OdtEntry {
             name: name.to_string(),
             a2l_type: A2lType { size, encoding },
+            dim: [1, 1],
             a2l_addr: A2lAddr { ext: 0, addr: 0, event: Some(0) },
             conversion,
             offset,
@@ -320,12 +330,14 @@ mod tests {
                         entry("counter", 2, A2lTypeEncoding::Unsigned, 0, A2lConversion::default()),
                         entry("_raw", 3, A2lTypeEncoding::Blob, 8, A2lConversion::default()),
                     ],
+                    odt_sizes: Vec::new(),
                     size: 12,
                 },
                 XcpDaqList {
                     event_id: 7,
                     event_name: None,
                     entries: vec![entry("state", 1, A2lTypeEncoding::Unsigned, 0, A2lConversion::new(None, None, r#"0 "OFF" 1 "ON""#))],
+                    odt_sizes: Vec::new(),
                     size: 1,
                 },
             ],
@@ -375,6 +387,7 @@ mod tests {
                 entry("b", 2, A2lTypeEncoding::Unsigned, 2, A2lConversion::default()),
                 entry("c", 2, A2lTypeEncoding::Unsigned, 4, A2lConversion::default()),
             ],
+            odt_sizes: Vec::new(),
             size: 6,
         };
         let (definition, _) = ros1_message_definition(0, &daq_list);
@@ -435,5 +448,22 @@ mod tests {
         );
         assert_eq!(m.channel.metadata["state.labels"], "0 \"OFF\" 1 \"ON\"");
         assert_eq!(messages[2].sequence, 1);
+    }
+
+    // An array is a fixed size ros1 array of its elements, the dimensions are in the comment and in the metadata
+    #[test]
+    fn test_ros1_message_definition_array() {
+        let mut map = entry("map", 2, A2lTypeEncoding::Unsigned, 0, A2lConversion::default());
+        map.dim = [3, 2];
+        let daq_list = XcpDaqList {
+            event_id: 0,
+            event_name: None,
+            entries: vec![map, entry("s", 1, A2lTypeEncoding::Unsigned, 12, A2lConversion::default())],
+            odt_sizes: Vec::new(),
+            size: 13,
+        };
+        let (definition, metadata) = ros1_message_definition(0, &daq_list);
+        assert_eq!(definition.lines().skip(1).collect::<Vec<_>>(), ["uint16[6] map  # map dim 3x2", "uint8 s  # s"]);
+        assert_eq!(metadata["map.dim"], "3x2");
     }
 }

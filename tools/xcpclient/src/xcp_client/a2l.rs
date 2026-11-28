@@ -155,8 +155,18 @@ impl XcpClient {
         registry.instance_list.find_instances_regex(expr, xcp_registry::McObjectType::Characteristic, None)
     }
 
+    /// Names of the measurable instances matching a regular expression: MEASUREMENTs and CHARACTERISTICs with an event, see daq::is_measurable
+    /// Arrays are included, an invalid regular expression matches nothing
     pub fn find_measurements(&self, expr: &str) -> Vec<String> {
         let registry = self.registry.as_ref().unwrap();
-        registry.instance_list.find_instances_regex(expr, xcp_registry::McObjectType::Measurement, None)
+        let Ok(regex) = regex::Regex::new(expr) else {
+            return Vec::new();
+        };
+        registry
+            .instance_list
+            .into_iter()
+            .filter(|i| daq::is_measurable(i) && regex.is_match(i.name.as_str()))
+            .map(|i| i.name.to_string())
+            .collect()
     }
 }

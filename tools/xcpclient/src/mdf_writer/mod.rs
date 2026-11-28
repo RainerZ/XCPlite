@@ -7,7 +7,9 @@
 //
 // File layout (unsorted MDF: all DAQ lists in one data group, the records are told apart by the record id)
 //
-//   ID  HD  FH  MD  TX...  SI  { TX CC CN ... CG } per DAQ list  DG  DT [records ...]
+//   ID  HD  FH  MD  TX...  SI  { TX CC CA CN ... CG } per DAQ list  DG  DT [records ...]
+//
+//   An array signal is a CN block of its element type with a CA block (fixed size array, CN template), see BlockBuffer::ca_array
 //
 //   One channel group (CG) per DAQ list, its record id is the DAQ list number
 //   Record:  daq (u16) | time (i64) | payload (XcpDaqList::size bytes)
@@ -83,7 +85,7 @@ impl<W: Write + Seek + Send> MdfWriter<W> {
         self.writer
     }
 
-    // Data type and bit count of a signal
+    // Data type and bit count of a signal, of one element of an array
     fn data_type(entry: &OdtEntry) -> (u8, u32) {
         let bits = 8 * entry.a2l_type.size as u32;
         match (entry.a2l_type.encoding, entry.a2l_type.size) {
@@ -141,6 +143,17 @@ impl<W: Write + Seek + Send> MdfWriter<W> {
                     "" => NIL,
                     unit => tx(&mut b, unit),
                 };
+                // Array: CA block, MDF dimensions in row oriented order (last varies fastest), so a C array [y][x] is [y_dim, x_dim]
+                let composition = if entry.is_array() {
+                    let dim_sizes: Vec<u64> = if entry.dim[1] > 1 {
+                        vec![entry.dim[1] as u64, entry.dim[0] as u64]
+                    } else {
+                        vec![entry.dim[0] as u64]
+                    };
+                    b.ca_array(&dim_sizes, entry.a2l_type.size as i32)
+                } else {
+                    NIL
+                };
                 next = b.cn(&Channel {
                     cn_type: CN_TYPE_VALUE,
                     sync_type: CN_SYNC_NONE,
@@ -152,6 +165,7 @@ impl<W: Write + Seek + Send> MdfWriter<W> {
                     source: NIL,
                     conversion,
                     unit,
+                    composition,
                     next,
                 });
             }
@@ -166,6 +180,7 @@ impl<W: Write + Seek + Send> MdfWriter<W> {
                 source: NIL,
                 conversion: time_conversion,
                 unit: time_unit,
+                composition: NIL,
                 next,
             }));
         }
@@ -304,6 +319,7 @@ mod tests {
         OdtEntry {
             name: name.to_string(),
             a2l_type: A2lType { size, encoding },
+            dim: [1, 1],
             a2l_addr: A2lAddr { ext: 0, addr: 0, event: Some(0) },
             conversion,
             offset,
@@ -322,12 +338,14 @@ mod tests {
                         entry("counter", 2, A2lTypeEncoding::Unsigned, 0, A2lConversion::default()),
                         entry("temperature", 4, A2lTypeEncoding::Float, 4, A2lConversion::new(Some(2.0), Some(-1.0), "°C")),
                     ],
+                    odt_sizes: Vec::new(),
                     size: 8,
                 },
                 XcpDaqList {
                     event_id: 7,
                     event_name: None,
                     entries: vec![entry("state", 1, A2lTypeEncoding::Unsigned, 0, A2lConversion::new(None, None, r#"0 "OFF" 1 "ON""#))],
+                    odt_sizes: Vec::new(),
                     size: 1,
                 },
             ],
@@ -479,5 +497,60 @@ mod tests {
         let buf = measure(false);
         assert_eq!(&buf[0..8], b"UnFinMF ");
         assert_eq!(u16::from_le_bytes([buf[60], buf[61]]), ID_UNFIN_FLAG_INVAL_CYCLE_COUNT_CG | ID_UNFIN_FLAG_INVAL_LEN_LAST_DT);
+    }
+
+    // Array channels: CN of the element type with a CA block, dimensions row oriented (a C array [y][x] is [y_dim, x_dim])
+    #[test]
+    fn test_mdf_writer_array() {
+        let mut map = entry("map", 2, A2lTypeEncoding::Unsigned, 0, A2lConversion::default());
+        map.dim = [3, 2];
+        let mut curve = entry("curve", 4, A2lTypeEncoding::Float, 12, A2lConversion::default());
+        curve.dim = [5, 1];
+        let layout = DaqLayout::new(
+            4,
+            1,
+            vec![XcpDaqList {
+                event_id: 0,
+                event_name: None,
+                entries: vec![map, curve],
+                odt_sizes: Vec::new(),
+                size: 32,
+            }],
+        );
+        let mut w = MdfWriter::new(Cursor::new(Vec::new()));
+        w.start(&layout, 0).unwrap();
+        w.stop(0).unwrap();
+        w.writer.flush().unwrap();
+        let buf = w.into_inner().into_inner();
+
+        let hd = block(&buf, 64);
+        let dg = block(&buf, hd.links[0]);
+        let cg = block(&buf, dg.links[1]);
+        let time_cn = block(&buf, cg.links[1]);
+        assert_eq!(time_cn.links[1], NIL); // The master channel is a scalar
+        let mut arrays = Vec::new();
+        let mut pos = time_cn.links[0];
+        while pos != NIL {
+            let cn = block(&buf, pos);
+            let byte_offset = u32::from_le_bytes(cn.data[4..8].try_into().unwrap());
+            let bit_count = u32::from_le_bytes(cn.data[8..12].try_into().unwrap());
+            let ca = block(&buf, cn.links[1]);
+            assert_eq!(ca.id, b"CA");
+            assert_eq!(ca.links, vec![NIL]);
+            let ndim = u16::from_le_bytes(ca.data[2..4].try_into().unwrap()) as usize;
+            let flags = u32::from_le_bytes(ca.data[4..8].try_into().unwrap());
+            let byte_offset_base = i32::from_le_bytes(ca.data[8..12].try_into().unwrap());
+            let dims: Vec<u64> = (0..ndim).map(|i| u64_at(ca.data, 16 + 8 * i)).collect();
+            assert_eq!((ca.data[0], ca.data[1], flags), (CA_TYPE_ARRAY, CA_STORAGE_CN_TEMPLATE, 0));
+            arrays.push((text(&buf, cn.links[2]), cn.data[2], byte_offset, bit_count, byte_offset_base, dims));
+            pos = cn.links[0];
+        }
+        assert_eq!(
+            arrays,
+            vec![
+                ("map".to_string(), CN_VAL_UNSIGNED_LE, 8, 16, 2, vec![2, 3]),
+                ("curve".to_string(), CN_VAL_REAL_LE, 20, 32, 4, vec![5]),
+            ]
+        );
     }
 }
