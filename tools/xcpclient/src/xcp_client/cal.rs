@@ -25,7 +25,7 @@ impl XcpClient {
     /// Create a calibration object by name from the registry and upload its current value from the XCP server
     /// name may be a regular expression matching exactly one characteristic
     pub async fn create_calibration_object(&mut self, name: &str) -> Result<XcpCalibrationObjectHandle, Box<dyn Error>> {
-        let registry = self.registry.as_ref().unwrap();
+        let registry = self.registry()?;
         match registry.instance_list.get_instance(name, xcp_registry::McObjectType::Characteristic, None) {
             None => {
                 error!("Characteristic {} not found", name);
@@ -46,11 +46,19 @@ impl XcpClient {
                 let a2l_limits: A2lLimits = A2lLimits { lower, upper };
                 let mut o = XcpClientCalibrationObject::new(instance.get_name(), a2l_addr, a2l_type, a2l_limits);
                 let size = o.get_type.size;
-                assert!(size < 256, "xcp_client currently supports only <256 byte values");
+                if size >= 256 {
+                    error!("Characteristic {} has {} bytes, xcp_client currently supports only <256 byte values", name, size);
+                    return Err(format!("Characteristic {} has {} bytes, values of more than 255 bytes are not supported", name, size).into());
+                }
                 if self.is_connected() {
                     let resp = self.short_upload(o.a2l_addr.addr, o.a2l_addr.ext, size as u8).await?;
                     o.value = resp[1..=o.get_type.size].to_vec();
                     trace!("upload {}: addr = {:?} type = {:?} limit={:?} value={:?}\n", name, a2l_addr, a2l_type, a2l_limits, o.value);
+                }
+                // The object of a characteristic which was created before is replaced, the list does not grow with every access
+                if let Some(index) = self.calibration_object_list.iter().position(|c| c.get_name() == o.get_name()) {
+                    self.calibration_object_list[index] = o;
+                    return Ok(XcpCalibrationObjectHandle(index));
                 }
                 self.calibration_object_list.push(o);
                 Ok(XcpCalibrationObjectHandle(self.calibration_object_list.len() - 1))
@@ -170,15 +178,7 @@ impl XcpClient {
 
     /// Set all calibration segments to page 0, working page
     pub async fn init_calibration_segments(&mut self) -> Result<(), Box<dyn Error>> {
-        let calseg_numbers = self
-            .registry
-            .as_ref()
-            .unwrap()
-            .cal_seg_list
-            .0
-            .iter()
-            .filter_map(|cal_seg| cal_seg.get_number())
-            .collect::<Vec<u8>>();
+        let calseg_numbers = self.registry()?.cal_seg_list.0.iter().filter_map(|cal_seg| cal_seg.get_number()).collect::<Vec<u8>>();
         for number in &calseg_numbers {
             let ecu_page = self.get_ecu_page(*number).await?;
             let xcp_page = self.get_xcp_page(*number).await?;
@@ -256,7 +256,7 @@ impl XcpClient {
         // Prepare every supplied segment before sending commands, so invalid data
         // in a later segment cannot leave earlier segments already downloaded.
         let mut downloads = Vec::new();
-        for segment in &self.registry.as_ref().unwrap().cal_seg_list {
+        for segment in &self.registry()?.cal_seg_list {
             let (seg_index, seg_name, seg_length, addr_ext, addr) =
                 (segment.get_index(), segment.get_name(), segment.size, segment.addr_ext, segment.addr);
             if seg_length == 0 {
@@ -307,13 +307,14 @@ impl XcpClient {
     pub async fn save_calibration_segments_to_file<P: AsRef<std::path::Path>>(&mut self, bin_path: &P, contexts: &[ContextDescriptor]) -> Result<(), Box<dyn Error>> {
         info!("Save calibration segments to file {}", bin_path.as_ref().display());
 
-        assert!(bin_path.as_ref().extension().is_some());
+        // The file format is selected by the extension
+        let Some(extension) = bin_path.as_ref().extension().map(|e| e.to_os_string()) else {
+            return Err(format!("File name '{}' has no extension, use .hex or .bin", bin_path.as_ref().display()).into());
+        };
 
         // First, collect all segment information from registry (immutable borrow)
         let cal_seg_info: Vec<_> = self
-            .registry
-            .as_ref()
-            .unwrap()
+            .registry()?
             .cal_seg_list
             .into_iter()
             .map(|cal_seg| {
@@ -331,8 +332,8 @@ impl XcpClient {
         // Now upload data for each segment (mutable borrows of self)
         let mut cal_seg_desc: Vec<(CalSegDescriptor, Vec<u8>)> = Vec::new();
         for (index, number, size, addr, addr_ext, name) in cal_seg_info {
-            self.set_mta(addr_ext, addr).await.unwrap();
-            let data: Vec<u8> = self.upload_memory_block(size).await.unwrap();
+            self.set_mta(addr_ext, addr).await?;
+            let data: Vec<u8> = self.upload_memory_block(size).await?;
             debug!("  Uploaded {} bytes from segment {}", data.len(), name);
             cal_seg_desc.push((
                 CalSegDescriptor {
@@ -348,13 +349,11 @@ impl XcpClient {
         }
 
         // If file extension is .hex
-        if bin_path.as_ref().extension().unwrap() == "hex" {
+        if extension == "hex" {
             write_hex_file(&bin_path.as_ref().to_path_buf(), &cal_seg_desc)?;
         } else {
             let event_desc = self
-                .registry
-                .as_ref()
-                .unwrap()
+                .registry()?
                 .event_list
                 .into_iter()
                 .map(|event| {
@@ -374,7 +373,7 @@ impl XcpClient {
                     }
                 })
                 .collect::<Vec<_>>();
-            write_bin_file(&bin_path.as_ref().to_path_buf(), self.get_epk().unwrap(), &event_desc, &cal_seg_desc, contexts)?;
+            write_bin_file(&bin_path.as_ref().to_path_buf(), self.get_epk().unwrap_or(""), &event_desc, &cal_seg_desc, contexts)?;
         }
 
         info!("Successfully saved {} segment(s) to {}", cal_seg_desc.len(), bin_path.as_ref().display());
@@ -439,6 +438,50 @@ mod tests {
         let o = client.get_calibration_object(h);
         assert_eq!(o.get_a2l_addr().addr, 0x1004);
         assert_eq!(o.get_a2l_type().size, 2);
+    }
+
+    // A characteristic has one calibration object, the object list does not grow when it is accessed again
+    #[tokio::test]
+    async fn create_calibration_object_twice_gives_the_same_object() {
+        let mut reg = struct_characteristic_registry();
+        reg.flatten_typedefs();
+        let mut client = new_client(reg);
+        let h1 = client.create_calibration_object("parameters.counter_max").await.unwrap();
+        let h2 = client.create_calibration_object("parameters.period_ms").await.unwrap();
+        let h3 = client.create_calibration_object("parameters.counter_max").await.unwrap();
+        assert_eq!(h1.0, h3.0);
+        assert_ne!(h1.0, h2.0);
+        assert_eq!(client.calibration_object_list.len(), 2);
+    }
+
+    // Without a description of the target (registry) there are no characteristics, this is an error, not a panic
+    #[tokio::test]
+    async fn calibration_without_registry_fails() {
+        let addr: SocketAddr = "127.0.0.1:5555".parse().unwrap();
+        let mut client = XcpClient::new("UDP", addr, addr, 0);
+        assert!(client.find_characteristics(".*").is_empty());
+        assert!(client.find_measurements(".*").is_empty());
+        assert!(client.create_calibration_object("parameters.counter_max").await.is_err());
+        assert!(client.save_calibration_segments_to_file(&PathBuf::from("no_registry.hex"), &[]).await.is_err());
+    }
+
+    // The file format of a parameter file is selected by its extension, a file name without is an error, not a panic
+    #[tokio::test]
+    async fn save_calibration_segments_without_file_extension_fails() {
+        let mut client = new_client(struct_characteristic_registry());
+        let e = client.save_calibration_segments_to_file(&PathBuf::from("no_extension"), &[]).await.unwrap_err();
+        assert!(e.to_string().contains("has no extension"), "{}", e);
+    }
+
+    // Commands of a client which is not connected fail with an error, not with a panic
+    #[tokio::test]
+    async fn commands_without_connection_fail() {
+        let mut client = new_client(struct_characteristic_registry());
+        let e = client.short_upload(0x1000, 0, 4).await.unwrap_err();
+        assert_eq!(e.downcast_ref::<XcpError>().map(|e| e.get_error_code()), Some(ERROR_NOT_CONNECTED));
+        assert!(client.start_measurement().await.is_err());
+        assert!(client.stop_measurement().await.is_err());
+        assert!(client.disconnect().await.is_ok());
     }
 
     // HEX loader regressions: cargo test xcp_client::cal::tests::load_hex

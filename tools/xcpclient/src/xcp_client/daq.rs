@@ -476,11 +476,14 @@ impl XcpClient {
 
         // Reset the DAQ decoder and set measurement start time
         let daq_clock = self.get_daq_clock_raw().await?;
-        self.daq_decoder.as_ref().unwrap().lock().start(daq_lists, daq_clock);
+        let (Some(daq_decoder), Some(tx_task_control)) = (self.daq_decoder.as_ref(), self.tx_task_control.as_ref()) else {
+            return Err(Box::new(XcpError::new(ERROR_NOT_CONNECTED, CC_START_STOP_SYNCH)) as Box<dyn Error>);
+        };
+        daq_decoder.lock().start(daq_lists, daq_clock);
 
         // Send running=true throught the DAQ control channel to the receive task
         self.task_control.running = true;
-        self.tx_task_control.as_ref().unwrap().send(self.task_control).await.unwrap();
+        tx_task_control.send(self.task_control).await?;
 
         // Start DAQ
         self.start_selected_daq_lists().await?;
@@ -497,10 +500,14 @@ impl XcpClient {
 
         // Send running=false throught the DAQ control channel to the receive task
         self.task_control.running = false;
-        self.tx_task_control.as_ref().unwrap().send(self.task_control).await?;
+        if let Some(tx_task_control) = self.tx_task_control.as_ref() {
+            tx_task_control.send(self.task_control).await?;
+        }
 
         // Stop the DAQ decoder
-        self.daq_decoder.as_ref().unwrap().lock().stop();
+        if let Some(daq_decoder) = self.daq_decoder.as_ref() {
+            daq_decoder.lock().stop();
+        }
 
         // Clear the measurement object list
         self.measurement_object_list.clear();

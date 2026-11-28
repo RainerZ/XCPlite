@@ -35,6 +35,12 @@ mod transport;
 
 pub const CMD_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// Error for an XCP server which xcpclient does not support
+/// xcpclient is a test client for XCPlite, protocol settings other than those of XCPlite are rejected
+pub fn unsupported_server(reason: &str) -> Box<dyn std::error::Error> {
+    format!("XCP server not supported by xcpclient: {}", reason).into()
+}
+
 //--------------------------------------------------------------------------------------------------------------------------------------------------
 // Type to control the receive task sent over the receive task control channel
 

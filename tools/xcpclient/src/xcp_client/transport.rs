@@ -24,6 +24,19 @@ use super::*;
 const UDP_RECV_BUFFER_SIZE: usize = 8 * 1024 * 1024;
 const UDP_RECV_BUFFER_SIZE_MIN: usize = 256 * 1024;
 
+/// Minimum length of the positive response to a command, as far as the client reads the response without checking its length
+fn min_response_len(cmd_bytes: &[u8]) -> usize {
+    match cmd_bytes[4] {
+        CC_CONNECT | CC_GET_COMM_MODE_INFO | CC_GET_ID | CC_GET_SEGMENT_INFO => 8,
+        CC_GET_VERSION => 6,
+        CC_GET_CAL_PAGE | CC_GET_DAQ_EVENT_INFO | CC_GET_DAQ_CLOCK => 4,
+        CC_GET_PAG_PROCESSOR_INFO => 3,
+        // The number of data bytes requested with the command
+        CC_UPLOAD | CC_SHORT_UPLOAD => 1 + cmd_bytes.get(5).copied().unwrap_or(0) as usize,
+        _ => 1,
+    }
+}
+
 // Set the largest possible receive buffer size of the UDP socket, up to UDP_RECV_BUFFER_SIZE
 // macOS rejects sizes above kern.ipc.maxsockbuf, so the size is halved until it is accepted
 // Linux silently limits it to net.core.rmem_max and reports twice the effective size
@@ -167,12 +180,12 @@ impl XcpClient {
                             let mut i: usize = 0;
                             while i < size {
                                 // Decode the next transport layer message header in the packet
-                                if size < 5 {
+                                if size - i < 5 {
                                     error!("receive_task: stop, corrupt packet received, size {} too small for header", size);
                                     return Err(Box::new(XcpError::new(ERROR_TL_HEADER,0)) as Box<dyn Error>);
                                 }
                                 let len = buf[i] as usize + ((buf[i + 1] as usize) << 8);
-                                if len > size - 4 || len == 0 { // Corrupt packet received, not enough data received or no content
+                                if len > size - i - 4 || len == 0 { // Corrupt packet received, not enough data received or no content
                                     error!("receive_task: stop, corrupt packet received, invalid length {} in header, size={}", len, size   );
                                     return Err(Box::new(XcpError::new(ERROR_TL_HEADER,0)) as Box<dyn Error>);
                                 }
@@ -213,7 +226,7 @@ impl XcpClient {
                                     0xFC => {
                                         // Service
                                         let service_code = buf[i + 5];
-                                        if service_code == 0x01 {
+                                        if service_code == 0x01 && len >= 2 {
                                             decode_serv_text.decode(&buf[i + 6..i + len + 4]);
                                         } else {
                                             // Unknown PID
@@ -259,7 +272,15 @@ impl XcpClient {
     pub(super) async fn send_command(&mut self, cmd_bytes: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
         //
         // Send command
-        let socket = self.socket.as_ref().unwrap();
+        let (Some(socket), Some(rx_cmd_resp)) = (self.socket.as_ref(), self.rx_cmd_resp.as_mut()) else {
+            return Err(Box::new(XcpError::new(ERROR_NOT_CONNECTED, cmd_bytes[4])) as Box<dyn Error>);
+        };
+
+        // Discard a late response to a previous command which timed out, it would be taken as the response to this command
+        while let Ok(data) = rx_cmd_resp.try_recv() {
+            warn!("xcp_command: late response discarded = {:?}", data);
+        }
+
         let send_time = tokio::time::Instant::now();
         socket.send_to(cmd_bytes, self.dest_addr).await?;
         self.cmd_send_time = Some(send_time);
@@ -267,7 +288,7 @@ impl XcpClient {
         debug!("xcp_command: sent command = {:?}", cmd_bytes);
 
         // Wait for response channel with timeout
-        let res = timeout(CMD_TIMEOUT, self.rx_cmd_resp.as_mut().unwrap().recv()).await; // rx channel
+        let res = timeout(CMD_TIMEOUT, rx_cmd_resp.recv()).await; // rx channel
         match res {
             Ok(res) => {
                 match res {
@@ -276,6 +297,10 @@ impl XcpClient {
                         match data[0] {
                             0xFF => {
                                 // XCP positive response
+                                if data.len() < min_response_len(cmd_bytes) {
+                                    error!("xcp_command: response too short, {} bytes = {:?}", data.len(), data);
+                                    return Err(Box::new(XcpError::new(ERROR_RESPONSE_LENGTH, cmd_bytes[4])) as Box<dyn Error>);
+                                }
                                 Ok(data)
                             }
                             0xFE => {
@@ -283,7 +308,9 @@ impl XcpClient {
                                 Err(Box::new(XcpError::new(data[1], cmd_bytes[4])) as Box<dyn Error>)
                             }
                             _ => {
-                                panic!("xcp_command: bug in receive_task");
+                                // The receive task hands over responses only
+                                error!("xcp_command: unexpected packet = {:?}", data);
+                                Err(Box::new(XcpError::new(ERROR_GENERIC, cmd_bytes[4])) as Box<dyn Error>)
                             }
                         }
                     }
@@ -351,7 +378,6 @@ impl XcpClient {
         // Connect
         debug!("XCP CONNECT");
         let data = self.send_command(XcpCommandBuilder::new(CC_CONNECT).add_u8(connect_mode).build()).await?;
-        assert!(data.len() >= 8);
         let resources = data[1];
         let comm_mode_basic = data[2];
         let max_cto_size: u8 = data[3];
@@ -393,7 +419,6 @@ impl XcpClient {
         let res = self.send_command(XcpCommandBuilder::new(CC_GET_PAG_PROCESSOR_INFO).add_u8(0).build()).await;
         match res {
             Ok(data) => {
-                assert!(data.len() >= 3);
                 self.max_segments = data[1];
                 self.freeze_supported = (data[2] & 0x01) != 0;
             }
@@ -417,9 +442,13 @@ impl XcpClient {
         // Notify the rx task
         self.task_control.connected = true; // the task will end, when it gets connected = false over the XcpControl channel
         self.task_control.running = false;
-        self.tx_task_control.as_ref().unwrap().send(self.task_control).await.unwrap();
-
-        assert!(self.is_connected());
+        if let Some(tx_task_control) = self.tx_task_control.as_ref() {
+            // An error means the receive task has terminated
+            tx_task_control
+                .send(self.task_control)
+                .await
+                .map_err(|_| Box::new(XcpError::new(ERROR_TASK_TERMINATED, CC_CONNECT)) as Box<dyn Error>)?;
+        }
 
         // Initialize DAQ clock
         self.time_correlation_properties().await?; // Set 64 bit response format for GET_DAQ_CLOCK
@@ -448,7 +477,9 @@ impl XcpClient {
         // Stop XCP client task
         self.task_control.connected = false;
         self.task_control.running = false;
-        let _ = self.tx_task_control.as_ref().unwrap().send(self.task_control).await;
+        if let Some(tx_task_control) = self.tx_task_control.as_ref() {
+            let _ = tx_task_control.send(self.task_control).await;
+        }
 
         // Make sure receive_task has terminated
         if let Some(receive_task) = self.receive_task.take() {
@@ -475,7 +506,6 @@ impl XcpClient {
         assert!(id_type == IDT_VECTOR_ELF_UPLOAD || id_type == IDT_ASAM_UPLOAD || id_type == IDT_ASAM_NAME || id_type == IDT_ASCII || id_type == IDT_ASAM_EPK); // others not supported yet
 
         let data = self.send_command(XcpCommandBuilder::new(CC_GET_ID).add_u8(id_type).build()).await?;
-        assert_eq!(data[0], 0xFF);
         let mode = data[1]; // 0 = data by upload, 1 = data in response
 
         // Decode size
@@ -512,6 +542,10 @@ impl XcpClient {
         }
         // Data in response
         else {
+            if data.len() < 8 + size as usize {
+                error!("GET_ID mode={} -> response too short for {} bytes of data", id_type, size);
+                return Err(Box::new(XcpError::new(ERROR_RESPONSE_LENGTH, CC_GET_ID)) as Box<dyn Error>);
+            }
             // Decode string
             let name = String::from_utf8(data[8..(size as usize + 8)].to_vec());
             match name {
@@ -525,5 +559,29 @@ impl XcpClient {
                 }
             }
         }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------------------------------------------------------
+// Tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Minimum length of a positive response, the command code is behind the 4 byte transport layer header
+    #[test]
+    fn test_min_response_len() {
+        assert_eq!(min_response_len(XcpCommandBuilder::new(CC_CONNECT).add_u8(0).build()), 8);
+        assert_eq!(min_response_len(XcpCommandBuilder::new(CC_GET_CAL_PAGE).add_u8(1).add_u8(0).build()), 4);
+        // UPLOAD and SHORT_UPLOAD: the packet id and the requested number of bytes
+        assert_eq!(min_response_len(XcpCommandBuilder::new(CC_UPLOAD).add_u8(100).build()), 101);
+        assert_eq!(
+            min_response_len(XcpCommandBuilder::new(CC_SHORT_UPLOAD).add_u8(8).add_u8(0).add_u8(0).add_u32(0x1000).build()),
+            9
+        );
+        // Commands with a response without data
+        assert_eq!(min_response_len(XcpCommandBuilder::new(CC_SET_MTA).add_u8(0).add_u8(0).add_u8(0).add_u32(0).build()), 1);
+        assert_eq!(min_response_len(XcpCommandBuilder::new(CC_FREE_DAQ).build()), 1);
     }
 }

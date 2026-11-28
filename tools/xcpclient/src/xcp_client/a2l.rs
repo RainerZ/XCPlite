@@ -127,7 +127,9 @@ impl XcpClient {
         for i in 0..self.max_events {
             let name = self.get_daq_event_info(i).await?;
             info!(" Event {}: {}", i, name);
-            reg.event_list.add_event(McEvent::new(name, 0, i, 0)).unwrap();
+            reg.event_list
+                .add_event(McEvent::new(name, 0, i, 0))
+                .map_err(|e| format!("Event {} of the XCP server can not be registered: {}", i, e))?;
         }
 
         // Get segment information
@@ -136,7 +138,9 @@ impl XcpClient {
             info!(" Segment {}: {} addr={}:0x{:08X} length={} ", i, name, addr_ext, addr, length);
 
             // Segment relative addressing is ignored, all addresses are treated as raw A2L addr_ext/addr
-            reg.cal_seg_list.add_cal_seg_by_addr(name, Some(i), addr_ext, addr, length as u32).unwrap();
+            reg.cal_seg_list
+                .add_cal_seg_by_addr(name, Some(i), addr_ext, addr, length as u32)
+                .map_err(|e| format!("Calibration segment {} of the XCP server can not be registered: {}", i, e))?;
         }
 
         Ok(())
@@ -150,15 +154,25 @@ impl XcpClient {
         self.registry.as_ref().unwrap()
     }
 
+    /// The registry, an error if no description of the target is loaded
+    pub(super) fn registry(&self) -> Result<&xcp_registry::Registry, Box<dyn Error>> {
+        self.registry.as_ref().ok_or_else(|| "No A2L description of the target loaded".into())
+    }
+
+    /// Names of the calibration objects matching a regular expression, none if no description of the target is loaded
     pub fn find_characteristics(&self, expr: &str) -> Vec<String> {
-        let registry = self.registry.as_ref().unwrap();
+        let Some(registry) = self.registry.as_ref() else {
+            return Vec::new();
+        };
         registry.instance_list.find_instances_regex(expr, xcp_registry::McObjectType::Characteristic, None)
     }
 
     /// Names of the measurable instances matching a regular expression: MEASUREMENTs and CHARACTERISTICs with an event, see daq::is_measurable
     /// Arrays are included, an invalid regular expression matches nothing
     pub fn find_measurements(&self, expr: &str) -> Vec<String> {
-        let registry = self.registry.as_ref().unwrap();
+        let Some(registry) = self.registry.as_ref() else {
+            return Vec::new();
+        };
         let Ok(regex) = regex::Regex::new(expr) else {
             return Vec::new();
         };

@@ -3,6 +3,13 @@
 All notable changes to XCPlite are documented in this file.
 
 
+## [V2.4.5]
+
+xcpclient:
+- Support measurment of arrys
+- Added an mcp server mode
+
+
 ## [V2.4.3]
 
 - Breaking change:

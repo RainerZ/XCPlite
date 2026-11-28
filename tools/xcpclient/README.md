@@ -1,11 +1,22 @@
 # xcpclient
 
-XCP test client and A2L generator implementation in Rust
-
-Used for integration testing and for uploading or generating A2L files.  
-Partial XCP implementation with hard-coded protocol settings for XCPlite.  
+XCP test client and A2L generator for XCPlite, implemented in Rust
 
 XCP client v4.x for testing XCP servers and managing A2L and HEX files.
+
+## Scope
+
+xcpclient has two purposes:
+
+- **Testing xcplib**: integration tests, test sequences, measurement and calibration from the command line and in scripts.
+- **Generating A2L files** for XCPlite applications: upload from the target or creation from ELF/DWARF debug information.
+
+What it is not:
+
+- It is not a general purpose XCP client. It is a partial XCP implementation with protocol settings hard-coded for XCPlite, and it does not promise to work with other XCP implementations. An XCP server it does not support is rejected with an error message.
+- It is not a replacement for a full featured measurement and calibration tool like CANape.
+
+## Features
 
 This tool can:
 - Connect to XCP on Ethernet servers via TCP or UDP and show information about the XCP protocol and the target ECU

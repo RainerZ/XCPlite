@@ -1,6 +1,6 @@
 # xcpclient MCP Server
 
-**Status: specification, implementation in progress (phase 0, see [8.5](#85-phases)).** This document explains what an MCP server is, specifies an MCP server mode for `xcpclient` (`tools/xcpclient/`) and describes how to implement it. The decisions taken, the open ones and the points noted for later are in [section 10](#10-decisions-and-open-points).
+**Status: specification, implementation in progress (phase 0 done, see [8.5](#85-phases)).** This document explains what an MCP server is, specifies an MCP server mode for `xcpclient` (`tools/xcpclient/`) and describes how to implement it. The decisions taken, the open ones and the points noted for later are in [section 10](#10-decisions-and-open-points).
 
 The facts about the MCP specification, the Rust SDK and the client applications were looked up on 2026-11-28, the sources are linked in [section 11](#11-sources). MCP changes quickly, check them again before implementing.
 
@@ -14,6 +14,13 @@ The facts about the MCP specification, the Rust SDK and the client applications 
 > **Assistant:** `counter_max` was 1000, now 2000. I observed `counter` for 3 s: min 0, max 1999.
 
 The server contains no AI. It executes function calls, exactly like the command line does. Understanding the sentence and choosing the function is done by the language model in the assistant application.
+
+### Scope
+
+The MCP server does not change what xcpclient is (see `tools/xcpclient/README.md`): its major use cases are testing xcplib and generating A2L files. It does not promise to work with other XCP implementations, and it is not a replacement for a full featured measurement and calibration tool. For this specification this means:
+
+- The tool set stays small. It covers what the command line covers, not what CANape covers: no curve and map editors, no parameter set management, no measurement configurations, no data analysis.
+- The XCP server on the other side is XCPlite. Robustness means: an unexpected response or an unsupported XCP server gives an error message and a clean session state, not that xcpclient works around it.
 
 ## 2. MCP in a nutshell
 
@@ -572,7 +579,7 @@ src/main.rs                    command line: parses Args, calls the Session meth
                                The EPK mismatch prompt is a callback given to load_description
 ```
 
-Still to do in phase 0, see 8.3: typed results and a `SessionError` where the tools need them (`connect` and `load_description` only log what they find), stdout and panic cleanup.
+Typed results and a `SessionError` are added in phase 1 where the tools need them, today `connect` and `load_description` only log what they find.
 
 Step two adds:
 
@@ -587,16 +594,18 @@ The typed results implement `Display` in the line format shown in section 5. The
 
 ### 8.3 What a long running server needs from the existing code
 
-| Topic | Today | Needed |
+| Topic | Before | State |
 |---|---|---|
-| stdout | `env_logger` logs to stdout, `println!`/`print!` in `main.rs`, `xcp_client/decoder.rs`, `elf_reader`, `bin_reader`, `xcp_test_executor.rs`, `ConsoleWriter::stdout()` | In MCP mode the logger target is stderr and nothing prints to stdout. On stdio, one stray line on stdout breaks the protocol |
-| `SERV_TEXT` | Printed to stdout (`ServTextDecoder` in `main.rs`) | Kept in a ring buffer of the session, shown by `xcp_status` |
-| Panics | `assert!`, `panic!("Empty string")`, `unwrap()` on target responses and on the registry (`self.registry.as_ref().unwrap()`) | Errors on the paths the tools use. As a safety net the actor runs each command so that a panic is caught, reported as tool error and the session reset to `disconnected` |
-| Errors | `Box<dyn Error>`, which is not `Send` | `SessionError` (a `thiserror` enum, `Send`) at the boundary of the session, with messages written for the model. If the `XcpClient` futures are not `Send`, the actor runs on its own thread with a current-thread runtime, nothing else changes |
-| EPK mismatch | Interactive prompt on stdin, or `--yes` | Decision as argument of `Session::load_description`, the prompt stays in `main.rs` |
-| Calibration objects | `calibration_object_list` only grows, `create_calibration_object` pushes a new object on every call (the measurement object list is cleared at measurement stop) | Look up before create. A daemon which reads a parameter every few seconds leaks otherwise |
-| Reconnect | One connect per process | `XcpClient` is created per connect and dropped at disconnect, the receive task ends with it |
-| Shutdown | Disconnect at the end of `xcp_client()` | One shutdown path for stdin closed, SIGTERM and Ctrl-C: stop measurement, finalize files, `DISCONNECT` (R9) |
+| stdout | `env_logger` logs to stdout, about 120 `println!`/`print!` in `main.rs`, `elf_reader`, `bin_reader`, `xcp_client/decoder.rs`, `xcp_test_executor.rs` and `ConsoleWriter::stdout()` | **Phase 1.** The print statements stay as they are, most are the verbose output of the ELF reader. Instead, the MCP mode protects the protocol channel for the whole process: at startup it keeps a duplicate of the original stdout for the MCP transport and redirects file descriptor 1 to stderr, the logger target is stderr. On stdio, one stray line on stdout breaks the protocol, and this also covers prints in libraries |
+| `SERV_TEXT` | Printed to stdout (`ServTextDecoder` in `main.rs`) | **Phase 1.** A text decoder which keeps the last lines in a ring buffer of the session, shown by `xcp_status`. `Session::connect` takes the decoder as argument |
+| Panics on target responses | `assert!`, `panic!` and `unwrap()` on responses of the XCP server | **Done.** A response which is shorter than the client reads it is an error (`min_response_len` in `transport.rs`). Protocol settings xcpclient does not support (DAQ timestamp, DAQ header, address granularity, byte order) give the error `XCP server not supported by xcpclient: ...`. A target without ECU name, A2L name or EPK is not a panic. Printing an error of a command which was missing in the `XcpCommand` enum (`GET_VERSION`, `GET_COMM_MODE_INFO`) panicked, for example a timeout during connect |
+| Panics on wrong use | `unwrap()` on the registry, the socket and the channels, for a client which is not connected or has no description. A parameter file name without extension panicked | **Done.** Errors (`Not connected to an XCP server`, `No A2L description of the target loaded`, `File name ... has no extension`). Internal invariants (command builder alignment and such) are still asserts. As a safety net the actor runs each command so that a panic is caught, reported as tool error and the session reset to `disconnected` (phase 1) |
+| Late responses | A response which arrived after the command timeout stayed in the response channel and was taken as the response to the next command | **Done.** Discarded with a warning before a command is sent. Needed for a session which goes on after a timeout, for example of an upload with dynamic addressing (4.5) |
+| Errors | `Box<dyn Error>`, which is not `Send` | **Phase 1.** `SessionError` (a `thiserror` enum, `Send`) at the boundary of the session, with messages written for the model. If the `XcpClient` futures are not `Send`, the actor runs on its own thread with a current-thread runtime, nothing else changes |
+| EPK mismatch | Interactive prompt on stdin, or `--yes` | **Done.** A callback of `Session::load_description`, the prompt is in `main.rs` |
+| Calibration objects | `calibration_object_list` only grew, `create_calibration_object` pushed a new object on every call | **Done.** The object of a characteristic is replaced when it is accessed again |
+| Reconnect | One connect per process | **Phase 1.** `XcpClient` is created per connect and dropped at disconnect, the receive task ends with it |
+| Shutdown | Disconnect at the end of `xcp_client()` | **Phase 1.** One shutdown path for stdin closed, SIGTERM and Ctrl-C: stop measurement, finalize files, `DISCONNECT` (R9) |
 
 ### 8.4 Tests
 
@@ -615,8 +624,8 @@ The typed results implement `Display` in the line format shown in section 5. The
 
 | Phase | Content | Result |
 |---|---|---|
-| 0 | Session refactoring (8.2 step one), stdout and panic cleanup (8.3). No MCP code | Command line unchanged, `test/test_examples.sh` passes |
-| 1 | `--mcp` on stdio, session actor, tools `xcp_status`, `xcp_connect`, `xcp_disconnect`, `xcp_list_*`, `xcp_read` (polling), `xcp_write`, `--mcp-read-only` | The conversation of section 1 works in Claude Code, except the last sentence |
+| 0 | **Done.** Session refactoring (8.2 step one), panic cleanup (8.3). No MCP code | Command line unchanged, compared with the binary before the change |
+| 1 | `--mcp` on stdio with stdout redirection, session actor, `SessionError` and typed results, tools `xcp_status`, `xcp_connect`, `xcp_disconnect`, `xcp_list_*`, `xcp_read` (polling), `xcp_write`, `--mcp-read-only` | The conversation of section 1 works in Claude Code, except the last sentence |
 | 2 | ValueWriter, `xcp_sample`, `xcp_measure_start`, `xcp_measure_stop`, `xcp_read` of measured signals from the ValueWriter | Measurement |
 | 3 | `--mcp-http`, clean shutdown as daemon | The connection survives host sessions (R1 in full) |
 | 4 | `xcp_load_a2l`, `xcp_create_a2l`, `xcp_save_parameters`, `xcp_load_parameters`, `--mcp-dir` checks | Feature parity with the command line |

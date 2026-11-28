@@ -62,7 +62,10 @@ impl XcpClient {
     }
 
     pub async fn short_download(&mut self, addr: u32, ext: u8, data_bytes: &[u8]) -> Result<(), Box<dyn Error>> {
-        let len: u8 = data_bytes.len().try_into().unwrap();
+        let len: u8 = data_bytes
+            .len()
+            .try_into()
+            .map_err(|_| Box::new(XcpError::new(CRC_CMD_SYNTAX, CC_SHORT_DOWNLOAD)) as Box<dyn Error>)?;
         trace!("short_download addr={}:{:08X},{} data={:?}", ext, addr, len, data_bytes);
         self.send_command(
             XcpCommandBuilder::new(CC_SHORT_DOWNLOAD)
@@ -180,7 +183,10 @@ impl XcpClient {
                     .build(),
             )
             .await?;
-        let length = u32::from_le_bytes([data[4], data[5], data[6], data[7]]).try_into().unwrap();
+        let length = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+        let length: u16 = length
+            .try_into()
+            .map_err(|_| unsupported_server(&format!("calibration segment {} has {} bytes, more than 65535", segment_number, length)))?;
 
         // Name
         let data = self
@@ -193,7 +199,10 @@ impl XcpClient {
                     .build(),
             )
             .await?;
-        let name_length: u8 = u32::from_le_bytes([data[4], data[5], data[6], data[7]]).try_into().unwrap();
+        let name_length = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+        let name_length: u8 = name_length
+            .try_into()
+            .map_err(|_| unsupported_server(&format!("name of calibration segment {} has {} characters, more than 255", segment_number, name_length)))?;
         let data = self.upload(name_length).await?;
         let res = String::from_utf8(data[1..=(name_length as usize)].to_vec());
         let name = match res {
@@ -232,13 +241,17 @@ impl XcpClient {
         let mut c = Cursor::new(&data[1..]);
 
         let daq_properties = ReadBytesExt::read_u8(&mut c)?;
-        assert!((daq_properties & 0x10) == 0x10, "DAQ timestamps must be available");
+        if (daq_properties & 0x10) != 0x10 {
+            return Err(unsupported_server("DAQ timestamps must be available"));
+        }
         let max_daq = ReadBytesExt::read_u16::<LittleEndian>(&mut c)?;
         self.max_events = ReadBytesExt::read_u16::<LittleEndian>(&mut c)?;
         let min_daq = ReadBytesExt::read_u8(&mut c)?;
         let daq_key_byte = ReadBytesExt::read_u8(&mut c)?;
         self.daq_header_size = (daq_key_byte >> 6) + 1;
-        assert!(self.daq_header_size == 4 || self.daq_header_size == 2, "DAQ header type must be ODT_FIL_DAQW or ODT_DAQB");
+        if self.daq_header_size != 4 && self.daq_header_size != 2 {
+            return Err(unsupported_server("DAQ header type must be ODT_FIL_DAQW or ODT_DAQB"));
+        }
 
         debug!(
             "CC_GET_DAQ_PROCESSOR_INFO daq_properties = 0x{:0X}, max_daq = {}, max_event = {}, min_daq = {}, daq_key_byte = 0x{:0X} (header_size={})",
@@ -380,9 +393,15 @@ impl XcpClient {
         let timestamp_mode = ReadBytesExt::read_u8(&mut c)?;
         let timestamp_ticks = ReadBytesExt::read_u16::<LittleEndian>(&mut c)?;
 
-        assert!(granularity_daq == 0x01, "support only 1 byte DAQ granularity");
-        assert!(timestamp_mode & 0x07 == 0x04, "support only 32 bit DAQ timestamps");
-        assert!(timestamp_mode & 0x08 == 0x08, "support only fixed DAQ timestamps");
+        if granularity_daq != 0x01 {
+            return Err(unsupported_server("support only 1 byte DAQ granularity"));
+        }
+        if timestamp_mode & 0x07 != 0x04 {
+            return Err(unsupported_server("support only 32 bit DAQ timestamps"));
+        }
+        if timestamp_mode & 0x08 != 0x08 {
+            return Err(unsupported_server("support only fixed DAQ timestamps"));
+        }
 
         // Calculate timestamp resolution in ns per tick
         let mut timestamp_unit = timestamp_mode >> 4; // 1ns=0, 10ns=1, 100ns=2, 1us=3, 10us=4, 100us=5, 1ms=6, 10ms=7, 100ms=8, 1s=9

@@ -108,6 +108,8 @@ pub const ERROR_TYPE_MISMATCH: u8 = 0xF7;
 pub const ERROR_REGISTRY_EXISTS: u8 = 0xF8;
 pub const ERROR_GENERIC: u8 = 0xF9;
 pub const ERROR_NOT_FOUND: u8 = 0xFA;
+pub const ERROR_NOT_CONNECTED: u8 = 0xFB;
+pub const ERROR_RESPONSE_LENGTH: u8 = 0xFC;
 
 #[derive(Default)]
 pub struct XcpError {
@@ -157,6 +159,12 @@ impl std::fmt::Display for XcpError {
             }
             ERROR_ODT_SIZE => {
                 write!(f, "ODT max size exceeded")
+            }
+            ERROR_NOT_CONNECTED => {
+                write!(f, "Not connected to an XCP server")
+            }
+            ERROR_RESPONSE_LENGTH => {
+                write!(f, "{cmd:?}: Response of the XCP server is too short")
             }
             CRC_CMD_SYNCH => {
                 write!(f, "SYNCH")
@@ -285,6 +293,8 @@ pub enum XcpCommand {
     AllocOdt = CC_ALLOC_ODT as isize,
     AllocOdtEntry = CC_ALLOC_ODT_ENTRY as isize,
     TimeCorrelationProperties = CC_TIME_CORRELATION_PROPERTIES as isize,
+    GetCommModeInfo = CC_GET_COMM_MODE_INFO as isize,
+    GetVersion = CC_GET_VERSION as isize,
     Undefined = 0,
 }
 
@@ -329,11 +339,10 @@ impl From<u8> for XcpCommand {
             CC_ALLOC_ODT => XcpCommand::AllocOdt,
             CC_ALLOC_ODT_ENTRY => XcpCommand::AllocOdtEntry,
             CC_TIME_CORRELATION_PROPERTIES => XcpCommand::TimeCorrelationProperties,
-            0 => XcpCommand::Undefined,
-            _ => {
-                error!("Unknown command code: 0x{:02X}", code);
-                panic!("Unknown command code: 0x{:02X}", code);
-            }
+            CC_GET_COMM_MODE_INFO => XcpCommand::GetCommModeInfo,
+            CC_GET_VERSION => XcpCommand::GetVersion,
+            // Used to print the command of an error only, an unknown command code is not an error here
+            _ => XcpCommand::Undefined,
         }
     }
 }
@@ -384,5 +393,29 @@ impl XcpCommandBuilder {
         self.data[0] = (len & 0xFFu16) as u8;
         self.data[1] = (len >> 8) as u8;
         self.data.as_ref()
+    }
+}
+
+//--------------------------------------------------------------------------------------------------------------------------------------------------
+// Tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Printing an error must not panic, also not for a command the XcpCommand enum does not know
+    #[test]
+    fn test_xcp_error_display() {
+        assert_eq!(XcpError::new(ERROR_CMD_TIMEOUT, CC_GET_VERSION).to_string(), "GetVersion: Command response timeout");
+        assert_eq!(XcpError::new(CRC_CMD_UNKNOWN, CC_GET_COMM_MODE_INFO).to_string(), "Unknown XCP command: GetCommModeInfo ");
+        assert_eq!(XcpError::new(ERROR_CMD_TIMEOUT, CC_CONNECT).to_string(), "Connect: Command response timeout");
+        assert_eq!(
+            XcpError::new(ERROR_RESPONSE_LENGTH, CC_GET_ID).to_string(),
+            "GetId: Response of the XCP server is too short"
+        );
+        assert_eq!(XcpError::new(ERROR_NOT_CONNECTED, CC_SHORT_UPLOAD).to_string(), "Not connected to an XCP server");
+        for cmd in 0..=255u8 {
+            let _ = XcpError::new(ERROR_CMD_TIMEOUT, cmd).to_string();
+        }
     }
 }

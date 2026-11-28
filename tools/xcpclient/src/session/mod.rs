@@ -279,7 +279,10 @@ impl Session {
             }
         }
         self.xcp_client.log_connect_info();
-        assert!((self.xcp_client.comm_mode_basic() & 0x07) == 0); // Address granularity != 1 and motorola format not supported
+        // Address granularity != 1 and motorola format not supported
+        if (self.xcp_client.comm_mode_basic() & 0x07) != 0 {
+            return Err(unsupported_server("support only address granularity 1 and intel byte order"));
+        }
 
         info!("Reading target ECU information via XCP GET_ID commands:");
 
@@ -294,7 +297,7 @@ impl Session {
                 error!("GET_ID IDT_ASCII failed, Error: {}", e);
             }
             _ => {
-                panic!("Empty string");
+                warn!("  GET_ID IDT_ASCII not available");
             }
         };
 
@@ -309,7 +312,7 @@ impl Session {
                 error!("GET_ID IDT_ASAM_NAME failed, Error: {}", e);
             }
             _ => {
-                panic!("Empty string");
+                warn!("  GET_ID IDT_ASAM_NAME not available");
             }
         };
 
@@ -324,7 +327,7 @@ impl Session {
                 warn!("GET_ID IDT_ASAM_EPK failed, Error: {}", e);
             }
             _ => {
-                panic!("Empty string");
+                warn!("  GET_ID IDT_EPK not available");
             }
         };
 
