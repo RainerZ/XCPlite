@@ -28,16 +28,12 @@ inspired by the Mandelbrot example in the book "Programming Rust" by Jim Blandy 
 
 ## Observe the Mandelbrot image generation, measure large arrays
 
-The example work renders images of the Mandelbrot set. The area is defined by the calibration segment `mandelbrot`: the demo starts
+The example work renders images of the Mandelbrot set. The area is defined by in calibration segment `mandelbrot`: the demo starts
 with the area of `mandelbrot.x`, `mandelbrot.y` and `mandelbrot.width` and continuously zooms into the center. The file
 `mandelbrot.png` is written for the first image. Each image is compressed to JPEG (800 x 600) and streamed as Motion JPEG video by
 an HTTP server on port 8080.
 
-The uncompressed image (`pixels`, 1.92 MB) and the compressed image (`jpeg`, a buffer of 256 KB) can be measured with XCP.
-The compressed image can be measured with the default settings of the library (about 7 KB DAQ memory). The uncompressed image needs
-about 50 KB DAQ memory, more than the default `OPTION_DAQ_MEM_SIZE` of 16 KB in `src/xcplib_cfg.h`. Both need the large DTO size of
-the current default configuration (`OPTION_MTU` 8000, `XCPTL_MAX_DTO_SIZE` 7960): an array has to fit into one DAQ list of at most
-251 ODTs, with `XCPTL_MAX_DTO_SIZE` 1024 this is 256016 bytes.
+The uncompressed image (`pixels`, 1.92 MB) and the compressed image (`jpeg`, a buffer of 256 KB) can be measured with XCP. The compressed image can be measured with the OPTION_MTU 8000 only. The default settings in `src/xcplib_cfg.h` (OPTION_MTU 1500 and about 7 KB DAQ memory) are not sufficient. The uncompressed image needs about 50 KB DAQ memory. Both need the maximum DTO size set in the current default configuration (`XCPTL_MAX_DTO_SIZE = (XCPTL_MAX_SEGMENT_SIZE - 8)` ). An array has to fit into one DAQ list of at most 251 ODTs, with `XCPTL_MAX_DTO_SIZE` 1024 this is 256016 bytes.
 
 See the full list of events, measurements and calibration parameters below.
 

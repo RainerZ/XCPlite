@@ -20,7 +20,7 @@
 // find_package(xcplite) reports to a consuming project.
 #define OPTION_VERSION_MAJOR 2
 #define OPTION_VERSION_MINOR 4
-#define OPTION_VERSION_PATCH 3
+#define OPTION_VERSION_PATCH 5
 
 // CANape version compatibility
 // Disable workarounds for CANape versions < 24SP2
@@ -75,8 +75,8 @@
 
 #define OPTION_ENABLE_TCP
 #define OPTION_ENABLE_UDP
-// #define OPTION_MTU 1500                     // IP MTU; jumbo frames support depend on path MTU in your network
-#define OPTION_MTU 8000
+#define OPTION_MTU 1500
+// #define OPTION_MTU 8000     // IP MTU; jumbo frames support depends on path MTU in your network
 #define OPTION_SERVER_FORCEFULL_TERMINATION // Don't wait for the rx and tx thread to finish, just terminate them
 
 //-------------------------------------------------------------------------------
