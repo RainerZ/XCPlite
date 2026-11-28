@@ -13,128 +13,25 @@
 // xcpclient --help
 //-----------------------------------------------------------------------------
 
+use std::error::Error;
 use std::io::{IsTerminal, Write};
-use std::net::Ipv4Addr;
 use std::process::ExitCode;
-use std::{error::Error, sync::Arc};
 
 use figment::{
     Figment,
     providers::{Format, Toml},
 };
-use parking_lot::Mutex;
 
-mod xcp_client;
-use xcp_client::*;
+use xcpclient::session::{DefaultEvent, DescriptionOptions, MeasurementOptions, ParameterValue, Session};
+use xcpclient::xcp_client::{A2lTypeEncoding, XcpTextDecoder};
 
 mod xcp_test_executor;
-
-mod a2l_fix;
-
-mod daq_writer;
-use daq_writer::{DaqDecoder, DaqWriter};
-
-mod console_writer;
-use console_writer::ConsoleWriter;
-
-mod csv_writer;
-use csv_writer::CsvWriter;
-
-mod perfetto_writer;
-use perfetto_writer::{PerfettoWriter, TraceAuto};
-
-mod mdf_writer;
-use mdf_writer::MdfWriter;
-mod mcap_writer;
-use mcap_writer::McapWriter;
-
-use xcp_registry::McA2mlMode;
-use xcp_registry::McEvent;
 use xcp_test_executor::test_executor;
-
-pub mod elf_reader;
-use elf_reader::{ElfFilter, ElfReader};
-
-pub mod bin_reader;
 
 //-----------------------------------------------------------------------------
 // Command line arguments
 
 use clap::Parser;
-
-//------------------------------------------------------------------------
-// --default-event value
-
-/// Value of --default-event: an event id or an event name.
-/// A name follows the C identifier rules and is resolved to an event id against the registry event list once it is complete.
-#[derive(Debug, Clone, PartialEq)]
-enum DefaultEvent {
-    Id(u16),
-    Name(String),
-}
-
-impl DefaultEvent {
-    /// Resolve to an event id
-    /// An id is taken as it is, a name is looked up in the registry event list and is an error when not found
-    fn resolve(&self, reg: &xcp_registry::Registry) -> Result<u16, String> {
-        match self {
-            DefaultEvent::Id(id) => Ok(*id),
-            DefaultEvent::Name(name) => reg
-                .event_list
-                .iter()
-                .find(|e| e.get_unique_name(reg) == name.as_str() || (e.index == 0 && e.get_name() == name.as_str()))
-                .map(|e| e.get_id())
-                .ok_or_else(|| {
-                    let known: Vec<String> = reg.event_list.iter().map(|e| format!("{} ({})", e.get_unique_name(reg), e.get_id())).collect();
-                    format!("Default event '{}' not found in the event list [{}]", name, known.join(", "))
-                }),
-        }
-    }
-}
-
-impl std::fmt::Display for DefaultEvent {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DefaultEvent::Id(id) => write!(f, "{}", id),
-            DefaultEvent::Name(name) => write!(f, "{}", name),
-        }
-    }
-}
-
-impl std::str::FromStr for DefaultEvent {
-    type Err = String;
-
-    /// An unsigned integer is an event id, a C identifier is an event name, anything else is an error
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim();
-        if let Ok(id) = s.parse::<u16>() {
-            return Ok(DefaultEvent::Id(id));
-        }
-        let mut chars = s.chars();
-        let is_identifier = matches!(chars.next(), Some(c) if c == '_' || c.is_ascii_alphabetic()) && chars.all(|c| c == '_' || c.is_ascii_alphanumeric());
-        if is_identifier {
-            Ok(DefaultEvent::Name(s.to_string()))
-        } else {
-            Err(format!("'{}' is neither an event id (0..65535) nor an event name (C identifier)", s))
-        }
-    }
-}
-
-/// Config file: accept an integer (event id) or a string (event id or event name)
-impl<'de> serde::Deserialize<'de> for DefaultEvent {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        #[derive(serde::Deserialize)]
-        #[serde(untagged)]
-        enum Raw {
-            Id(u16),
-            Text(String),
-        }
-        match Raw::deserialize(deserializer)? {
-            Raw::Id(id) => Ok(DefaultEvent::Id(id)),
-            Raw::Text(s) => s.parse().map_err(serde::de::Error::custom),
-        }
-    }
-}
 
 #[derive(Parser, Debug)]
 #[command(name = "xcpclient")]
@@ -407,87 +304,6 @@ impl ToLogLevelFilter for u8 {
 }
 
 //------------------------------------------------------------------------
-// Measurement data output
-// The DAQ decoder hands the DAQ packets to writers, one for each output format, see module daq_writer
-
-// Create the writers for the measurement data output, without an output file the data is printed to the console
-// contexts are the known contexts and trace_signals the signals added to the measurement for --perfetto (see add_trace_signals)
-fn create_daq_writers(
-    csv_filename: &str,
-    mdf_filename: &str,
-    mcap_filename: &str,
-    perfetto_filename: &str,
-    ecu_name: &str,
-    contexts: &[String],
-    trace_signals: &[String],
-) -> Result<Vec<Box<dyn DaqWriter>>, Box<dyn Error>> {
-    let mut writers: Vec<Box<dyn DaqWriter>> = Vec::new();
-    if !csv_filename.is_empty() {
-        let writer = CsvWriter::create(csv_filename).map_err(|e| format!("Failed to create CSV file '{}': {}", csv_filename, e))?;
-        info!("CSV output to file: {}", csv_filename);
-        // The trace signals are not written to the CSV file
-        writers.push(Box::new(writer.with_skip(trace_signals)));
-    }
-    if !mdf_filename.is_empty() {
-        let writer = MdfWriter::create(mdf_filename).map_err(|e| format!("Failed to create MDF file '{}': {}", mdf_filename, e))?;
-        info!("MDF output to file: {}", mdf_filename);
-        writers.push(Box::new(writer.with_ecu_name(ecu_name)));
-    }
-    if !mcap_filename.is_empty() {
-        let writer = McapWriter::create(mcap_filename).map_err(|e| format!("Failed to create MCAP file '{}': {}", mcap_filename, e))?;
-        info!("MCAP output to file: {}", mcap_filename);
-        writers.push(Box::new(writer.with_ecu_name(ecu_name)));
-    }
-    if !perfetto_filename.is_empty() {
-        let mut writer = PerfettoWriter::create(perfetto_filename).map_err(|e| format!("Failed to create Perfetto trace file '{}': {}", perfetto_filename, e))?;
-        info!("Perfetto trace output to file: {}", perfetto_filename);
-        writer.set_ecu_name(ecu_name);
-        writer.set_contexts(contexts);
-        writers.push(Box::new(writer));
-    }
-    if writers.is_empty() {
-        writers.push(Box::new(ConsoleWriter::stdout()));
-    }
-    Ok(writers)
-}
-
-//------------------------------------------------------------------------
-// Trace signals for --perfetto
-// Adds the span and link signals needed for the trace to the measurement list, at the level given with --trace-auto
-// Returns the measurement list, the known contexts (each is a process in the Perfetto trace) and the added signals
-
-fn add_trace_signals(xcp_client: &XcpClient, trace_auto: &str, mut list: Vec<String>) -> (Vec<String>, Vec<String>, Vec<String>) {
-    let level: TraceAuto = trace_auto.parse().unwrap_or(TraceAuto::Links);
-    let measurements: Vec<(String, Option<String>)> = xcp_client
-        .find_measurements(".*")
-        .into_iter()
-        .map(|name| {
-            let event = xcp_client.measurement_event_name(&name);
-            (name, event)
-        })
-        .collect();
-    let contexts = perfetto_writer::find_contexts(measurements.iter().map(|(n, _)| n.as_str()));
-    if contexts.is_empty() {
-        return (list, contexts, Vec::new());
-    }
-
-    let added = perfetto_writer::trace_signals(level, &measurements, &list);
-    if level == TraceAuto::Off {
-        let missing = perfetto_writer::trace_signals(TraceAuto::Links, &measurements, &list);
-        if !missing.is_empty() {
-            warn!(
-                "Perfetto trace: the spans and span links of the contexts are not measured, add them with --trace-auto links or measure them: {}",
-                missing.join(" ")
-            );
-        }
-    } else if !added.is_empty() {
-        info!("Perfetto trace: {} trace signals added (--trace-auto {}): {}", added.len(), trace_auto, added.join(" "));
-    }
-    list.extend(added.iter().cloned());
-    (list, contexts, added)
-}
-
-//------------------------------------------------------------------------
 // Handle incoming SERV_TEXT data
 // Prints the text to the console
 
@@ -514,20 +330,38 @@ impl XcpTextDecoder for ServTextDecoder {
 
 //------------------------------------------------------------------------
 //  XCP client
+// Runs the steps selected by the command line arguments with a session, see module session
 
 async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::SocketAddr, local_addr: std::net::SocketAddr, baud_rate: u32) -> Result<(), Box<dyn Error>> {
+    // Create the session
+    let mut session = Session::new(protocol, dest_addr, local_addr, baud_rate);
+    if let Some(event) = &args.default_event {
+        info!("Default event {} for variables without a fixed event", event);
+    }
+
+    // Execute main logic and capture the result
+    let result = xcp_client_steps(&mut session, args, protocol).await;
+
+    // Always disconnect, regardless of whether the logic succeeded or failed
+    session.disconnect().await?;
+
+    // Return the result from the main logic (preserving any errors that occurred)
+    result
+}
+
+async fn xcp_client_steps(session: &mut Session, args: Args, protocol: &'static str) -> Result<(), Box<dyn Error>> {
     // Destructure args
     let Args {
         verbose,
         connect_mode,
         offline,
-        a2l: a2l_filename,
+        a2l,
         upload_a2l,
         create_a2l,
         create_a2l_template,
         fix_a2l,
         embed_aml,
-        elf: elf_filename,
+        elf,
         upload_elf,
         elf_unit_limit_min,
         elf_unit_limit,
@@ -543,787 +377,223 @@ async fn xcp_client(args: Args, protocol: &'static str, dest_addr: std::net::Soc
         default_event,
         time,
         cal: cal_args,
-        csv: csv_filename,
-        mdf: mdf_filename,
-        mcap: mcap_filename,
-        perfetto: perfetto_filename,
+        csv,
+        mdf,
+        mcap,
+        perfetto,
         trace_auto,
         yes,
         ..
     } = args;
     let measurement_duration_ms = time * 1000;
 
-    // Create xcp_client
-    let mut xcp_client = XcpClient::new(protocol, dest_addr, local_addr, baud_rate);
-    if let Some(event) = &default_event {
-        info!("Default event {} for variables without a fixed event", event);
+    //----------------------------------------------------------------
+    // Connect the XCP on ETH server if required
+    let go_online = !offline && (protocol == "TCP" || protocol == "UDP" || upload_a2l || upload_elf || !measurement_list.is_empty() || !cal_args.is_empty());
+    if go_online {
+        session.connect(connect_mode, ServTextDecoder::new()).await?;
     }
-    // Default event id, resolved from --default-event once the registry event list is complete
-    let mut default_event_id: Option<u16> = None;
 
-    // Target ECU name (from GET_ID)
-    let mut ecu_name = String::new();
-
-    // A2L name (from GET_ID)
-    let mut a2l_name = String::new();
-    // EPK reported by the target, empty when offline or unsupported
-    let mut ecu_epk = String::new();
-
-    // Calibration segment relative addressing mode
-    let mut segment_relative = false;
-
-    // DAQ decoder, the measurement data writers are set at measurement start
-    let mut daq_decoder_handle: Option<Arc<Mutex<DaqDecoder>>> = None;
-
-    // Execute main logic and capture the result
-    let result = async {
-        //----------------------------------------------------------------
-        // Connect the XCP on ETH server if required
-        let go_online = !offline && (protocol == "TCP" || protocol == "UDP" || upload_a2l || upload_elf || !measurement_list.is_empty() || !cal_args.is_empty());
-        if go_online {
-            // Connect to the XCP server
-            // Print protocol information
-            info!("XCP Connect using {}", protocol);
-            let daq_decoder = Arc::new(Mutex::new(DaqDecoder::new()));
-            daq_decoder_handle = Some(Arc::clone(&daq_decoder));
-            match xcp_client.connect(connect_mode, Arc::clone(&daq_decoder), ServTextDecoder::new()).await {
-                Ok(_) => {
-                    info!("Connected to XCP server at {}", dest_addr);
+    //----------------------------------------------------------------
+    // Upload, create or load the A2L file
+    let description_options = DescriptionOptions {
+        a2l,
+        upload_a2l,
+        create_a2l,
+        create_a2l_template,
+        fix_a2l,
+        embed_aml,
+        elf,
+        upload_elf,
+        elf_unit_limit_min,
+        elf_unit_limit,
+        elf_var_filter,
+        elf_unit_filter,
+        elf_skip_no_metadata,
+        default_event,
+        verbose,
+    };
+    // An EPK mismatch between the A2L file and the target is confirmed with --yes or interactively
+    let confirm_epk_mismatch = || -> Result<(), Box<dyn Error>> {
+        if !yes {
+            if std::io::stdin().is_terminal() {
+                eprint!("Continue anyway? [y/N] ");
+                let _ = std::io::stderr().flush();
+                let mut input = String::new();
+                let _ = std::io::stdin().read_line(&mut input);
+                if !input.trim().eq_ignore_ascii_case("y") {
+                    return Err("Aborted due to EPK mismatch".into());
                 }
-                Err(e) => {
-                    error!("Failed to connect to XCP server at {}, Error: {}", dest_addr, e);
-                    return Err("Failed to connect to XCP server".into());
-                }
-            }
-            xcp_client.log_connect_info();
-            assert!((xcp_client.comm_mode_basic() & 0x07) == 0); // Address granularity != 1 and motorola format not supported
-
-            info!("Reading target ECU information via XCP GET_ID commands:");
-
-            // Get target ECU name
-            let res = xcp_client.get_id(xcp::IDT_ASCII).await;
-            match res {
-                Ok((_, Some(id))) => {
-                    ecu_name = id;
-                    info!("  GET_ID IDT_ASCII = {}", ecu_name);
-                }
-                Err(e) => {
-                    error!("GET_ID IDT_ASCII failed, Error: {}", e);
-                }
-                _ => {
-                    panic!("Empty string");
-                }
-            };
-
-            // Get A2L name
-            let res = xcp_client.get_id(xcp::IDT_ASAM_NAME).await;
-            match res {
-                Ok((_, Some(id))) => {
-                    a2l_name = id;
-                    info!("  GET_ID IDT_ASAM_NAME = {}", a2l_name);
-                }
-                Err(e) => {
-                    error!("GET_ID IDT_ASAM_NAME failed, Error: {}", e);
-                }
-                _ => {
-                    panic!("Empty string");
-                }
-            };
-
-            // Get EPK
-            let res = xcp_client.get_id(xcp::IDT_ASAM_EPK).await;
-            match res {
-                Ok((_, Some(id))) => {
-                    info!("  GET_ID IDT_EPK = {}", id);
-                    ecu_epk = id;
-                }
-                Err(e) => {
-                    warn!("GET_ID IDT_ASAM_EPK failed, Error: {}", e);
-                }
-                _ => {
-                    panic!("Empty string");
-                }
-            };
-        } // go online
-
-        //----------------------------------------------------------------
-        // Create a new empty A2L registry
-        let mut reg = xcp_registry::Registry::new();
-        if !ecu_name.is_empty() {
-            reg.application.set_info(ecu_name.clone(), "-", 0);
-        }
-        reg.set_flatten_typedefs_mode(false);
-        reg.set_prefix_names_mode(false);
-        reg.set_a2ml_mode(if embed_aml { McA2mlMode::Embed } else { McA2mlMode::Include });
-
-        // Set A2L file path to given command line argument 'a2l' or to GET_ID IDT_ASAM_NAME or IDT_ASCII
-        let (mut a2l_path, a2l_asam_name) = if !a2l_filename.is_empty() {
-            log::info!("Using A2L file name from command line argument: {}", a2l_filename);
-            let a2l_filename = if !a2l_filename.ends_with(".a2l") {
-                // Add .a2l extension
-                format!("{}.a2l", a2l_filename)
             } else {
-                a2l_filename
-            };
-            (std::path::Path::new(&a2l_filename).to_path_buf(), false)
-        } else if !a2l_name.is_empty() {
-            log::info!("Using A2L file name from XCP server GET_ID ASAM_NAME: {}", a2l_name);
-            let a2l_filename = format!("{}.a2l", a2l_name);
-            (std::path::Path::new(&a2l_filename).to_path_buf(), true) // from GET_ID ASAM_NAME
-        } else if !ecu_name.is_empty() {
-            log::info!("Using A2L file name from XCP server GET_ID ASCII: {}", ecu_name);
-            let a2l_filename = format!("{}.a2l", ecu_name);
-            (std::path::Path::new(&a2l_filename).to_path_buf(), false) // from GET_ID ASCII
+                return Err("EPK mismatch: aborting. Use --yes to proceed anyway.".into());
+            }
+        }
+        Ok(())
+    };
+    session.load_description(&description_options, confirm_epk_mismatch).await?;
+
+    // Print all known calibration objects and get their current value
+    if !list_cal.is_empty() {
+        println!();
+        let cal_objects = session.find_parameters(list_cal.as_str());
+        info!("===============================================================");
+        println!("Calibration variables:");
+        if !cal_objects.is_empty() {
+            for name in &cal_objects {
+                let p = session.read_parameter(name).await?;
+                match p.encoding {
+                    A2lTypeEncoding::Signed => {
+                        print!(" {} {}:{:08X}", p.name, p.addr.ext, p.addr.addr);
+                        if let Some(ParameterValue::Signed(v)) = p.value {
+                            print!(" ={}", v);
+                        }
+                    }
+                    A2lTypeEncoding::Unsigned => {
+                        print!(" {} {}:{:08X} ", p.name, p.addr.ext, p.addr.addr);
+                        if let Some(ParameterValue::Unsigned(v)) = p.value {
+                            print!(" = {}", v);
+                        }
+                    }
+                    A2lTypeEncoding::Float => {
+                        print!(" {} {}:{:08X}", p.name, p.addr.ext, p.addr.addr);
+                        if let Some(ParameterValue::Float(v)) = p.value {
+                            print!(" = {}", v);
+                        }
+                    }
+                    A2lTypeEncoding::Blob => {
+                        print!(" {} = [...]", name);
+                    }
+                }
+                println!();
+            }
+            println!();
         } else {
-            return Err("^No A2L file name specified, use --a2l commandline parameter".into());
+            println!(" None");
+        }
+    }
+
+    // Upload or Download calibration segment data
+    // (Note: In XCP, Upload means from target to file, Download means from file to target)
+    if upload_bin {
+        session.upload_parameters(&bin_filename).await?;
+    } else if download_bin {
+        session.download_parameters(&bin_filename).await?;
+    }
+
+    // Set calibration variable
+    if session.is_connected() && !cal_args.is_empty() {
+        if cal_args.len() != 2 {
+            return Err("Calibration command requires exactly 2 arguments: variable name and value".into());
+        }
+
+        // Parse the value as a double
+        let var_name = &cal_args[0];
+        let value_str = &cal_args[1];
+        let value: f64 = value_str.parse().map_err(|_| format!("Failed to parse '{}' as a double value", value_str))?;
+        session.write_parameter(var_name, value).await?;
+        println!("Ok");
+    }
+
+    // Print all known measurement objects
+    if !list_mea.is_empty() {
+        println!();
+        let mea_objects = session.find_measurements(&list_mea);
+        info!("===============================================================");
+        println!("Measurement variables:");
+        if !mea_objects.is_empty() {
+            for name in &mea_objects {
+                if let Some(description) = session.describe_measurement(name) {
+                    println!(" {}", description);
+                }
+            }
+            println!();
+        } else {
+            println!(" None");
+        }
+    }
+
+    // Measurement
+    if session.is_connected() && !measurement_list.is_empty() {
+        // Measurement data output to the given files, to the console if there is none
+        let measurement_options = MeasurementOptions {
+            csv,
+            mdf,
+            mcap,
+            perfetto,
+            trace_auto,
+            console: true,
         };
-        info!("A2L path: {}", a2l_path.display());
-
-        //----------------------------------------------------------------
-        // Upload A2L
-        // From XCP server and load it into the xcp_client registry
-        if upload_a2l {
-            // Don't overwrite existing A2L file generated by a XCP demo running in the same directory
-            if a2l_path.exists() && a2l_asam_name && a2l_path == std::path::Path::new(&a2l_name).with_extension("a2l") {
-                // Generate a different file name for the uploaded A2L file
-                let new_a2l_path = a2l_path
-                    .with_file_name(format!("{}_upload", a2l_path.file_stem().unwrap().to_str().unwrap()))
-                    .with_extension("a2l");
-                warn!(
-                    "The A2L file '{}' already exists and matches the XCP server A2L file name (from GET_ID ASAM_NAME), uploading to {}",
-                    a2l_path.display(),
-                    new_a2l_path.display()
-                );
-                a2l_path = new_a2l_path;
-            }
-
-            // Upload A2L file
-            let res = xcp_client.upload_a2l_into_registry(&a2l_path, &mut reg).await;
-            if let Err(e) = res {
-                error!("A2L upload failed, Error: {}", e);
-                return Err("A2L upload failed".into());
-            }
-        }
-        //
-        //----------------------------------------------------------------
-        // Create A2L file
-        // If an ELF file is available, create an A2L file from the XCP server information and the ELF file
-        // If option create-a2l is specified and no ELF file, create a A2L template from XCP server information
-        // Read segment and event information obtained from the XCP server into registry
-        // Add measurement and calibration variables from ELF file if specified
-        // Addressing scheme may be XCPLITE__ACSDD or XCPLITE__CASDD depending on the target configuration
-        else if create_a2l || create_a2l_template || !elf_filename.is_empty() || upload_elf {
-            let mode = if create_a2l_template {
-                if !elf_filename.is_empty() || upload_elf {
-                    "target XCP event/segment and ELF/DWARF event/segment information (template, no variables), online mode"
-                } else {
-                    "target XCP event/segment information only (template, no variables), online mode"
-                }
-            } else if xcp_client.is_connected() {
-                if !elf_filename.is_empty() || upload_elf {
-                    "target XCP event/segment and ELF/DWARF variable and type information, online mode"
-                } else {
-                    "target XCP event/segment information only, online mode"
-                }
+        if session.start_measurement(measurement_list, &measurement_options).await? {
+            // Periodic statistics reporter — prints event and data rate once per second.
+            // Reported at log level Info, independent of --verbose (which only controls per-sample content dumps).
+            let stats_decoder = session.daq_decoder();
+            let deadline = if measurement_duration_ms > 0 {
+                Some(tokio::time::Instant::now() + std::time::Duration::from_millis(measurement_duration_ms))
             } else {
-                "ELF/DWARF information only,  offline mode"
+                println!("Press Ctrl-C to stop measurement...");
+                None
             };
-            info!("Generate A2L file {} with {} ", a2l_path.display(), mode);
-
-            // Set registry XCP transport layer information for A2L file
-            // TCP or UDP: set IP address and port number
-            if protocol == "TCP" || protocol == "UDP" {
-                let addr = dest_addr.ip();
-                let ipv4_addr = match addr {
-                    std::net::IpAddr::V4(v4) => v4,
-                    std::net::IpAddr::V6(_) => Ipv4Addr::new(127, 0, 0, 1),
-                };
-                let port: u16 = dest_addr.port();
-                reg.set_xcp_eth_params(protocol, ipv4_addr, port);
-            }
-            // SxI protocol: set baud rate
-            else if protocol == "SxI" {
-                reg.set_xcp_sxi_params(baud_rate);
-            }
-
-            // If there is an ECU online, get event and segment information via XCP
-            if xcp_client.is_connected() {
-                xcp_client.get_event_segment_info(&mut reg).await?;
-            }
-
-            // Read ELF/DWARF information for events, segments and (unless --create-a2l-template) variables
-            // Events and calibration segments found in the ELF file, must match the XCP server information if present
-            // If not, they are created, but with dummy event id and segment number, which has to be fixed later !!!
-            if !elf_filename.is_empty() || upload_elf {
-                // Upload ELF file
-                if upload_elf {
-                    if elf_filename.is_empty() {
-                        error!("ELF file name must be specified with --elf when using --upload-elf");
-                        return Err("ELF file name not specified".into());
-                    }
-                    info!("Upload ELF file: {}", elf_filename);
-                    let res = xcp_client.upload_elf_file(&elf_filename).await;
-                    if let Err(e) = res {
-                        error!("ELF upload failed, Error: {}", e);
-                        return Err("ELF upload failed".into());
-                    }
-                }
-
-                // The compilation unit and variable name selection, built and validated once here and then carried by the ELF reader
-                let elf_filter = ElfFilter::new(elf_unit_limit_min, elf_unit_limit, &elf_unit_filter, &elf_var_filter)?;
-
-                // Read ELF file and DWARF debug information, compilation unit number may be limited to reduce processing time and memory needed
-                info!("Reading ELF file: {}", elf_filename);
-                let elf_reader = ElfReader::new(&elf_filename, verbose, elf_filter).map_err(|e| format!("Failed to read ELF file '{}': {}", elf_filename, e))?;
-                elf_reader.log_compilers();
-
-                if verbose > 0 {
-                    elf_reader.debug_data.print_debug_info(verbose);
-                }
-
-                // Detect addressing scheme for calibration segments
-                // Get target signature (CASDD, ACSDD, ...) from ELF file if available
-                // true - addr_ext==0 is segment relative addressing, addr_ext==1 is absolute addressing
-                // false - addr_ext==0 is absolute addressing, addr_ext==1 is segment relative addressing
-                info!("===============================================================");
-                segment_relative = {
-                    let signature = elf_reader.get_target_signature();
-                    if let Some(sig) = signature {
-                        info!("Target signature found: {}", sig);
-                        if sig.starts_with("C") { true } else { false }
-                    } else {
-                        warn!("No target signature found in ELF file");
-                        false
-                    }
-                };
-                info!(
-                    "Using {} addressing for calibration segments",
-                    if segment_relative { "segment relative" } else { "absolute" }
-                );
-
-                // Register events from event creation markers (evt__name) in the code
-                elf_reader.register_events(&mut reg, verbose)?;
-
-                // Register segments from segment creation markers (calseg__name) found in the code
-                elf_reader.register_segments(&mut reg, segment_relative, verbose)?;
-
-                // Get the EPK string from debug_data and set it in the registry application version information, if available
-                // After the segments, ADDR_EPK depends on the addressing mode and the epk segment
-                elf_reader.register_epk_addr_info(&mut reg, segment_relative, verbose);
-
-                // Find event triggers in the code by their trigger markers (trg__mode__name) and register their location (compilation unit, function, CFA offset)
-                elf_reader.register_event_locations(&mut reg, verbose)?;
-
-                // Register all accessible variables and their types
-                // Skipped in --create-a2l-template mode; events and segments are still registered above
-                if !create_a2l_template {
-                    // The event list is complete now (XCP server and ELF file), resolve the default event name to its id
-                    if let Some(event) = &default_event {
-                        default_event_id = Some(event.resolve(&reg)?);
-                    }
-                    elf_reader.register_variables(&mut reg, segment_relative, verbose, default_event_id)?;
-                    // Register the captured local variables of the event triggers (DaqTriggerEventCapture)
-                    elf_reader.register_captures(&mut reg, verbose)?;
-                    // Apply metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the xcp_meta ELF section
-                    elf_reader.register_metadata(&mut reg, verbose)?;
-                    // Optionally remove all variables without any metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) from the registry
-                    if elf_skip_no_metadata {
-                        let before = reg.instance_list.len();
-                        reg.instance_list.retain(|inst| inst.get_mc_support_data().has_metadata());
-                        let removed = before - reg.instance_list.len();
-                        if verbose > 0 || removed > 0 {
-                            info!("Removed {} variables without metadata ({} remaining)", removed, reg.instance_list.len());
-                        }
-                    }
-                }
-            }
-
-            // Write the registry to A2L file
-            if !a2l_path.as_os_str().is_empty() {
-                info!("===============================================================");
-                if a2l_path.exists() {
-                    warn!("Overwriting existing A2L file: {}", a2l_path.display());
-                }
-                if ecu_name.is_empty() {
-                    ecu_name = "project_name".into();
-                }
-                let title_info = format!("Created by xcp_client with {} - {}", mode, chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"));
-                reg.write_a2l(
-                    &a2l_path,
-                    title_info.as_str(),
-                    &ecu_name,
-                    "",
-                    &ecu_name,
-                    if segment_relative { "XCPLITE__CASDD" } else { "XCPLITE__ACSDD" },
-                    true,
-                )
-                .unwrap();
-                info!("Created A2L with file: {} {}", a2l_path.display(), mode);
-            }
-
-            // The A2L file keeps the typedef structure, but xcp_client supports only basic type instances (see load_a2l_file_into_registry):
-            // flatten the registry like loading an A2L file does, so --list-cal, --cal and --mea work the same as with --a2l
-            reg.flatten_typedefs();
-        }
-        //----------------------------------------------------------------
-        // Load A2L from local file
-        // If not upload or create option load  A2L from specified file into reg
-        // If fix-a2l option is specified, check and correct the A2L file with the XCP server information otherwise just warn about differences
-        // Consider command line option --epk-segment
-        else {
-            info!("===============================================================");
-            info!("Load A2L file: {}", a2l_path.display());
-            xcp_client
-                .load_a2l_file_into_registry(&a2l_path, &mut reg)
-                .map_err(|e| format!("Could not load A2L file '{}': {}", a2l_path.display(), e))?;
-
-            // Check the A2L EPK against the EPK reported by the target.
-            // The EPK is the firmware version string the A2L was generated from,
-            // so a mismatch means this A2L describes different firmware and its
-            // addresses may point at the wrong variables.
-            if !ecu_epk.is_empty() {
-                let a2l_epk = reg.application.get_version();
-                if a2l_epk.is_empty() {
-                    warn!("A2L file {} has no EPK, cannot verify it matches the target", a2l_path.display());
-                } else if a2l_epk != ecu_epk {
-                    error!(
-                        "EPK mismatch: A2L file '{}' has EPK '{}', target reports EPK '{}'. Addresses may be wrong.",
-                        a2l_path.display(),
-                        a2l_epk,
-                        ecu_epk
-                    );
-                    if !yes {
-                        if std::io::stdin().is_terminal() {
-                            eprint!("Continue anyway? [y/N] ");
-                            let _ = std::io::stderr().flush();
-                            let mut input = String::new();
-                            let _ = std::io::stdin().read_line(&mut input);
-                            if !input.trim().eq_ignore_ascii_case("y") {
-                                return Err("Aborted due to EPK mismatch".into());
-                            }
-                        } else {
-                            return Err("EPK mismatch: aborting. Use --yes to proceed anyway.".into());
-                        }
-                    }
-                } else {
-                    info!("EPK '{}' of A2L file and target match", ecu_epk);
-                }
-            }
-
-            let mut event_mapping: std::collections::HashMap<u16, u16> = std::collections::HashMap::new();
-            let mut seg_mapping: std::collections::HashMap<u16, u16> = std::collections::HashMap::new();
-            let mut missing_event_ids = 0;
-
-            // Load the event and calibration segment information from target into a temporary registry and check if the given A2L file needs to be corrected
-            let mut tmp_reg = xcp_registry::Registry::new();
-            xcp_client.get_event_segment_info(&mut tmp_reg).await?;
-
-            // Check events
-            if xcp_client.max_events() == 0 {
-                warn!("XCP server does not support get event info, skipping event check");
-            } else {
-                for event in &tmp_reg.event_list {
-                    if let Some(e) = reg.event_list.find_event(event.get_name(), 0) {
-                        if e.get_id() != event.get_id() {
-                            warn!(
-                                "Event id of '{}' differs, A2L file {} has id {}, target has id {}",
-                                event.get_name(),
-                                a2l_path.display(),
-                                e.get_id(),
-                                event.get_id()
-                            );
-
-                            // Create event mapping information in a hash map
-                            event_mapping.insert(e.get_id(), event.get_id());
-                        }
-                    } else {
-                        warn!("Event '{}' missing in A2L file {}", event.get_name(), a2l_path.display());
-                        missing_event_ids += 1;
-                    }
-                }
-            }
-
-            // Check calibration segments
-            if xcp_client.max_segments() == 0 {
-                warn!("XCP server does not support get segment info, skipping calibration segment check");
-            } else {
-                for seg in &tmp_reg.cal_seg_list {
-                    if let Some(s) = reg.cal_seg_list.find_cal_seg(seg.get_name()) {
-                        if s.get_index() != seg.get_index() {
-                            warn!(
-                                "Calibration segment index of '{}' differs, A2L file {} has index {}, target has index {}",
-                                seg.get_name(),
-                                a2l_path.display(),
-                                s.get_index(),
-                                seg.get_index()
-                            );
-
-                            // Create segment mapping information in a hash map
-                            seg_mapping.insert(s.get_index(), seg.get_index());
-                        }
-                    } else {
-                        error!("Calibration segment '{}' missing in A2L file {}", seg.get_name(), a2l_path.display());
-                    }
-                }
-            }
-
-            // Fix the registry used in this run and rewrite the A2L file
-            // In the event list and calibration segment list, and in the addresses of all instances with XCPlite event relative
-            // or calibration segment relative addressing, which contain the event id or segment number
-            if fix_a2l {
-                // Only an A2L file generated by xcpclient is corrected, the event ids and segment numbers of an A2L file generated offline
-                // from the ELF file without section registration. Any other A2L file is rejected, it might lose information when rewritten
-                let a2l_text = std::fs::read_to_string(&a2l_path).map_err(|e| format!("Could not read A2L file '{}': {}", a2l_path.display(), e))?;
-                if !a2l_fix::is_created_by_xcpclient(&a2l_text) {
-                    return Err(format!(
-                        "--fix-a2l: A2L file '{}' was not created by xcpclient, only A2L files created with --elf and --create-a2l can be corrected. \
-                         Create the A2L file with --elf and --create-a2l while connected to the XCP server instead",
-                        a2l_path.display()
-                    )
-                    .into());
-                }
-                if !event_mapping.is_empty() {
-                    info!("Event mapping information:");
-                    for (k, v) in &event_mapping {
-                        info!("  {} -> {}", k, v);
-                    }
-                }
-                if !seg_mapping.is_empty() {
-                    info!("Calibration segment mapping information:");
-                    for (k, v) in &seg_mapping {
-                        info!("  {} -> {}", k, v);
-                    }
-                }
-                let project_no = a2l_fix::get_project_no(&a2l_text);
-                a2l_fix::apply_mappings(&mut reg, &event_mapping, &seg_mapping, project_no.as_deref());
-
-                if missing_event_ids > 0 {
-                    if missing_event_ids == 1 {
-                        // Add a dummy event
-                        match reg.event_list.add_event(McEvent::new("async", 0, 0, 0)) {
-                            Ok(_) => {
-                                warn!("XCPlite async event added");
-                            }
-                            Err(e) => warn!("Failed to add event 'async', Error: {}", e),
-                        }
-                    } else {
-                        warn!("A2L file {} is missing {} event ids, please correct manually", a2l_path.display(), missing_event_ids);
-                    }
-                }
-
-                if event_mapping.is_empty() && seg_mapping.is_empty() {
-                    info!("Event ids and calibration segment numbers of A2L file {} match the target", a2l_path.display());
-                } else {
-                    let tl_params = match dest_addr.ip() {
-                        std::net::IpAddr::V4(addr) if protocol == "TCP" || protocol == "UDP" => Some((protocol, addr, dest_addr.port())),
-                        _ => None,
-                    };
-                    a2l_fix::rewrite_a2l_file(&a2l_path, &event_mapping, &seg_mapping, tl_params, embed_aml)
-                        .map_err(|e| format!("Could not rewrite A2L file '{}': {}", a2l_path.display(), e))?;
-                }
-            } else if !event_mapping.is_empty() || !seg_mapping.is_empty() {
-                warn!("A2L file {} differs from target, use automatic correction (--fix-a2l)", a2l_path.display());
-                info!("events: {:?}", event_mapping);
-                info!("segments: {:?}", seg_mapping);
-            }
-        } // load  A2L from specified file
-
-        // Resolve the default event against the final event list, if not done yet, and use it for the measurement of variables without a fixed event
-        if let Some(event) = &default_event
-            && default_event_id.is_none()
-        {
-            default_event_id = Some(event.resolve(&reg)?);
-        }
-        if let (Some(DefaultEvent::Name(name)), Some(id)) = (&default_event, default_event_id) {
-            info!("Default event '{}' resolved to event id {}", name, id);
-        }
-        xcp_client.set_default_event(default_event_id);
-
-        // Assign the new registry to xcp_client
-        xcp_client.set_registry(reg);
-
-        // Check the status of all calibration segments and goto working page
-        if xcp_client.is_connected() {
-            xcp_client.init_calibration_segments().await?;
-        }
-
-        // Print all known calibration objects and get their current value
-        if !list_cal.is_empty() {
-            println!();
-            let cal_objects = xcp_client.find_characteristics(list_cal.as_str());
-            info!("===============================================================");
-            println!("Calibration variables:");
-            if !cal_objects.is_empty() {
-                for name in &cal_objects {
-                    {
-                        let h: XcpCalibrationObjectHandle = xcp_client.create_calibration_object(name).await?;
-                        match xcp_client.get_calibration_object(h).get_a2l_type().encoding {
-                            A2lTypeEncoding::Signed => {
-                                let o = xcp_client.get_calibration_object(h);
-                                print!(" {} {}:{:08X}", o.get_name(), o.get_a2l_addr().ext, o.get_a2l_addr().addr);
-                                if xcp_client.is_connected() {
-                                    let v = xcp_client.get_value_i64(h);
-                                    print!(" ={}", v);
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1));
+            ticker.tick().await; // consume the immediate first tick, report rates from t+1s
+            let mut last_report = tokio::time::Instant::now();
+            let mut last_events = 0usize;
+            let mut last_bytes = 0usize;
+            let mut last_lost = 0usize;
+            loop {
+                tokio::select! {
+                    _ = ticker.tick() => {
+                        if let Some(ref d) = stats_decoder {
+                            let (events, bytes, lost) = {
+                                let g = d.lock();
+                                (g.get_event_count(), g.get_byte_count(), g.get_lost_count())
+                            };
+                            let now = tokio::time::Instant::now();
+                            let dt = now.duration_since(last_report).as_secs_f64();
+                            if dt > 0.0 {
+                                if lost > last_lost {
+                                    warn!(
+                                        "Measurement: {:.0} event/s, {:.3} Mbyte/s, {} packets lost",
+                                        (events - last_events) as f64 / dt,
+                                        (bytes - last_bytes) as f64 / dt / 1_000_000.0,
+                                        lost - last_lost
+                                    );
+                                } else {
+                                    info!(
+                                        "Measurement: {:.0} event/s, {:.3} Mbyte/s",
+                                        (events - last_events) as f64 / dt,
+                                        (bytes - last_bytes) as f64 / dt / 1_000_000.0
+                                    );
                                 }
                             }
-                            A2lTypeEncoding::Unsigned => {
-                                let o = xcp_client.get_calibration_object(h);
-                                print!(" {} {}:{:08X} ", o.get_name(), o.get_a2l_addr().ext, o.get_a2l_addr().addr);
-                                if xcp_client.is_connected() {
-                                    let v = xcp_client.get_value_u64(h);
-                                    print!(" = {}", v);
-                                }
-                            }
-                            A2lTypeEncoding::Float => {
-                                let o = xcp_client.get_calibration_object(h);
-                                print!(" {} {}:{:08X}", o.get_name(), o.get_a2l_addr().ext, o.get_a2l_addr().addr);
-                                if xcp_client.is_connected() {
-                                    let v = xcp_client.get_value_f64(h);
-                                    print!(" = {}", v);
-                                }
-                            }
-                            A2lTypeEncoding::Blob => {
-                                print!(" {} = [...]", name);
-                            }
+                            last_report = now;
+                            last_events = events;
+                            last_bytes = bytes;
+                            last_lost = lost;
                         }
                     }
-                    println!();
-                }
-                println!();
-            } else {
-                println!(" None");
-            }
-        }
-
-        // Upload or Download calibration segment data
-        // (Note: In XCP, Upload means from target to file, Download means from file to target)
-        if upload_bin || download_bin {
-            let path = if bin_filename.is_empty() {
-                // No filename given, build HEX file path from ECU name
-                std::path::Path::new(&ecu_name).with_extension("hex")
-            } else {
-                std::path::Path::new(&bin_filename).to_path_buf()
-            };
-            if !xcp_client.is_connected() {
-                return Err("XCP client not connected, cannot upload or download calibration segment data".into());
-            }
-            if upload_bin {
-                // The context list of the target is the enum conversion table conv.contexts in the A2L file
-                let contexts = std::fs::read_to_string(&a2l_path)
-                    .ok()
-                    .and_then(|a2l_text| bin_reader::parse_a2l_context_table(&a2l_text))
-                    .unwrap_or_default();
-                if !contexts.is_empty() {
-                    info!("{} contexts found in A2L file {}", contexts.len(), a2l_path.display());
-                }
-                xcp_client.save_calibration_segments_to_file(&path, &contexts).await?;
-            } else {
-                xcp_client.load_calibration_segments_from_file(&path).await?;
-            }
-        }
-
-        // Set calibration variable
-        if xcp_client.is_connected() && !cal_args.is_empty() {
-            if cal_args.len() != 2 {
-                return Err("Calibration command requires exactly 2 arguments: variable name and value".into());
-            }
-
-            // Parse the value as a double
-            let var_name = &cal_args[0];
-            let value_str = &cal_args[1];
-            let value: f64 = value_str.parse().map_err(|_| format!("Failed to parse '{}' as a double value", value_str))?;
-            info!("Setting calibration variable '{}' to {}", var_name, value);
-
-            // Create calibration object
-            let handle = xcp_client
-                .create_calibration_object(var_name)
-                .await
-                .map_err(|e| format!("Failed to create calibration object for '{}': {}", var_name, e))?;
-
-            // Set the value
-            xcp_client
-                .set_value_f64(handle, value)
-                .await
-                .map_err(|e| format!("Failed to set value for '{}': {}", var_name, e))?;
-
-            info!("Successfully set '{}' = {}", var_name, value);
-            println!("Ok");
-        }
-
-        // Print all known measurement objects
-        if !list_mea.is_empty() {
-            println!();
-            let mea_objects = xcp_client.find_measurements(&list_mea);
-            info!("===============================================================");
-            println!("Measurement variables:");
-            if !mea_objects.is_empty() {
-                for name in &mea_objects {
-                    if let Some(description) = xcp_client.describe_measurement(name) {
-                        println!(" {}", description);
+                    _ = async {
+                        match deadline {
+                            Some(dl) => tokio::time::sleep_until(dl).await,
+                            None => std::future::pending::<()>().await,
+                        }
+                    } => {
+                        break;
                     }
-                }
-                println!();
-            } else {
-                println!(" None");
-            }
-        }
-
-        // Measurement
-        if xcp_client.is_connected() && !measurement_list.is_empty() {
-            // Create list of measurement variable names
-            let list = if measurement_list.len() == 1 {
-                // Regular expression
-                xcp_client.find_measurements(measurement_list[0].as_str())
-            } else {
-                // Just a list of names given on the command line
-                measurement_list
-            };
-            // Trace signals for --perfetto
-            let (list, contexts, trace_signals) = if perfetto_filename.is_empty() {
-                (list, Vec::new(), Vec::new())
-            } else {
-                add_trace_signals(&xcp_client, &trace_auto, list)
-            };
-            if list.is_empty() {
-                warn!("No measurement variables found");
-            }
-            // Start measurement
-            else {
-                // Create measurement objects for all names in the list
-                // Multi dimensional objects not supported yet
-                info!("===============================================================");
-                info!("Measurement list:");
-                for name in &list {
-                    if let Some(o) = xcp_client.create_measurement_object(name) {
-                        info!(r#"  {}: {}"#, o.0, name);
-                    }
-                }
-
-                // Measurement data output
-                let writers = create_daq_writers(&csv_filename, &mdf_filename, &mcap_filename, &perfetto_filename, &ecu_name, &contexts, &trace_signals)?;
-                if let Some(daq_decoder) = &daq_decoder_handle {
-                    daq_decoder.lock().set_writers(writers);
-                }
-
-                // Measure
-                // 32 bit DAQ timestamp will overflow after 4.2s
-                let start_time = tokio::time::Instant::now();
-                xcp_client.start_measurement().await?;
-
-                // Periodic statistics reporter — prints event and data rate once per second.
-                // Reported at log level Info, independent of --verbose (which only controls per-sample content dumps).
-                let stats_decoder = xcp_client.get_daq_decoder();
-                let deadline = if measurement_duration_ms > 0 {
-                    Some(tokio::time::Instant::now() + std::time::Duration::from_millis(measurement_duration_ms))
-                } else {
-                    println!("Press Ctrl-C to stop measurement...");
-                    None
-                };
-                let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1));
-                ticker.tick().await; // consume the immediate first tick, report rates from t+1s
-                let mut last_report = tokio::time::Instant::now();
-                let mut last_events = 0usize;
-                let mut last_bytes = 0usize;
-                let mut last_lost = 0usize;
-                loop {
-                    tokio::select! {
-                        _ = ticker.tick() => {
-                            if let Some(ref d) = stats_decoder {
-                                let (events, bytes, lost) = {
-                                    let g = d.lock();
-                                    (g.get_event_count(), g.get_byte_count(), g.get_lost_count())
-                                };
-                                let now = tokio::time::Instant::now();
-                                let dt = now.duration_since(last_report).as_secs_f64();
-                                if dt > 0.0 {
-                                    if lost > last_lost {
-                                        warn!(
-                                            "Measurement: {:.0} event/s, {:.3} Mbyte/s, {} packets lost",
-                                            (events - last_events) as f64 / dt,
-                                            (bytes - last_bytes) as f64 / dt / 1_000_000.0,
-                                            lost - last_lost
-                                        );
-                                    } else {
-                                        info!(
-                                            "Measurement: {:.0} event/s, {:.3} Mbyte/s",
-                                            (events - last_events) as f64 / dt,
-                                            (bytes - last_bytes) as f64 / dt / 1_000_000.0
-                                        );
-                                    }
-                                }
-                                last_report = now;
-                                last_events = events;
-                                last_bytes = bytes;
-                                last_lost = lost;
-                            }
-                        }
-                        _ = async {
-                            match deadline {
-                                Some(dl) => tokio::time::sleep_until(dl).await,
-                                None => std::future::pending::<()>().await,
-                            }
-                        } => {
-                            break;
-                        }
-                        _ = tokio::signal::ctrl_c(), if deadline.is_none() => {
-                            println!("\nStopping measurement...");
-                            break;
-                        }
-                    }
-                }
-
-                xcp_client.stop_measurement().await?;
-                let elapsed_time = start_time.elapsed().as_micros();
-
-                // Print statistics from DAQ decoder
-                {
-                    let daq_decoder = xcp_client.get_daq_decoder();
-                    if let Some(daq_decoder) = daq_decoder {
-                        let daq_decoder = daq_decoder.lock();
-                        let event_count = daq_decoder.get_event_count();
-                        let byte_count = daq_decoder.get_byte_count();
-                        let lost_count = daq_decoder.get_lost_count();
-                        let packet_count = daq_decoder.get_packet_count();
-                        let dropped_count = daq_decoder.get_dropped_count();
-                        info!(
-                            "Measurement done, {} events, {:.0} event/s, {:.3} Mbytes/s, {} packets, {} packets lost",
-                            event_count,
-                            event_count as f64 * 1_000_000.0 / elapsed_time as f64,
-                            byte_count as f64 / elapsed_time as f64,
-                            packet_count,
-                            lost_count
-                        );
-                        if lost_count > 0 {
-                            warn!(
-                                "{} of {} DAQ packets lost ({:.3}%), in the transmit queue of the XCP server or in the UDP receive buffer",
-                                lost_count,
-                                packet_count + lost_count,
-                                lost_count as f64 * 100.0 / (packet_count + lost_count) as f64
-                            );
-                        }
-                        if dropped_count > 0 {
-                            warn!(
-                                "{} incomplete samples of DAQ lists with more than one ODT dropped, an ODT was lost or out of sequence",
-                                dropped_count
-                            );
-                        }
+                    _ = tokio::signal::ctrl_c(), if deadline.is_none() => {
+                        println!("\nStopping measurement...");
+                        break;
                     }
                 }
             }
+
+            // Stop the measurement and print the statistics
+            if let Some(summary) = session.stop_measurement().await? {
+                summary.log();
+            }
         }
-
-        Ok::<(), Box<dyn Error>>(())
-    }
-    .await;
-
-    // Always disconnect, regardless of whether the logic succeeded or failed
-    if xcp_client.is_connected() {
-        xcp_client.disconnect().await?;
-        info!("XCP Disconnected");
     }
 
-    // Return the result from the main logic (preserving any errors that occurred)
-    result
+    Ok(())
 }
 
 //------------------------------------------------------------------------
@@ -1544,55 +814,4 @@ async fn run(args: Args) -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
-}
-
-//------------------------------------------------------------------------
-// Tests
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_default_event_parse() {
-        assert_eq!("3".parse::<DefaultEvent>(), Ok(DefaultEvent::Id(3)));
-        assert_eq!(" 65535 ".parse::<DefaultEvent>(), Ok(DefaultEvent::Id(65535)));
-        assert_eq!("mainloop".parse::<DefaultEvent>(), Ok(DefaultEvent::Name("mainloop".into())));
-        assert_eq!("_task_1".parse::<DefaultEvent>(), Ok(DefaultEvent::Name("_task_1".into())));
-        assert!("65536".parse::<DefaultEvent>().is_err()); // not a u16, not an identifier
-        assert!("-1".parse::<DefaultEvent>().is_err());
-        assert!("1abc".parse::<DefaultEvent>().is_err());
-        assert!("main loop".parse::<DefaultEvent>().is_err());
-        assert!("main-loop".parse::<DefaultEvent>().is_err());
-        assert!("".parse::<DefaultEvent>().is_err());
-    }
-
-    #[test]
-    fn test_default_event_resolve() {
-        let mut reg = xcp_registry::Registry::new();
-        reg.event_list.add_event(McEvent::new("mainloop", 0, 7, 0)).unwrap();
-        reg.event_list.add_event(McEvent::new("task", 1, 8, 0)).unwrap();
-        reg.event_list.add_event(McEvent::new("task", 2, 9, 0)).unwrap();
-
-        assert_eq!(DefaultEvent::Id(42).resolve(&reg), Ok(42)); // ids are not checked here
-        assert_eq!(DefaultEvent::Name("mainloop".into()).resolve(&reg), Ok(7));
-        assert_eq!(DefaultEvent::Name("task_2".into()).resolve(&reg), Ok(9)); // multi instance event by unique name
-        assert!(DefaultEvent::Name("task".into()).resolve(&reg).is_err()); // ambiguous, only exists with index > 0
-        assert!(DefaultEvent::Name("unknown".into()).resolve(&reg).is_err());
-    }
-
-    #[test]
-    fn test_default_event_config_file() {
-        #[derive(serde::Deserialize, Default)]
-        #[serde(default)]
-        struct Cfg {
-            default_event: Option<DefaultEvent>,
-        }
-        let parse = |text: &str| Figment::new().merge(Toml::string(text)).extract::<Cfg>().map_err(|e| e.to_string());
-        assert_eq!(parse("default_event = 3").unwrap().default_event, Some(DefaultEvent::Id(3)));
-        assert_eq!(parse("default_event = \"3\"").unwrap().default_event, Some(DefaultEvent::Id(3)));
-        assert_eq!(parse("default_event = \"mainloop\"").unwrap().default_event, Some(DefaultEvent::Name("mainloop".into())));
-        assert!(parse("default_event = \"main loop\"").is_err());
-        assert_eq!(parse("").unwrap().default_event, None);
-    }
 }
