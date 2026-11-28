@@ -13,7 +13,50 @@ use xcp_registry::McEvent;
 
 use super::*;
 
+/// Path of the temporary file an upload is written to: the file name with .part appended
+fn partial_upload_path(path: &std::path::Path) -> std::path::PathBuf {
+    let mut file_name = path.file_name().unwrap_or_default().to_os_string();
+    file_name.push(".part");
+    path.with_file_name(file_name)
+}
+
 impl XcpClient {
+    //-------------------------------------------------------------------------------------------------
+    // Upload of a file
+
+    // Upload file_size bytes from the MTA of the XCP server into a file
+    // The data is written to a temporary file, which gets its name when the upload is complete. A file with the name of the
+    // uploaded file is not touched before: it may be the file the XCP server is reading for this upload (an XCPlite application
+    // in the same directory), and a failed upload does not leave an empty or truncated file
+    async fn upload_to_file(&mut self, path: &std::path::Path, file_size: u32) -> Result<(), Box<dyn Error>> {
+        let partial_path = partial_upload_path(path);
+        let result: Result<(), Box<dyn Error>> = async {
+            let file = std::fs::File::create(&partial_path)?;
+            let mut writer = std::io::BufWriter::new(file);
+            let mut size = file_size;
+            while size > 0 {
+                let n = if size >= self.max_cto_size as u32 { self.max_cto_size - 1 } else { size as u8 };
+                size -= n as u32;
+                let data = self.upload(n).await?;
+                trace!("xcp_client.upload: {} bytes = {:?}", data.len(), data);
+                writer.write_all(&data[1..=n as usize])?;
+            }
+            writer.flush()?;
+            Ok(())
+        }
+        .await;
+        match result {
+            Ok(()) => {
+                std::fs::rename(&partial_path, path)?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&partial_path);
+                Err(e)
+            }
+        }
+    }
+
     //-------------------------------------------------------------------------------------------------
     // ELF upload
 
@@ -27,22 +70,12 @@ impl XcpClient {
 
         // Check if the ELF file already exists and warn about overwriting
         if elf_path.as_ref().exists() {
-            warn!("ELF file {} already exists, overwriting", elf_path.as_ref().display());
+            info!("ELF file {} already exists, replacing it", elf_path.as_ref().display());
         }
 
         // Upload the ELF file
         info!("Upload ELF to {}", elf_path.as_ref().display());
-        let file = std::fs::File::create(elf_path)?;
-        let mut writer = std::io::BufWriter::new(file);
-        let mut size = file_size;
-        while size > 0 {
-            let n = if size >= self.max_cto_size as u32 { self.max_cto_size - 1 } else { size as u8 };
-            size -= n as u32;
-            let data = self.upload(n).await?;
-            trace!("xcp_client.upload: {} bytes = {:?}", data.len(), data);
-            writer.write_all(&data[1..=n as usize])?;
-        }
-        writer.flush()?;
+        self.upload_to_file(elf_path.as_ref(), file_size).await?;
         debug!("ELF upload completed, {} bytes loaded", file_size);
 
         Ok(())
@@ -61,22 +94,12 @@ impl XcpClient {
 
         // Check if the A2L file already exists and warn about overwriting
         if a2l_path.as_ref().exists() {
-            warn!("A2L file {} already exists, overwriting", a2l_path.as_ref().display());
+            info!("A2L file {} already exists, replacing it", a2l_path.as_ref().display());
         }
 
         // Upload the A2L file
-        info!("Upload A2L to {}.a2l", a2l_path.as_ref().display());
-        let file = std::fs::File::create(a2l_path)?;
-        let mut writer = std::io::BufWriter::new(file);
-        let mut size = file_size;
-        while size > 0 {
-            let n = if size >= self.max_cto_size as u32 { self.max_cto_size - 1 } else { size as u8 };
-            size -= n as u32;
-            let data = self.upload(n).await?;
-            trace!("xcp_client.upload: {} bytes = {:?}", data.len(), data);
-            writer.write_all(&data[1..=n as usize])?;
-        }
-        writer.flush()?;
+        info!("Upload A2L to {}", a2l_path.as_ref().display());
+        self.upload_to_file(a2l_path.as_ref(), file_size).await?;
         debug!("A2L upload completed, {} bytes loaded", file_size);
 
         Ok(())
@@ -154,6 +177,17 @@ impl XcpClient {
         self.registry.as_ref().unwrap()
     }
 
+    /// Number of measurable objects and of calibration objects in a registry
+    pub fn count_objects(reg: &xcp_registry::Registry) -> (usize, usize) {
+        let measurements = reg.instance_list.into_iter().filter(|i| daq::is_measurable(i)).count();
+        let parameters = reg
+            .instance_list
+            .into_iter()
+            .filter(|i| i.object_type() == xcp_registry::McObjectType::Characteristic)
+            .count();
+        (measurements, parameters)
+    }
+
     /// The registry, an error if no description of the target is loaded
     pub(super) fn registry(&self) -> Result<&xcp_registry::Registry, Box<dyn Error>> {
         self.registry.as_ref().ok_or_else(|| "No A2L description of the target loaded".into())
@@ -182,5 +216,40 @@ impl XcpClient {
             .filter(|i| daq::is_measurable(i) && regex.is_match(i.name.as_str()))
             .map(|i| i.name.to_string())
             .collect()
+    }
+}
+
+//--------------------------------------------------------------------------------------------------------------------------------------------------
+// Tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    // The temporary file of an upload is next to the file, the name of the file is kept with its dots
+    #[test]
+    fn test_partial_upload_path() {
+        assert_eq!(partial_upload_path(Path::new("hello_xcp_V2.3.a2l")), Path::new("hello_xcp_V2.3.a2l.part"));
+        assert_eq!(partial_upload_path(Path::new("dir.d/app.elf")), Path::new("dir.d/app.elf.part"));
+    }
+
+    // An upload which fails does not touch an existing file with the name of the uploaded file and leaves no temporary file
+    #[tokio::test]
+    async fn test_failed_upload_keeps_existing_file() {
+        let dir = std::env::temp_dir().join(format!("xcpclient-test-upload-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("hello_xcp_V2.3.a2l");
+        std::fs::write(&path, "content").unwrap();
+
+        // Not connected, the first UPLOAD command fails
+        let addr: SocketAddr = "127.0.0.1:5555".parse().unwrap();
+        let mut client = XcpClient::new("UDP", addr, addr, 0);
+        client.max_cto_size = 248;
+        assert!(client.upload_to_file(&path, 1000).await.is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "content");
+        assert!(!partial_upload_path(&path).exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

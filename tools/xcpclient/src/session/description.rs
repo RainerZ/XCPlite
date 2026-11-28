@@ -10,12 +10,13 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::net::Ipv4Addr;
+use std::path::{Path, PathBuf};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use xcp_registry::{McA2mlMode, McEvent, Registry};
 
-use super::{DefaultEvent, Session};
+use super::{DefaultEvent, DescriptionInfo, DescriptionSource, EpkCheck, Session};
 use crate::a2l_fix;
 use crate::elf_reader::{ElfFilter, ElfReader};
 
@@ -27,6 +28,10 @@ use crate::elf_reader::{ElfFilter, ElfReader};
 pub struct DescriptionOptions {
     /// Name of the A2L file, overrides the name from the XCP server
     pub a2l: String,
+    /// Directory for an A2L file which is uploaded or created under the name of the target (a2l not given), empty: the current directory
+    /// In a directory given here, an existing file is replaced. In the current directory, an existing file with the name of the
+    /// target is not overwritten by an upload, the upload goes to <name>_upload.a2l
+    pub a2l_dir: String,
     /// Upload the A2L file from the XCP server
     pub upload_a2l: bool,
     /// Create an A2L file from XCP server information and the ELF file
@@ -61,6 +66,7 @@ impl Default for DescriptionOptions {
     fn default() -> Self {
         DescriptionOptions {
             a2l: String::new(),
+            a2l_dir: String::new(),
             upload_a2l: false,
             create_a2l: false,
             create_a2l_template: false,
@@ -80,74 +86,46 @@ impl Default for DescriptionOptions {
 }
 
 //------------------------------------------------------------------------
+// A2L file names
+
+/// File name of the A2L file for a name: the name with the extension .a2l
+/// The name of a target may contain dots ("hello_xcp_V2.3"), the extension is appended to it as text. Path::with_extension must
+/// not be used for such names, it takes ".3" as the extension and replaces it
+fn a2l_file_name(name: &str) -> String {
+    if name.ends_with(".a2l") { name.to_string() } else { format!("{}.a2l", name) }
+}
+
+/// Path of the A2L file for a name given by the user: the name with the extension .a2l, if it has none
+pub fn a2l_file_path(name: &str) -> PathBuf {
+    PathBuf::from(a2l_file_name(name))
+}
+
+/// The path an A2L file is uploaded to, for the path built from the name of the target
+/// An existing file is not overwritten, the upload goes to <name>_upload.a2l then: an XCPlite application writes its A2L file
+/// <name>.a2l into its working directory and reads it for the upload. A client which runs in the same directory and uploads to
+/// the same name would overwrite the file of the application while it is read
+fn upload_a2l_path(a2l_path: &Path, exists: impl Fn(&Path) -> bool) -> PathBuf {
+    if !exists(a2l_path) {
+        return a2l_path.to_path_buf();
+    }
+    let file_name = a2l_path.file_name().unwrap_or_default().to_string_lossy();
+    let name = file_name.strip_suffix(".a2l").unwrap_or(&file_name);
+    a2l_path.with_file_name(format!("{}_upload.a2l", name))
+}
+
+//------------------------------------------------------------------------
 // Session
 
 impl Session {
     /// Load the description of the target into the XCP client: upload the A2L file, create it or load it from a file
     /// Works connected and, for the creation from an ELF file and the load from a file, not connected
-    /// confirm_epk_mismatch is called when the EPK of a loaded A2L file differs from the EPK of the target, an error aborts
+    /// confirm_epk_mismatch is called with the EPK of the file and the EPK of the target, when the EPK of a loaded A2L file or of
+    /// the ELF file an A2L file is created from differs from the EPK of the target, an error aborts
     pub async fn load_description<F>(&mut self, options: &DescriptionOptions, confirm_epk_mismatch: F) -> Result<(), Box<dyn Error>>
     where
-        F: Fn() -> Result<(), Box<dyn Error>>,
+        F: Fn(&str, &str) -> Result<(), Box<dyn Error>>,
     {
-        // Default event id, resolved from the default event once the registry event list is complete
-        let mut default_event_id: Option<u16> = None;
-
-        //----------------------------------------------------------------
-        // Create a new empty A2L registry
-        let mut reg = Registry::new();
-        if !self.ecu_name.is_empty() {
-            reg.application.set_info(self.ecu_name.clone(), "-", 0);
-        }
-        reg.set_flatten_typedefs_mode(false);
-        reg.set_prefix_names_mode(false);
-        reg.set_a2ml_mode(if options.embed_aml { McA2mlMode::Embed } else { McA2mlMode::Include });
-
-        // Set A2L file path to the given A2L file name or to GET_ID IDT_ASAM_NAME or IDT_ASCII
-        let a2l_filename = options.a2l.clone();
-        let (a2l_path, a2l_asam_name) = if !a2l_filename.is_empty() {
-            log::info!("Using A2L file name from command line argument: {}", a2l_filename);
-            let a2l_filename = if !a2l_filename.ends_with(".a2l") {
-                // Add .a2l extension
-                format!("{}.a2l", a2l_filename)
-            } else {
-                a2l_filename
-            };
-            (std::path::Path::new(&a2l_filename).to_path_buf(), false)
-        } else if !self.a2l_name.is_empty() {
-            log::info!("Using A2L file name from XCP server GET_ID ASAM_NAME: {}", self.a2l_name);
-            let a2l_filename = format!("{}.a2l", self.a2l_name);
-            (std::path::Path::new(&a2l_filename).to_path_buf(), true) // from GET_ID ASAM_NAME
-        } else if !self.ecu_name.is_empty() {
-            log::info!("Using A2L file name from XCP server GET_ID ASCII: {}", self.ecu_name);
-            let a2l_filename = format!("{}.a2l", self.ecu_name);
-            (std::path::Path::new(&a2l_filename).to_path_buf(), false) // from GET_ID ASCII
-        } else {
-            return Err("^No A2L file name specified, use --a2l commandline parameter".into());
-        };
-        self.a2l_path = a2l_path;
-        info!("A2L path: {}", self.a2l_path.display());
-
-        //----------------------------------------------------------------
-        // Upload A2L
-        // From XCP server and load it into the registry
-        if options.upload_a2l {
-            self.upload_a2l(&mut reg, a2l_asam_name).await?;
-        }
-        //
-        //----------------------------------------------------------------
-        // Create A2L file
-        // If an ELF file is available, create an A2L file from the XCP server information and the ELF file
-        // If option create_a2l is specified and no ELF file, create a A2L template from XCP server information
-        else if options.create_a2l || options.create_a2l_template || !options.elf.is_empty() || options.upload_elf {
-            default_event_id = self.create_a2l(&mut reg, options).await?;
-        }
-        //----------------------------------------------------------------
-        // Load A2L from local file
-        // If not upload or create option load A2L from specified file into reg
-        else {
-            self.load_a2l(&mut reg, options, &confirm_epk_mismatch).await?;
-        }
+        let (reg, source, mut default_event_id) = self.build_description(options, &confirm_epk_mismatch).await?;
 
         // Resolve the default event against the final event list, if not done yet, and use it for the measurement of variables without a fixed event
         if let Some(event) = &options.default_event
@@ -161,7 +139,17 @@ impl Session {
         self.xcp_client.set_default_event(default_event_id);
 
         // Assign the new registry to xcp_client
+        let (events, segments) = (reg.event_list.len(), reg.cal_seg_list.len());
         self.xcp_client.set_registry(reg);
+        self.description = Some(DescriptionInfo {
+            a2l_path: self.a2l_path.clone(),
+            source,
+            epk_check: self.epk_check,
+            events,
+            segments,
+            measurements: self.xcp_client.find_measurements(".*").len(),
+            parameters: self.xcp_client.find_characteristics(".*").len(),
+        });
 
         // Check the status of all calibration segments and goto working page
         if self.xcp_client.is_connected() {
@@ -171,23 +159,136 @@ impl Session {
         Ok(())
     }
 
+    /// Create an A2L file without using it as the description of this session: from an ELF file, with the event and segment
+    /// information of the target if connected, offline if not
+    /// options are those of load_description which create an A2L file (elf, create_a2l, create_a2l_template)
+    /// Returns what was written. The description loaded into the session is not changed
+    pub async fn create_a2l_file<F>(&mut self, options: &DescriptionOptions, confirm_epk_mismatch: F) -> Result<DescriptionInfo, Box<dyn Error>>
+    where
+        F: Fn(&str, &str) -> Result<(), Box<dyn Error>>,
+    {
+        if options.upload_a2l || !(options.create_a2l || options.create_a2l_template) {
+            return Err("create_a2l_file: no A2L file to create".into());
+        }
+        // The state of the description in use is kept
+        let saved = (self.a2l_path.clone(), self.segment_relative, self.epk_check, self.ecu_name.clone());
+        let result = self.build_description(options, &confirm_epk_mismatch).await;
+        let created = (self.a2l_path.clone(), self.epk_check);
+        (self.a2l_path, self.segment_relative, self.epk_check, self.ecu_name) = saved;
+
+        let (reg, source, _) = result?;
+        let (measurements, parameters) = crate::xcp_client::XcpClient::count_objects(&reg);
+        Ok(DescriptionInfo {
+            a2l_path: created.0,
+            source,
+            epk_check: created.1,
+            events: reg.event_list.len(),
+            segments: reg.cal_seg_list.len(),
+            measurements,
+            parameters,
+        })
+    }
+
+    // Build the registry with the description of the target: upload the A2L file, create it or load it from a file
+    // Returns the registry, where it comes from and the default event id, if it was resolved for the creation
+    // Sets a2l_path, segment_relative and epk_check
+    async fn build_description<F>(&mut self, options: &DescriptionOptions, confirm_epk_mismatch: &F) -> Result<(Registry, DescriptionSource, Option<u16>), Box<dyn Error>>
+    where
+        F: Fn(&str, &str) -> Result<(), Box<dyn Error>>,
+    {
+        // Default event id, resolved from the default event once the registry event list is complete
+        let mut default_event_id: Option<u16> = None;
+        self.epk_check = EpkCheck::NotChecked;
+        let source;
+
+        //----------------------------------------------------------------
+        // Create a new empty A2L registry
+        let mut reg = Registry::new();
+        if !self.ecu_name.is_empty() {
+            reg.application.set_info(self.ecu_name.clone(), "-", 0);
+        }
+        reg.set_flatten_typedefs_mode(false);
+        reg.set_prefix_names_mode(false);
+        reg.set_a2ml_mode(if options.embed_aml { McA2mlMode::Embed } else { McA2mlMode::Include });
+
+        // The A2L file is written (uploaded or created), not loaded
+        let create_a2l = options.create_a2l || options.create_a2l_template || !options.elf.is_empty() || options.upload_elf;
+        let write_a2l = options.upload_a2l || create_a2l;
+
+        // Set A2L file path to the given A2L file name or to GET_ID IDT_ASAM_NAME or IDT_ASCII
+        // a2l_name_from_target: the file name is the name of the target, not a name the user has chosen
+        let (a2l_path, a2l_name_from_target) = if !options.a2l.is_empty() {
+            log::info!("Using A2L file name from command line argument: {}", options.a2l);
+            // Add .a2l extension
+            (PathBuf::from(a2l_file_name(&options.a2l)), false)
+        } else {
+            let name = if !self.a2l_name.is_empty() {
+                log::info!("Using A2L file name from XCP server GET_ID ASAM_NAME: {}", self.a2l_name);
+                &self.a2l_name
+            } else if !self.ecu_name.is_empty() {
+                log::info!("Using A2L file name from XCP server GET_ID ASCII: {}", self.ecu_name);
+                &self.ecu_name
+            } else {
+                return Err("^No A2L file name specified, use --a2l commandline parameter".into());
+            };
+            // A file which is written under the name of the target goes to the directory for such files, if there is one
+            if write_a2l && !options.a2l_dir.is_empty() {
+                (Path::new(&options.a2l_dir).join(a2l_file_name(name)), true)
+            } else {
+                (PathBuf::from(a2l_file_name(name)), true)
+            }
+        };
+        self.a2l_path = a2l_path;
+        info!("A2L path: {}", self.a2l_path.display());
+
+        //----------------------------------------------------------------
+        // Upload A2L
+        // From XCP server and load it into the registry
+        if options.upload_a2l {
+            self.upload_a2l(&mut reg, a2l_name_from_target, options.a2l_dir.is_empty()).await?;
+            source = DescriptionSource::Uploaded;
+        }
+        //
+        //----------------------------------------------------------------
+        // Create A2L file
+        // If an ELF file is available, create an A2L file from the XCP server information and the ELF file
+        // If option create_a2l is specified and no ELF file, create a A2L template from XCP server information
+        else if create_a2l {
+            default_event_id = self.create_a2l(&mut reg, options, confirm_epk_mismatch).await?;
+            source = DescriptionSource::Created;
+        }
+        //----------------------------------------------------------------
+        // Load A2L from local file
+        // If not upload or create option load A2L from specified file into reg
+        else {
+            self.load_a2l(&mut reg, options, confirm_epk_mismatch).await?;
+            source = DescriptionSource::Loaded;
+        }
+
+        Ok((reg, source, default_event_id))
+    }
+
     //------------------------------------------------------------------------
     // Upload the A2L file from the XCP server and load it into the registry
 
-    async fn upload_a2l(&mut self, reg: &mut Registry, a2l_asam_name: bool) -> Result<(), Box<dyn Error>> {
-        // Don't overwrite existing A2L file generated by a XCP demo running in the same directory
-        if self.a2l_path.exists() && a2l_asam_name && self.a2l_path == std::path::Path::new(&self.a2l_name).with_extension("a2l") {
-            // Generate a different file name for the uploaded A2L file
-            let new_a2l_path = self
-                .a2l_path
-                .with_file_name(format!("{}_upload", self.a2l_path.file_stem().unwrap_or_default().to_string_lossy()))
-                .with_extension("a2l");
-            warn!(
-                "The A2L file '{}' already exists and matches the XCP server A2L file name (from GET_ID ASAM_NAME), uploading to {}",
-                self.a2l_path.display(),
-                new_a2l_path.display()
-            );
-            self.a2l_path = new_a2l_path;
+    async fn upload_a2l(&mut self, reg: &mut Registry, a2l_name_from_target: bool, options_a2l_dir_is_empty: bool) -> Result<(), Box<dyn Error>> {
+        // Don't overwrite an existing A2L file with the name of the target, it may be the file of an XCP demo running in the same directory
+        // A file name the user has given is used as it is, and in a directory of its own (a2l_dir) the last upload is replaced
+        if a2l_name_from_target && options_a2l_dir_is_empty {
+            let upload_path = upload_a2l_path(&self.a2l_path, |path| path.exists());
+            if upload_path != self.a2l_path {
+                warn!(
+                    "The A2L file '{}' already exists and has the A2L file name of the XCP server, uploading to {}",
+                    self.a2l_path.display(),
+                    upload_path.display()
+                );
+                self.a2l_path = upload_path;
+            }
+        }
+
+        // A file name the user has given is used as it is
+        if !a2l_name_from_target && self.a2l_path.exists() {
+            warn!("A2L file {} already exists, overwriting", self.a2l_path.display());
         }
 
         // Upload A2L file
@@ -206,7 +307,10 @@ impl Session {
     // Addressing scheme may be XCPLITE__ACSDD or XCPLITE__CASDD depending on the target configuration
     // Returns the default event id, if it was resolved for the registration of the variables
 
-    async fn create_a2l(&mut self, reg: &mut Registry, options: &DescriptionOptions) -> Result<Option<u16>, Box<dyn Error>> {
+    async fn create_a2l<F>(&mut self, reg: &mut Registry, options: &DescriptionOptions, confirm_epk_mismatch: &F) -> Result<Option<u16>, Box<dyn Error>>
+    where
+        F: Fn(&str, &str) -> Result<(), Box<dyn Error>>,
+    {
         let elf_filename = &options.elf;
         let upload_elf = options.upload_elf;
         let create_a2l_template = options.create_a2l_template;
@@ -312,6 +416,27 @@ impl Session {
             // After the segments, ADDR_EPK depends on the addressing mode and the epk segment
             elf_reader.register_epk_addr_info(reg, segment_relative, verbose);
 
+            // Check the EPK of the ELF file against the EPK reported by the target
+            // The EPK is the version string of the software, a mismatch means the ELF file is from another build than the
+            // software on the target, and the addresses of the A2L file created from it may point at the wrong variables
+            if !self.ecu_epk.is_empty() {
+                let elf_epk = reg.application.get_version();
+                if elf_epk.is_empty() {
+                    warn!("ELF file {} has no EPK, cannot verify it matches the target", elf_filename);
+                    self.epk_check = EpkCheck::NoEpkInA2l;
+                } else if elf_epk != self.ecu_epk {
+                    error!(
+                        "EPK mismatch: ELF file '{}' has EPK '{}', target reports EPK '{}'. Addresses may be wrong.",
+                        elf_filename, elf_epk, self.ecu_epk
+                    );
+                    confirm_epk_mismatch(elf_epk, &self.ecu_epk)?;
+                    self.epk_check = EpkCheck::MismatchAccepted;
+                } else {
+                    info!("EPK '{}' of ELF file and target match", self.ecu_epk);
+                    self.epk_check = EpkCheck::Match;
+                }
+            }
+
             // Find event triggers in the code by their trigger markers (trg__mode__name) and register their location (compilation unit, function, CFA offset)
             elf_reader.register_event_locations(reg, verbose)?;
 
@@ -376,7 +501,7 @@ impl Session {
 
     async fn load_a2l<F>(&mut self, reg: &mut Registry, options: &DescriptionOptions, confirm_epk_mismatch: &F) -> Result<(), Box<dyn Error>>
     where
-        F: Fn() -> Result<(), Box<dyn Error>>,
+        F: Fn(&str, &str) -> Result<(), Box<dyn Error>>,
     {
         info!("===============================================================");
         info!("Load A2L file: {}", self.a2l_path.display());
@@ -392,6 +517,7 @@ impl Session {
             let a2l_epk = reg.application.get_version();
             if a2l_epk.is_empty() {
                 warn!("A2L file {} has no EPK, cannot verify it matches the target", self.a2l_path.display());
+                self.epk_check = EpkCheck::NoEpkInA2l;
             } else if a2l_epk != self.ecu_epk {
                 error!(
                     "EPK mismatch: A2L file '{}' has EPK '{}', target reports EPK '{}'. Addresses may be wrong.",
@@ -399,9 +525,11 @@ impl Session {
                     a2l_epk,
                     self.ecu_epk
                 );
-                confirm_epk_mismatch()?;
+                confirm_epk_mismatch(a2l_epk, &self.ecu_epk)?;
+                self.epk_check = EpkCheck::MismatchAccepted;
             } else {
                 info!("EPK '{}' of A2L file and target match", self.ecu_epk);
+                self.epk_check = EpkCheck::Match;
             }
         }
 
@@ -523,5 +651,52 @@ impl Session {
         }
 
         Ok(())
+    }
+}
+
+//------------------------------------------------------------------------
+// Tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The name of a target may contain dots, the EPK is part of the A2L name of XCPlite ("hello_xcp_V2.3")
+    #[test]
+    fn test_a2l_file_name() {
+        assert_eq!(a2l_file_name("hello_xcp"), "hello_xcp.a2l");
+        assert_eq!(a2l_file_name("hello_xcp_V2.3"), "hello_xcp_V2.3.a2l");
+        assert_eq!(a2l_file_name("hello_xcp_V2.3.a2l"), "hello_xcp_V2.3.a2l");
+        assert_eq!(a2l_file_name("dir.d/my.ecu.v1"), "dir.d/my.ecu.v1.a2l");
+    }
+
+    // An existing A2L file with the name of the target is not the upload destination
+    #[test]
+    fn test_upload_a2l_path() {
+        let exists = |_: &Path| true;
+        let missing = |_: &Path| false;
+        assert_eq!(upload_a2l_path(Path::new("hello_xcp_V2.3.a2l"), missing), Path::new("hello_xcp_V2.3.a2l"));
+        assert_eq!(upload_a2l_path(Path::new("hello_xcp_V2.3.a2l"), exists), Path::new("hello_xcp_V2.3_upload.a2l"));
+        assert_eq!(upload_a2l_path(Path::new("hello_xcp.a2l"), exists), Path::new("hello_xcp_upload.a2l"));
+        assert_eq!(upload_a2l_path(Path::new("dir.d/hello_xcp_V2.3.a2l"), exists), Path::new("dir.d/hello_xcp_V2.3_upload.a2l"));
+    }
+
+    // Regression test: the A2L file of an XCPlite application named <name>_V<epk>.a2l in the working directory was emptied
+    // by an upload from this application, because the name with a dot was not recognized as the name of the existing file
+    #[test]
+    fn test_upload_a2l_path_existing_file_with_dot_in_name() {
+        let dir = std::env::temp_dir().join(format!("xcpclient-test-upload-a2l-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let a2l_path = dir.join(a2l_file_name("hello_xcp_V2.3"));
+        std::fs::write(&a2l_path, "ASAP2_VERSION 1 71").unwrap();
+
+        let upload_path = upload_a2l_path(&a2l_path, |path| path.exists());
+        assert_ne!(upload_path, a2l_path);
+        assert_eq!(upload_path, dir.join("hello_xcp_V2.3_upload.a2l"));
+        // The upload is written to the other file, the existing file keeps its content
+        std::fs::write(&upload_path, "uploaded").unwrap();
+        assert_eq!(std::fs::read_to_string(&a2l_path).unwrap(), "ASAP2_VERSION 1 71");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

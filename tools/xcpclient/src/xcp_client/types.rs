@@ -292,6 +292,9 @@ impl XcpClientCalibrationObject {
     pub fn get_a2l_addr(&self) -> A2lAddr {
         self.a2l_addr
     }
+    pub fn get_a2l_limits(&self) -> A2lLimits {
+        self.a2l_limits
+    }
     pub fn set_value(&mut self, bytes: &[u8]) {
         self.value = bytes.to_vec();
     }

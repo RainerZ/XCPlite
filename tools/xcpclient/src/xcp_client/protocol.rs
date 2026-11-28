@@ -21,6 +21,13 @@ impl XcpClient {
     }
 
     //------------------------------------------------------------------------
+    // GET_STATUS, used to check that the XCP server still responds
+    pub async fn get_status(&mut self) -> Result<(), Box<dyn Error>> {
+        self.send_command(XcpCommandBuilder::new(CC_GET_STATUS).build()).await?;
+        Ok(())
+    }
+
+    //------------------------------------------------------------------------
     // calibration segment and page control
 
     pub async fn get_ecu_page(&mut self, segment: u8) -> Result<u8, Box<dyn Error>> {

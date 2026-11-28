@@ -1,6 +1,6 @@
 # xcpclient MCP Server
 
-**Status: specification, implementation in progress (phase 0 done, see [8.5](#85-phases)).** This document explains what an MCP server is, specifies an MCP server mode for `xcpclient` (`tools/xcpclient/`) and describes how to implement it. The decisions taken, the open ones and the points noted for later are in [section 10](#10-decisions-and-open-points).
+**Status: phases 1, 2 and 4 are implemented (see [8.5](#85-phases)): `xcpclient --mcp` on stdio with all tools of [section 5](#5-tools). The HTTP daemon (phase 3) is postponed, it is specified here and not implemented.**
 
 The facts about the MCP specification, the Rust SDK and the client applications were looked up on 2026-11-28, the sources are linked in [section 11](#11-sources). MCP changes quickly, check them again before implementing.
 
@@ -199,17 +199,19 @@ xcpclient --mcp-http 127.0.0.1:9000      # other address or port
 
 New options:
 
-| Option | Meaning |
-|---|---|
-| `--mcp` | Run as MCP server on stdin/stdout |
-| `--mcp-http [ADDR]` | Run as MCP server on Streamable HTTP, default `127.0.0.1:8555`, endpoint `/mcp` |
-| `--mcp-read-only` | Do not offer the tools which change the target (`xcp_write`, `xcp_load_parameters`). The model does not even see them |
-| `--mcp-dir <DIR>` | Directory for files read and written by tools (A2L, ELF, measurement and parameter files), default: the current directory. Paths outside are rejected |
-| `--mcp-token <TOKEN>` | HTTP only: require `Authorization: Bearer <TOKEN>` |
+| Option | Meaning | State |
+|---|---|---|
+| `--mcp` | Run as MCP server on stdin/stdout | Implemented |
+| `--mcp-read-only` | Do not offer the tools which change the target (`xcp_write`, `xcp_load_parameters`). The model does not even see them | Implemented |
+| `--mcp-dir <DIR>` | Directory for the files the server writes on its own: the uploaded A2L file, `XCP_104.aml`, an A2L file created from an ELF file without a given name. Default: the cache directory of the user for xcpclient (macOS `~/Library/Caches/xcpclient`, Linux `$XDG_CACHE_HOME/xcpclient` or `~/.cache/xcpclient`, Windows `%LOCALAPPDATA%\xcpclient\cache`). The working directory is not changed: file names in tool arguments (`a2l`, `elf`) are relative to the directory the host starts xcpclient in | Implemented |
+| `--mcp-http [ADDR]` | Run as MCP server on Streamable HTTP, default `127.0.0.1:8555`, endpoint `/mcp` | Phase 3 |
+| `--mcp-token <TOKEN>` | HTTP only: require `Authorization: Bearer <TOKEN>` | Later |
 
-In MCP mode the existing options and the config file (`--config xcpclient.toml`) are the **defaults of the tool arguments**: `--dest-addr`, `--port`, `--udp`/`--tcp`, `--bind-addr`, `--a2l`, `--elf`, `--default-event`, `--trace-auto`. With `xcpclient --mcp --dest-addr 192.168.0.206 --udp`, the sentence "connect to the target" is enough. The options which trigger an action on the command line (`--mea`, `--cal`, `--list-*`, `--upload-*`, `--create-a2l`, `--test`, `--time`) are rejected together with `--mcp`.
+In MCP mode the existing options and the config file (`--config xcpclient.toml`) are the **defaults of the tool arguments**: `--dest-addr`, `--port`, `--udp`/`--tcp`, `--bind-addr`, `--a2l`, `--elf`, `--default-event`, `--trace-auto`. With `xcpclient --mcp --dest-addr 192.168.0.206 --udp`, the sentence "connect to the target" is enough. Without `--udp` or `--tcp` the default protocol is UDP, not TCP as on the command line. The options which trigger an action on the command line (`--mea`, `--cal`, `--list-*`, `--upload-*`, `--create-a2l`, `--test`, `--time`, the output files and others) are rejected together with `--mcp`.
 
-Logging goes to stderr in both modes, at the level given with `--log-level`. Hosts show or store the stderr of a stdio server (Claude Code: in its MCP log).
+Logging goes to stderr in both modes, at the level given with `--log-level`. Hosts show or store the stderr of a stdio server (Claude Code: in its MCP log). In stdio mode stdout is redirected to stderr for the whole process, see 8.3.
+
+xcpclient is built with the MCP mode by default (cargo feature `mcp`). `cargo build --no-default-features` builds it without, the options do not exist then.
 
 ### 4.2 Architecture
 
@@ -232,7 +234,7 @@ Logging goes to stderr in both modes, at the level given with `--log-level`. Hos
 ```
 
 - **MCP layer**: generated mostly by the Rust SDK. One function per tool: parse the arguments, send a command to the session actor, format the reply as text. No XCP knowledge.
-- **Session actor**: a single task which owns the `XcpClient`, the registry and the state. It takes one command at a time from a channel. XCP is a strict request and response protocol with one command in flight, the actor enforces this without locks, also when two hosts call tools at the same time. It also owns the timers: the end of a timed measurement, the end of a sample window.
+- **Session actor** (`src/session/actor.rs`): a single task which owns the `Session` with the `XcpClient`, the registry and the state. It runs on its own thread with a single threaded tokio runtime, because the futures of the XCP client are not `Send`. It takes one command at a time from a channel. XCP is a strict request and response protocol with one command in flight, the actor enforces this without locks, also when two hosts call tools at the same time. It also owns the timers: the end of a timed measurement, the end of a sample window.
 - **Receive task and writers**: as today. The DAQ packets go from the receive task through the `DaqDecoder` to the writers, without passing the actor. A measurement runs on its own after the start, the actor is free for other commands, for example a parameter write while measuring.
 - **ValueWriter**: a new `DaqWriter` which keeps the last sample of each DAQ list (a copy of the payload, decoded only when asked for) and, for a sample window, statistics of selected signals. This is what `xcp_read` and `xcp_sample` answer from.
 
@@ -257,7 +259,7 @@ The command line stays a second front end on the same session code, see [section
 | `ready` | Description loaded: names, addresses, types, events are known | all |
 | `measuring` | A recording runs in the background | all, except a second measurement, see 4.5 |
 
-`xcp_connect` is idempotent: connected to the same target, it returns the current state and does nothing. Connected to another target, it is an error which names the current target. The model then asks the user or disconnects first, it does not silently drop a connection with a running measurement.
+`xcp_connect` is idempotent: connected to the same target, it returns the current state and does nothing. The exception: if `a2l`, `elf` or `accept_epk_mismatch` is given, or no description is loaded yet, the description is loaded again on the existing connection. `xcp_load_a2l` does the same on its own, without the connect. Connected to another target, it is an error which names the current target. The model then asks the user or disconnects first, it does not silently drop a connection with a running measurement.
 
 ### 4.4 Description of the target
 
@@ -265,10 +267,14 @@ The command line stays a second front end on the same session code, see [section
 
 1. `a2l` given: load the file, compare its EPK with the EPK of the target, compare the event ids and segment numbers with the target (warning in the result, as `--fix-a2l` would correct).
 2. `elf` given: create the A2L file from the ELF file and the event and segment information of the target (as `--elf --create-a2l`).
-3. Neither: upload the A2L file from the target (`GET_ID`), store it in the MCP directory.
+3. Neither: upload the A2L file from the target (`GET_ID`), store it in the MCP directory (`--mcp-dir`). The A2L file of an XCPlite target includes the A2ML description `XCP_104.aml` by name, xcpclient writes this file into the MCP directory if it is not there.
+
+The MCP directory is never the working directory by default. An XCPlite application writes its A2L file `<name>.a2l` into its working directory when a client connects, and reads it for the upload. A server started in the same directory, which is the normal case when a host starts it in the project directory, must not write a file with this name there: this emptied the A2L file of the application (fixed, see `tools/xcpclient/CHANGELOG.md`). Two more things protect the file: on the command line an upload does not overwrite an existing `<name>.a2l`, it goes to `<name>_upload.a2l`, and every upload is written to a temporary file which gets its name when the upload is complete.
 4. The target has no A2L file (`no_a2l`, `rtos` configuration): state `connected`. The result says that `xcp_load_a2l` with an A2L or ELF file is needed.
 
-An EPK mismatch is an error. It is overridden with the argument `accept_epk_mismatch: true`, which the tool description tells the model to set only when the user confirmed. This replaces the `Continue anyway? [y/N]` prompt and `--yes`.
+An EPK mismatch is an error. It is overridden with the argument `accept_epk_mismatch: true`, which the tool description tells the model to set only when the user confirmed. This replaces the `Continue anyway? [y/N]` prompt and `--yes`. `xcp_status` then shows that the EPK differs.
+
+An A2L file created from an ELF file (2.) is checked in the same way: the EPK in the ELF file (`XcpCreateEpk`) is compared with the EPK of the target, a mismatch is an error unless `accept_epk_mismatch` is given. The command line does the same, it asks or needs `--yes`. An ELF file without EPK can not be compared, the result says so.
 
 ### 4.5 Reading values and measuring
 
@@ -277,10 +283,10 @@ There are three ways to get values, with different costs:
 | Tool | For | How |
 |---|---|---|
 | `xcp_read` | "What is the value now?" | Signals of a running measurement: the last sample from the ValueWriter. Everything else which can be uploaded: polling (`SHORT_UPLOAD`). `xcp_read` never starts a measurement. A value which is neither in the running measurement nor can be uploaded is refused, with the hint to use `xcp_sample` |
-| `xcp_sample` | "Watch it for 5 seconds" | A DAQ measurement of the given signals for a time window of at most 30 s, the call blocks and reports progress. Result: count, rate, min, max, mean, first and last value per signal. No file |
+| `xcp_sample` | "Watch it for 5 seconds" | A DAQ measurement of the given signals for a time window of at most 30 s, the call returns when it is over. Result: count, rate, min, max, mean and last value per signal. No file |
 | `xcp_measure_start`, `xcp_measure_stop` | "Record into a file" | A DAQ measurement in the background, into MDF, MCAP, CSV or Perfetto files, with a time limit or until stopped. The start returns immediately, the stop returns the statistics |
 
-Polling in XCPlite covers more than global variables and parameters: an upload from an address with dynamic addressing mode is possible as well, the XCP server answers it when the event of the address occurs. If the event does not occur, the upload stalls, which is rare. The consequence for the server: a timeout of such an upload is not a lost connection (4.6), it is reported for this value (`task2.x: no response, event 'task2' is not triggered`) and the session stays connected. How the XCP server and `XcpClient` behave after such a timeout (late response, next command) has to be checked in phase 1.
+Polling in XCPlite covers more than global variables and parameters: an upload from an address with dynamic addressing mode is possible as well, the XCP server answers it when the event of the address occurs. Tried with `hello_xcp`: the local variables of `main` and of a function, measured with stack relative addressing, are read by `xcp_read`. If the event does not occur, the upload stalls, which is rare. The consequence for the server: a timeout of such an upload is not a lost connection (4.6), it is reported for this value (`task2.x: no response, event 'task2' is not triggered`) and the session stays connected. This is implemented generally: when an XCP command of a tool fails, the actor checks with `GET_STATUS` whether the XCP server still responds. If it does, only the value is reported as not readable. A late response is discarded before the next command. Not tried yet with an event which does not occur.
 
 XCP has one DAQ setup, which can not be changed while it runs. While a recording runs, `xcp_sample` works only for signals which are part of the recording. For others the error says so: `SigGen1.input is not part of the running measurement. Stop it with xcp_measure_stop or sample it after the measurement.`
 
@@ -316,7 +322,7 @@ All tools have the prefix `xcp_`, because some hosts show tool names without the
 | `xcp_measure_start` | no | ready | `--mea --time --csv --mdf --mcap --perfetto` | 2 |
 | `xcp_measure_stop` | no | measuring | Ctrl-C | 2 |
 | `xcp_load_a2l` | no | connected | `--a2l`, `--elf`, `--upload-a2l`, `--fix-a2l` | 4 |
-| `xcp_create_a2l` | no | any | `--create-a2l --elf --offline` | 4 |
+| `xcp_create_a2l` | no | any | `--create-a2l --elf`, `--create-a2l-template`, `--offline` | 4 |
 | `xcp_save_parameters` | no | ready | `--upload-bin --bin` | 4 |
 | `xcp_load_parameters` | **yes** | ready | `--download-bin --bin` | 4 |
 
@@ -327,12 +333,15 @@ All tools have the prefix `xcp_`, because some hosts show tool names without the
 The text the model gets about the server as a whole:
 
 ```text
-XCP measurement and calibration client for one target (ECU).
-The connection to the target is kept between calls. Call xcp_status first: if it is already connected, do not connect again.
+XCP measurement and calibration client for one target (ECU) running XCPlite.
+The connection to the target is kept between calls. Call xcp_status first: if a target is already connected, do not connect again.
 Never guess signal or parameter names, look them up with xcp_list_measurements and xcp_list_parameters (regular expressions).
-xcp_write and xcp_load_parameters change the behavior of a running machine. Call them only when the user asked for exactly
-this change, and report the old and the new value.
+xcp_write changes the behavior of a running machine. Call it only when the user asked for exactly this change, and report the
+old and the new value.
+For one current value use xcp_read, to observe signals for some seconds use xcp_sample, to record into a file use
+xcp_measure_start and xcp_measure_stop.
 Measurement data is written to files, tool results contain summaries only.
+When a tool reports that the connection is lost, tell the user, and reconnect with xcp_connect only if the user wants it.
 ```
 
 ### 5.2 `xcp_status`
@@ -340,34 +349,72 @@ Measurement data is written to files, tool results contain summaries only.
 No arguments. Works in every state and is the first call of a conversation.
 
 ```text
-State: measuring
+State: ready
 Target: hello_xcp at 192.168.0.206:5555 (UDP), connected for 4 min
-EPK: v10_21_15_02, matches hello_xcp.a2l
-XCP: protocol 1.4, MAX_CTO 248, MAX_DTO 1024, resources CAL DAQ
-Description: hello_xcp.a2l (uploaded), 3 events, 2 calibration segments, 12 signals, 3 parameters
-Measurement: 4 signals, running 12.4 s of 60 s, 12400 events, 1000 event/s, 0 packets lost, hello_xcp_20261128_140530.mf4
-Target messages: (last SERV_TEXT lines, if any)
+EPK: V2.3, matches the A2L file
+XCP: protocol 1.4, MAX_CTO 248, MAX_DTO 1464, resources CAL DAQ
+Description: hello_xcp_V2.3.a2l (loaded from file), 2 events, 2 calibration segments, 9 signals, 3 parameters
+Messages of the target (SERV_TEXT):
+  (the last 20 lines, if any)
 ```
 
-In state `disconnected` after a loss: `State: disconnected. Connection to hello_xcp at 192.168.0.206:5555 lost 2 min ago (no response to SHORT_UPLOAD).`
+The states are `disconnected`, `connected, no description of the target loaded`, `ready` and `measuring`. Not connected, it shows the default target of `xcp_connect`, and after a lost connection the reason:
+
+```text
+State: disconnected
+Connection to hello_xcp at 192.168.0.206:5555 (UDP) lost (ShortUpload: Command response timeout), 2 min ago
+Default target of xcp_connect: 192.168.0.206 port 5555 (UDP)
+```
+
+While a recording runs, and after it:
+
+```text
+State: measuring
+...
+Measurement: 9 signals in 2 DAQ lists, running 12.4 s of 60 s, 19220 events, 1550 event/s, 0.028 MByte/s, 0 packets lost, last sample 2 ms ago, files: hello_xcp_20261128_180907.mf4 (0 bytes)
+```
+
+```text
+Last measurement: 9 signals measured for 60.0 s (the requested duration is over): 93000 events, 1550 event/s, 0.028 MByte/s, 0 packets lost. Files: hello_xcp_20261128_180907.mf4 (2.5 MB)
+```
+
+`last sample ... ago` is how a target which stopped sending shows up: `xcp_status` sends no command and does not detect a lost connection by itself. The size of a file which is being written lags behind, the writers buffer.
 
 ### 5.3 `xcp_connect`
 
 | Argument | Type | Default | |
 |---|---|---|---|
-| `host` | string | `--dest-addr` | IP address of the target |
+| `host` | string | `--dest-addr` | IP address, IP:port or host name of the target |
 | `port` | integer | `--port`, 5555 | |
 | `protocol` | `udp`, `tcp` | `--udp`/`--tcp`, else `udp` | See open decision 2 |
 | `a2l` | string | `--a2l` | A2L file to use instead of an upload |
-| `elf` | string | `--elf` | ELF file to create the A2L file from |
+| `elf` | string | `--elf` | ELF file to create the A2L file from. With `a2l`: the name of the A2L file to write |
 | `default_event` | string | `--default-event` | Event id or name for variables without a fixed event |
 | `accept_epk_mismatch` | boolean | false | Only after the user confirmed |
 
-Result: the lines `Target`, `EPK`, `XCP` and `Description` of `xcp_status`, and warnings (event ids differ, no A2L available). Errors: `Target 192.168.0.206:5555 does not respond (UDP, 3 s). Is the application running, is the protocol right?`, `Already connected to hello_xcp at 192.168.0.206:5555. Call xcp_disconnect first.`, `EPK mismatch: ...`.
+Result: `Connected.` and the status. Errors:
+
+```text
+Could not connect to 192.168.0.206:5555 (UDP): Connect: Command response timeout. Is the application running, are address, port and protocol (udp or tcp) right?
+```
+
+```text
+Already connected to hello_xcp at 192.168.0.206:5555 (UDP). Call xcp_disconnect first to connect to 192.168.0.146:5555 (UDP).
+```
+
+```text
+The description of the target could not be loaded: EPK mismatch: the A2L file has EPK 'V9.9', the target reports EPK 'V2.3'. The A2L file describes another software version, addresses may be wrong. Ask the user. To use this A2L file anyway, call xcp_connect again with accept_epk_mismatch = true
+
+Current state:
+State: connected, no description of the target loaded
+...
+```
+
+When the description can not be loaded, the target stays connected. A description which was loaded before stays in use.
 
 ### 5.4 `xcp_disconnect`
 
-No arguments. Stops a running measurement (the result contains its statistics), sends `DISCONNECT`, forgets the description.
+No arguments. Stops a running recording first, the result then contains its summary. Sends `DISCONNECT` and forgets the description.
 
 ### 5.5 `xcp_list_measurements`, `xcp_list_parameters`
 
@@ -377,21 +424,21 @@ No arguments. Stops a running measurement (the result contains its statistics), 
 | `limit` | integer | 50 | Maximum 200 |
 | `offset` | integer | 0 | For the next page |
 
-One line per object, parameters with their current value:
+One line per object, parameters with their current value, read from the target:
 
 ```text
-3 of 3 parameters matching 'counter|delay'
-counter_max  u16  = 1000   limits 0..65535   segment params
-delay_us     u32  = 1000   limits 0..999999  unit us  segment params
-...
+3 of 3 parameters matching '.'
+params.counter_max  u16 = 1024  limits 0..65535
+params.delay_us  u32 = 1000  limits 0..500000
+params.flow_rate  f32 = 0.301  limits 0..2
 ```
 
 ```text
-50 of 1234 signals matching '.', next page: offset 50. Use a more specific pattern.
-SigGen1.input    f64      unit Volt  event SigGen1.clip
-matrix_f32       f32[8x4]            event mainloop
-global_counter   u32                 no event, needs default_event
-...
+4 of 12 signals matching '.', next page: offset 4. Use a more specific pattern to get fewer
+diff_temp  f64  event calc_power
+outside_temperature  u8  event mainloop
+matrix_f32  f32[8x4]  unit Volt  event mainloop
+global_counter  u16  no event, needs default_event
 ```
 
 ### 5.6 `xcp_read`
@@ -401,15 +448,18 @@ global_counter   u32                 no event, needs default_event
 | `names` | array of strings | Exact names of parameters or signals, at most 50 |
 
 ```text
-counter_max = 1000                     (parameter, polled)
-SigGen1.input = -17.514 Volt           (measured, sample 3 ms old)
-state = RUNNING                        (enum, polled)
-local_var: can not be uploaded and is not part of a running measurement, use xcp_sample
+params.counter_max = 1024  (parameter, limits 0..65535)
+counter = 402  (measured, sample 2 ms old)
+global_counter = 776519  (polled)
+heat_power = 8728.99 Watt  (polled)
+state = RUNNING  (polled)
+other_var: can not be read by upload (ShortUpload: Access denied)
+nosuch_counter: not found. Similar: params.counter_max, global_counter
 ```
 
-`xcp_read` never starts a measurement, see 4.5.
+A parameter is shown as `xcp_write` takes it, with its limits. A signal is shown as physical value with unit, an enum as its label, as in the CSV output. Arrays show the first 16 elements. A name which can not be read does not fail the call, as long as one value could be read.
 
-Values are physical values with unit and enum labels, as in the CSV output. Arrays show the first 16 elements, as the console output.
+`xcp_read` never starts a measurement, see 4.5. A signal of the running measurement (a recording or an open `xcp_sample` window) is answered with its last sample, without a command to the target. Everything else is read by upload. A measured signal which has no sample yet is tried by upload, the message names its event if this fails as well.
 
 ### 5.7 `xcp_write`
 
@@ -418,30 +468,59 @@ Values are physical values with unit and enum labels, as in the CSV output. Arra
 | `name` | string | Exact name of a parameter |
 | `value` | number | Checked against the A2L limits |
 
-The value is written with `SHORT_DOWNLOAD` and read back:
+The old value is read, the new value is checked against the limits, written with `SHORT_DOWNLOAD` and read back:
 
 ```text
-counter_max: 1000 -> 2000 (limits 0..65535, segment params, working page)
+params.counter_max: 1024 -> 500  (u16, limits 0..65535)
 ```
 
-Errors: `counter_max: value 70000 exceeds the limits 0..65535, not written`, `counter_maxx not found. Similar: counter_max`. Scope of the first version as `--cal`: scalar parameters of basic types. Curves, maps and enum labels as input are later.
+Errors:
 
-The change is in the working page (RAM) of the target. Whether it survives a restart depends on the target (persistence, freeze), the result says so if the target reports freeze support.
+```text
+params.counter_max: value 99999999 exceeds the limits 0..65535, not written
+```
+
+```text
+counter_max not found, nothing written. Similar: params.counter_max
+```
+
+```text
+global_counter is a measurement variable, not a calibration parameter. Only parameters can be written.
+```
+
+Scope as `--cal`: scalar parameters of basic types, the value as `--cal` and `--list-cal` handle it (open decision 8). Curves, maps and enum labels as input are later.
+
+The change is in the working page (RAM) of the target. Whether it survives a restart depends on the target (persistence, freeze).
 
 ### 5.8 `xcp_sample`
 
 | Argument | Type | Default | |
 |---|---|---|---|
 | `names` | array of strings | | Exact signal names, at most 20 |
-| `duration_ms` | integer | 1000 | Maximum 30000 |
+| `duration_ms` | integer | 1000 | 100 to 30000 |
+
+The call returns when the window is over:
 
 ```text
-Sampled 2 signals for 3.0 s, 0 packets lost
-counter        3000 samples, 1000/s   min 0        max 1999     mean 999.5    last 1042
-SigGen1.input  120000 samples, 40000/s  min -17.51  max 17.51  mean 0.002  last 3.07  Volt
+Sampled 4 signals for 2.0 s, 0 packets lost
+heat_power  1552 samples, 775/s  min 8729  max 8729  mean 8729  last 8729 Watt
+t1  1552 samples, 775/s  min 50  max 50  mean 50  last 50
+counter  1552 samples, 775/s  min 0  max 1000  mean 498.58  last 771
+state  3 samples, 1.5/s  last RUNNING
+task2.x: no sample in 2.0 s, its event 'task2' was not triggered
+nosuch: not found.
+params.counter_max: is a calibration parameter without event, it can not be measured. Read it with xcp_read.
 ```
 
-Sends a progress notification every second. A cancelled call stops the measurement.
+Minimum, maximum and mean are of the physical value, of the first element for an array, with 6 significant digits. An enum has no statistics, only its last label. The call is an error only if no signal had a sample.
+
+Without a recording, `xcp_sample` starts a measurement of the signals and stops it at the end of the window. While a recording runs, it uses the recording and can only cover its signals:
+
+```text
+heat_power: not part of the running measurement. Stop it with xcp_measure_stop or sample it after the measurement.
+```
+
+While the window is open, the server answers `xcp_status`, `xcp_read`, `xcp_write` and the lists. The tools which change the measurement or the connection are refused until it is over (`xcp_sample is running for another 2.5 s, call this tool again when it is done.`). A cancelled call closes the window and stops its measurement. Progress notifications are not sent, the window is at most 30 s.
 
 ### 5.9 `xcp_measure_start`, `xcp_measure_stop`
 
@@ -450,21 +529,96 @@ Sends a progress notification every second. A cancelled call stops the measureme
 | Argument | Type | Default | |
 |---|---|---|---|
 | `names` | array of strings | | Exact signal names, or |
-| `pattern` | string | | a regular expression, as `--mea` |
+| `pattern` | string | | a regular expression, `.` for all. Not both |
 | `duration_s` | integer | 0 | 0: until `xcp_measure_stop` |
-| `mdf`, `mcap`, `csv`, `perfetto` | string | | Output files in the MCP directory. None given: MDF with the name `<target>_<date>_<time>.mf4` |
-| `trace_auto` | `off`, `context`, `links`, `all` | `--trace-auto` | With `perfetto` |
+| `mdf`, `mcap`, `csv`, `perfetto` | string | | Output files, relative to the working directory. None given: an MDF file `<target>_<date>_<time>.mf4` in the working directory |
+| `trace_auto` | `off`, `context`, `links`, `all` | `links` | With `perfetto` |
 
-Returns immediately: the number of signals and DAQ lists, signals which were skipped and why (no event, array too large), the file names. An existing file is not overwritten.
+It returns immediately:
 
-`xcp_measure_stop` has no arguments and returns the final statistics, as the command line prints them: duration, events, rates, packets, lost packets, dropped samples, files with their sizes. After a measurement which ended by itself (`duration_s`), `xcp_status` shows this summary until the next measurement starts.
+```text
+Measurement started: 2 signals in 1 DAQ list, for 2 s, it stops by itself.
+Files: m.mf4, m.csv
+nosuch: not found.
+```
 
-### 5.10 A2L and parameter file tools (phase 4)
+Signals without event are not measured, with names they are listed with the reason, with a pattern they are counted. An existing file is not overwritten: `The file 'm.csv' exists, a measurement does not overwrite files. Give another file name.` There is one recording at a time.
 
-- `xcp_load_a2l {a2l?, elf?, fix?}`: load or replace the description of the connected target, `fix` as `--fix-a2l`.
-- `xcp_create_a2l {elf, a2l, template?, embed_aml?, var_filter?, unit_filter?, skip_no_metadata?}`: create an A2L file from an ELF file, offline or with the event and segment information of the connected target. Result: counts, and the warnings and diagnostics described in [OFFLINE_A2L.md](OFFLINE_A2L.md).
-- `xcp_save_parameters {file}`: upload all calibration segments into a `.hex` or `.bin` file.
-- `xcp_load_parameters {file}`: download a `.hex` or `.bin` file into the target. Changes the target.
+`xcp_measure_stop` has no arguments and returns the summary:
+
+```text
+9 signals measured for 2.6 s (stopped by xcp_measure_stop): 3930 events, 1532 event/s, 0.028 MByte/s, 0 packets lost. Files: hello_xcp_20261128_180907.mf4 (107 KB)
+```
+
+The summary of a recording which ended in another way is shown by `xcp_status` as `Last measurement`, with the reason: `the requested duration is over`, `stopped by xcp_disconnect`, `the connection was lost`, `xcpclient was shut down`. In all these cases the files are completed.
+
+### 5.10 `xcp_load_a2l`
+
+Load or replace the description of the connected target. Not while a recording runs.
+
+| Argument | Type | Default | |
+|---|---|---|---|
+| `a2l` | string | | A2L file to load. Or |
+| `elf` | string | | ELF file to create the A2L file from, with the events and calibration segments of the target. With `a2l`: the name of the A2L file to write. Neither: upload the A2L file from the target |
+| `fix` | boolean | false | With `a2l`: correct the event ids and calibration segment numbers in the file with those of the target and rewrite it, as `--fix-a2l`. Only for A2L files created by xcpclient |
+| `default_event` | string | `--default-event` | |
+| `accept_epk_mismatch` | boolean | false | Only after the user confirmed |
+
+Result: `Description loaded.`, the status, and the warnings found on the way.
+
+### 5.11 `xcp_create_a2l`
+
+Create an A2L file from an ELF file, without using it. Works in every state. Not connected, or with `offline`, the file is created from the ELF file alone. Connected, the events and calibration segments of the target are used as well and the EPKs are compared. The description in use is not changed.
+
+| Argument | Type | Default | |
+|---|---|---|---|
+| `elf` | string | | ELF file with DWARF debug information |
+| `a2l` | string | | A2L file to write |
+| `overwrite` | boolean | false | Replace the A2L file if it exists |
+| `template` | boolean | false | Events and calibration segments only, as `--create-a2l-template` |
+| `offline` | boolean | false | Do not use the connected target |
+| `var_filter`, `unit_filter` | string | | Regular expressions on variable and compilation unit names, as `--elf-var-filter`, `--elf-unit-filter` |
+| `skip_no_metadata` | boolean | false | As `--elf-skip-no-metadata` |
+| `embed_aml` | boolean | false | As `--embed-aml`. Without it, `XCP_104.aml` is written next to the A2L file if it is not there |
+| `default_event` | string | `--default-event` | |
+| `accept_epk_mismatch` | boolean | false | Only after the user confirmed |
+
+```text
+A2L file out/offline.a2l created from no_a2l_demo.elf (offline, from the ELF file only): 4 events, 3 calibration segments, 49 signals, 14 parameters. out/XCP_104.aml written, the A2L file includes it.
+Warning: 188 variables not described, location is a register: main_c:333 'p_counter_control', main_c:346 'p_params', main_c:363 'delay', ...
+Warning: 78 variables not described, not registered, it has no location in the debug information, not implemented yet: 'len' in safe_strnlen, 'i' in XcpPrintDaqList, ...
+Warning: 2 variables not described, has unsupported type: 'heap_struct', 'gModuleAddr'
+```
+
+The warnings are those the generator logs (see [OFFLINE_A2L.md](OFFLINE_A2L.md)). An ELF file has hundreds of variables which can not be described, mostly local variables the compiler keeps in registers. They are reported as one line for each reason, with the number of variables and three examples, the full list is in the log.
+
+Errors: `The file 'out/offline.a2l' exists. To replace it, call xcp_create_a2l again with overwrite = true.`, an EPK mismatch as in 5.3, a macOS executable (the message of the ELF reader says that ELF files are needed).
+
+### 5.12 `xcp_save_parameters`, `xcp_load_parameters`
+
+`xcp_save_parameters` reads all calibration segments from the target and writes them into a file.
+
+| Argument | Type | Default | |
+|---|---|---|---|
+| `file` | string | `<target>_<date>_<time>.hex` in the working directory | `.hex`: Intel-HEX with the data of the segments. `.bin`: XCPlite persistence file, with events and EPK |
+
+```text
+2 calibration segments saved to p.hex (156 bytes).
+```
+
+An existing file is not overwritten.
+
+`xcp_load_parameters` writes a `.hex` file into the working page of the target. It changes the target and does not exist with `--mcp-read-only`.
+
+| Argument | Type | |
+|---|---|---|
+| `file` | string | An Intel-HEX file written by `xcp_save_parameters` |
+
+```text
+2 of 2 calibration segments loaded from p.hex into the working page of the target.
+```
+
+The file contains addresses, not names, and has no EPK. It is not checked against the software on the target, the tool description tells the model to use only a file of the same software version. A segment is loaded only if the file has all of its bytes, a segment the file has no data for is skipped with a warning. A `.bin` file can not be loaded, as on the command line.
 
 ## 6. Example conversation
 
@@ -504,61 +658,67 @@ The official Rust SDK is the crate [`rmcp`](https://crates.io/crates/rmcp), vers
 ```toml
 [features]
 default = ["mcp"]
-mcp = ["dep:rmcp", "dep:axum"]
+mcp = ["dep:rmcp", "dep:schemars", "dep:libc"]
 
 [dependencies]
-rmcp = { version = "3.12", optional = true, features = ["server", "macros", "transport-io", "transport-streamable-http-server"] }
-axum = { version = "0.8", optional = true }      # HTTP server for --mcp-http, rmcp provides a tower service
-serde_json = "1"                                  # today a dev-dependency
+rmcp = { version = "3.12", default-features = false, features = ["server", "macros", "transport-io"], optional = true }
+schemars = { version = "1", optional = true }     # JSON schemas of the tool arguments
+futures-util = "0.3"                              # session actor: catch a panic of a command
+
+[target."cfg(unix)".dependencies]
+libc = { version = "0.2", optional = true }       # redirection of stdout
 ```
 
-A tool is a function with a description, its arguments are a struct with a derived JSON schema. The doc comments of the fields become the argument descriptions the model sees. Sketch, following the rmcp examples, not compiled:
+The HTTP mode (phase 3) adds the rmcp feature `transport-streamable-http-server` and an HTTP server (axum 0.8), rmcp provides a tower service.
+
+A tool is a function with a description, its arguments are a struct with a derived JSON schema. The doc comments of the fields become the argument descriptions the model sees. A tool function returns `Result<String, String>`: `Ok` is the text of the result, `Err` is a tool execution error (`isError: true`), which the model reads. From `src/mcp/mod.rs`, shortened:
 
 ```rust
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-struct ConnectArgs {
-    /// IP address of the target
-    host: Option<String>,
-    /// XCP port, default 5555
-    port: Option<u16>,
-    /// Transport protocol
-    protocol: Option<Protocol>,
-    // ...
+#[derive(Debug, Deserialize, JsonSchema)]
+struct WriteArgs {
+    /// Exact name of a calibration parameter, as listed by xcp_list_parameters.
+    name: String,
+    /// The new value. It is checked against the limits of the parameter.
+    value: f64,
 }
 
 #[derive(Clone)]
-struct XcpMcpServer {
-    session: SessionHandle, // sender of the command channel to the session actor
+pub struct XcpMcpServer {
+    session: SessionHandle, // handle to the session actor, all server instances share the one XCP session
+    tool_router: ToolRouter<XcpMcpServer>,
 }
 
 #[tool_router]
 impl XcpMcpServer {
-    #[tool(description = "Connect to an XCP target (ECU) and load its A2L description. ...")]
-    async fn xcp_connect(&self, Parameters(args): Parameters<ConnectArgs>) -> Result<CallToolResult, McpError> {
-        match self.session.connect(args.into()).await {
-            Ok(info) => Ok(CallToolResult::success(vec![ContentBlock::text(info.to_string())])),
-            Err(e) => Ok(CallToolResult::error(vec![ContentBlock::text(e.to_string())])), // isError: true, for the model
+    pub fn new(session: SessionHandle, read_only: bool) -> XcpMcpServer {
+        let mut tool_router = Self::tool_router();
+        if read_only {
+            tool_router.remove_route("xcp_write"); // the model does not see the tool
         }
+        XcpMcpServer { session, tool_router }
     }
 
-    #[tool(description = "State of the XCP connection ...", annotations(read_only_hint = true))]
-    async fn xcp_status(&self) -> Result<CallToolResult, McpError> { /* ... */ }
+    #[tool(description = "Show the state of the XCP connection ...", annotations(read_only_hint = true))]
+    async fn xcp_status(&self) -> Result<String, String> {
+        self.session.status().await
+    }
+
+    #[tool(description = "Set a calibration parameter ...", annotations(read_only_hint = false, destructive_hint = true))]
+    async fn xcp_write(&self, Parameters(args): Parameters<WriteArgs>) -> Result<String, String> {
+        self.session.write(args.name, args.value).await
+    }
 }
 
-#[tool_handler(name = "xcpclient", version = env!("CARGO_PKG_VERSION"), instructions = INSTRUCTIONS)]
+#[tool_handler(router = self.tool_router, name = "xcpclient", instructions = "XCP measurement and calibration client ...")]
 impl ServerHandler for XcpMcpServer {}
 
-// --mcp
-let service = XcpMcpServer::new(session).serve(rmcp::transport::stdio()).await?;
+// --mcp: stdin and the original stdout, see 8.3
+let service = XcpMcpServer::new(session.clone(), read_only).serve((tokio::io::stdin(), output)).await?;
 service.waiting().await?; // returns when stdin is closed
-
-// --mcp-http
-let service = StreamableHttpService::new(move || Ok(XcpMcpServer::new(session.clone())), LocalSessionManager::default().into(),
-    StreamableHttpServerConfig::default().with_allowed_origins([/* localhost origins */]));
-axum::serve(TcpListener::bind(addr).await?, axum::Router::new().route_service("/mcp", service)).await?;
+session.shutdown().await; // DISCONNECT
 ```
 
-Every host connection gets its own `XcpMcpServer`, all share one `SessionHandle`, so all see the same XCP session. Note that Origin validation is off by default in rmcp 3.12 and has to be configured.
+The MCP layer has no XCP knowledge. Everything a tool does is an operation of the session actor.
 
 ### 8.2 Refactoring: the session out of main.rs
 
@@ -581,37 +741,67 @@ src/main.rs                    command line: parses Args, calls the Session meth
 
 Typed results and a `SessionError` are added in phase 1 where the tools need them, today `connect` and `load_description` only log what they find.
 
-Step two adds:
+Step two, the MCP mode. **Phase 1 done:**
 
 ```
-src/session/actor.rs     SessionHandle and the actor task: commands over mpsc, replies over oneshot, timers
-src/value_writer/mod.rs  DaqWriter with the last sample per DAQ list and window statistics
-src/mcp/mod.rs           the rmcp server: tools, argument structs, result formatting, instructions
-src/mcp/transport.rs     stdio and HTTP startup, shutdown handling
+src/session/actor.rs           SessionHandle and the actor task on its own thread: commands over mpsc, replies over oneshot.
+                               The operations of the tools (status, connect, disconnect, list, read, write), the session state,
+                               the check for a lost connection, the text of the results and error messages
+src/mcp/mod.rs                 the rmcp server: tools with descriptions and annotations, argument structs, instructions, run_stdio
+src/mcp/stdio.rs               protect_stdout: redirection of stdout to stderr
+src/main.rs                    --mcp, --mcp-read-only, --mcp-dir
+tests/mcp_stdio.rs             integration test, see 8.4
 ```
 
-The typed results implement `Display` in the line format shown in section 5. The command line prints them, the MCP layer returns them, both show the same text.
+**Phase 2 done:**
+
+```
+src/value_writer/mod.rs        ValueStore and ValueWriter: a DaqWriter which keeps the last sample of each DAQ list (decoded when asked for)
+                               and the statistics of a time window for selected signals
+src/session/actor/measure.rs   the measurement operations of the actor: sample, measure start, measure stop, the timers for the end of
+                               a sample window and of a timed recording, the summaries
+src/session/mod.rs             start_measurement_of (names and additional writers), measurement_progress, abort_measurement
+```
+
+**Phase 4 done:**
+
+```
+src/session/actor/files.rs     the file operations of the actor: load A2L, create A2L, save and load parameters
+src/session/description.rs     build_description, shared by load_description and the new create_a2l_file, which writes an A2L file
+                               without changing the description of the session. The EPK of an ELF file is compared with the target
+src/log_capture.rs             CaptureLogger: the warnings and errors logged while a tool runs are appended to its result.
+                               Warnings about single variables of an ELF file are counted by reason
+```
+
+A sample window is answered when it is over: the actor keeps the reply and goes on serving commands, it wakes up at the end of the window. The MCP tool waits for the reply and for the cancellation of the request at the same time.
+
+The actor replies with text (`Result<String, String>`), which the MCP layer passes on. The data behind it is typed (`TargetInfo`, `DescriptionInfo`, `ParameterInfo`, `XcpMeasurementInfo` in the session and the XCP client), the formatting is in `actor.rs`. A typed reply for `structuredContent` (open decision 6) would be a change in these two files.
 
 ### 8.3 What a long running server needs from the existing code
 
 | Topic | Before | State |
 |---|---|---|
-| stdout | `env_logger` logs to stdout, about 120 `println!`/`print!` in `main.rs`, `elf_reader`, `bin_reader`, `xcp_client/decoder.rs`, `xcp_test_executor.rs` and `ConsoleWriter::stdout()` | **Phase 1.** The print statements stay as they are, most are the verbose output of the ELF reader. Instead, the MCP mode protects the protocol channel for the whole process: at startup it keeps a duplicate of the original stdout for the MCP transport and redirects file descriptor 1 to stderr, the logger target is stderr. On stdio, one stray line on stdout breaks the protocol, and this also covers prints in libraries |
-| `SERV_TEXT` | Printed to stdout (`ServTextDecoder` in `main.rs`) | **Phase 1.** A text decoder which keeps the last lines in a ring buffer of the session, shown by `xcp_status`. `Session::connect` takes the decoder as argument |
+| stdout | `env_logger` logs to stdout, about 120 `println!`/`print!` in `main.rs`, `elf_reader`, `bin_reader`, `xcp_client/decoder.rs`, `xcp_test_executor.rs` and `ConsoleWriter::stdout()` | **Done.** The print statements stay as they are, most are the verbose output of the ELF reader. Instead, the MCP mode protects the protocol channel for the whole process (`mcp::protect_stdout`): at startup it keeps a duplicate of the original stdout for the MCP transport and redirects file descriptor 1 to stderr, the logger target is stderr. This also covers prints in libraries. Unix only, on Windows nothing is redirected and nothing but the MCP transport may write to stdout |
+| `SERV_TEXT` | Printed to stdout (`ServTextDecoder` in `main.rs`) | **Done.** The actor gives `Session::connect` a text decoder which keeps the last 20 lines, shown by `xcp_status`. Not tried with a target which sends `SERV_TEXT` |
 | Panics on target responses | `assert!`, `panic!` and `unwrap()` on responses of the XCP server | **Done.** A response which is shorter than the client reads it is an error (`min_response_len` in `transport.rs`). Protocol settings xcpclient does not support (DAQ timestamp, DAQ header, address granularity, byte order) give the error `XCP server not supported by xcpclient: ...`. A target without ECU name, A2L name or EPK is not a panic. Printing an error of a command which was missing in the `XcpCommand` enum (`GET_VERSION`, `GET_COMM_MODE_INFO`) panicked, for example a timeout during connect |
-| Panics on wrong use | `unwrap()` on the registry, the socket and the channels, for a client which is not connected or has no description. A parameter file name without extension panicked | **Done.** Errors (`Not connected to an XCP server`, `No A2L description of the target loaded`, `File name ... has no extension`). Internal invariants (command builder alignment and such) are still asserts. As a safety net the actor runs each command so that a panic is caught, reported as tool error and the session reset to `disconnected` (phase 1) |
+| Panics on wrong use | `unwrap()` on the registry, the socket and the channels, for a client which is not connected or has no description. A parameter file name without extension panicked | **Done.** Errors (`Not connected to an XCP server`, `No A2L description of the target loaded`, `File name ... has no extension`). Internal invariants (command builder alignment and such) are still asserts. As a safety net the actor catches a panic of a command: the session is dropped, the state is `disconnected` with the reason, the tool call returns an error |
 | Late responses | A response which arrived after the command timeout stayed in the response channel and was taken as the response to the next command | **Done.** Discarded with a warning before a command is sent. Needed for a session which goes on after a timeout, for example of an upload with dynamic addressing (4.5) |
-| Errors | `Box<dyn Error>`, which is not `Send` | **Phase 1.** `SessionError` (a `thiserror` enum, `Send`) at the boundary of the session, with messages written for the model. If the `XcpClient` futures are not `Send`, the actor runs on its own thread with a current-thread runtime, nothing else changes |
-| EPK mismatch | Interactive prompt on stdin, or `--yes` | **Done.** A callback of `Session::load_description`, the prompt is in `main.rs` |
+| Errors | `Box<dyn Error>`, which is not `Send` | **Done, differently.** The session keeps `Box<dyn Error>`. The actor runs on its own thread with a single threaded runtime, so nothing has to be `Send`, and converts errors to text at its boundary. The messages for the model are written in the actor. A typed `SessionError` was not needed |
+| Measurement stop | `XcpClient::stop_measurement` returned before the DAQ decoder was stopped, if the receive task had terminated: the files stayed open | **Done.** The decoder is always stopped. For a lost connection the measurement is completed locally without commands (`abort_measurement`) |
+| Lost connection | Not detected, `is_connected` is a flag of the client | **Done.** When an XCP command of a tool fails, the actor sends `GET_STATUS`. No response: the session is dropped, the state is `disconnected` with the reason (4.6). This costs a second command timeout, a lost target is reported after 6 s |
+| EPK mismatch | Interactive prompt on stdin, or `--yes` | **Done.** A callback of `Session::load_description`, the prompt is in `main.rs`, the actor decides by `accept_epk_mismatch` |
 | Calibration objects | `calibration_object_list` only grew, `create_calibration_object` pushed a new object on every call | **Done.** The object of a characteristic is replaced when it is accessed again |
-| Reconnect | One connect per process | **Phase 1.** `XcpClient` is created per connect and dropped at disconnect, the receive task ends with it |
-| Shutdown | Disconnect at the end of `xcp_client()` | **Phase 1.** One shutdown path for stdin closed, SIGTERM and Ctrl-C: stop measurement, finalize files, `DISCONNECT` (R9) |
+| Reconnect | One connect per process | **Done.** The actor creates a `Session` with its `XcpClient` per connect and drops it at disconnect, the receive task ends with it |
+| Shutdown | Disconnect at the end of `xcp_client()` | **Done** for stdio: stdin closed, SIGTERM and Ctrl-C end `run_stdio`. The actor closes an open sample window, stops a running recording, completes its files and disconnects (R9). With a tool call still open when stdin is closed, the SDK waits about 5 s before it ends |
 
 ### 8.4 Tests
 
-- **Unit**: the session state machine and the result formatting against the fake transport which the tests in `src/xcp_client/cal.rs` already use.
-- **Integration**, registered with CTest as the other integration tests: start `hello_xcp` from `build/`, start `xcpclient --mcp` as child process, send JSON-RPC lines to its stdin and check the results: connect, list, read, write and read back, sample, measure into an MDF file, kill the target and check for `disconnected`, connect again. A second run with a legacy `initialize` handshake.
-- **stdout hygiene**: the integration test fails on any line on stdout which is not a JSON-RPC message.
+- **Unit** (`cargo test`): the text formatting of the results, the `SERV_TEXT` buffer, the actor without a target (status, the errors of the tools which need a connection, an invalid regular expression, a refused TCP connection), the tool list with and without `--mcp-read-only`, and that every tool and every argument has a description.
+- **Integration without target** (`cargo test`, `tests/mcp_stdio.rs`): starts the built `xcpclient --mcp` as a child process and sends MCP messages to its stdin: the handshake of the older protocol revisions, the stateless revision 2026-07-28 without handshake, tool list, annotations, tool errors, protocol errors, `--mcp-read-only`, the rejected options, exit status 0 after stdin is closed. It runs with log level trace and fails on any line on stdout which is not an MCP message.
+- **With a target** (`tools/xcpclient/tests/mcp/`, `python3 tests/mcp/run_all.py`): seven scenario scripts which start `build/hello_xcp` and `xcpclient --mcp`, send MCP messages as a host would and check the tool results. They cover what the following lines list for the phases, and the regression of the A2L file emptied by an upload in the directory of the target. They need a built target and take about a minute, they are not part of `cargo test` or CTest. See the `README.md` there.
+- **Phase 2 with a target** (`measure.py`, `measure_lost.py`): sample of signals of two events with a wrong name and a parameter in the list, status, read and a refused connect while a sample window is open, a cancelled sample, a recording of all signals with the default file, status, read and sample during the recording, a parameter write during the recording, a second recording refused, stop, a timed recording into MDF and CSV, MCAP and Perfetto, an existing file, disconnect during a recording, the target killed during a recording (the MDF file is completed, the state is `disconnected`), stdin closed during a recording with an open sample window.
+- **Phase 4 with a target** (`files.py`): A2L creation offline from the ELF fixtures and from `no_a2l_demo.elf` (existing file, overwrite, template, embedded A2ML, filters, an invalid filter, a missing file, a macOS executable), connected with an ELF file of another EPK (refused, accepted) and without EPK, load of an A2L file (copy, another EPK, fix of a file not created by xcpclient, missing file), reload by upload, refused during a recording, parameters saved as `.hex` and `.bin` (default name, existing file, wrong extension), two parameters changed and restored by loading the `.hex` file, a `.bin` file, an empty and a broken `.hex` file. On the command line: `--elf --create-a2l` against a target with another EPK ends with exit status 1, with `--yes` it creates the file.
+- **With a host**: not done yet. The tools were not called by a language model so far, so the descriptions are untested where it matters. See section 9 for the setup.
 - **Manual**: the MCP Inspector, a debugger for MCP servers with a web UI:
 
   ```bash
@@ -625,12 +815,14 @@ The typed results implement `Display` in the line format shown in section 5. The
 | Phase | Content | Result |
 |---|---|---|
 | 0 | **Done.** Session refactoring (8.2 step one), panic cleanup (8.3). No MCP code | Command line unchanged, compared with the binary before the change |
-| 1 | `--mcp` on stdio with stdout redirection, session actor, `SessionError` and typed results, tools `xcp_status`, `xcp_connect`, `xcp_disconnect`, `xcp_list_*`, `xcp_read` (polling), `xcp_write`, `--mcp-read-only` | The conversation of section 1 works in Claude Code, except the last sentence |
-| 2 | ValueWriter, `xcp_sample`, `xcp_measure_start`, `xcp_measure_stop`, `xcp_read` of measured signals from the ValueWriter | Measurement |
-| 3 | `--mcp-http`, clean shutdown as daemon | The connection survives host sessions (R1 in full) |
-| 4 | `xcp_load_a2l`, `xcp_create_a2l`, `xcp_save_parameters`, `xcp_load_parameters`, `--mcp-dir` checks | Feature parity with the command line |
+| 1 | **Done.** `--mcp` on stdio with stdout redirection, session actor, tools `xcp_status`, `xcp_connect`, `xcp_disconnect`, `xcp_list_*`, `xcp_read` (polling), `xcp_write`, `--mcp-read-only`, `--mcp-dir` | Tested over stdio against `hello_xcp`. To do: try it in Claude Code (the conversation of section 1, except the last sentence) |
+| 2 | **Done.** ValueWriter, `xcp_sample`, `xcp_measure_start`, `xcp_measure_stop`, `xcp_read` of measured signals from the ValueWriter, shutdown with a running measurement | Tested over stdio against `hello_xcp`. Not done: progress notifications of `xcp_sample` |
+| 3 | **Postponed.** `--mcp-http`, clean shutdown as daemon | The connection survives host sessions (R1 in full) |
+| 4 | **Done.** `xcp_load_a2l`, `xcp_create_a2l`, `xcp_save_parameters`, `xcp_load_parameters`, the EPK check of ELF files, warnings in tool results | Tested over stdio against `hello_xcp`. Not done: upload of the ELF file from the target (`--upload-elf`), a template from the target information alone (`--create-a2l` without ELF file), the checks of file paths (section 7, deferred) |
 
 ## 9. Setup in the hosts
+
+The host starts the `xcpclient` it finds in the path. Install the current build first (`cargo install --path tools/xcpclient --locked`), or give the full path of `tools/xcpclient/target/debug/xcpclient` in the commands below.
 
 ### Claude Code
 
@@ -654,6 +846,10 @@ The second command writes `.mcp.json` in the project root:
 }
 ```
 
+Without the `claude` command line, for example with only the Claude desktop app installed: write this `.mcp.json` by hand into the project root, with the full path of xcpclient as `command`. A file with a path of your machine does not belong into the repository.
+
+A new server is loaded when a session starts, and a server from `.mcp.json` has to be approved once.
+
 HTTP, with the daemon started before:
 
 ```bash
@@ -674,14 +870,20 @@ claude mcp add --transport http xcp http://127.0.0.1:8555/mcp
 
 | | Decision | |
 |---|---|---|
-| 1 | Which transport first | stdio first, the HTTP daemon in phase 3 |
+| 1 | Which transport first | stdio first. The HTTP daemon (phase 3) is postponed, decided after phases 1, 2 and 4 were done |
 | 4 | Targets per server process | One. Two targets (Pi and ESP32) are two servers, registered for example as `xcp-pi` and `xcp-esp32` |
 | 5 | Parameter writes | Available by default, xcpclient is a lab tool. The host asks for permission, `--mcp-read-only` switches them off |
 | | Reading values | `xcp_read` never starts a measurement: last sample of a running measurement or upload, otherwise refused (4.5) |
 | | Alive polling | None (4.6). Noted for later, see below |
 | | Security | Deferred, see section 7 |
+| | Measurement files | A recording without a given file name is written to the working directory, as `<target>_<date>_<time>.mf4`. Given file names are relative to the working directory. A measurement never overwrites a file |
+| | EPK of an ELF file | Compared with the EPK of the target when an A2L file is created from it, in the MCP tools and on the command line. A mismatch needs `accept_epk_mismatch` or `--yes` |
+| | A2L file which exists | `xcp_create_a2l` replaces it only with `overwrite = true`. Parameter and measurement files are never overwritten |
+| | Files of the server | The files the server writes on its own go to the cache directory of the user, not to the working directory (4.1, 4.4). Decided after an upload into the working directory had emptied the A2L file of the application running there |
 
 ### Open, the recommendation is used until decided otherwise
+
+Phase 1 is implemented with the recommendations of 2, 3, 6, 7 and 8.
 
 | | Decision | Options | Recommendation |
 |---|---|---|---|
@@ -697,6 +899,9 @@ claude mcp add --transport http xcp http://127.0.0.1:8555/mcp
 
 ### Noted for later
 
+- **A target which stops sending during a recording** is not detected, as long as no tool sends a command: `xcp_status` and `xcp_read` of measured signals answer from what was received. `xcp_status` shows the age of the last sample. A watchdog on the DAQ data would have to know which events are sporadic.
+- **Progress notifications** for `xcp_sample`. Not needed for the stdio transport with a window of at most 30 s, to be looked at with the HTTP transport, where hosts have shorter timeouts.
+
 - **Alive check.** No keep-alive polling for now, a lost target is detected by the next command or by missing DAQ packets. To be reconsidered with the daemon (phase 3), where `xcp_status` of a connection which is idle for hours should be true. It depends on the outcome of the point above: a polling client must not disturb another client.
 
 ## 11. Sources
@@ -709,4 +914,4 @@ Looked up on 2026-11-28:
 - Claude Desktop: [local servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers), [remote servers](https://modelcontextprotocol.io/docs/develop/connect-remote-servers), [mcp-remote](https://github.com/geelen/mcp-remote)
 - MCP Inspector: [github.com/modelcontextprotocol/inspector](https://github.com/modelcontextprotocol/inspector)
 
-Not verified: the rmcp code in 8.1 is not compiled, the attribute names of the annotations other than `read_only_hint` are assumed. How Claude Desktop handles a local HTTP server is taken from its documentation, not tried.
+Not verified: how Claude Desktop handles a local HTTP server is taken from its documentation, not tried.

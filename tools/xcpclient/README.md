@@ -2,7 +2,8 @@
 
 XCP test client and A2L generator for XCPlite, implemented in Rust
 
-XCP client v4.x for testing XCP servers and managing A2L and HEX files.
+XCP client v4.x for testing XCP servers and managing A2L and HEX files. Changes are documented in [CHANGELOG.md](CHANGELOG.md).
+
 
 ## Scope
 
@@ -13,8 +14,9 @@ xcpclient has two purposes:
 
 What it is not:
 
-- It is not a general purpose XCP client. It is a partial XCP implementation with protocol settings hard-coded for XCPlite, and it does not promise to work with other XCP implementations. An XCP server it does not support is rejected with an error message.
+- It is not a general purpose XCP client. It is a partial XCP implementation with protocol settings hard-coded for XCPlite, and it does not promise to work with other XCP implementations.
 - It is not a replacement for a full featured measurement and calibration tool like CANape.
+
 
 ## Features
 
@@ -31,6 +33,8 @@ This tool can:
 - Execute test sequences
 - Check the EPK of the A2L file against the EPK reported by the target, abort on mismatch unless `--yes` is given
 - Load options from a TOML configuration file (`--config`, see `xcpclient.toml`)
+- Run as MCP server for AI assistants (`--mcp`), see [MCP server mode](#mcp-server-mode)
+
 
 ## Offline A2L generation
 
@@ -47,39 +51,134 @@ xcpclient rejects Mach-O files with an error message, generate the A2L file from
 xcpclient exits with status 1 on any error (connection failed, ELF or A2L file not found or not usable, test failed), so scripts can
 detect failures by the exit status.
 
+
 ## Usage
 
 ```text
+XCP client v4.3.0 for testing XCP servers and managing A2L and HEX files
+
 Usage: xcpclient [OPTIONS]
 
 Options:
-      --config <CONFIG>
-          Load arguments from a TOML config file. Command-line arguments take precedence
-          
-          [default: ""]
+      --config <FILE>      Load arguments from a TOML config file
+      --log-level <LEVEL>  Program flow log level (Off=0, Error=1, Warn=2, Info=3, Debug=4, Trace=5) [default: 3]
+      --verbose <LEVEL>    ELF parsing log verbosity level [default: 0]
+  -y, --yes                Automatically confirm EPK mismatch and other safety warnings
+  -h, --help               Print help (see more with '--help')
+  -V, --version            Print version
 
-      --log-level <LOG_LEVEL>
+Connection:
+      --dest-addr <ADDR>       XCP server address (IP address or IP:port) [default: 127.0.0.1]
+      --port <PORT>            XCP server port number, used when --dest-addr has no port [default: 5555]
+      --bind-addr <ADDR>       Local bind address (IP address or IP:port) [default: 0.0.0.0]
+      --baud-rate <BAUD_RATE>  Baud rate for XCP communication (only applicable for certain protocols) [default: 115200]
+      --tcp                    Use TCP for XCP communication
+      --udp                    Use UDP for XCP communication
+      --sxi                    Use SxI for XCP communication
+      --connect-mode <MODE>    XCP connect mode [default: 0]
+      --offline                Force offline mode, no network communication
+
+A2L file:
+      --a2l <FILE>           Name of the A2L file
+      --upload-a2l           Upload the A2L file from the XCP server
+      --create-a2l           Create an A2L file from XCP server information and, with --elf or --upload-elf, from ELF
+                             debug information
+      --create-a2l-template  Create a minimal A2L template from XCP server event and memory segment information only
+      --fix-a2l              Correct event ids and calibration segment numbers of the given A2L file with XCP server
+                             information
+      --embed-aml            Embed the XCP A2ML description into a created A2L file, instead of including XCP_104.aml
+
+ELF file:
+      --upload-elf               Upload the ELF file from the XCP server
+      --elf <FILE>               Create an A2L file from the debug information of this ELF file
+      --elf-unit-limit <N>       Parse only compilation units <= n
+      --elf-unit-limit-min <N>   Parse only compilation units >= n [default: 0]
+      --elf-var-filter <REGEX>   Register only ELF variables whose names match this regex
+      --elf-skip-no-metadata     Skip ELF variables without metadata (XCP_UNIT, XCP_LIMITS, XCP_COMMENT)
+      --elf-unit-filter <REGEX>  Register only ELF variables from compilation units (source files) whose names match
+                                 this regex
+
+Calibration:
+      --bin <FILE>          Pathname of the parameter file (.bin or Intel-HEX .hex) for --upload-bin and --download-bin
+      --upload-bin          Upload the working page data of all calibration segments into a parameter file
+      --download-bin        Download the working page data of all calibration segments from a parameter file to the
+                            target
+      --list-cal <REGEX>    List the calibration variables in the A2L file matching this regex
+      --cal <NAME> <VALUE>  Set a calibration variable to a value
+
+Measurement:
+      --list-mea <REGEX>         List the measurement variables in the A2L file matching this regex
+      --mea <NAME>...            Measure these variables with DAQ, names separated by space or regular expressions (e.g.
+                                 ".*")
+      --default-event <ID|NAME>  Event for variables without a fixed event, given by event id or event name
+      --time <S>                 Measurement duration in s, 0 means infinite [default: 0]
+
+Measurement output files:
+      --csv <FILE>          Save measurement data to a CSV file instead of printing it to the console
+      --mdf <FILE>          Save measurement data to an ASAM MDF 4.1 file
+      --mcap <FILE>         Save measurement data to an MCAP file (https://mcap.dev)
+      --perfetto <FILE>     Save measurement data to a trace file for Perfetto (https://ui.perfetto.dev)
+      --trace-auto <LEVEL>  Trace signals added to the measurement with --perfetto [default: links] [possible values:
+                            off, context, links, all]
+
+Test:
+      --test  Execute a test sequence on the XCP server
+
+MCP server:
+      --mcp            Run as MCP server on stdin/stdout, offering the xcpclient functions as tools to an AI assistant
+      --mcp-read-only  Do not offer the tools which change the target (writing calibration parameters)
+      --mcp-dir <DIR>  Directory for the files the MCP server writes on its own
+```
+
+```text
+XCP client v4.3.0 for testing XCP servers and managing A2L and HEX files
+
+Usage: xcpclient [OPTIONS]
+
+Options:
+      --config <FILE>
+          Load arguments from a TOML config file
+          
+          Command-line arguments take precedence.
+
+      --log-level <LEVEL>
           Program flow log level (Off=0, Error=1, Warn=2, Info=3, Debug=4, Trace=5)
           
           [default: 3]
 
-      --verbose <VERBOSE>
-          Content information detail verbosity level
+      --verbose <LEVEL>
+          ELF parsing log verbosity level
           
           [default: 0]
 
-      --dest-addr <DEST_ADDR>
-          XCP server address (IP address or IP:port). If port is omitted, uses --port parameter
+  -y, --yes
+          Automatically confirm EPK mismatch and other safety warnings
+          
+          Use in scripts to suppress interactive prompts.
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+Connection:
+      --dest-addr <ADDR>
+          XCP server address (IP address or IP:port)
+          
+          If the port is omitted, --port is used.
           
           [default: 127.0.0.1]
 
       --port <PORT>
-          XCP server port number (used when --dest-addr doesn't include port)
+          XCP server port number, used when --dest-addr has no port
           
           [default: 5555]
 
-      --bind-addr <BIND_ADDR>
-          Bind address (IP address or IP:port). If port is omitted, system assigns an available port
+      --bind-addr <ADDR>
+          Local bind address (IP address or IP:port)
+          
+          If the port is omitted, the system assigns an available port.
           
           [default: 0.0.0.0]
 
@@ -89,7 +188,7 @@ Options:
           [default: 115200]
 
       --tcp
-          Use TCP for XCP communication..
+          Use TCP for XCP communication
 
       --udp
           Use UDP for XCP communication
@@ -97,134 +196,232 @@ Options:
       --sxi
           Use SxI for XCP communication
 
-      --connect-mode <CONNECT_MODE>
+      --connect-mode <MODE>
           XCP connect mode
           
           [default: 0]
 
       --offline
-          Force offline mode (no network communication), communication parameters are used to create A2L file
-
-      --a2l <A2L>
-          Specify and overide the name of the A2L file name. If not specified, The A2L file name is read from the XCP server
+          Force offline mode, no network communication
           
-          [default: ""]
+          The communication parameters are used to create the A2L file.
+
+A2L file:
+      --a2l <FILE>
+          Name of the A2L file
+          
+          If not specified, the A2L file name is read from the XCP server.
 
       --upload-a2l
-          Upload A2L file from XCP server. Requires that the XCP server supports GET_ID A2L upload
+          Upload the A2L file from the XCP server
+          
+          Requires that the XCP server supports GET_ID A2L upload.
 
       --create-a2l
-          Build an A2L file template from XCP server information about events and memory segments. Requires that the XCP server supports the GET_EVENT_INFO and GET_SEGMENT_INFO commands. Insert all visible measurement and calibration variables from ELF file if specified with --elf or --upload-elf
+          Create an A2L file from XCP server information and, with --elf or --upload-elf, from ELF debug information
+          
+          Events and memory segments are read from the XCP server, all visible measurement and calibration variables are
+          inserted from the ELF file if specified with --elf or --upload-elf. Requires that the XCP server supports the
+          GET_EVENT_INFO and GET_SEGMENT_INFO commands.
 
       --create-a2l-template
-          Build a minimal A2L template from XCP server event and memory segment information only. No variables or types are registered; the result is a skeleton A2L file. Requires that the XCP server supports the GET_EVENT_INFO and GET_SEGMENT_INFO commands
+          Create a minimal A2L template from XCP server event and memory segment information only
+          
+          No variables or types are registered, the result is a skeleton A2L file. Requires that the XCP server supports
+          the GET_EVENT_INFO and GET_SEGMENT_INFO commands.
 
       --fix-a2l
-          Correct the event ids and calibration segment numbers of the given A2L file with XCP server information and rewrite it, the original is kept as <file>.a2l.bak. Only for A2L files created by xcpclient (--elf and --create-a2l), typically generated offline without section registration. Requires that the XCP server supports the GET_EVENT_INFO and GET_SEGMENT_INFO commands
+          Correct event ids and calibration segment numbers of the given A2L file with XCP server information
+          
+          The A2L file is rewritten, the original is kept as <file>.a2l.bak. Only for A2L files created by xcpclient
+          (--elf and --create-a2l), typically generated offline without section registration. Requires that the XCP
+          server supports the GET_EVENT_INFO and GET_SEGMENT_INFO commands.
 
       --embed-aml
-          Embed the XCP A2ML description into an A2L file created by xcpclient (--elf, --create-a2l, --create-a2l-template), instead of including XCP_104.aml. The A2L file is self-contained, XCP_104.aml is not needed next to it. --fix-a2l keeps an embedded A2ML description
+          Embed the XCP A2ML description into a created A2L file, instead of including XCP_104.aml
+          
+          Applies to A2L files created by xcpclient (--elf, --create-a2l, --create-a2l-template). The A2L file is
+          self-contained, XCP_104.aml is not needed next to it. --fix-a2l keeps an embedded A2ML description.
 
+ELF file:
       --upload-elf
-          Upload ELF file from XCP server. Requires that the XCP server supports proprietary GET_ID ELF upload command
-
-      --elf <ELF>
-          Specify the name of an ELF file, create an A2L file from ELF debug information. If connected to a XCP server, events and memory segments will be extracted from the XCP server. ELF files with DWARF debug information only (Linux, QNX, embedded targets), macOS Mach-O executables are not supported
+          Upload the ELF file from the XCP server
           
-          [default: ""]
+          Requires that the XCP server supports the proprietary GET_ID ELF upload command.
 
-      --elf-unit-limit <ELF_UNIT_LIMIT>
-          Parse only compilations units <= n
+      --elf <FILE>
+          Create an A2L file from the debug information of this ELF file
           
-          [default: 18446744073709551615]
+          If connected to an XCP server, events and memory segments are read from the XCP server. ELF files with DWARF
+          debug information only (Linux, QNX, embedded targets), macOS Mach-O executables are not supported.
 
-      --elf-var-filter <ELF_VAR_FILTER>
-          Regex pattern to filter variable names when registering from an ELF file. Only variables whose names match the pattern are included in the A2L output. If not specified (or empty), all variables are registered
-          
-          [default: ""]
+      --elf-unit-limit <N>
+          Parse only compilation units <= n
 
-      --elf-skip-no-metadata
-          Skip variables without any metadata (XCP_UNIT / XCP_LIMITS / XCP_COMMENT) when creating an A2L file from an ELF file. Only variables that have at least one metadata annotation are included in the A2L output
-
-      --elf-unit-filter <ELF_UNIT_FILTER>
-          Regex pattern to filter variables by their compilation unit (source file) name. Only variables defined in compilation units whose name matches are included in the A2L output. If not specified (or empty), variables from all compilation units are registered
-          
-          [default: ""]
-
-      --bin <BIN>
-          Specify the pathname of a binary file (Intel-HEX) for calibration parameter segment data
-          
-          [default: ""]
-
-      --upload-bin
-          Upload all calibration segments working page data from target and store into a binary file. Requires that the XCP server supports GET_ID A2L upload. A .bin file is an XCPlite persistence file with the event list and the context list (conv.contexts in the A2L file), a .hex file contains the segment data only
-
-      --download-bin
-          Download all calibration segments working page data in a binary file to the target
-
-      --list-mea <LIST_MEA>
-          Lists all specified measurement variables (regex) found in the A2L file
-          
-          [default: ""]
-
-      --mea <MEA>...
-          Specify variable names for DAQ measurement (list), may be list of names separated by space or single regular expressions (e.g. ".*")
-
-      --default-event <ID|NAME>
-          Event for variables without a fixed event (global variables and static variables in functions without an event trigger), given by event id or event name. Used for their DAQ measurement and assigned to them as default event when an A2L file is created from an ELF file. An event name is looked up in the event list (from the XCP server, the ELF file or the A2L file), xcpclient aborts when it is not found. If not specified, such variables get no event and can not be measured with xcpclient
-
-      --time <TIME>
-          Time limit measurement duration to n s. 0 means infinite
+      --elf-unit-limit-min <N>
+          Parse only compilation units >= n
           
           [default: 0]
 
-      --csv <CSV>
-          Save measurement data to a CSV file. If not specified, data is printed to the console. CSV format: time_ns,daq,name,value,unit  (one row per measurement sample). Values are physical values (factor and offset applied), the value of an enum is its label
+      --elf-var-filter <REGEX>
+          Register only ELF variables whose names match this regex
           
-          [default: ""]
+          If not specified (or empty), all variables are registered.
+
+      --elf-skip-no-metadata
+          Skip ELF variables without metadata (XCP_UNIT, XCP_LIMITS, XCP_COMMENT)
+          
+          Only variables that have at least one metadata annotation are included in the A2L output.
+
+      --elf-unit-filter <REGEX>
+          Register only ELF variables from compilation units (source files) whose names match this regex
+          
+          If not specified (or empty), variables from all compilation units are registered.
+
+Calibration:
+      --bin <FILE>
+          Pathname of the parameter file (.bin or Intel-HEX .hex) for --upload-bin and --download-bin
+
+      --upload-bin
+          Upload the working page data of all calibration segments into a parameter file
+          
+          Requires that the XCP server supports GET_ID A2L upload. A .bin file is an XCPlite persistence file with the
+          event list and the context list (conv.contexts in the A2L file), a .hex file contains the segment data only.
+
+      --download-bin
+          Download the working page data of all calibration segments from a parameter file to the target
+
+      --list-cal <REGEX>
+          List the calibration variables in the A2L file matching this regex
+
+      --cal <NAME> <VALUE>
+          Set a calibration variable to a value
+
+Measurement:
+      --list-mea <REGEX>
+          List the measurement variables in the A2L file matching this regex
+
+      --mea <NAME>...
+          Measure these variables with DAQ, names separated by space or regular expressions (e.g. ".*")
+
+      --default-event <ID|NAME>
+          Event for variables without a fixed event, given by event id or event name
+          
+          Applies to global variables and static variables in functions without an event trigger. Used for their DAQ
+          measurement and assigned to them as default event when an A2L file is created from an ELF file. An event name
+          is looked up in the event list (from the XCP server, the ELF file or the A2L file), xcpclient aborts when it
+          is not found. If not specified, such variables get no event and can not be measured with xcpclient.
+
+      --time <S>
+          Measurement duration in s, 0 means infinite
+          
+          [default: 0]
+
+Measurement output files:
+      --csv <FILE>
+          Save measurement data to a CSV file instead of printing it to the console
+          
+          CSV format: time_ns,daq,name,value,unit (one row per measurement sample). Values are physical values (factor
+          and offset applied), the value of an enum is its label.
 
       --mdf <FILE>
-          Save measurement data to an ASAM MDF 4.1 file. One channel group per DAQ list, the payload of the DAQ packets is stored as received. Values are raw values, the MDF file contains the conversions (factor and offset, enum labels) and units. May be combined with --csv and --perfetto
+          Save measurement data to an ASAM MDF 4.1 file
           
-          [default: ""]
+          One channel group per DAQ list, the payload of the DAQ packets is stored as received. Values are raw values,
+          the MDF file contains the conversions (factor and offset, enum labels) and units. May be combined with --csv,
+          --mcap and --perfetto.
 
       --mcap <FILE>
-          Save measurement data to an MCAP file (https://mcap.dev). One channel per DAQ list, the topic is the event name, the payload of the DAQ packets is stored as received, as ros1 messages. Values are raw values, MCAP has no conversions or units, they are in the comments of the message definitions and in the channel metadata. May be combined with --csv, --mdf and --perfetto
+          Save measurement data to an MCAP file (https://mcap.dev)
           
-          [default: ""]
+          One channel per DAQ list, the topic is the event name, the payload of the DAQ packets is stored as received,
+          as ros1 messages. Values are raw values, MCAP has no conversions or units, they are in the comments of the
+          message definitions and in the channel metadata. May be combined with --csv, --mdf and --perfetto.
 
       --perfetto <FILE>
-          Save measurement data to a trace file for Perfetto (Chrome Trace Event JSON format, open it with https://ui.perfetto.dev). Spans (DaqSpan) are slices in a track per context and thread, numeric signals are counter tracks, enum signals are state tracks, span links (xcp::LinkSpan) are flows (arrows) from the producer span to the consumer span. The span and link signals of the contexts needed for the trace are added to the measurement, see --trace-auto. May be combined with --csv, the added signals are not written to the CSV file
+          Save measurement data to a trace file for Perfetto (https://ui.perfetto.dev)
           
-          [default: ""]
+          Chrome Trace Event JSON format. Spans (DaqSpan) are slices in a track per context and thread, numeric signals
+          are counter tracks, enum signals are state tracks, span links (xcp::LinkSpan) are flows (arrows) from the
+          producer span to the consumer span. The span and link signals of the contexts needed for the trace are added
+          to the measurement, see --trace-auto. May be combined with --csv, the added signals are not written to the CSV
+          file.
 
       --trace-auto <LEVEL>
-          Trace signals added to the measurement with --perfetto: off (none, only hints which signals are missing), context (the spans of the contexts of the measured signals), links (also the span links of these contexts and, if there are any, the spans of all contexts as possible producers), all (the spans and span links of all contexts). The context of a signal is the prefix of its name or of the name of its event (<context>.<name>)
+          Trace signals added to the measurement with --perfetto
+          
+          off: none, only hints which signals are missing.
+          
+          context: the spans of the contexts of the measured signals.
+          
+          links: also the span links of these contexts and, if there are any, the spans of all contexts as possible
+          producers.
+          
+          all: the spans and span links of all contexts.
+          
+          The context of a signal is the prefix of its name or of the name of its event (<context>.<name>).
           
           [default: links]
           [possible values: off, context, links, all]
 
-      --list-cal <LIST_CAL>
-          Lists all specified calibration variables (regex) found in the A2L file
-          
-          [default: ""]
-
-      --cal <NAME> <VALUE>
-          Set calibration variable to a value (format: "variable_name value")
-
+Test:
       --test
-          --test Execute a test sequence on the XCP server
+          Execute a test sequence on the XCP server
+          
+          If there is a calibration segment named params (see daq_test, c_demo), a calibration consistency test is
+          performed.
 
-  -y, --yes
-          Automatically confirm EPK mismatch and other safety warnings. Use in scripts to suppress interactive prompts
+MCP server:
+      --mcp
+          Run as MCP server on stdin/stdout, offering the xcpclient functions as tools to an AI assistant
+          
+          The MCP host starts xcpclient with this option, xcpclient keeps the connection to the target between the tool
+          calls, see docs/MCP.md. --dest-addr, --port, --udp/--tcp, --bind-addr, --a2l, --elf and --default-event are
+          the defaults of the connect tool. Log output goes to stderr.
 
-  -h, --help
-          Print help (see a summary with '-h')
+      --mcp-read-only
+          Do not offer the tools which change the target (writing calibration parameters)
 
-  -V, --version
-          Print version
+      --mcp-dir <DIR>
+          Directory for the files the MCP server writes on its own
+          
+          These are the A2L file uploaded from the target, XCP_104.aml and an A2L file created from an ELF file without
+          a given name. Default is the cache directory of the user for xcpclient, never the working directory, where an
+          XCPlite application started in the same directory writes its A2L file.
 ```
 
+
+## MCP server mode
+
+With `--mcp`, xcpclient is a server for the Model Context Protocol (MCP): an AI assistant such as Claude Code operates the target in natural language ("connect to 192.168.0.206", "what is counter_max", "set it to 2000", "record all signals for a minute"). xcpclient keeps the XCP connection between the requests. [docs/MCP.md](../../docs/MCP.md) explains MCP, the tools and their limits.
+
+The MCP host starts xcpclient, it is not started by hand. For Claude Code, in the directory of the project:
+
+```bash
+claude mcp add xcp -- xcpclient --mcp --dest-addr 192.168.0.206 --udp
+```
+
+Tools:
+
+| Tool | |
+|---|---|
+| `xcp_status` | State of the connection, target, EPK, A2L, running measurement |
+| `xcp_connect`, `xcp_disconnect` | Connect to a target and load its A2L description |
+| `xcp_list_measurements`, `xcp_list_parameters` | Find signals and parameters by regular expression |
+| `xcp_read` | Current values of parameters and signals |
+| `xcp_write` | Set a calibration parameter, not available with `--mcp-read-only` |
+| `xcp_sample` | Observe signals for some seconds: count, rate, min, max, mean, last value |
+| `xcp_measure_start`, `xcp_measure_stop` | Record signals into a file (MDF, MCAP, CSV, Perfetto) in the background |
+| `xcp_load_a2l` | Load or replace the A2L description of the connected target: from an A2L file, created from an ELF file, or uploaded |
+| `xcp_create_a2l` | Create an A2L file from an ELF file, offline or with the events and calibration segments of the connected target |
+| `xcp_save_parameters` | Save all calibration segments of the target into a `.hex` or `.bin` file |
+| `xcp_load_parameters` | Load a `.hex` file into the target, not available with `--mcp-read-only` |
+
+A recording without a given file name is written to the working directory as `<target>_<date>_<time>.mf4`, a parameter file as `<target>_<date>_<time>.hex`. Measurement and parameter files are never overwritten, an A2L file only with `overwrite`. The warnings xcpclient logs while a tool runs (variables of an ELF file which can not be described, an A2L file which differs from the target) are part of the tool result.
+
+The target options (`--dest-addr`, `--port`, `--udp`/`--tcp`, `--a2l`, `--elf`, `--default-event`) are the defaults of `xcp_connect`, the default protocol is UDP. The uploaded A2L file and `XCP_104.aml` are written into a directory of their own (`--mcp-dir`, default `~/Library/Caches/xcpclient` on macOS and `~/.cache/xcpclient` on Linux), so the server can run in the working directory of the application without touching its files. `xcp_status` shows the path of the A2L file. File names in tool arguments (`a2l`, `elf`) are relative to the working directory the host starts xcpclient in. The log output is on stderr.
+
+The scope of xcpclient is the same in this mode, see [Scope](#scope).
 
 ## Build and Install
 
@@ -238,6 +435,12 @@ cargo install --path . --locked
 ```bash
 cd tools/xcpclient
 cargo test
+```
+
+The MCP server mode has end-to-end scenarios against a running target (`build/hello_xcp`) in addition, see [tests/mcp/README.md](tests/mcp/README.md):
+
+```bash
+python3 tests/mcp/run_all.py
 ```
 
 

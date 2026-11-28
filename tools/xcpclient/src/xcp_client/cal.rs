@@ -202,7 +202,8 @@ impl XcpClient {
     /// Load complete calibration segments from an Intel-HEX file.
     /// Empty segments and segments absent from the file are skipped. Partial data,
     /// conflicting overlaps, and address overflow are rejected before any XCP writes.
-    pub async fn load_calibration_segments_from_file<P: AsRef<std::path::Path>>(&mut self, bin_path: &P) -> Result<(), Box<dyn Error>> {
+    /// Returns the number of segments loaded
+    pub async fn load_calibration_segments_from_file<P: AsRef<std::path::Path>>(&mut self, bin_path: &P) -> Result<usize, Box<dyn Error>> {
         info!("Load calibration segments from file {}", bin_path.as_ref().display());
 
         // Read the Intel-Hex file
@@ -291,6 +292,7 @@ impl XcpClient {
         drop(hex_ranges);
         drop(file_content);
 
+        let segment_count = downloads.len();
         for (seg_index, seg_name, addr_ext, addr, data) in downloads {
             info!(" Load segment {} (index={} addr={}:0x{:08X} length={})", seg_name, seg_index, addr_ext, addr, data.len());
             self.set_mta(addr_ext, addr).await?;
@@ -298,13 +300,14 @@ impl XcpClient {
             debug!("  Downloaded {} bytes to segment {}", data.len(), seg_name);
         }
 
-        Ok(())
+        Ok(segment_count)
     }
 
     // Save the working page data of all calibration segments to a HEX or BIN file
     // A BIN file is an XCPlite persistence file, it also contains the event list and the context list
     // contexts is the context list of the target (conv.contexts in the A2L file), events named <context>.<name> are written as events of this context
-    pub async fn save_calibration_segments_to_file<P: AsRef<std::path::Path>>(&mut self, bin_path: &P, contexts: &[ContextDescriptor]) -> Result<(), Box<dyn Error>> {
+    // Returns the number of segments saved
+    pub async fn save_calibration_segments_to_file<P: AsRef<std::path::Path>>(&mut self, bin_path: &P, contexts: &[ContextDescriptor]) -> Result<usize, Box<dyn Error>> {
         info!("Save calibration segments to file {}", bin_path.as_ref().display());
 
         // The file format is selected by the extension
@@ -378,7 +381,7 @@ impl XcpClient {
 
         info!("Successfully saved {} segment(s) to {}", cal_seg_desc.len(), bin_path.as_ref().display());
 
-        Ok(())
+        Ok(cal_seg_desc.len())
     }
 }
 
@@ -544,7 +547,7 @@ mod tests {
             commands
         });
         tokio::time::timeout(Duration::from_secs(5), async {
-            let result = client.load_calibration_segments_from_file(&fixture.0).await;
+            let result = client.load_calibration_segments_from_file(&fixture.0).await.map(|_| ());
             finish.send(()).unwrap();
             (result, server.await.unwrap())
         })

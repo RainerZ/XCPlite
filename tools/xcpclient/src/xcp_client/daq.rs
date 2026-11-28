@@ -202,6 +202,23 @@ fn split_daq_lists(objects: &[XcpClientMeasurementObject], max_odt_entry_count: 
     Ok(daq_lists)
 }
 
+/// Description of a measurable object
+#[derive(Debug, Clone)]
+pub struct XcpMeasurementInfo {
+    pub name: String,
+    /// Address with the fixed or default event, if there is one
+    pub a2l_addr: A2lAddr,
+    /// Type of one element
+    pub a2l_type: A2lType,
+    /// Array dimensions x, y (MATRIX_DIM), [1, 1] for a scalar
+    pub dim: [u16; 2],
+    pub unit: String,
+    /// Name of the event, None if the object has no event or the event is not in the event list
+    pub event_name: Option<String>,
+    /// The object is a CHARACTERISTIC with an event
+    pub characteristic: bool,
+}
+
 /// A registry instance is measurable, if it is a MEASUREMENT, or a CHARACTERISTIC with an event
 /// (IF_DATA XCP DAQ_EVENT with a fixed event or a default event list, the A2L reader takes the first event of the list)
 pub(crate) fn is_measurable(instance: &xcp_registry::McInstance) -> bool {
@@ -319,6 +336,55 @@ impl XcpClient {
             s.push_str(", array larger than one DAQ list can not be measured");
         }
         Some(s)
+    }
+
+    /// Description of a measurable instance as data: address, event, type, dimensions and unit, None if it can not be measured
+    pub fn measurement_info(&self, name: &str) -> Option<XcpMeasurementInfo> {
+        let instance = self.measurable_instance(name)?;
+        let o = self.measurement_object_from_instance(name, instance);
+        Some(XcpMeasurementInfo {
+            name: o.get_name().to_string(),
+            a2l_addr: o.get_a2l_addr(),
+            a2l_type: o.get_a2l_type(),
+            dim: [instance.x_dim(), instance.y_dim()],
+            unit: o.get_conversion().unit().to_string(),
+            event_name: o.get_a2l_addr().event.and_then(|event| self.event_name(event)),
+            characteristic: instance.object_type() == xcp_registry::McObjectType::Characteristic,
+        })
+    }
+
+    /// The object is a calibration object (CHARACTERISTIC), None if there is no object with this name
+    pub fn is_characteristic(&self, name: &str) -> Option<bool> {
+        let registry = self.registry.as_ref()?;
+        let instance = registry.instance_list.get_instance(name, xcp_registry::McObjectType::Unspecified, None)?;
+        Some(instance.object_type() == xcp_registry::McObjectType::Characteristic)
+    }
+
+    /// Upload the current value of a measurement or calibration object from the XCP server (polling, SHORT_UPLOAD)
+    /// Returns the physical values of all elements with the unit, one value for a scalar
+    /// The object does not need an event. Whether its address can be uploaded is decided by the XCP server
+    pub async fn upload_value(&mut self, name: &str) -> Result<(Vec<A2lValue>, String), Box<dyn Error>> {
+        let registry = self.registry()?;
+        let Some(instance) = registry.instance_list.get_instance(name, xcp_registry::McObjectType::Unspecified, None) else {
+            return Err(Box::new(XcpError::new(ERROR_NOT_FOUND, 0)) as Box<dyn Error>);
+        };
+        let o = self.measurement_object_from_instance(name, instance);
+        let size = o.size();
+        let max_size = (self.max_cto_size as usize).saturating_sub(1).min(255);
+        if size == 0 || size > max_size {
+            return Err(format!("{} has {} bytes, only values of 1 to {} bytes can be uploaded", name, size, max_size).into());
+        }
+        let a2l_addr = o.get_a2l_addr();
+        let a2l_type = o.get_a2l_type();
+        let resp = self.short_upload(a2l_addr.addr, a2l_addr.ext, size as u8).await?;
+        let values: Option<Vec<A2lValue>> = resp[1..=size]
+            .chunks_exact(a2l_type.size.max(1))
+            .map(|bytes| a2l_type.decode(bytes).map(|raw| o.get_conversion().convert(raw)))
+            .collect();
+        match values {
+            Some(values) if !values.is_empty() => Ok((values, o.get_conversion().unit().to_string())),
+            _ => Err(format!("{} is not a basic type value ({})", name, a2l_type).into()),
+        }
     }
 
     pub fn get_measurement_object(&self, handle: XcpMeasurementObjectHandle) -> &XcpClientMeasurementObject {
@@ -499,9 +565,10 @@ impl XcpClient {
         let res = self.stop_all_daq_lists().await;
 
         // Send running=false throught the DAQ control channel to the receive task
+        // If the receive task has terminated (connection closed), the measurement is completed locally all the same
         self.task_control.running = false;
         if let Some(tx_task_control) = self.tx_task_control.as_ref() {
-            tx_task_control.send(self.task_control).await?;
+            let _ = tx_task_control.send(self.task_control).await;
         }
 
         // Stop the DAQ decoder
@@ -513,6 +580,24 @@ impl XcpClient {
         self.measurement_object_list.clear();
 
         res
+    }
+
+    /// Complete a measurement locally, without commands to the XCP server: for a measurement which could not be started and
+    /// for a connection which is lost. The DAQ decoder is stopped, its writers complete their files
+    pub fn abort_measurement(&mut self, started: bool) {
+        self.task_control.running = false;
+        if let Some(tx_task_control) = self.tx_task_control.as_ref() {
+            let _ = tx_task_control.try_send(self.task_control);
+        }
+        if started && let Some(daq_decoder) = self.daq_decoder.as_ref() {
+            daq_decoder.lock().stop();
+        }
+        self.measurement_object_list.clear();
+    }
+
+    /// Number of measurement objects created for the next measurement
+    pub fn measurement_object_count(&self) -> usize {
+        self.measurement_object_list.len()
     }
 }
 

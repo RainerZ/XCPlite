@@ -38,6 +38,7 @@ pub const CRC_TIMECORR_STATE_CHANGE: u8 = 0x35;
 pub const CC_CONNECT: u8 = 0xFF;
 pub const CC_DISCONNECT: u8 = 0xFE;
 pub const CC_SHORT_DOWNLOAD: u8 = 0xED;
+pub const CC_GET_STATUS: u8 = 0xFD;
 pub const CC_SYNC: u8 = 0xFC;
 pub const CC_GET_COMM_MODE_INFO: u8 = 0xFB;
 pub const CC_GET_ID: u8 = 0xFA;
@@ -295,6 +296,7 @@ pub enum XcpCommand {
     TimeCorrelationProperties = CC_TIME_CORRELATION_PROPERTIES as isize,
     GetCommModeInfo = CC_GET_COMM_MODE_INFO as isize,
     GetVersion = CC_GET_VERSION as isize,
+    GetStatus = CC_GET_STATUS as isize,
     Undefined = 0,
 }
 
@@ -341,6 +343,7 @@ impl From<u8> for XcpCommand {
             CC_TIME_CORRELATION_PROPERTIES => XcpCommand::TimeCorrelationProperties,
             CC_GET_COMM_MODE_INFO => XcpCommand::GetCommModeInfo,
             CC_GET_VERSION => XcpCommand::GetVersion,
+            CC_GET_STATUS => XcpCommand::GetStatus,
             // Used to print the command of an error only, an unknown command code is not an error here
             _ => XcpCommand::Undefined,
         }

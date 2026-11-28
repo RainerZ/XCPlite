@@ -23,6 +23,15 @@ pub mod daq_writer;
 pub mod mcap_writer;
 pub mod mdf_writer;
 pub mod perfetto_writer;
+// The current values of a running measurement: last samples and window statistics
+pub mod value_writer;
 
 // A session with an XCP server: the steps xcpclient is made of
 pub mod session;
+
+// Capture of warnings and errors of the log, to return them with the result of an operation
+pub mod log_capture;
+
+// MCP server mode: xcpclient as a tool server for AI assistants, see docs/MCP.md
+#[cfg(feature = "mcp")]
+pub mod mcp;

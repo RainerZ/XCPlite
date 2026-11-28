@@ -2,12 +2,12 @@
 
 All notable changes to XCPlite are documented in this file.
 
+The changes of the `xcpclient` tool are documented in [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md), this file only notes the xcpclient version of each release.
+
 
 ## [V2.4.5]
 
-xcpclient:
-- Support measurment of arrys
-- Added an mcp server mode
+- xcpclient V4.3.0: measurement of arrays, MCP server mode, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md).
 
 
 ## [V2.4.3]
@@ -28,22 +28,10 @@ Additions for contexts, spans and span links:
 - Span names are registered at link time (`OPTION_DAQ_SPAN_SECTION_REGISTRATION`, default), or at runtime where linker sections are not available (Windows, SHM mode).
 - New option `OPTION_DAQ_SPAN_THREAD` (not defined by default): records the thread index with each span, for several threads in one context. Experimental, might be removed again.
 
-Changes in `xcpclient` (xcpclient V4.2.0):
+Tools:
 
-- New option `--perfetto <file>`: writes spans, span links and signals as a trace file for Perfetto (Chrome Trace Event JSON format), see `tools/xcpclient/README.md`. The span and link signals needed for the trace are automatically added to the measurement (option `--trace-auto`).
-- Print values in physical unit or as enum strings in console and csv. Enum conversion is used to display span names. 
-- The CSV file has a new column `unit`.
-- New option `--mdf <file>`: writes an MDF4 file.
-- `--upload-bin` writes the new context list and events with their context id, if there are any.
-- `tools/bintool` and the BIN reader of xcpclient show the context list and the memory segment numbers.
-- Improved timestamp wraparound detection for very sporadic events.
-- The console output of `--mea` shows events by name, `EVENT: <event> (id=<id>, daq=<daq>), ...`.
-- Measurement (`--mea`) is no longer limited to 123 signals or one packet per event.
-- Measurement setup merges signals of an event which are adjacent in memory. 
-- Measurement reports a signal which is too large for the XCP server and more than 1024 DAQ lists as an error. These cases paniced before.
-- Fixed reporting of lost DAQ packets.
-- The UDP socket requests an 8 MB receive buffer to reduce UDP packet loss on high data rate.
-- Fixed A2L and ELF upload of files smaller than the maximum command size, they were reported as not available. `GET_ID` size 0 is reported as file not available without sending `UPLOAD`.
+- xcpclient V4.2.0: Perfetto trace export of spans and span links, MDF4 and MCAP measurement files, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md).
+- `tools/bintool` shows the context list and the memory segment numbers.
 
 Bugfixes in A2L and ELF file upload (#151, contributed by pamirmundt):
 
@@ -63,7 +51,7 @@ Changed core files for events with named context:
 
 ## [V2.3.5]
 
-- The registry crate `xcp_registry` is used from crates.io (version 0.1) instead of as a git dependency on xcp-lite. It has moved to its own repository, <https://github.com/RainerZ/xcp-registry>
+- xcpclient V4.0.1 (version not increased): the registry crate `xcp_registry` is used from crates.io, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md).
 
 
 ## [V2.3.4]
@@ -95,24 +83,7 @@ Changed core files for events with named context:
 
 - `XcpCreateEpk`: the EPK string variable is renamed from `gXcpEpkString` to `xcp_epk__`. Its address is stored in a volatile pointer, so the string is no longer removed by the compiler in optimized builds, or by the linker with `--gc-sections`, when there is no `xcp_epk` section (no `OPTION_SECTION_REGISTRATION`).
 
-- xcpclient changes (xcpclient V4.0.1):
-    - The DWARF location expression parser no longer floods the log with warnings about variables which are dropped anyway by the filters, or which are markers the XCPlite macros generate in the code of the application (`evt__`, `trg__`, `cap__`, `xcp_meta__`, `evt_id_<event>`, ...).
-    - A local variable without any `DW_AT_location` in the debug information is now reported with a warning instead of silently missing from the A2L file.
-    - The messages of the location expression parser now name the compilation unit and the declaration line of the variable (`main_c:178: 'delay': ...`), the variable name alone does not identify which of several variables with that name is meant.
-    - A variable which the compiler spread over several locations (`DW_OP_piece`) is now reported as split into slices. A single piece covering only a part of the variable was silently registered with the address of the slice before, it is now rejected like the multi piece case.
-    - Static variables in functions now always get the function prefix in the A2L name (`main.counter`), before only when the name was used more than once. A metadata marker in the function did not reach a static variable with a unique name. The default page of a calibration segment declared in a function keeps the segment name. Renames objects in existing A2L files, e.g. `evt_id_<event>` of an event created in a function.
-    - The segment index variables `calseg_id_<segment>` and `calblk_id_<block>` of the calibration segment declaration macros are no longer registered as measurements.
-    - `--fix-a2l` now rewrites the A2L file with the event ids and calibration segment numbers of the target, the original is kept as `<file>.a2l.bak`. The event ids in the addresses of dynamic addressing mode (stack variables) and the segment numbers in calibration segment relative addresses are corrected as well, it panicked on those before. Only A2L files created by xcpclient are accepted. 
-    - Bugfix: without the `xcp_cals` section, the `epk` calibration segment was not always numbered 0 in the A2L file, the segments were numbered in the order of the debug information, where the application usually comes before the library.
-    - Without the `xcp_cals` section (no `OPTION_SECTION_REGISTRATION`), a calibration segment declared with `CalSegDecl`, `CalBlkDecl` or `CalSegDeclRef` is reported, the target never creates it. More than one calibration segment is reported as well, their numbers are in declaration order, the target numbers them in creation order.
-    - Without the `xcp_epk` section (no `OPTION_SECTION_REGISTRATION`), the EPK string is read from the variable `xcp_epk__` of `XcpCreateEpk`, using its DWARF location and the initialized data of the ELF file. A missing `XcpCreateEpk` call, or an EPK string which the compiler or linker removed, is reported with a warning and a hint what to do.
-    - `ADDR_EPK` is now the address the target maps to its EPK (`XCP_ADDR_EPK`, `0xFFFFFF00` with absolute, `0x80000000` with segment relative addressing of calibration segments), not the address of the `XcpCreateEpk` string. The target keeps its own copy of the EPK given to `XcpInit`, the EPK check of a tool now reads the EPK the target actually uses.
-    - The EPK in the A2L file is truncated to 31 characters and space, tab and colon are replaced with an underscore, as `XcpInit` does on the target. A changed EPK is reported with a warning.
-    - The `epk` calibration segment has the size of the target segment (32 bytes) in an offline A2L file, not the length of the EPK string. In online mode, the different address of the `epk` segment of the target is no longer reported as a mismatch.
-    - Bugfix: in online mode with absolute addressing, a calibration segment which the target reported was not used to find the calibration variables in it.
-    - Bugfix: `--list-cal` and `--cal` with `--elf` panicked on a calibration segment struct. The registry created from the ELF file is now flattened like a loaded A2L file, the A2L file keeps the typedef structure.
-    - `--test` collects GET_DAQ_CLOCK latency statistics
-    - New option `--embed-aml`
+- xcpclient V4.0.1: offline A2L generation without `OPTION_SECTION_REGISTRATION`, EPK handling, `--fix-a2l` rewrites the A2L file, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md).
 
 
 
@@ -161,20 +132,9 @@ Changed core files for events with named context:
     - Missing xcp_meta section added to ld.
     - The lwIP socket path now reports a segment that does not fit the link MTU. lwIP sets no DF option.
 
-- xcpclient related changes (xcpclient V4.0.0):
-    - New option `--default-event <id>`: event used for the DAQ measurement of variables without a fixed event, such as global variables.
-    - Captured local variables of the event triggers are registered from the capture structs (`cap__<event>`).     
-    - New command line option elf-unit-limit-min, to reduce large logs and unwanted A2L entries.
-    - Improved warnings for clangs non frame based based locals.
-    - The addressing mode signature of the target (`XCPLITE__<signature>`) is read from the ELF symbol table instead of the DWARF variables, so it is found when the debug information of the XCPlite library is not parsed or present.
-    - The compilers which built the ELF file are logged.
-    - Metadata markers (`XCP_COMMENT`, `XCP_UNIT`, `XCP_LIMITS`, `XCP_READ_WRITE`) of local variables in C compilation units built with GCC are applied again.
-    - A metadata marker at file scope is no longer applied to the local variables of the same name in functions.
-    - Functions with an event trigger which the compiler inlined are detected (abstract instance, inlined copies and the out of line copy) and stack frame relative variables are not registered.
-    - DWARF 5 location lists referenced by index (`DW_FORM_loclistx`, clang) are evaluated like the location lists of DWARF 4.
-    - A location list is accepted only if all its entries describe the same memory location, which replaces the previous unsafe heuristic approach.
-    - The relative addresses of local variables are now the offsets from the DWARF frame base without correction, the call frame information parser is removed. The trigger macros pass a matching base to the target.
-    - `xcp_get_frame_addr()` in `xcplib.h` is `__builtin_dwarf_cfa()` under GCC (CFA on every architecture) and `__builtin_frame_address(0)` under clang (frame pointer register).
+- `xcp_get_frame_addr()` in `xcplib.h` is `__builtin_dwarf_cfa()` under GCC (CFA on every architecture) and `__builtin_frame_address(0)` under clang (frame pointer register). Stack relative addresses of A2L files created by xcpclient V4.x need this version.
+
+- xcpclient V4.0.0, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md).
 
 - New raw Ethernet transport `OPTION_ENABLE_UDP_RAW`: XCP on UDP/IPv4 implemented inside xcplib on top of a thin raw Ethernet HAL, for targets without a TCP/IP stack. See `docs/SOCKET_RAW.md`.
     - New build configuration `raw` (`src/xcplib_raw_cfg.h`, `build-raw/`) with the new example `udp_raw_demo` (for testing on Linux only).
@@ -202,17 +162,8 @@ Changed core files for events with named context:
 
 ## [V2.1.12]
 
-- xcpclient related changes (xcpclient V3.0.10):
-    - Improved variable registration for global and static variables.
-    - Global variables and local static variables in functions without event trigger are registered, but not associated to any specific default DAQ event.
-    - Unique typedef names for struct/class types with the same name in different namespaces, classes or functions (`motor_control.Input`, `valve_control.Input`). Previously all variables of such types referenced the first registered typedef and were shown with the wrong type.
-    - Global variables with the same name in different namespaces are registered with namespace qualified names (`motor_control.input`, `valve_control.input`) instead of dropping all but the first one.
-    - A struct type which is used for measurement and for calibration variables gets separate typedefs.
-    - The GCC declaration and definition entries of a namespace scope variable are merged, they no longer produce duplicate instance errors.
-    - Variables with internal linkage in a namespace and without DWARF location (e.g. metadata markers `XCP_COMMENT(motor_control__input, ...)` inside a namespace) are resolved by their mangled symbol name.
-    - Metadata annotations placed in the same namespace or function as the variable no longer need a scope prefix (`XCP_COMMENT(input, ...)` in namespace `motor_control` annotates `motor_control.input`), explicit prefixes keep working. Metadata for the typedef fields of namespace qualified instances.
-    - Local variables without a DWARF location (optimized away) are no longer resolved to the address of a global variable with the same name, only symbols with local binding are considered for them.
-    - no_a2l_demo, no_a2l_demo_cpp: more demo cases, no_a2l_demo_cpp demonstrates types and variables with the same name in different namespaces.
+- xcpclient V3.0.10: improved offline A2L generation for global and static variables and C++ namespaces, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md).
+- no_a2l_demo, no_a2l_demo_cpp: more demo cases, no_a2l_demo_cpp demonstrates types and variables with the same name in different namespaces.
 - Documentation: new `docs/OFFLINE_A2L.md` for the offline A2L generation with xcpclient (workflow, naming rules, supported types, diagnostics), `docs/TECHNICAL.md` keeps the library topics and the instrumentation marker contract, xcpclient and no_a2l_demo READMEs updated
     
 
@@ -228,19 +179,7 @@ Changed core files for events with named context:
     - Make FreeRTOS queue segment count configurable.
 
 - Build cleanup: `shm.h` and `persistence.h` are only included where the corresponding feature is enabled, reducing overhead for minimal embedded source subsets
-- `xcpclient` related changes: 
-    - EPK validation — A2L file EPK is now compared against the EPK reported by the target; mismatch prints a warning and aborts unless overridden with `--yes`.
-    - Dependency on `mc_registry` switched to public `RainerZ/xcp-lite` 3.0.9.
-    - Improved error message when AML file is not found.
-    - Uses ELF section boundary variables as fallback event detection when `xcp_evts` section is absent.
-    - Fixed ESP32 image containing multiple DROM segments.
-    - Handle C++ class types and fix empty typedefs for template structs in offline A2L generation.
-    - The DWARF type reader was merged up to a2ltool 3.4.1.
-    - Unique names for field typedefs in the A2L writer (`xcp_registry` update).
-    - Fixed the size of pointer members in structs and classes.
-    - No panic on ELF files without `xcp_evts` section or with duplicate event markers.
-    - README section on supported types and limitations, unit tests with a C++ type fixture.
-    - Fixed free_rtos_esp32_demo linker map section based event detection when dynamic event management is disabled.
+- xcpclient V3.0.9: EPK validation, C++ class types, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md).
 - Documentation improvements.
 - Fixed metadata macros XCP_LIMITS (missing ;) and XCP_READ_WRITE ([]).
 - Fixed link type_detection_test against xcplite for XCPLITE_CONFIGURATION define.
@@ -258,12 +197,9 @@ Changed core files for events with named context:
 - Windows build fixes.
 - Removed code definition of `_GNU_SOURCE`, made it public in CMakeLists.txt.
 
-- `xcpclient` related changes:
-    - New `XCP_READ_WRITE` metadata macro.
-    - Added enum conversion support in ELF->A2L converter.
-    - Updated `mc_registry`, `gimli` and `object` crate dependencies to latest versions.
-    - New options `--elf_skip_no_metadata` and `--config <xcpclient.toml>`.
-    - Various bugfixes in debuginfo parsing and `no_a2l_demo` event handling.
+- New `XCP_READ_WRITE` metadata macro.
+
+- xcpclient V3.0.9 (released with V2.1.11): enum conversion, new options `--elf_skip_no_metadata` and `--config`, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md).
 
 
 ## [V2.1.6] 
@@ -272,7 +208,7 @@ Changed core files for events with named context:
 - Optimizations for microcontroller/RTOS builds, optimized locking (critical section instead of mutex) and static allocated queue (new ´queue32m.c´).
 - Link-time, deterministic event id assignment (´tXcpEventDescriptor´ in section ´xcp_evts´).
 - Implemented ´XCP_LIMIT´, XCP_COMMENT and ´XCP_UNIT´ metadata definition to support A2L generation in RTOS use cases (new linker section ´xcp_meta´). See example no_a2l_demo for details.
-- ´xcpclient´ tool refactoring and bugfixes, xcp_registry dependency switched back to ´xcplite´ crate main on VectorGrp.
+- xcpclient V3.0.1, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md).
 - Made OPTION_DAQ_EVENT_LIST an configuration override and removed special configuration handling with XCPLIB_FOR_RUST.
 - Enabled 1ms event ´async´ (event id 0) as default event for global variables in RTOS builds.
 - ´XcpGetEcuEpk´ renamed to ´XcpGetLocalEpk´ for clarity in SHM mode.
@@ -286,6 +222,7 @@ Changed core files for events with named context:
 - freertos_stm32_demo with FreeRTOS and lwip for STM32 microcontrollers
 - More flexibility how to provide the DAQ timebase
 - Single source demo code for all FreeRTOS examples
+- xcpclient V2.1.3 (no further changes), see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md)
 
 
 ## [V2.1.3]
@@ -293,7 +230,7 @@ Changed core files for events with named context:
 - cmake build system revisited, build configurations and build options
 - Improved convenience build script
 - README files for all example applications
-- xcpclient only uses the registry (xcp-lite xcp_registry crate), not the full Rust xcp-lite stack
+- xcpclient (version not increased, 2.1.0): only uses the registry (xcp-lite xcp_registry crate), not the full Rust xcp-lite stack, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md)
 
 
 ## [V2.1.0]
@@ -304,7 +241,7 @@ Changed core files for events with named context:
 - Improved compatibility for 32 bit microcontroller RTOS operating systems (like freeRTOS, zephyr, ThreadX etc.)
 - Improved support for offline A2L creation from ELF files, file system dependency is now optional 
 - XCP event and segment descriptor memory sections to preregister events and calibration segments/block in XcpInit, for deterministic event numbers without .BIN file
-- The A2L generator in xcpclient can create an A2L file template with XCP events and segments from the ELF file only, by inspecting the event and segment descriptor memory sections
+- xcpclient V2.1.0: the A2L generator can create an A2L file template with XCP events and segments from the ELF file only, by inspecting the event and segment descriptor memory sections, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md)
 - Optional custom GET_ID to download the ELF file instead of the A2L file
 - Addressing scheme XCPLITE__AXSDD, memory access via callbacks, no calibration segment management 
 
@@ -342,7 +279,7 @@ Changed core files for events with named context:
 - Refactoring in platform.c socket abstraction: socket error handling, OPTION_SOCKET_HW_TIMESTAMPS, new function socketSetTimeout, improved debug logging for socketRecvFrom to help diagnose interface index issues on Linux, SOCKET keeps track of configured interface
 - Log level 6 for very verbose debug logging
 - Define GNU_SOURCE in cmakelists.txt
-- xcpclient tool in Rust for testing and for offline A2L generation
+- xcpclient tool (V2.0.0) in Rust for testing and for offline A2L generation, see [tools/xcpclient/CHANGELOG.md](tools/xcpclient/CHANGELOG.md)
 - Improved Windows performance
 
 

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "xcp": {
+      "command": "/Users/rainer/git/XCPlite-RainerZ/tools/xcpclient/target/release/xcpclient",
+      "args": ["--mcp"]
+    }
+  }
+}

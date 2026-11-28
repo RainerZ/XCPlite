@@ -37,7 +37,116 @@ mod default_event;
 pub use default_event::DefaultEvent;
 
 mod description;
-pub use description::DescriptionOptions;
+pub use description::{DescriptionOptions, a2l_file_path};
+
+mod actor;
+pub use actor::{
+    ConnectRequest, CreateA2lRequest, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, ListRequest, LoadA2lRequest, MeasureRequest, READ_NAMES_MAX, SAMPLE_DURATION_DEFAULT_MS,
+    SAMPLE_DURATION_MAX_MS, SAMPLE_NAMES_MAX, SampleRequest, SessionDefaults, SessionHandle, TransportProtocol, default_file_dir,
+};
+
+//------------------------------------------------------------------------
+// Address of the target
+
+/// Parse the address of a target: an IP address, with the default port, or IP:port
+pub fn parse_dest_addr(dest_addr: &str, default_port: u16) -> Result<SocketAddr, Box<dyn Error>> {
+    // Try to parse as a complete socket address first (IP:port)
+    if let Ok(addr) = dest_addr.parse::<SocketAddr>() {
+        return Ok(addr);
+    }
+
+    // If that fails, try to parse as just an IP address and add the default port
+    if let Ok(ip) = dest_addr.parse::<std::net::IpAddr>() {
+        return Ok(SocketAddr::new(ip, default_port));
+    }
+
+    // If both fail, return an error
+    Err(format!("Invalid destination address: '{}'. Expected format: 'IP' or 'IP:port'", dest_addr).into())
+}
+
+//------------------------------------------------------------------------
+// Target and description information
+
+/// The target of a connected session
+#[derive(Debug, Clone)]
+pub struct TargetInfo {
+    /// Name of the target ECU from GET_ID, may be empty
+    pub ecu_name: String,
+    pub dest_addr: SocketAddr,
+    /// "TCP", "UDP" or "SxI"
+    pub protocol: &'static str,
+    /// EPK reported by the target, empty if the target has none
+    pub epk: String,
+    pub xcp: XcpConnectInfo,
+    /// Time since the connect
+    pub connected_for: std::time::Duration,
+}
+
+impl TargetInfo {
+    /// Name, address and protocol: "hello_xcp at 192.168.0.206:5555 (UDP)"
+    pub fn name_and_address(&self) -> String {
+        let name = if self.ecu_name.is_empty() { "unnamed target" } else { self.ecu_name.as_str() };
+        format!("{} at {} ({})", name, self.dest_addr, self.protocol)
+    }
+}
+
+/// Where the description of the target comes from
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DescriptionSource {
+    /// A2L file uploaded from the target
+    Uploaded,
+    /// A2L file created from the event and segment information of the target and from an ELF file
+    Created,
+    /// A2L file loaded from a local file
+    Loaded,
+}
+
+/// Result of the comparison of the EPK of a loaded A2L file with the EPK of the target
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EpkCheck {
+    /// Nothing to compare: not connected, the target has no EPK, or the A2L file was uploaded or created for this target
+    NotChecked,
+    /// The A2L file has no EPK
+    NoEpkInA2l,
+    Match,
+    /// The EPKs differ, the mismatch was accepted
+    MismatchAccepted,
+}
+
+/// The description of the target loaded with load_description
+#[derive(Debug, Clone)]
+pub struct DescriptionInfo {
+    pub a2l_path: PathBuf,
+    pub source: DescriptionSource,
+    pub epk_check: EpkCheck,
+    pub events: usize,
+    pub segments: usize,
+    /// Number of measurable objects
+    pub measurements: usize,
+    /// Number of calibration objects
+    pub parameters: usize,
+}
+
+impl std::fmt::Display for DescriptionInfo {
+    /// One line: "hello_xcp.a2l (uploaded), 3 events, 2 calibration segments, 12 signals, 3 parameters"
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let source = match self.source {
+            DescriptionSource::Uploaded => "uploaded from the target",
+            DescriptionSource::Created => "created",
+            DescriptionSource::Loaded => "loaded from file",
+        };
+        write!(
+            f,
+            "{} ({}), {} events, {} calibration segments, {} signals, {} parameters",
+            self.a2l_path.display(),
+            source,
+            self.events,
+            self.segments,
+            self.measurements,
+            self.parameters
+        )
+    }
+}
 
 //------------------------------------------------------------------------
 // Calibration parameters
@@ -56,6 +165,10 @@ pub struct ParameterInfo {
     pub name: String,
     pub addr: A2lAddr,
     pub encoding: A2lTypeEncoding,
+    /// Size in bytes
+    pub size: usize,
+    /// Limits from the A2L file, a written value is checked against them
+    pub limits: A2lLimits,
     /// None if not connected or if the parameter is not a basic type value (blob)
     pub value: Option<ParameterValue>,
 }
@@ -215,6 +328,13 @@ pub struct Session {
 
     // Start time of the running measurement
     measurement_start: Option<tokio::time::Instant>,
+
+    // Time of the connect
+    connected_at: Option<std::time::Instant>,
+    // The loaded description, set by load_description
+    description: Option<DescriptionInfo>,
+    // Result of the EPK check of load_description
+    epk_check: EpkCheck,
 }
 
 impl Session {
@@ -233,7 +353,32 @@ impl Session {
             a2l_path: PathBuf::new(),
             segment_relative: false,
             measurement_start: None,
+            connected_at: None,
+            description: None,
+            epk_check: EpkCheck::NotChecked,
         }
+    }
+
+    /// The target of the session: name, address, EPK and XCP information, valid when connected
+    pub fn target_info(&self) -> TargetInfo {
+        TargetInfo {
+            ecu_name: self.ecu_name.clone(),
+            dest_addr: self.dest_addr,
+            protocol: self.protocol,
+            epk: self.ecu_epk.clone(),
+            xcp: self.xcp_client.connect_info(),
+            connected_for: self.connected_at.map(|t| t.elapsed()).unwrap_or_default(),
+        }
+    }
+
+    /// The description of the target, None before load_description succeeded
+    pub fn description(&self) -> Option<&DescriptionInfo> {
+        self.description.as_ref()
+    }
+
+    /// Check that the XCP server still responds (GET_STATUS)
+    pub async fn check_connection(&mut self) -> bool {
+        self.xcp_client.is_connected() && self.xcp_client.get_status().await.is_ok()
     }
 
     /// Name of the target ECU from GET_ID, empty if not connected
@@ -275,9 +420,10 @@ impl Session {
             }
             Err(e) => {
                 error!("Failed to connect to XCP server at {}, Error: {}", self.dest_addr, e);
-                return Err("Failed to connect to XCP server".into());
+                return Err(format!("Failed to connect to XCP server: {}", e).into());
             }
         }
+        self.connected_at = Some(std::time::Instant::now());
         self.xcp_client.log_connect_info();
         // Address granularity != 1 and motorola format not supported
         if (self.xcp_client.comm_mode_basic() & 0x07) != 0 {
@@ -355,9 +501,15 @@ impl Session {
     pub async fn read_parameter(&mut self, name: &str) -> Result<ParameterInfo, Box<dyn Error>> {
         let h: XcpCalibrationObjectHandle = self.xcp_client.create_calibration_object(name).await?;
         let connected = self.xcp_client.is_connected();
-        let (name, addr, encoding) = {
+        let (name, addr, encoding, size, limits) = {
             let o = self.xcp_client.get_calibration_object(h);
-            (o.get_name().to_string(), o.get_a2l_addr(), o.get_a2l_type().encoding)
+            (
+                o.get_name().to_string(),
+                o.get_a2l_addr(),
+                o.get_a2l_type().encoding,
+                o.get_a2l_type().size,
+                o.get_a2l_limits(),
+            )
         };
         let value = if connected {
             match encoding {
@@ -369,7 +521,25 @@ impl Session {
         } else {
             None
         };
-        Ok(ParameterInfo { name, addr, encoding, value })
+        Ok(ParameterInfo {
+            name,
+            addr,
+            encoding,
+            size,
+            limits,
+            value,
+        })
+    }
+
+    /// The object is a calibration parameter, None if there is no object with this name
+    pub fn is_parameter(&self, name: &str) -> Option<bool> {
+        self.xcp_client.is_characteristic(name)
+    }
+
+    /// Upload the current value of a measurement or calibration object from the target (polling)
+    /// Returns the physical values of all elements and the unit
+    pub async fn read_value(&mut self, name: &str) -> Result<(Vec<A2lValue>, String), Box<dyn Error>> {
+        self.xcp_client.upload_value(name).await
     }
 
     /// Set a calibration parameter to a value
@@ -397,7 +567,8 @@ impl Session {
     fn parameter_file_path(&mut self, filename: &str) -> Result<PathBuf, Box<dyn Error>> {
         let path = if filename.is_empty() {
             // No filename given, build HEX file path from ECU name
-            std::path::Path::new(&self.ecu_name).with_extension("hex")
+            // The extension is appended as text, the name may contain dots
+            PathBuf::from(format!("{}.hex", self.ecu_name))
         } else {
             std::path::Path::new(filename).to_path_buf()
         };
@@ -409,7 +580,8 @@ impl Session {
 
     /// Upload the working page data of all calibration segments from the target and store it into a file (.hex or .bin)
     /// (Note: In XCP, Upload means from target to file, Download means from file to target)
-    pub async fn upload_parameters(&mut self, filename: &str) -> Result<(), Box<dyn Error>> {
+    /// Returns the number of segments
+    pub async fn upload_parameters(&mut self, filename: &str) -> Result<usize, Box<dyn Error>> {
         let path = self.parameter_file_path(filename)?;
         // The context list of the target is the enum conversion table conv.contexts in the A2L file
         let contexts = std::fs::read_to_string(&self.a2l_path)
@@ -423,7 +595,8 @@ impl Session {
     }
 
     /// Download the working page data of all calibration segments from a file (.hex or .bin) to the target
-    pub async fn download_parameters(&mut self, filename: &str) -> Result<(), Box<dyn Error>> {
+    /// Returns the number of segments which were in the file
+    pub async fn download_parameters(&mut self, filename: &str) -> Result<usize, Box<dyn Error>> {
         let path = self.parameter_file_path(filename)?;
         self.xcp_client.load_calibration_segments_from_file(&path).await
     }
@@ -434,6 +607,11 @@ impl Session {
     /// Names of the measurable objects matching a regular expression
     pub fn find_measurements(&self, pattern: &str) -> Vec<String> {
         self.xcp_client.find_measurements(pattern)
+    }
+
+    /// Description of a measurable object as data, None if it can not be measured
+    pub fn measurement_info(&self, name: &str) -> Option<XcpMeasurementInfo> {
+        self.xcp_client.measurement_info(name)
     }
 
     /// Description of a measurable object: name, address, event and type, None if it can not be measured
@@ -453,6 +631,13 @@ impl Session {
             // Just a list of names
             measurement_list
         };
+        self.start_measurement_of(list, options, Vec::new()).await
+    }
+
+    /// Start a measurement of the signals with the given names
+    /// The measurement data goes to the outputs given with options and to the additional writers
+    /// Returns false if there is nothing to measure, the measurement is not started then
+    pub async fn start_measurement_of(&mut self, list: Vec<String>, options: &MeasurementOptions, writers: Vec<Box<dyn DaqWriter>>) -> Result<bool, Box<dyn Error>> {
         // Trace signals for a Perfetto trace
         let (list, contexts, trace_signals) = if options.perfetto.is_empty() {
             (list, Vec::new(), Vec::new())
@@ -473,33 +658,53 @@ impl Session {
                 info!(r#"  {}: {}"#, o.0, name);
             }
         }
+        if self.xcp_client.measurement_object_count() == 0 {
+            warn!("None of the measurement variables can be measured");
+            return Ok(false);
+        }
 
         // Measurement data output
-        let writers = create_daq_writers(options, &self.ecu_name, &contexts, &trace_signals)?;
+        let mut all_writers = match create_daq_writers(options, &self.ecu_name, &contexts, &trace_signals) {
+            Ok(writers) => writers,
+            Err(e) => {
+                self.xcp_client.abort_measurement(false);
+                return Err(e);
+            }
+        };
+        all_writers.extend(writers);
         if let Some(daq_decoder) = &self.daq_decoder {
-            daq_decoder.lock().set_writers(writers);
+            daq_decoder.lock().set_writers(all_writers);
         }
 
         // Measure
         // 32 bit DAQ timestamp will overflow after 4.2s
         self.measurement_start = Some(tokio::time::Instant::now());
-        self.xcp_client.start_measurement().await?;
+        if let Err(e) = self.xcp_client.start_measurement().await {
+            // Not started: the measurement objects and the writers are not kept for the next measurement
+            self.measurement_start = None;
+            self.xcp_client.abort_measurement(false);
+            if let Some(daq_decoder) = &self.daq_decoder {
+                daq_decoder.lock().set_writers(Vec::new());
+            }
+            return Err(e);
+        }
         Ok(true)
     }
 
-    /// The DAQ decoder with the counters of the running measurement (events, bytes, lost packets)
-    pub fn daq_decoder(&mut self) -> Option<Arc<Mutex<dyn XcpDaqDecoder>>> {
-        self.xcp_client.get_daq_decoder()
+    /// A measurement is running
+    pub fn is_measuring(&self) -> bool {
+        self.measurement_start.is_some()
     }
 
-    /// Stop the measurement, complete the output files
-    /// Returns the statistics of the measurement
-    pub async fn stop_measurement(&mut self) -> Result<Option<MeasurementSummary>, Box<dyn Error>> {
-        self.xcp_client.stop_measurement().await?;
-        let elapsed_us = self.measurement_start.take().map(|t| t.elapsed().as_micros()).unwrap_or(0);
+    /// Statistics of the running measurement so far, None if no measurement is running
+    pub fn measurement_progress(&self) -> Option<MeasurementSummary> {
+        let elapsed_us = self.measurement_start?.elapsed().as_micros();
+        self.measurement_summary(elapsed_us)
+    }
 
-        // Statistics from DAQ decoder
-        let summary = self.xcp_client.get_daq_decoder().map(|daq_decoder| {
+    // Statistics from the DAQ decoder
+    fn measurement_summary(&self, elapsed_us: u128) -> Option<MeasurementSummary> {
+        self.daq_decoder.as_ref().map(|daq_decoder| {
             let daq_decoder = daq_decoder.lock();
             MeasurementSummary {
                 elapsed_us,
@@ -509,7 +714,29 @@ impl Session {
                 lost_count: daq_decoder.get_lost_count(),
                 dropped_count: daq_decoder.get_dropped_count(),
             }
-        });
-        Ok(summary)
+        })
+    }
+
+    /// Complete the running measurement locally, without commands to the XCP server, for a connection which is lost
+    /// The output files are completed
+    pub fn abort_measurement(&mut self) {
+        if self.measurement_start.take().is_some() {
+            self.xcp_client.abort_measurement(true);
+        }
+    }
+
+    /// The DAQ decoder with the counters of the running measurement (events, bytes, lost packets)
+    pub fn daq_decoder(&mut self) -> Option<Arc<Mutex<dyn XcpDaqDecoder>>> {
+        self.xcp_client.get_daq_decoder()
+    }
+
+    /// Stop the measurement, complete the output files
+    /// Returns the statistics of the measurement
+    /// The output files are completed also when the stop command fails
+    pub async fn stop_measurement(&mut self) -> Result<Option<MeasurementSummary>, Box<dyn Error>> {
+        let result = self.xcp_client.stop_measurement().await;
+        let elapsed_us = self.measurement_start.take().map(|t| t.elapsed().as_micros()).unwrap_or(0);
+        result?;
+        Ok(self.measurement_summary(elapsed_us))
     }
 }

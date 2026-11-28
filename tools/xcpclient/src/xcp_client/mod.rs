@@ -27,6 +27,7 @@ pub use decoder::*;
 mod a2l;
 mod cal;
 mod daq;
+pub use daq::XcpMeasurementInfo;
 mod protocol;
 mod transport;
 
@@ -54,6 +55,44 @@ impl XcpTaskControl {
     #[allow(clippy::new_without_default)]
     pub fn new() -> XcpTaskControl {
         XcpTaskControl { running: false, connected: false }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------------------------------------------------------
+// Information about the XCP server, from the CONNECT, GET_VERSION, GET_COMM_MODE_INFO, GET_DAQ_PROCESSOR_INFO and GET_PAG_PROCESSOR_INFO commands
+
+#[derive(Debug, Clone, Copy)]
+pub struct XcpConnectInfo {
+    pub resources: u8,
+    pub comm_mode_basic: u8,
+    pub comm_mode_optional: u8,
+    pub max_cto_size: u8,
+    pub max_dto_size: u16,
+    pub protocol_version: u16,
+    pub transport_layer_version: u16,
+    pub driver_version: u8,
+    pub max_segments: u8,
+    pub max_events: u16,
+    pub freeze_supported: bool,
+}
+
+impl std::fmt::Display for XcpConnectInfo {
+    /// One line: protocol version, packet sizes and resources
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "protocol {}.{}, MAX_CTO {}, MAX_DTO {}, resources",
+            self.protocol_version >> 8,
+            self.protocol_version & 0xFF,
+            self.max_cto_size,
+            self.max_dto_size
+        )?;
+        for (bit, name) in [(0x01, "CAL"), (0x04, "DAQ"), (0x08, "STIM"), (0x10, "PGM")] {
+            if self.resources & bit != 0 {
+                write!(f, " {}", name)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -213,6 +252,23 @@ impl XcpClient {
 
     //------------------------------------------------------------------------
     // Information from the XCP server, valid after connect
+
+    /// Information about the XCP server, valid after connect
+    pub fn connect_info(&self) -> XcpConnectInfo {
+        XcpConnectInfo {
+            resources: self.resources,
+            comm_mode_basic: self.comm_mode_basic,
+            comm_mode_optional: self.comm_mode_optional,
+            max_cto_size: self.max_cto_size,
+            max_dto_size: self.max_dto_size,
+            protocol_version: self.protocol_version,
+            transport_layer_version: self.transport_layer_version,
+            driver_version: self.driver_version,
+            max_segments: self.max_segments,
+            max_events: self.max_events,
+            freeze_supported: self.freeze_supported,
+        }
+    }
 
     /// COMM_MODE_BASIC from CONNECT (byte order, address granularity, block modes)
     pub fn comm_mode_basic(&self) -> u8 {
