@@ -123,15 +123,24 @@ the diff in `test/test_*.log` before committing an updated fixture.
 
 ## Large array end-to-end script: `test_multi_thread_image.sh`
 
-[`test_multi_thread_image.sh`](test_multi_thread_image.sh) measures the image of `multi_thread_demo` (the array `pixels`,
-1600 x 1200 bytes in one DAQ list with 242 ODTs) with `xcpclient` in continuous render mode to an MDF file. It checks that
-complete samples arrive without lost packets or dropped incomplete samples, and compares the last sample with a reference
-render of the same area ([`mdf_image_check.py`](mdf_image_check.py), every 10th line, isolated rounding differences at the
-boundary of the set are accepted). Self-verifying, about 10 s.
+[`test_multi_thread_image.sh`](test_multi_thread_image.sh) measures the images of `multi_thread_demo` with `xcpclient` in
+continuous render mode to MDF files and checks them with [`mdf_image_check.py`](mdf_image_check.py):
+
+1. The JPEG image of the video (`jpeg`, a buffer of 256 KB in one DAQ list with 33 ODTs, `jpeg_size`, `jpeg_image`, event
+   `jpeg`): each sample has to be a complete JPEG image (SOI, EOI at `jpeg_size`, 800 x 600 in the SOF header), the image
+   numbers increase.
+2. The uncompressed image (`pixels`, 1600 x 1200 bytes in one DAQ list with 242 ODTs, event `batch_done`) without zoom
+   animation: every 10th line of the last sample is compared with a reference render of the same area, isolated rounding
+   differences at the boundary of the set are accepted. `pixels` needs about 50 KB DAQ memory, more than the default
+   `OPTION_DAQ_MEM_SIZE` of 16 KB: if the XCP server rejects the DAQ setup with a memory overflow, this part is skipped with a
+   message and the test passes with the JPEG check only.
+
+Both measurements have to deliver complete samples without lost packets or dropped incomplete samples. Self-verifying,
+about 15 s.
 
 ```bash
-./test_multi_thread_image.sh           # measure 3 s
-./test_multi_thread_image.sh --keep    # keep the temporary directory with the logs and the MDF file
+./test_multi_thread_image.sh           # measure 3 s each
+./test_multi_thread_image.sh --keep    # keep the temporary directory with the logs and the MDF files
 XCPCLIENT=../tools/xcpclient/target/release/xcpclient ./test_multi_thread_image.sh
 ```
 

@@ -183,10 +183,10 @@
 
 // Memory bytes used for XCP DAQ tables
 // 6 bytes per measurement signal (ODT entry), 8 bytes per ODT and 12 bytes per DAQ list needed
-// 64 KiB are sufficient for about 10000 signals with a DAQ list for each 123 signals, more when the tool merges adjacent signals
-// to one ODT entry (xcpclient), or for an array of about 2.5 MB (6 bytes for each 248 byte ODT entry), e.g. the 1600 x 1200
-// image of multi_thread_demo, which needs about 50 KB
-#define OPTION_DAQ_MEM_SIZE (1024 * 64)
+// 16 KiB are sufficient for about 2600 signals with a DAQ list for each 123 signals, more when the tool merges adjacent signals
+// to one ODT entry, or for an array of about 600 KB (6 bytes for each 248 byte ODT entry and 8 bytes for each ODT)
+// Larger arrays need more, e.g. the 1600 x 1200 image of multi_thread_demo about 50 KB
+#define OPTION_DAQ_MEM_SIZE (1024 * 16)
 
 // Create an cyclic default DAQ event with event id=0 for asynchronous data acquisition
 // May be used as default_event for xcpclient, since xcpclient V4.x explicitly specified as commandline option

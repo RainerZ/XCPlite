@@ -380,7 +380,7 @@ bool work_complete(uint32_t lines) {
             }
         }
     }
-    mjpeg_publish(&gPreview[0][0][0]);
+    mjpeg_publish(&gPreview[0][0][0], gImageCount);
 #endif
 
     // One log line per image

@@ -6,10 +6,12 @@
 //   http://<host>:<port>/        HTML page with the stream
 //   http://<host>:<port>/stream  MJPEG stream
 //
-// One server thread, one client at a time, a new connection is served when the previous one is closed.
-// The application publishes frames from any thread, mjpeg_publish copies the frame. The server thread encodes and sends the newest
-// frame, frames are dropped when encoding or the client is slower than the application. A new client gets the newest frame at once.
-// Uses the socket and thread abstraction of xcplib, the sockets must be initialized (XcpEthServerInit).
+// The application publishes frames from any thread, mjpeg_publish copies the frame. An encoder thread encodes each frame into a JPEG
+// image, also without a browser connected, and triggers the XCP event 'jpeg', which measures the JPEG image (jpeg, jpeg_size,
+// jpeg_image). An HTTP thread serves one client at a time and sends the newest JPEG image. Frames are dropped when encoding or the
+// client is slower than the application, a new client gets the newest image at once.
+// Uses the socket and thread abstraction of xcplib, the sockets must be initialized (XcpEthServerInit), and the XCP instrumentation
+// API, XCP and the A2L generation must be initialized (XcpInit, A2lInit).
 
 #include <stdbool.h> // for bool
 #include <stdint.h>  // for uintxx_t
@@ -27,7 +29,8 @@ extern "C" {
 bool mjpeg_start(uint16_t port, uint32_t width, uint32_t height, int quality);
 
 /// Publish a new frame, RGB with 3 bytes per pixel, width * height pixels line by line, the frame is copied
-void mjpeg_publish(const uint8_t *rgb);
+/// @param image Number of the image in the application, measured with the JPEG image (jpeg_image)
+void mjpeg_publish(const uint8_t *rgb, uint32_t image);
 
 /// Stop the server and release its resources
 void mjpeg_shutdown(void);
